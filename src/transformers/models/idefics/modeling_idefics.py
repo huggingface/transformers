@@ -44,7 +44,7 @@ from ...utils import (
 )
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
-from .vision import IdeficsVisionTransformer
+from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
 
 
 if is_torch_flex_attn_available():
@@ -934,7 +934,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
         # base should be used for training from scratch and it contains the correct code.
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -942,6 +942,25 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, IdeficsRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, IdeficsVisionEmbeddings):
+            module.class_embedding.data.normal_()
+        elif isinstance(module, IdeficsGatedCrossAttentionLayer):
+            if self.config.alpha_initializer == "zeros":
+                module.alpha_cross_attn.data.zero_()
+                module.alpha_dense.data.zero_()
+            elif self.config.alpha_initializer == "ones":
+                module.alpha_cross_attn.data.fill_(1.0)
+                module.alpha_dense.data.fill_(1.0)
+            elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
+                module.alpha_cross_attn.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
+                module.alpha_dense.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
+        elif isinstance(module, IdeficsPerceiverResampler):
+            module.latents.data.normal_()
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -1495,7 +1514,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
 
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config, vision_model=None):

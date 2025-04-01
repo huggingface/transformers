@@ -1412,31 +1412,22 @@ class MimiPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
 
-    # Copied from transformers.models.encodec.modeling_encodec.EncodecPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LSTM):
-            for name, param in module.named_parameters():
-                if "weight" in name:
-                    nn.init.xavier_uniform_(param)
-                elif "bias" in name:
-                    nn.init.constant_(param, 0.0)
+        elif isinstance(module, MimiLayerScale):
+            module.scale.data.fill_(self.config.layer_scale_initial_scale)
 
 
 MIMI_START_DOCSTRING = r"""

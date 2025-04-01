@@ -540,6 +540,17 @@ class ModelTesterMixin:
             # Back to original method to avoid issues if running several other tests
             PreTrainedModel._initialize_weights = original_initialize_weights
 
+            # First, check if any parameters are still on meta -> this is usually an issue with tied weights
+            params_on_meta = []
+            for k, v in model_from_pretrained.named_parameters():
+                if v.device.type == "meta":
+                    params_on_meta.append(k)
+
+            self.assertTrue(
+                len(params_on_meta) == 0,
+                f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
+            )
+
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
             for (k1, v1), (k2, v2) in zip(
