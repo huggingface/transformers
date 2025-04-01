@@ -13,17 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for BiT."""
+
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, \
-    DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, ImageInput
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import add_start_docstrings
 
 
-
 class BitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     pass
+
 
 @add_start_docstrings(
     "Constructs a fast Bit image processor.",
@@ -56,4 +61,3 @@ class BitImageProcessorFast(BaseImageProcessorFast):
 
 
 __all__ = ["BitImageProcessorFast"]
-
