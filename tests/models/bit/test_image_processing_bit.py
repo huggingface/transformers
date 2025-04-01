@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers.image_utils import SizeDict
+from transformers.image_utils import SizeDict, PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
@@ -43,6 +43,7 @@ class BitImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         size={"shortest_edge": 224},
+        resample=PILImageResampling.BILINEAR,
     ):
 
         self.parent = parent
@@ -54,12 +55,14 @@ class BitImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.size = size
+        self.resample = resample
 
     def prepare_image_processor_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-
+            "resample": self.resample,
+            "size": self.size,
         }
 
     def expected_output_image_shape(self, images):
@@ -99,7 +102,3 @@ class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_internal(self):
-        self.test_slow_fast_equivalence_batched()
-
