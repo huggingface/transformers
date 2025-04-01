@@ -52,7 +52,7 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_torch_tpu_available,
+    is_torch_xla_available,
 )
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
@@ -234,9 +234,7 @@ def parse_args():
         "--fim_pad_token",
         type=str,
         default="<fim_pad>",
-        help=(
-            "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True." " Defaults to '<fim_pad>'."
-        ),
+        help=("Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -494,7 +492,7 @@ def main():
     if torch.cuda.is_availble():
         pad_factor = 8
 
-    elif is_torch_tpu_available():
+    elif is_torch_xla_available(check_is_tpu=True):
         pad_factor = 128
 
     # Add the new tokens to the tokenizer

@@ -255,7 +255,7 @@ class TorchAoGPUTest(TorchAoTest):
     def test_int4wo_quant_multi_gpu(self):
         """
         Simple test that checks if the quantized model int4 weight only is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
 
         quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)

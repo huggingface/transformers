@@ -164,6 +164,10 @@ visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
 visualizer("<img>What is shown in this image?")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-3-attn-mask.png"/>
+</div>
+
 ## Notes
 
 - Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.

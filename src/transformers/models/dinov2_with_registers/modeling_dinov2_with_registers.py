@@ -556,6 +556,11 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
+            module.mask_token.data.zero_()
+            module.register_tokens.data.zero_()
+        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
+            module.lambda1.data.fill_(self.config.layerscale_value)
+
 
 _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 
