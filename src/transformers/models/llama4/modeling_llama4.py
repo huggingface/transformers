@@ -752,9 +752,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if isinstance(attention_mask, torch.Tensor):
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            print(attention_mask)
-            print(chunked_attention_mask)
-            exit(0)
             return attention_mask, chunked_attention_mask
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail

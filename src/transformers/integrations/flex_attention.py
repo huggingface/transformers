@@ -100,6 +100,10 @@ def make_flex_block_causal_mask(
     document_ids = attention_mask_2d
     batch_size, total_seq_len = document_ids.shape
 
+    if attention_chunk_size is not None:
+        document_ids = torch.arange(attention_mask_2d.shape[-1]) // attention_chunk_size
+        document_ids = document_ids[None, :].expand((attention_mask_2d.shape[0],-1))
+
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
     # computation prior to the softmax. For sample packing, we need both the
@@ -114,42 +118,13 @@ def make_flex_block_causal_mask(
         for an illustration.
         """
         causal_mask = q_idx >= kv_idx
-        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        document_mask = document_ids[batch_idx, q_idx].bool()
         padding_mask = document_ids[batch_idx, q_idx] > 0
         return causal_mask & document_mask & padding_mask
 
-    def chunk_causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
-        """
-        Defines the logic of a block causal mask by combining both a standard causal mask
-        and a block diagonal document mask.
-
-        'What'      :  0 ■ ⬚ ⬚ ⬚ ⬚ ⬚    |
-        '▁is'       :  1 ■ ■ ⬚ ⬚ ⬚ ⬚    |
-        '▁ch'       :  2 ■ ■ ■ ⬚ ⬚ ⬚    |
-        'unked'     :  3 ⬚ ⬚ ⬚ ■ ⬚ ⬚    |
-        '▁attention':  4 ⬚ ⬚ ⬚ ■ ■ ⬚    |
-        '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■    |
-
-        Is what it should end up paying attention to.
-        """
-        block_pos = torch.abs((q_idx // attention_chunk_size) - (kv_idx // attention_chunk_size))
-        token_pos = q_idx - kv_idx
-        chunked_causal_mask = (block_pos == 0) & (token_pos <= 0)
-
-        # Document mask logic
-        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
-
-        # Padding mask logic
-        padding_mask = document_ids[batch_idx, q_idx] > 0
-        print(chunked_causal_mask & document_mask & padding_mask)
-        return chunked_causal_mask & document_mask & padding_mask
-
-    mask_mod = causal_mask_mod
-    if attention_chunk_size is not None:
-        mask_mod = chunk_causal_mask_mod
 
     return create_block_causal_mask_flex(
-        mask_mod=mask_mod,
+        mask_mod=causal_mask_mod,
         B=batch_size,
         H=None,  # attention head
         Q_LEN=total_seq_len,
