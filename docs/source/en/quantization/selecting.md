@@ -135,7 +135,7 @@ See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https
 
 ## Research
 
-Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., often push the boundaries of compression (e.g., < 2-bit) or explore novel techniques.
+Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., push the boundaries of compression (< 2-bit) or explore novel techniques.
 
 *   Consider these if:
     *   You need extreme compression (sub-4-bit).
