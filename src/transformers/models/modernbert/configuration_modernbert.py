@@ -216,7 +216,7 @@ class ModernBertConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
-        del output["reference_compile"]
+        output.pop("reference_compile", None)
         return output
 
 
