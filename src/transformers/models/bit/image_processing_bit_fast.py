@@ -50,7 +50,6 @@ class BitImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = BitFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[BitFastImageProcessorKwargs]):
-        print(kwargs)
         super().__init__(**kwargs)
 
     @add_start_docstrings(
