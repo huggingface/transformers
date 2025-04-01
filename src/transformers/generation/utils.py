@@ -458,7 +458,7 @@ class GenerationMixin:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
                 device = model_inputs["inputs_embeds"].device
             else:
-                batch_size, sequence_length = model_inputs[input_ids_key].shape
+                batch_size, sequence_length = model_inputs[input_ids_key].shape[0], model_inputs[input_ids_key].shape[1]
                 device = model_inputs[input_ids_key].device
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create

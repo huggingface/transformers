@@ -510,6 +510,9 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
         "depth_decoder_config": ConversationalSpeechModelDepthDecoderConfig,
     }
 
+    def get_text_config(self, decoder=False):
+        return self.backbone_config
+
     def __init__(
         self,
         backbone_config=None,
