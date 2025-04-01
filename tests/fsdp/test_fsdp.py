@@ -100,20 +100,22 @@ if is_torch_available():
     get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
 require_fsdp_version = require_fsdp
-require_fsdp_v2_version = require_fsdp
 if is_accelerate_available():
     from accelerate.utils.constants import (
-        FSDP2_PYTORCH_VERSION,
         FSDP_PYTORCH_VERSION,
         FSDP_SHARDING_STRATEGY,
     )
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
-    require_fsdp_v2_version = partial(require_fsdp, min_version=FSDP2_PYTORCH_VERSION)
 
 
 FSDP2_ACCELERATE_VERSION = "1.6.0"
 require_accelerate_fsdp2 = partial(require_accelerate, min_version=FSDP2_ACCELERATE_VERSION)
+require_fsdp_v2_version = require_fsdp
+if is_accelerate_available(min_version=FSDP2_ACCELERATE_VERSION):
+    from accelerate.utils.constants import FSDP2_PYTORCH_VERSION
+
+    require_fsdp_v2_version = partial(require_fsdp, min_version=FSDP2_PYTORCH_VERSION)
 
 
 def get_launcher(distributed=False, use_accelerate=False):
