@@ -20,11 +20,11 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    convert_to_rgb,
     get_resize_output_image_size,
     pad,
     resize,
     to_channel_dimension_format,
-    convert_to_rgb,
 )
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -152,7 +152,7 @@ class DonutImageProcessor(BaseImageProcessor):
         output_height, output_width = size["height"], size["width"]
 
         if input_data_format == ChannelDimension.LAST:
-            rot_axes = (0, 1) 
+            rot_axes = (0, 1)
         elif input_data_format == ChannelDimension.FIRST:
             rot_axes = (1, 2)
         else:
