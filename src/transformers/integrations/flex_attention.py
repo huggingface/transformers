@@ -101,8 +101,8 @@ def make_flex_block_causal_mask(
     batch_size, total_seq_len = document_ids.shape
 
     if attention_chunk_size is not None:
-        document_ids = torch.arange(attention_mask_2d.shape[-1]) // attention_chunk_size
-        document_ids = document_ids[None, :].expand((attention_mask_2d.shape[0],-1))
+        document_ids = (torch.arange(total_seq_len) // attention_chunk_size) + 1
+        document_ids = document_ids[None, :].expand((batch_size,-1))
 
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
@@ -118,9 +118,11 @@ def make_flex_block_causal_mask(
         for an illustration.
         """
         causal_mask = q_idx >= kv_idx
-        document_mask = document_ids[batch_idx, q_idx].bool()
+        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
         padding_mask = document_ids[batch_idx, q_idx] > 0
-        return causal_mask & document_mask & padding_mask
+        final_mask = causal_mask & padding_mask
+        final_mask &= document_mask 
+        return final_mask
 
 
     return create_block_causal_mask_flex(

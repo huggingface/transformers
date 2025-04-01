@@ -744,12 +744,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        sequence_length = input_tensor.shape[1]
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask, attention_mask  # flash does not support chunked attn
             return None, None
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
+                # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             return attention_mask, chunked_attention_mask
