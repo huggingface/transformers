@@ -747,7 +747,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask, attention_mask  # flash does not support chunked attn
-            return None
+            return None, None
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
@@ -758,16 +758,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
@@ -793,7 +783,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         chunked_mask = self.create_chunked_attention_mask(
             sequence_length, self.config.attention_chunk_size, device=device
         )
-        chunked_attention_mask = causal_mask & chunked_attention_mask[None, None, :, :]
+        chunked_attention_mask = causal_mask.masked_fill(~chunked_mask[None, None, :, :],torch.finfo(dtype).min)
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
@@ -805,8 +795,18 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-            chunked_mask = AttentionMaskConverter._unmask_unattended(chunked_mask, min_dtype)
+            chunked_attention_mask = AttentionMaskConverter._unmask_unattended(chunked_attention_mask, min_dtype)
 
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                causal_mask = None
+        print(1-chunked_attention_mask.bool().int()) 
         return causal_mask, chunked_attention_mask
 
     def create_chunked_attention_mask(
