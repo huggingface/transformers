@@ -15,6 +15,7 @@
 
 
 import unittest
+import requests
 
 import numpy as np
 
@@ -235,3 +236,11 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.image_processor_tester.size["width"],
                 ),
             )
+
+
+@require_torch
+@require_vision
+class DonutImageProcessingAlignAxisTest(DonutImageProcessingTest):
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = DonutImageProcessingTester(self, do_align_axis=True)

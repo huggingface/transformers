@@ -26,6 +26,7 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
+from ...image_processing_utils import get_size_dict
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
