@@ -115,7 +115,10 @@ print(output_text)
 
 ### Notes
 
-Qwen2.5-VL is a multimodal conversational model designed for image, video, and text understanding, making it highly versatile for both general-purpose and fine-tuned downstream tasks such as image captioning, visual question answering (VQA), scene description, and video understanding.
+- Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
+- Use Qwen2.5-VL for a mixed batch of inputs (images, videos, text) as show below.
+- Use the `min_pixels` and `max_pixels` parameters in [`AutoProcessor`] to set the resolution. Higher resolution can require more compute whereas reducing the resolution can save memory.
+- Add labels when handling multiple images or videos for better reference as shown below.
 
 #### Image Resolution trade-off
 
