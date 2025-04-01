@@ -210,16 +210,12 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
+        if module in self.backbone.modules():
+            self.backbone._init_weights(module)
+        elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):

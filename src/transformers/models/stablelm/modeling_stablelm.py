@@ -666,6 +666,9 @@ class StableLmPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.)
+            module.bias.data.zero_()
 
 
 STABLELM_INPUTS_DOCSTRING = r"""
