@@ -323,18 +323,22 @@ class CosmosConfig(Emu3Config):
             CosmosTextConfig instance containing the configuration for the language model.
         vocabulary_map (`Dict`, *optional*):
             Not used by the model
-        prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
+        prompt_encoder_config (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
         image_token_id (`dict`, *optional*, defaults to 64000):
             An image placeholder token index.
     """
 
-    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "prompt_encoder": AutoConfig}
+    sub_configs = {
+        "text_config": CosmosTextConfig,
+        "vq_config": CosmosVQVAEConfig,
+        "prompt_encoder_config": AutoConfig,
+    }
 
     def __init__(
         self,
-        prompt_encoder: Union[Dict, AutoConfig] = None,
+        prompt_encoder_config: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
         **super_kwargs,
     ):
@@ -342,7 +346,7 @@ class CosmosConfig(Emu3Config):
 
         del self.vocabulary_map
 
-        if prompt_encoder is None:
+        if prompt_encoder_config is None:
             prompt_encoder_config = {
                 "d_ff": 65536,
                 "d_kv": 128,
@@ -357,11 +361,11 @@ class CosmosConfig(Emu3Config):
                 "relative_attention_num_buckets": 32,
                 "vocab_size": 32128,
             }
-            prompt_encoder = AutoConfig.for_model("t5", **prompt_encoder_config)
-        elif isinstance(prompt_encoder, dict):
-            prompt_encoder = AutoConfig.for_model(**prompt_encoder)
+            prompt_encoder_config = AutoConfig.for_model("t5", **prompt_encoder_config)
+        elif isinstance(prompt_encoder_config, dict):
+            prompt_encoder_config = AutoConfig.for_model(**prompt_encoder_config)
 
-        self.prompt_encoder = prompt_encoder
+        self.prompt_encoder_config = prompt_encoder_config
         self.image_token_id = image_token_id
 
 
@@ -1797,7 +1801,7 @@ class CosmosModel(CosmosPreTrainedModel):
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
         if config.text_config.is_video_to_world:
-            self.prompt_encoder = AutoModel.from_config(config.prompt_encoder).encoder
+            self.prompt_encoder = AutoModel.from_config(config.prompt_encoder_config).encoder
 
         # Initialize weights and apply final processing
         self.post_init()

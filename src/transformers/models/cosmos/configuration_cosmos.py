@@ -333,7 +333,7 @@ class CosmosConfig(PretrainedConfig):
             CosmosTextConfig instance containing the configuration for the language model.
         vocabulary_map (`Dict`, *optional*):
             Not used by the model
-        prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
+        prompt_encoder_config (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
         image_token_id (`dict`, *optional*, defaults to 64000):
@@ -343,14 +343,18 @@ class CosmosConfig(PretrainedConfig):
     model_type = "cosmos"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "prompt_encoder": AutoConfig}
+    sub_configs = {
+        "text_config": CosmosTextConfig,
+        "vq_config": CosmosVQVAEConfig,
+        "prompt_encoder_config": AutoConfig,
+    }
 
     def __init__(
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
         vocabulary_map: Dict[int, int] = None,
-        prompt_encoder: Union[Dict, AutoConfig] = None,
+        prompt_encoder_config: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
         **kwargs,
     ):
@@ -368,7 +372,7 @@ class CosmosConfig(PretrainedConfig):
         self.vq_config = vq_config
         self.text_config = text_config
 
-        if prompt_encoder is None:
+        if prompt_encoder_config is None:
             prompt_encoder_config = {
                 "d_ff": 65536,
                 "d_kv": 128,
@@ -383,11 +387,11 @@ class CosmosConfig(PretrainedConfig):
                 "relative_attention_num_buckets": 32,
                 "vocab_size": 32128,
             }
-            prompt_encoder = AutoConfig.for_model("t5", **prompt_encoder_config)
-        elif isinstance(prompt_encoder, dict):
-            prompt_encoder = AutoConfig.for_model(**prompt_encoder)
+            prompt_encoder_config = AutoConfig.for_model("t5", **prompt_encoder_config)
+        elif isinstance(prompt_encoder_config, dict):
+            prompt_encoder_config = AutoConfig.for_model(**prompt_encoder_config)
 
-        self.prompt_encoder = prompt_encoder
+        self.prompt_encoder_config = prompt_encoder_config
         self.image_token_id = image_token_id
 
 

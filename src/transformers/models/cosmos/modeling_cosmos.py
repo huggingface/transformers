@@ -2071,7 +2071,9 @@ class CosmosModel(CosmosPreTrainedModel):
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
         if config.text_config.is_video_to_world:
-            self.prompt_encoder = AutoModel.from_config(config.prompt_encoder).encoder
+            self.prompt_encoder = AutoModel.from_config(config.prompt_encoder_config).encoder
+
+        print(self.prompt_encoder.config)
 
         # Initialize weights and apply final processing
         self.post_init()
