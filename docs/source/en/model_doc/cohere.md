@@ -108,17 +108,7 @@ visualizer("Plants create energy through a process known as")
 
 
 ## Notes
-<Tip warning={true}>
-The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
-
-The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
-
-Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
-</Tip>
-
-When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
-
+- Don’t use the torch_dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
 ## CohereConfig
 
