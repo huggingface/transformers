@@ -223,10 +223,10 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            emb = torch.zeros(1, height, width, self.config.hidden_size // 2)
-            emb[:, :, :, 0::2] = i_position_indices * inv_freq_expanded
-            emb[:, :, :, 1::2] = j_position_indices * inv_freq_expanded
+
+        emb = torch.zeros(1, height, width, self.config.hidden_size // 2)
+        emb[:, :, :, 0::2] = i_position_indices * inv_freq_expanded
+        emb[:, :, :, 1::2] = j_position_indices * inv_freq_expanded
 
         sin = emb.sin()
         cos = emb.cos()
