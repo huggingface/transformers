@@ -1133,6 +1133,9 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+            module.b1.data.zero_()
+            module.b2.data.zero_()
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):

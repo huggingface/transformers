@@ -75,6 +75,9 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, GPTNeoXJapaneseAttention):
+            if module.dense_bias is not None:
+                module.dense_bias.data.zero_()
 
 
 class GPTNeoXJapaneseAttention(nn.Module):
