@@ -20,10 +20,17 @@ import numpy as np
 
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import (
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from transformers import EfficientNetImageProcessor
@@ -46,6 +53,9 @@ class EfficientNetImageProcessorTester:
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        do_rescale=True,
+        rescale_offset=True,
+        rescale_factor=1 / 127.5,
         resample=PILImageResampling.BILINEAR,  # NEAREST is too different between PIL and torchvision
     ):
         size = size if size is not None else {"height": 18, "width": 18}
@@ -124,11 +134,58 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
 
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
+            if image_processing_class == EfficientNetImageProcessorFast:
+                image = torch.from_numpy(image)
 
-            rescaled_image = image_processor.rescale(image, scale=1 / 127.5, dtype=np.float64)
-            expected_image = (image * (1 / 127.5)).astype(np.float64) - 1
-            self.assertTrue(np.allclose(rescaled_image, expected_image))
+                # Scale between [-1, 1] with rescale_factor 1/127.5 and rescale_offset=True
+                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, offset=True)
+                expected_image = (image * (1 / 127.5)) - 1
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
 
-            rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False, dtype=np.float64)
-            expected_image = (image / 255.0).astype(np.float64)
-            self.assertTrue(np.allclose(rescaled_image, expected_image))
+                # Scale between [0, 1] with rescale_factor 1/255 and rescale_offset=True
+                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+                expected_image = image / 255.0
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+
+            else:
+                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, dtype=np.float64)
+                expected_image = (image * (1 / 127.5)).astype(np.float64) - 1
+                self.assertTrue(np.allclose(rescaled_image, expected_image))
+
+                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False, dtype=np.float64)
+                expected_image = (image / 255.0).astype(np.float64)
+                self.assertTrue(np.allclose(rescaled_image, expected_image))
+
+    @require_vision
+    @require_torch
+    def test_rescale_normalize(self):
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32).repeat(3, 1, 1)
+        image_mean_0 = (0.0, 0.0, 0.0)
+        image_std_0 = (1.0, 1.0, 1.0)
+        image_mean_1 = (0.5, 0.5, 0.5)
+        image_std_1 = (0.5, 0.5, 0.5)
+
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
+        rescaled_normalized = image_processor_fast.rescale_and_normalize(
+            image, True, 1 / 127.5, True, image_mean_0, image_std_0, True
+        )
+        expected_image = (image * (1 / 127.5)) - 1
+        expected_image = (expected_image - torch.tensor(image_mean_0).view(3, 1, 1)) / torch.tensor(image_std_0).view(
+            3, 1, 1
+        )
+        self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))
+
+        # Rescale between [0, 1] with rescale_factor=1/255 and rescale_offset=False. Then normalize
+        rescaled_normalized = image_processor_fast.rescale_and_normalize(
+            image, True, 1 / 255, True, image_mean_1, image_std_1, False
+        )
+        expected_image = image * (1 / 255.0)
+        expected_image = (expected_image - torch.tensor(image_mean_1).view(3, 1, 1)) / torch.tensor(image_std_1).view(
+            3, 1, 1
+        )
+        self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))
