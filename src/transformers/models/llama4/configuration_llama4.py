@@ -142,6 +142,7 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
         "layers.*.feed_forward.experts": "local",
+        "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward": "gather",
     }
 
@@ -150,6 +151,7 @@ class Llama4TextConfig(PretrainedConfig):
         vocab_size=202048,
         hidden_size=5120,
         intermediate_size=8192,
+        intermediate_size_mlp=16384,
         num_hidden_layers=48,
         num_attention_heads=40,
         num_key_value_heads=8,
@@ -167,10 +169,12 @@ class Llama4TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=1,
         num_local_experts=16,
+        interleave_moe_layer_step=1,
+        use_qk_norm=True,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling="llama3",
+        rope_scaling=None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         **kwargs,
@@ -186,6 +190,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.intermediate_size_mlp = intermediate_size_mlp
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
@@ -203,9 +208,11 @@ class Llama4TextConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.use_qk_norm = use_qk_norm
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
+        self.interleave_moe_layer_step = interleave_moe_layer_step
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
