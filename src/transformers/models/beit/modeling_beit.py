@@ -770,6 +770,18 @@ class BeitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BeitEmbeddings):
+            module.cls_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, BeitRelativePositionBias):
+            module.relative_position_bias_table.data.zero_()
+        elif isinstance(module, BeitLayer):
+            if module.lambda_1 is not None:
+                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 BEIT_START_DOCSTRING = r"""
