@@ -614,7 +614,7 @@ class Llama4ImageProcessor(BaseImageProcessor):
             else:
                 processed_image = split_to_tiles(processed_image, ratio_h, ratio_w)
 
-            aspect_ratios.append(torch.tensor([ratio_h, ratio_w]))
+            aspect_ratios.append(torch.tensor([ratio_h, ratio_w], dtype=torch.int64))
 
             # add a global tile to the processed tile if there are more than one tile
             if ratio_h * ratio_w > 1:
