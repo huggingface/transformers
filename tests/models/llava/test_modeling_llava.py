@@ -617,8 +617,13 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_GENERATION = "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
-        self.assertEqual(output, EXPECTED_GENERATION)
+        EXPECTED_GENERATION = [
+            # CUDA output
+            "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
+            # XPU output
+            "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+        ]  # fmt: skip
+        self.assertTrue(output in EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes
