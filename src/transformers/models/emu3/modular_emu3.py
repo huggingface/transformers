@@ -394,7 +394,11 @@ class Emu3VQVAEResnetBlock(nn.Module):
 
 
 class Emu3VQVAEAttentionBlock(SiglipAttention):
-    pass
+    def __init__(self, config: Emu3VQVAEConfig):
+        super().__init__(config)
+
+        # for compatibility with the attention interface
+        self.num_key_value_groups = 1
 
 
 class Emu3VQVAEGroupNorm(nn.GroupNorm):
@@ -730,6 +734,9 @@ class Emu3VQVAE(PreTrainedModel):
     config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _no_split_modules = [
         "Emu3VQVAETemporalResnetBlock",
         "Emu3VQVAEAttentionBlock",
