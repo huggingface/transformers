@@ -118,3 +118,11 @@ class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+
+
+@require_torch
+@require_vision
+class PoolFormerImageProcessingCropPctTest(PoolFormerImageProcessingTest):
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = PoolFormerImageProcessingTester(self, crop_pct=None)
