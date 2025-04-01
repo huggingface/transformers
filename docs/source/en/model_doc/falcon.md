@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Falcon
 
-Falcon is a powerful family of language models created by the [Technology Innovation Institute (TII)](https://www.tii.ae/). What makes Falcon special is its optimized architecture that balances impressive performance with efficient inference. The models use multi-query attention - a clever technique that reduces memory requirements while maintaining quality. Falcon models have been trained on massive datasets (1+ trillion tokens) with a focus on the high-quality [RefinedWeb](https://arxiv.org/abs/2306.01116) corpus.
+Falcon is a series of causal decoder-only language models developed by the [Technology Innovation Institute (TII)](https://www.tii.ae/). Falcon models utilize multi-query attention and are optimized for efficient inference while maintaining strong performance. The models were trained on large-scale datasets (1+ trillion tokens) with a focus on the high-quality [RefinedWeb](https://arxiv.org/abs/2306.01116) corpus.
 
 You can find the research paper at https://huggingface.co/papers/2311.16867 and check out the official checkpoints under the [Falcon](https://huggingface.co/collections/tiiuae/falcon-64fb432660017eeec9837b5a) collection.
 
