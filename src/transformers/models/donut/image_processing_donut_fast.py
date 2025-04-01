@@ -16,7 +16,6 @@
 
 from typing import Optional, Union
 
-import numpy as np
 
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
@@ -171,8 +170,8 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         delta_height = output_height - input_height
 
         if random_padding:
-            pad_top = np.random.randint(low=0, high=delta_height + 1)
-            pad_left = np.random.randint(low=0, high=delta_width + 1)
+            pad_top = torch.random.randint(low=0, high=delta_height + 1)
+            pad_left = torch.random.randint(low=0, high=delta_width + 1)
         else:
             pad_top = delta_height // 2
             pad_left = delta_width // 2
@@ -197,7 +196,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         corresponding dimension of the specified size.
 
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 The image to be resized.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to resize the image to.
