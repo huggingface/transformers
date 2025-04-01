@@ -99,9 +99,9 @@ transformers-cli chat --model_name_or_path tiiuae/falcon-7b-instruct
 </hfoption>
 </hfoptions>
 
-## Quantization for Efficient Inference
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization]../quantization/overview) overview for more available quantization backends.
 
-For lower memory usage, you can load Falcon with 4-bit quantization:
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
 # Make sure to have bitsandbytes available in the environment
