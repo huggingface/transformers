@@ -630,7 +630,6 @@ class Idefics3PreTrainedModel(PreTrainedModel):
             else self.config.get_text_config().initializer_range
         )
 
-
         if hasattr(module, "class_embedding"):
             module.class_embedding.data.normal_(mean=0.0, std=std)
 
