@@ -51,7 +51,6 @@ class Phi3VProcessor(ProcessorMixin):
     valid_kwargs = ["chat_template"]
     image_processor_class = "Phi3VImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
-    special_image_token = "<|image|>"
 
     def __init__(self, image_processor, tokenizer, chat_template: str = None, **kwargs):
         self.image_processor = image_processor
@@ -148,13 +147,6 @@ class Phi3VProcessor(ProcessorMixin):
                 Height of the image.
         """
         return self.image_processor.calc_num_image_tokens_from_image_size(width, height)
-
-    @property
-    def special_image_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
-
-    def get_special_image_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
 
     def _convert_images_texts_to_inputs(
         self,

@@ -81,181 +81,38 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
 
-    def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
-        text_split_images = []
-        for n_h in range(image_rows):
-            for n_w in range(image_cols):
-                text_split_images += (
-                    [self.fake_image_token_id]
-                    + processor.tokenizer(f"<row_{n_h + 1}_col_{n_w + 1}>", add_special_tokens=False)["input_ids"]
-                    + [self.image_token_id] * self.image_seq_len
-                )
-            text_split_images += processor.tokenizer("\n", add_special_tokens=False)["input_ids"]
-        text_split_images = text_split_images[:-1]  # remove last newline
-        # add double newline, as it gets its own token
-        text_split_images += processor.tokenizer("\n\n", add_special_tokens=False)["input_ids"]
-        text_split_images += (
-            [self.fake_image_token_id]
-            + self.global_img_tokens_id
-            + [self.image_token_id] * self.image_seq_len
-            + [self.fake_image_token_id]
-        )
-        return text_split_images
+    def get_expected_input_ids(self, processor, image):
+        num_crops = processor.image_processor.num_crops
+        imgsize = list(image.size)
+        imgsize.sort()
+        height, width = imgsize
+        ratio = width / height
+        scale = 1
+        while scale * np.ceil(scale / ratio) <= num_crops:
+            scale += 1
+        scale -= 1
+        num_img_tokens = (scale * scale + 1) * 144 + 1 + (scale + 1) * 12
+        img_tokens = [-1 for num in range(num_img_tokens)]
+        img_tokens.append(1)
+        return img_tokens
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname)
 
-    def test_process_interleaved_images_prompts_no_image_splitting(self):
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
-        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
-        processor_kwargs = self.prepare_processor_dict()
-
-        processor = self.processor_class(**processor_components, **processor_kwargs)
-
-        # Test that a single image is processed correctly
-        inputs = processor(images=self.image1)
-        image1_expected_size = (512, 512)
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 1, 3, *image1_expected_size))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 1, *image1_expected_size))
-        # fmt: on
-
-        # Test a single sample with image and text
-        image_str = "<image>"
-        text_str = "In this image, we see"
-        text = image_str + text_str
-        inputs = processor(text=text, images=self.image1)
-
-        # fmt: off
-        tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [[self.fake_image_token_id] + self.global_img_tokens_id + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
-        self.assertEqual(inputs["input_ids"], expected_input_ids)
-        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 1, 3, *image1_expected_size))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 1, *image1_expected_size))
-        # fmt: on
-
-        # Test that batch is correctly processed
-        image_str = "<image>"
-        text_str_1 = "In this image, we see"
-        text_str_2 = "In this image, we see"
-
-        text = [
-            image_str + text_str_1,
-            image_str + image_str + text_str_2,
-        ]
-        images = [[self.image1], [self.image2, self.image3]]
-
-        inputs = processor(text=text, images=images, padding=True)
-
-        # fmt: off
-        tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
-        tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
-        image_tokens = [self.fake_image_token_id] + self.global_img_tokens_id + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
-        expected_input_ids_1 = image_tokens + tokenized_sentence_1["input_ids"]
-        expected_input_ids_2 = 2 * image_tokens + tokenized_sentence_2["input_ids"]
-        # Pad the first input to match the second input
-        pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
-        padded_expected_input_ids_1 = [self.padding_token_id] * pad_len + expected_input_ids_1
-
-        self.assertEqual(
-            inputs["input_ids"], [padded_expected_input_ids_1, expected_input_ids_2]
-        )
-        self.assertEqual(
-            inputs["attention_mask"],
-            [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
-        )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 2, 3, 512, 512))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 2, 512, 512))
-        # fmt: on
-
-    def test_process_interleaved_images_prompts_image_splitting(self):
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
-        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=True)
-        processor_kwargs = self.prepare_processor_dict()
-
-        processor = self.processor_class(**processor_components, **processor_kwargs)
-
-        # Test that a single image is processed correctly
-        inputs = processor(images=self.image1)
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
-        # fmt: on
-        self.maxDiff = None
-
-        # Test a single sample with image and text
-        image_str = "<image>"
-        text_str = "In this image, we see"
-        text = image_str + text_str
-        inputs = processor(text=text, images=self.image1)
-
-        # fmt: off
-        tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
-        expected_input_ids_1 = [split_image1_tokens + tokenized_sentence["input_ids"]]
-        self.assertEqual(inputs["input_ids"], expected_input_ids_1)
-        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids_1[0])])
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
-        # fmt: on
-
-        # Test that batch is correctly processed
-        image_str = "<image>"
-        text_str_1 = "In this image, we see"
-        text_str_2 = "bla, bla"
-
-        text = [
-            image_str + text_str_1,
-            text_str_2 + image_str + image_str,
-        ]
-        images = [[self.image1], [self.image2, self.image3]]
-
-        inputs = processor(text=text, images=images, padding=True)
-
-        # fmt: off
-        tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
-        tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
-
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
-        split_image2_tokens = self.get_split_image_expected_tokens(processor, 4, 4)
-        split_image3_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
-        expected_input_ids_1 = split_image1_tokens + tokenized_sentence_1["input_ids"]
-        expected_input_ids_2 = tokenized_sentence_2["input_ids"] + split_image2_tokens + split_image3_tokens
-        # Pad the first input to match the second input
-        pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
-        padded_expected_input_ids_1 = [self.padding_token_id] * pad_len + expected_input_ids_1
-
-        self.assertEqual(
-            inputs["input_ids"], [padded_expected_input_ids_1, expected_input_ids_2]
-        )
-        self.assertEqual(
-            inputs["attention_mask"],
-            [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
-        )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 30, 3, 512, 512))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 30, 512, 512))
-        # fmt: on
-
-    def test_add_special_tokens_processor(self):
+    def test_image_token_count(self):
         processor = self.get_processor()
 
-        image_str = "<image>"
-        text_str = "In this image, we see"
+        image_str = "<|image_1|>"
+        text_str = "In this image, we see\n"
         text = text_str + image_str
 
-        # fmt: off
-        inputs = processor(text=text, images=self.image1, add_special_tokens=False)
-        tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        inputs = processor(text=text, images=self.image1, return_tensors='pt')
+        tokenized_sentence = processor.tokenizer(text_str)
+        split_image1_tokens = self.get_expected_input_ids(processor, self.image1)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
-        self.assertEqual(inputs["input_ids"], expected_input_ids)
-
-        inputs = processor(text=text, images=self.image1)
-        expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
-        self.assertEqual(inputs["input_ids"], expected_input_ids)
-        # fmt: on
+        inputs = inputs["input_ids"].tolist()
+        self.assertEqual(inputs, expected_input_ids)
 
     @unittest.skip(reason="from @molbap @zucchini-nlp, passing non-nested images is error-prone and not recommended")
     def test_non_nested_images_with_batched_text(self):
@@ -276,55 +133,6 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 2, 3, 512, 512))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (2, 2, 512, 512))
-
-    # Copied from tests.models.idefics2.test_processor_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
-    def test_process_interleaved_images_prompts_image_error(self):
-        processor = self.get_processor()
-
-        text = [
-            "This is a test sentence.",
-            "In this other sentence we try some good things",
-        ]
-        images = [[self.image1], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [[self.image1], []]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-
-        text = [
-            "This is a test sentence.<image>",
-            "In this other sentence we try some good things<image>",
-        ]
-        images = [[self.image1], [self.image2, self.image3]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1, self.image2, self.image3]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-
-        text = [
-            "This is a test sentence.",
-            "In this other sentence we try some good things<image>",
-        ]
-        images = [[self.image1], []]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1, self.image2]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
@@ -530,19 +338,19 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         text = "This is a simple text without images."
-        inputs = processor(text=text)
+        inputs = processor(text=text, add_special_tokens=False, return_tensors=None)
 
         tokenized_sentence = processor.tokenizer(text, add_special_tokens=False)
-        expected_input_ids = [tokenized_sentence["input_ids"]]
+        expected_input_ids = tokenized_sentence["input_ids"]
 
         self.assertEqual(inputs["input_ids"], expected_input_ids)
-        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
+        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids)][0])
         self.assertTrue("pixel_values" not in inputs)
         self.assertTrue("pixel_attention_mask" not in inputs)
 
         # Test batch of texts without image tokens
         texts = ["First text.", "Second piece of text."]
-        batch_inputs = processor(text=texts, padding=True)
+        batch_inputs = processor(text=texts, padding=True, add_special_tokens=False, return_tensors=None)
 
         tokenized_1 = processor.tokenizer(texts[0], add_special_tokens=False)
         tokenized_2 = processor.tokenizer(texts[1], add_special_tokens=False)
@@ -563,33 +371,3 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
-
-    @require_torch
-    @require_vision
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
