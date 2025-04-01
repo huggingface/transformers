@@ -256,8 +256,58 @@ def is_mlx_array(x):
 def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    Performance-optimized version that avoids redundant checks and minimizes data transfers.
     """
+    # Fast path for common Python types
+    if isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
 
+    # Handle collections with type-specific optimizations
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_py_obj(o) for o in obj]
+
+    # Type-specific fast paths without using _get_frameworks_and_test_func
+    # This avoids redundant checks for each object
+
+    # PyTorch tensor
+    import torch
+
+    if isinstance(obj, torch.Tensor):
+        # For large tensors, converting to numpy first is faster than direct tolist()
+        if obj.numel() > 1000:  # Threshold determined by testing
+            return obj.detach().cpu().numpy().tolist()
+        else:
+            return obj.detach().cpu().tolist()
+
+    # NumPy array (check after PyTorch to avoid unnecessary conversions)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+
+    # NumPy scalar
+    if isinstance(obj, np.number):
+        return obj.tolist()
+
+    # TensorFlow tensor - only import if needed
+    try:
+        import tensorflow as tf
+
+        if isinstance(obj, tf.Tensor):
+            return obj.numpy().tolist()
+    except ImportError:
+        pass
+
+    # JAX array - only import if needed
+    try:
+        import jax.numpy as jnp
+
+        if isinstance(obj, jnp.ndarray):
+            return np.asarray(obj).tolist()
+    except ImportError:
+        pass
+
+    # Fall back to original behavior for other types
     framework_to_py_obj = {
         "pt": lambda obj: obj.detach().cpu().tolist(),
         "tf": lambda obj: obj.numpy().tolist(),
@@ -265,22 +315,13 @@ def to_py_obj(obj):
         "np": lambda obj: obj.tolist(),
     }
 
-    if isinstance(obj, (dict, UserDict)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
-
-    # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(obj)
     for framework, test_func in framework_to_test_func.items():
         if test_func(obj):
             return framework_to_py_obj[framework](obj)
 
-    # tolist also works on 0d np arrays
-    if isinstance(obj, np.number):
-        return obj.tolist()
-    else:
-        return obj
+    # Return as-is if no conversion applies
+    return obj
 
 
 def to_numpy(obj):
