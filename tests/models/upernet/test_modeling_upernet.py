@@ -184,14 +184,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @require_torch_multi_gpu
     @unittest.skip(reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
     def test_multi_gpu_data_parallel_forward(self):
