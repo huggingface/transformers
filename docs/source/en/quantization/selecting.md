@@ -141,7 +141,7 @@ Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), e
     *   You need extreme compression (sub-4-bit).
     *   You are conducting research or require state-of-the-art results from their respective papers.
     *   You have significant compute resources available for potentially complex quantization procedures.
-*   Recommendation: Consult their specific documentation and associated papers carefully before choosing them for production use.
+We recommend consulting each methods documentation and associated papers carefully before choosing one for use in production.
 
 ---
 
