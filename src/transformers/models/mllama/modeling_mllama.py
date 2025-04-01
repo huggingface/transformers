@@ -1038,15 +1038,22 @@ class MllamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, MllamaTextRMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, MllamaVisionModel):
             nn.init.normal_(module.class_embedding.data, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
             nn.init.normal_(module.embedding.data, std=std)
+            nn.init.zeros_(module.gate.data)
         elif isinstance(module, MllamaVisionEncoderLayer) and module.is_gated:
             nn.init.normal_(module.gate_attn.data, std=std)
             nn.init.normal_(module.gate_ffn.data, std=std)
+        elif isinstance(module, MllamaCrossAttentionDecoderLayer):
+            module.cross_attn_attn_gate.data.zero_()
+            module.cross_attn_mlp_gate.data.zero_()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(

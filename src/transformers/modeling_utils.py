@@ -2449,6 +2449,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._init_weights(module)
         module._is_hf_initialized = True
 
+    def initialize_weights(self):
+        """
+        This is equivalent to calling `self.apply(self._initialize_weights)`, but instead of full depth-first recursion,
+        it handles correctly composite models. Indeed, depth-first recursion fails with composite models as it will usually
+        initialize the basic blocks (e.g. nn.Linear, nn.Embedding, etc) first, which will cause them to be initialized according
+        to the `_init_weights` of the outer-most model instead of the given sub-model.
+        This function first searches for sub-models, initialize them, then initialize only remaining modules.
+        """
+        sub_models = []
+        for module_name, module in self.named_modules():
+            # self is of course not a sub-model
+            if module is self:
+                continue
+            if hasattr(module, "_init_weights"):
+                sub_models.append(module_name)
+
+        # sort according to depth, in order to initialize the dept-most sub-models first (to avoid issue mentionned in docstring)
+        # Note that the ordering of similar depth modules is not important, as they cannot have common modules
+        sub_models = sorted(sub_models, key=lambda x: len(x.split(".")), reverse=True)
+
+        for module_name in sub_models:
+            module = self.get_submodule(module_name)
+            # This will set the `_is_hf_initialized` flag everywhere, making future calls on the same module to be skipped
+            module.apply(module._initialize_weights)
+
+        # Finally, apply it to self as well to finalize missing modules
+        self.apply(self._initialize_weights)
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -3074,7 +3102,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if _init_weights:
             # Initialize weights
-            self.apply(self._initialize_weights)
+            self.initialize_weights()
 
             # Tie weights should be skipped when not initializing all weights
             # since from_pretrained(...) calls tie weights anyways
@@ -5286,9 +5314,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 )
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
-                self.apply(self._initialize_weights)
+                self.initialize_weights()
         else:
-            self.apply(self._initialize_weights)
+            self.initialize_weights()
 
     def get_parameter_or_buffer(self, target: str):
         """
