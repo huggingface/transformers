@@ -1592,7 +1592,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
     def forward_post(
         self,
         hidden_states: torch.Tensor,
-        level_index: int = None,
+        level_index: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
@@ -1651,7 +1651,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
     def forward_pre(
         self,
         hidden_states: torch.Tensor,
-        level_index: int = None,
+        level_index: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
@@ -1712,7 +1712,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        level_index: int = None,
+        level_index: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
@@ -2013,7 +2013,9 @@ class Mask2FormerMaskPredictor(nn.Module):
 
         self.mask_embedder = Mask2FormerMLPPredictionHead(self.hidden_size, self.hidden_size, mask_feature_size)
 
-    def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
+    def forward(
+        self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: Optional[int] = None
+    ):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
         is_tracing = torch.jit.is_tracing() or isinstance(outputs, torch.fx.Proxy) or is_torchdynamo_compiling()

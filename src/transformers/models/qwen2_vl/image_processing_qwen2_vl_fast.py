@@ -263,11 +263,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        min_pixels: int = None,
-        max_pixels: int = None,
-        patch_size: int = None,
-        temporal_patch_size: int = None,
-        merge_size: int = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -339,7 +339,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
         else:
-            size = self.size
+            size = {**self.size}
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         if min_pixels is not None:
             size["shortest_edge"] = min_pixels

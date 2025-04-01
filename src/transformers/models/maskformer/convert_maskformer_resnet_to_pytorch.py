@@ -125,31 +125,31 @@ def create_rename_keys(config):
             for i in range(3):
                 rename_keys.append(
                     (
-                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.weight",
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i + 1}.weight",
                         f"model.pixel_level_module.encoder.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.weight",
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i + 1}.norm.weight",
                         f"model.pixel_level_module.encoder.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.bias",
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i + 1}.norm.bias",
                         f"model.pixel_level_module.encoder.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_mean",
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i + 1}.norm.running_mean",
                         f"model.pixel_level_module.encoder.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_var",
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i + 1}.norm.running_var",
                         f"model.pixel_level_module.encoder.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
