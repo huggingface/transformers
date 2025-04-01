@@ -55,7 +55,7 @@ class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.NEAREST
+    resample = F.InterpolationMode.NEAREST_EXACT
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 346, "width": 346}
