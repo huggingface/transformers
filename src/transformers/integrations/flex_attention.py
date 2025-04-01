@@ -141,6 +141,7 @@ def make_flex_block_causal_mask(
 
         # Padding mask logic
         padding_mask = document_ids[batch_idx, q_idx] > 0
+        print(chunked_causal_mask & document_mask & padding_mask)
         return chunked_causal_mask & document_mask & padding_mask
 
     mask_mod = causal_mask_mod
@@ -217,7 +218,7 @@ def flex_attention_forward(
 
     enable_gqa = True
     num_local_query_heads = query.shape[1]
-    if not((num_local_query_heads & (num_local_query_heads)) == 0):
+    if not((num_local_query_heads & (num_local_query_heads - 1)) == 0):
         key = repeat_kv(key, num_local_query_heads)
         value = repeat_kv(value, num_local_query_heads)
         enable_gqa = False

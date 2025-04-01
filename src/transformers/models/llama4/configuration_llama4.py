@@ -178,7 +178,7 @@ class Llama4TextConfig(PretrainedConfig):
         rope_scaling=None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
-        attention_chunk_size=8192,
+        attention_chunk_size=3,
         for_llm_compressor=False,
         **kwargs,
     ):

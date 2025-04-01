@@ -322,7 +322,7 @@ class Llama4TextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.pretraining_tp = 8
+        self.use_rope = not layer_idx in config.no_rope_layers
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -335,7 +335,7 @@ class Llama4TextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        if self.config.use_qk_norm:
+        if self.config.use_qk_norm and not self.use_rope:
             self.qk_norm = Llama4TextL2Norm()
 
     def forward(
@@ -359,7 +359,7 @@ class Llama4TextAttention(nn.Module):
                 query_states, key_states, position_embeddings.to(query_states.device)
             )
 
-        if self.config.use_qk_norm:  # the 128E model does not use qk_norm
+        if hasattr(self, "qk_norm"):  # the 128E model does not use qk_norm
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
@@ -403,7 +403,8 @@ class Llama4TextDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
         self.use_chunked_attention = layer_idx in config.no_rope_layers
-        if layer_idx in config.moe_layers:  # the 128E model interleaves dense / sparse
+        self.is_moe_layer = layer_idx in config.moe_layers
+        if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
         else:
             self.feed_forward = Llama4TextMLP(config, intermediate_size=config.intermediate_size_mlp)
@@ -749,8 +750,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
             return None
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            print(attention_mask)
+            print(chunked_attention_mask)
+            exit(0)
             return attention_mask, chunked_attention_mask
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
