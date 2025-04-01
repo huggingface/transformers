@@ -27,6 +27,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     torch_int,
 )
@@ -1349,6 +1350,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         return fine_coordinates
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(EFFICIENTLOFTR_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1421,9 +1423,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         matching_keypoints[:, :, :, 0] = matching_keypoints[:, :, :, 0] / width
         matching_keypoints[:, :, :, 1] = matching_keypoints[:, :, :, 1] / height
-
-        if not return_dict:
-            return (coarse_matched_indices, coarse_matching_scores, matching_keypoints) + model_outputs[1:]
 
         return KeypointMatchingOutput(
             matches=coarse_matched_indices,
