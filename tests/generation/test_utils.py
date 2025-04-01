@@ -127,12 +127,8 @@ VLM_CLASS_NAMES = [
     "ayavision",
     "gemma3",
     "mistral3",
-<<<<<<< HEAD
     "chameleon",
     "ovis2"
-=======
-    "ovis2",
->>>>>>> Apply style fixes
 ]
 
 
