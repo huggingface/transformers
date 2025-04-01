@@ -235,10 +235,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="MaskFormerSwin is only used as an internal backbone")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
         model.to(torch_device)
