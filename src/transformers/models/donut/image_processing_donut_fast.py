@@ -16,7 +16,6 @@
 
 from typing import Optional, Union
 
-
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
