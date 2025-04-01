@@ -564,7 +564,7 @@ def is_torch_fp16_available_on_device(device):
     import torch
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
         _ = x @ x
 
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
@@ -673,31 +673,6 @@ def is_ftfy_available():
 
 def is_g2p_en_available():
     return _g2p_en_available
-
-
-@lru_cache()
-def is_torch_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-
-    if not _torch_available:
-        return False
-    if importlib.util.find_spec("torch_xla") is not None:
-        if check_device:
-            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-            try:
-                import torch_xla.core.xla_model as xm
-
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-        return True
-    return False
 
 
 @lru_cache
@@ -810,6 +785,10 @@ def is_torch_hpu_available():
         return False
 
     import torch
+
+    if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
+        # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
+        import habana_frameworks.torch  # noqa: F401
 
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
@@ -1035,11 +1014,6 @@ def is_flash_attn_2_available():
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
-        return False
-
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:
