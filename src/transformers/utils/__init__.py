@@ -45,6 +45,7 @@ from .generic import (
     add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
+    can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     find_labels,
