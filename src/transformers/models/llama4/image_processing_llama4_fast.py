@@ -414,9 +414,6 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(grouped_processed_images, grouped_images_index)
         aspect_ratios_list = reorder_images(grouped_aspect_ratios, grouped_images_index)
 
-        # temp hack for compatibility test. Not checking in this line
-        return_tensors = None
-
         processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
         aspect_ratios = torch.stack(aspect_ratios_list, dim=0) if return_tensors else aspect_ratios_list
         return BatchFeature(
