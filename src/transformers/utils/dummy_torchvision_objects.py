@@ -147,3 +147,10 @@ class ViTImageProcessorFast(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
+
+
+class ViltImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
