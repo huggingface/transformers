@@ -248,6 +248,11 @@ class ModernBertConfig(PretrainedConfig):
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
 
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
+
 
 def _unpad_modernbert_input(
     inputs: torch.Tensor,
