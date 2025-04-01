@@ -296,7 +296,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
         do_image_splitting: bool = True,
         max_image_size: Dict[str, int] = None,
         do_rescale: bool = True,

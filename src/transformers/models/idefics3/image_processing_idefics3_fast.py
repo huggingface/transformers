@@ -92,25 +92,12 @@ class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """,
 )
 class Idefics3ImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"longest_edge": 4 * 364}
     max_image_size = {"longest_edge": 364}
-    default_to_square = None
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
@@ -244,8 +231,8 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             num_splits_h, num_splits_w = 0, 0
             frames = image.unsqueeze(1)
 
-        num_splits_h = [num_splits_h] * batch_size
-        num_splits_w = [num_splits_w] * batch_size
+        num_splits_h = [[num_splits_h]] * batch_size
+        num_splits_w = [[num_splits_w]] * batch_size
 
         return frames, num_splits_h, num_splits_w
 
@@ -313,7 +300,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = None
         if return_pixel_mask:
-            pixel_mask = torch.zeros_like(image, dtype=torch.int64)
+            pixel_mask = torch.zeros_like(image[...,0,:,:], dtype=torch.int64)
             pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask
@@ -396,6 +383,8 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_rows = reorder_images(processed_rows_grouped, grouped_images_index)
+        processed_cols = reorder_images(processed_cols_grouped, grouped_images_index)
 
         # For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         # For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
@@ -428,8 +417,6 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
         if return_row_col_info:
-            processed_rows = reorder_images(processed_rows_grouped, grouped_images_index)
-            processed_cols = reorder_images(processed_cols_grouped, grouped_images_index)
             encoding["rows"] = processed_rows
             encoding["cols"] = processed_cols
 
