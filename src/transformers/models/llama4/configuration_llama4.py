@@ -171,6 +171,8 @@ class Llama4TextConfig(PretrainedConfig):
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
         rope_scaling="llama3",
+        no_rope_layers=None,
+        no_rope_layer_interval=4,
         **kwargs,
     ):
         super().__init__(
@@ -207,6 +209,8 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        default_no_rope_layers = list(range(num_hidden_layers, no_rope_layer_interval))
+        self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
 
 
 class Llama4Config(PretrainedConfig):
