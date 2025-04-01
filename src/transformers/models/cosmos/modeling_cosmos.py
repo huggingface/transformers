@@ -560,11 +560,6 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
-        # TODO: add causalm mask somwhow
-        attention_mask = torch.tril(torch.ones_like(attn_weights))
-        dtype_min = torch.finfo(attn_weights.dtype).min
-        attn_weights = attn_weights.masked_fill(attention_mask == 0, dtype_min)
-
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
@@ -668,7 +663,7 @@ class CosmosVQVAEAttention(nn.Module):
         self.attn_norm_1 = CosmosVQVAETemporalNorm(in_channels)
         self.attn_norm_2 = CosmosVQVAETemporalNorm(in_channels)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor):
         # Apply attn norm + attn in spatial dim
         residual = hidden_states
         hidden_states = self.attn_norm_1(hidden_states)
@@ -689,7 +684,7 @@ class CosmosVQVAEAttention(nn.Module):
         batch_size, channels, temporal, height, width = hidden_states.shape
         hidden_states = hidden_states.permute(0, 3, 4, 1, 2).contiguous()
         hidden_states = hidden_states.view(batch_size * height * width, channels, temporal).transpose(1, 2)
-        hidden_states = self.attn_2(hidden_states)[0]
+        hidden_states = self.attn_2(hidden_states, attention_mask=attention_mask)[0]
         hidden_states = hidden_states.reshape(batch_size, height, width, temporal, channels).permute(0, 4, 3, 1, 2)
         hidden_states += residual
         return hidden_states
@@ -710,9 +705,9 @@ class CosmosVQVAEMiddleBlock(nn.Module):
             dropout=config.dropout,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.FloatTensor, attention_mask: torch.Tensor):
         hidden_states = self.block_1(hidden_states)
-        hidden_states = self.attn(hidden_states)
+        hidden_states = self.attn(hidden_states, attention_mask=attention_mask)
         hidden_states = self.block_2(hidden_states)
         return hidden_states
 
@@ -860,13 +855,13 @@ class CosmosVQVAEEncoder(nn.Module):
             CosmosCausalConv3d(out_channels, out_channels, kernel_size=(3, 1, 1), stride=1, padding=0),
         )
 
-    def forward(self, pixel_values: torch.LongTensor):
+    def forward(self, pixel_values: torch.LongTensor, attention_mask: torch.Tensor):
         hidden_states = self.patch(pixel_values)
 
         # downsampling & middle
         hidden_states = self.conv_in(hidden_states)
         hidden_states = self.down_block(hidden_states)
-        hidden_states = self.middle_block(hidden_states)
+        hidden_states = self.middle_block(hidden_states, attention_mask=attention_mask)
 
         # end
         hidden_states = self.norm_out(hidden_states)
@@ -897,10 +892,10 @@ class CosmosVQVAEDecoder(nn.Module):
         )
         self.unpatch = CosmosUnpatch3D(config.patch_size)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.FloatTensor, attention_mask: torch.Tensor):
         hidden_states = self.conv_in(hidden_states)
 
-        hidden_states = self.middle_block(hidden_states)
+        hidden_states = self.middle_block(hidden_states, attention_mask=attention_mask)
         hidden_states = self.up_block(hidden_states)
 
         hidden_states = self.norm_out(hidden_states)
@@ -983,22 +978,72 @@ class CosmosVQVAE(PreTrainedModel):
     def encode(self, pixel_values: torch.Tensor):
         # b t c h w -> b c t h w
         pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
-        hidden_states = self.encoder(pixel_values)
+        causal_mask = self._update_causal_mask(pixel_values)
+        hidden_states = self.encoder(pixel_values, attention_mask=causal_mask)
         hidden_states = self.quant_conv(hidden_states)
         codes, quant_indices = self.quantize(hidden_states)
         return codes, quant_indices
 
     def decode(self, indices: torch.Tensor):
         codes = self.quantize.indices_to_codes(indices)
-        codes = codes.to(torch.bfloat16)
+
+        # dequantization returns an fp32 tensor, we need to cast to VAE dtype if needed
+        codes = codes.to(self.post_quant_conv.conv3d.weight.dtype)
         hidden_states = self.post_quant_conv(codes)
-        video = self.decoder(hidden_states)
+        causal_mask = self._update_causal_mask(hidden_states)
+        video = self.decoder(hidden_states, attention_mask=causal_mask)
         return video
 
     def forward(self, pixel_values):
         quant_info, quant_codes = self.encode(pixel_values)
         reconstructions = self.decode(quant_info)
         return reconstructions, quant_info
+
+    def _update_causal_mask(self, input_tensor: torch.Tensor):
+        # For SDPA, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in order to dispatch on Flash Attention 2
+        if self.config._attn_implementation == "flash_attention_2" or self.config._attn_implementation:
+            return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        sequence_length = self.config.base_channels * self.config.channel_multiplier[-1]
+        batch_size = input_tensor.shape[0] * 40 * 64
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
+            sequence_length=sequence_length,
+            dtype=dtype,
+            device=device,
+            batch_size=batch_size,
+        )
+
+        return causal_mask
+
+    @staticmethod
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        sequence_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        batch_size: int,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length).
+
+        Args:
+            sequence_length (`int`):
+                The sequence length being processed. Tthe mask will be as long as the sequence length,
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        min_dtype = torch.finfo(dtype).min
+        causal_mask = torch.full((sequence_length, sequence_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+
+        return causal_mask
 
 
 class CosmosAbsolutePositionEmbedding(nn.Module):
@@ -1256,24 +1301,25 @@ class CosmosTextAttention(nn.Module):
 
     def __init__(self, config: CosmosTextConfig, layer_idx: int, is_self_attention: bool = True):
         super().__init__()
+        # define `kv_hidden_size` before `init` to get it prepended to copied code, not appended
+        kv_hidden_size = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
+
         self.is_causal = is_self_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        kv_hidden_size = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
         self.k_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-
         self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -1941,7 +1987,79 @@ class CosmosPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-COSMOS_INPUTS_DOCSTRING = "Hello"
+COSMOS_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
+            [`Emu3ImageProcessor`] for processing images).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Has to be an instance of [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
 
 
 class CosmosModel(CosmosPreTrainedModel):
@@ -1995,7 +2113,7 @@ class CosmosModel(CosmosPreTrainedModel):
         video = self.vqmodel.decode(video_tokens)
         return video
 
-    # @add_start_docstrings_to_model_forward(COSMOS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(COSMOS_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

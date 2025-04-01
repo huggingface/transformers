@@ -196,9 +196,9 @@ def convert_model(
     model.load_state_dict(state_dict, assign=True, strict=True)
     model.save_pretrained(output_dir, safe_serialization=True)
 
-    # if hub_model_id is not None:
-    #     model.push_to_hub(hub_model_id)
-    #     processor.push_to_hub(hub_model_id)
+    if hub_model_id is not None:
+        model.push_to_hub(hub_model_id)
+        processor.push_to_hub(hub_model_id)
 
     if test_inference:
         pass

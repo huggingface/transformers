@@ -249,7 +249,7 @@ class CosmosTextConfig(PretrainedConfig):
         max_position_embeddings: int = 12800,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: int = 64002,
+        pad_token_id: int = None,
         bos_token_id: int = 64000,
         eos_token_id: int = 64001,
         tie_word_embeddings: bool = False,
@@ -288,10 +288,11 @@ class CosmosTextConfig(PretrainedConfig):
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
-        self.rope_latent_shape = rope_latent_shape
         rope_config_validation(self)
 
         self.attention_dropout = attention_dropout
+
+        self.rope_latent_shape = rope_latent_shape
         self.apply_abs_pos_emb = apply_abs_pos_emb
         self.cross_attn_hidden_size = cross_attn_hidden_size
         self.insert_cross_attn_layers = insert_cross_attn_layers or []
