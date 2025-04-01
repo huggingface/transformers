@@ -14,6 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for EfficientNet."""
 
+from functools import lru_cache
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
@@ -24,7 +25,7 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -107,6 +108,24 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             rescaled_image -= 1
 
         return rescaled_image
+
+    @lru_cache(maxsize=10)
+    def _fuse_mean_std_and_rescale_factor(
+        self,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        device: Optional["torch.device"] = None,
+        rescale_offset: Optional[bool] = False,
+    ) -> tuple:
+        if do_rescale and do_normalize and not rescale_offset:
+            # Fused rescale and normalize
+            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+            do_rescale = False
+        return image_mean, image_std, do_rescale
 
     def rescale_and_normalize(
         self,
