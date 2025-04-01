@@ -3072,7 +3072,8 @@ def get_device_properties() -> DeviceProperties:
             return ("cuda", major)
     elif IS_XPU_SYSTEM:
         import torch
-        arch = torch.xpu.get_device_capability()['architecture']
+
+        arch = torch.xpu.get_device_capability()["architecture"]
         return ("xpu", arch)
     else:
         return (torch_device, None)

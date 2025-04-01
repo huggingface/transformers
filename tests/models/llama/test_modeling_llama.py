@@ -544,7 +544,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
-
     @slow
     @require_read_token
     def test_llama_3_1_hard(self):
