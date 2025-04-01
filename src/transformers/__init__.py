@@ -321,9 +321,9 @@ _import_structure = {
     "models.convnextv2": ["ConvNextV2Config"],
     "models.cosmos": [
         "CosmosConfig",
+        "CosmosProcessor",
         "CosmosTextConfig",
         "CosmosVQVAEConfig",
-        "CosmosProcessor",
     ],
     "models.cpm": [],
     "models.cpmant": [
@@ -1912,10 +1912,10 @@ else:
     _import_structure["models.cosmos"].extend(
         [
             "CosmosForConditionalGeneration",
-            "CosmosTextModel",
             "CosmosModel",
-            "CosmosVQVAE",
             "CosmosPreTrainedModel",
+            "CosmosTextModel",
+            "CosmosVQVAE",
         ]
     )
     _import_structure["models.cpmant"].extend(

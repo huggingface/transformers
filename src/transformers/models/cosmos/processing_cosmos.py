@@ -48,7 +48,7 @@ class CosmosProcessor(ProcessorMixin):
     [`~CosmosProcessor.__call__`] and [`~CosmosProcessor.decode`] for more information.
 
     Args:
-        videos_processor ([`CosmosVideoProcessor`], *optional*):
+        video_processor ([`CosmosVideoProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`T5TokenizerFast`], *optional*):
             The tokenizer is a required input.

@@ -38,9 +38,9 @@ class CosmosVQVAEConfig(PretrainedConfig):
     Args:
         codebook_size (`int`, *optional*, defaults to 32768):
             Codebook size of the VQ model.
-        embed_dim (`int`, *optional*, defaults to 4):
+        embed_dim (`int`, *optional*, defaults to 6):
             Dimension of the quantized vector in codebook.
-        latent_channels (`int`, *optional*, defaults to 4):
+        latent_channels (`int`, *optional*, defaults to 16):
             Dimension of the output channel of encoder and the input channel of decoder
         double_latent (`bool`, *optional*, defaults to `False`):
             Whether double the output dim of the encoder.
@@ -48,22 +48,28 @@ class CosmosVQVAEConfig(PretrainedConfig):
             Input channel of encoder.
         out_channels (`int`, *optional*, defaults to 3):
             Output channel of decoder.
-        temporal_downsample_factor (`int`, *optional*, defaults to 4):
+        temporal_downsample_factor (`int`, *optional*, defaults to 8):
             Temporal downsample factor.
-        base_channels (`int`, *optional*, defaults to 256):
+        base_channels (`int`, *optional*, defaults to 128):
             Basic channel number of the intermediate blocks.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
+        channel_multiplier (`List[int]`, *optional*, defaults to `[2, 4, 4]`):
             Channel scaling factor of the intermediate blocks.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Residual block number in each stage.
         attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
-        hidden_size (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 512):
             Dimension of the hidden representations in the attention layer.
         num_attention_heads (`int`, *optional*, defaults to 1):
             Number of attention heads for each attention layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        patch_size (`int`, *optional*, defaults to 4):
+            VAE patch size
+        levels (`List`, *optional*, defaults to `[8, 8, 8, 5, 5, 5]`):
+            Levels used by the quantizer
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout to apply.
 
     ```python
     >>> from transformers import CosmosVQVAE, CosmosVQVAEConfig
@@ -135,14 +141,14 @@ class CosmosTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 184622):
+        vocab_size (`int`, *optional*, defaults to 64000):
             Vocabulary size of the Cosmos model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`CosmosModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 16):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
@@ -156,7 +162,7 @@ class CosmosTextConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 9216):
+        max_position_embeddings (`int`, *optional*, defaults to 12800):
             The maximum sequence length that this model might ever be used with. Emu supports up to 9216 tokens,
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
@@ -165,13 +171,13 @@ class CosmosTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 151643):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 151849):
+        bos_token_id (`int`, *optional*, defaults to 64000):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 151850):
+        eos_token_id (`int`, *optional*, defaults to 64001):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
+        rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -218,6 +224,16 @@ class CosmosTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rope_latent_shape (`List`, *optional*):
+            Shapes of time, height and width grids.
+        apply_abs_pos_emb (`bool`, *optional*, defaults to `False`):
+            Whether to apply absolute positional embedding or not.
+        cross_attn_hidden_size (`int`, *optional*, defaults to 1024):
+            Cross attention hidden size.
+        insert_cross_attn_layers (`List`, *optional*):
+            Layer indices where to insert cross attention modules.
+        is_video_to_world (`bool`, *optional*, defaults to `False`):
+            Whether model is used in video-2-world setting.
 
 
     ```python
@@ -315,10 +331,12 @@ class CosmosConfig(PretrainedConfig):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
+        vocabulary_map (`Dict`, *optional*):
+            Not used by the model
         prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
-        image_token_id (`dict`, *optional*m defaults to 64000):
+        image_token_id (`dict`, *optional*, defaults to 64000):
             An image placeholder token index.
     """
 

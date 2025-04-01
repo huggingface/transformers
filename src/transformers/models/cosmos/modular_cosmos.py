@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import math
-import random
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -70,6 +69,62 @@ logger = logging.get_logger(__name__)
 
 
 class CosmosVQVAEConfig(Emu3VQVAEConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`CosmosVQVAE`]. It is used to instantiate an VQ-VAE
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a configuration to the VQ model presented in Cosmos paper.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    Args:
+        codebook_size (`int`, *optional*, defaults to 32768):
+            Codebook size of the VQ model.
+        embed_dim (`int`, *optional*, defaults to 6):
+            Dimension of the quantized vector in codebook.
+        latent_channels (`int`, *optional*, defaults to 16):
+            Dimension of the output channel of encoder and the input channel of decoder
+        double_latent (`bool`, *optional*, defaults to `False`):
+            Whether double the output dim of the encoder.
+        in_channels (`int`, *optional*, defaults to 3):
+            Input channel of encoder.
+        out_channels (`int`, *optional*, defaults to 3):
+            Output channel of decoder.
+        temporal_downsample_factor (`int`, *optional*, defaults to 8):
+            Temporal downsample factor.
+        base_channels (`int`, *optional*, defaults to 128):
+            Basic channel number of the intermediate blocks.
+        channel_multiplier (`List[int]`, *optional*, defaults to `[2, 4, 4]`):
+            Channel scaling factor of the intermediate blocks.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            Residual block number in each stage.
+        attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
+            Stage indices to apply attention.
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimension of the hidden representations in the attention layer.
+        num_attention_heads (`int`, *optional*, defaults to 1):
+            Number of attention heads for each attention layer.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        patch_size (`int`, *optional*, defaults to 4):
+            VAE patch size
+        levels (`List`, *optional*, defaults to `[8, 8, 8, 5, 5, 5]`):
+            Levels used by the quantizer
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout to apply.
+
+    ```python
+    >>> from transformers import CosmosVQVAE, CosmosVQVAEConfig
+
+    >>> # Initializing a video VQ model of Cosmos configuration
+    >>> configuration = CosmosVQVAEConfig()
+
+    >>> # Initializing a model from the Cosmos VQ model style configuration
+    >>> model = CosmosVQVAE(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     def __init__(
         self,
         codebook_size: int = 32768,
@@ -93,6 +148,125 @@ class CosmosVQVAEConfig(Emu3VQVAEConfig):
 
 
 class CosmosTextConfig(Emu3TextConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`CosmosTextModel`]. It is used to instantiate a
+    cosmos model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [Cosmos-community/Cosmos-Chat-hf](https://huggingface.co/Cosmos-community/Cosmos-Chat-hf).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 64000):
+            Vocabulary size of the Cosmos model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`CosmosModel`]
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 14336):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 16):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 8):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 12800):
+            The maximum sequence length that this model might ever be used with. Emu supports up to 9216 tokens,
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 151643):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 64000):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 64001):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 500000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rope_latent_shape (`List`, *optional*):
+            Shapes of time, height and width grids.
+        apply_abs_pos_emb (`bool`, *optional*, defaults to `False`):
+            Whether to apply absolute positional embedding or not.
+        cross_attn_hidden_size (`int`, *optional*, defaults to 1024):
+            Cross attention hidden size.
+        insert_cross_attn_layers (`List`, *optional*):
+            Layer indices where to insert cross attention modules.
+        is_video_to_world (`bool`, *optional*, defaults to `False`):
+            Whether model is used in video-2-world setting.
+
+
+    ```python
+    >>> from transformers import CosmosModel, CosmosConfig
+
+    >>> # Initializing a Cosmos-community/Cosmos-Chat-hf style configuration
+    >>> configuration = CosmosConfig()
+
+    >>> # Initializing a model from the Cosmos-community/Cosmos-Chat-hf style configuration
+    >>> model = CosmosModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     def __init__(
         self,
         vocab_size: int = 64000,
@@ -147,10 +321,12 @@ class CosmosConfig(Emu3Config):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
+        vocabulary_map (`Dict`, *optional*):
+            Not used by the model
         prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
-        image_token_id (`dict`, *optional*m defaults to 64000):
+        image_token_id (`dict`, *optional*, defaults to 64000):
             An image placeholder token index.
     """
 
@@ -220,11 +396,14 @@ class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -255,11 +434,14 @@ class CosmosCausalLMOutputWithPast(CausalLMOutputWithPast):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -320,7 +502,7 @@ class CosmosVQVAEVectorQuantizer(nn.Module):
     def codes_to_indices(self, codes: torch.Tensor) -> torch.Tensor:
         half_width = self._levels // 2
         codes = (codes * half_width) + half_width
-        indices = (codes.float() * self._basis).sum(dim=-1).to(torch.int32)
+        indices = (codes.float() * self._basis).sum(dim=-1).to(torch.int64)
         return indices
 
     def indices_to_codes(self, indices: torch.Tensor) -> torch.Tensor:
@@ -907,6 +1089,7 @@ class CosmosVQVAE(Emu3VQVAE):
         "CosmosVQVAEResnetBlock",
         "CosmosVQVAEVectorQuantizer",
     ]
+    _supports_sdpa = True
 
     def __init__(self, config: CosmosVQVAEConfig):
         super().__init__(config)
@@ -1387,8 +1570,8 @@ class CosmosTextModel(LlamaModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
@@ -1422,20 +1605,9 @@ class CosmosTextModel(LlamaModel):
 
         if use_cache and past_key_values is None:
             if not self.config.insert_cross_attn_layers:
-                past_key_values = StaticCache(
-                    config=self.config,
-                    max_batch_size=1,
-                    max_cache_len=12800,
-                    dtype=torch.bfloat16,
-                )
+                past_key_values = DynamicCache()
             else:
-                self_attn_past_kv = StaticCache(
-                    config=self.config,
-                    max_batch_size=1,
-                    max_cache_len=12864,
-                    dtype=torch.bfloat16,
-                )
-                past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1451,14 +1623,17 @@ class CosmosTextModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        self_attn_cache = (
+            past_key_values.self_attention_cache
+            if isinstance(past_key_values, EncoderDecoderCache)
+            else past_key_values
+        )
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values,
-            output_attentions,
+            past_key_values=self_attn_cache,
+            output_attentions=output_attentions,
         )
         if encoder_attention_mask is not None:
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
@@ -1539,10 +1714,10 @@ COSMOS_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
-            [`Emu3ImageProcessor`] for processing images).
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CosmosVideoProcessor.__call__`] for details ([]`CosmosProcessor`] uses
+            [`CosmosVideoProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1606,7 +1781,11 @@ COSMOS_INPUTS_DOCSTRING = r"""
 
 class CosmosPreTrainedModel(Emu3PreTrainedModel):
     _no_split_modules = [
-        "CosmosDecoderLayer",
+        "CosmosVQVAEAttentionBlock",
+        "CosmosVQVAETemporalAttentionBlock",
+        "CosmosVQVAEResnetBlock",
+        "CosmosVQVAEVectorQuantizer",
+        "CosmosTextDecoderLayer",
     ]
 
 
@@ -1629,26 +1808,32 @@ class CosmosModel(CosmosPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+    def get_video_tokens(self, pixel_values_videos: torch.FloatTensor):
         """
         Tokenizes images into discrete tokens with Vector Quantizer module.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
         """
-        vq_tokens, _ = self.vqmodel.encode(pixel_values)
+        vq_tokens, _ = self.vqmodel.encode(pixel_values_videos)
         vq_tokens = vq_tokens.flatten(1)  # (batch_size, seq_length)
-        vq_tokens = vq_tokens[:, :-7680]  # remove pad tokens
+
+        # Only supported lengths are 1 for image and 2 for video conditioning (i.e. 1 or 2 time grids of input context)
+        # VAE can support only 5 time grids, so we'll generate the rest 3 or 4 grids
+        latent_context_size = 2 if pixel_values_videos.shape[1] > 1 else 1
+        time, height, width = self.config.text_config.rope_latent_shape
+        num_gen_tokens = int(np.prod([time - latent_context_size, height, width]))
+        vq_tokens = vq_tokens[:, :-num_gen_tokens]  # remove repeated pad tokens
         if self.config.text_config.is_video_to_world:
-            bov_tokens = [[self.config.get_text_config().bos_token_id] * vq_tokens.shape[0]]
+            bov_tokens = [[self.config.get_text_config().bos_token_id]] * vq_tokens.shape[0]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
             vq_tokens = torch.cat([bov_tokens, vq_tokens], dim=-1)
 
         return vq_tokens
 
     @torch.no_grad
-    def decode_image_tokens(self, video_tokens: torch.LongTensor):
+    def decode_video_tokens(self, video_tokens: torch.LongTensor):
         """
         Decodes generated image tokens from language model to continuous pixel values
         with VQGAN module via upsampling.
@@ -1665,15 +1850,16 @@ class CosmosModel(CosmosPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1686,38 +1872,32 @@ class CosmosModel(CosmosPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # if [input_ids, inputs_embeds, pixel_values].count(None) != 2:
-        #     raise ValueError(
-        #         "You have to specify only one of the input_ids, inputs_embeds and pixel values."
-        #     )
+        if (decoder_input_ids is None) ^ (pixel_values_videos is not None):
+            raise ValueError("You must specify exactly one of decoder_input_ids or pixel_values_videos")
 
-        if pixel_values is not None:
-            input_ids = self.get_image_tokens(pixel_values)
+        if pixel_values_videos is not None:
+            decoder_input_ids = self.get_video_tokens(pixel_values_videos)
 
-        if encoder_hidden_states is None and encoder_input_ids is not None:
-            output = self.prompt_encoder(
-                input_ids=encoder_input_ids,
-                attention_mask=encoder_attention_mask,
-                output_hidden_states=True,
-                output_attentions=True,
-            )
-            encoder_hidden_states = output.last_hidden_state
-            if encoder_attention_mask is not None:
-                lengths = encoder_attention_mask.sum(dim=1)
+        encoder_hidden_states = None
+        if self.config.is_encoder_decoder:
+            if encoder_outputs is None:
+                encoder_outputs = self.prompt_encoder(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True,
+                    output_attentions=True,
+                )
+            encoder_hidden_states = encoder_outputs.last_hidden_state
+            if attention_mask is not None:
+                lengths = attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
 
-        seed = 0
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
+            input_ids=decoder_input_ids,
+            inputs_embeds=decoder_inputs_embeds,
+            attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             position_ids=position_ids,
             position_ids_rope=position_ids_rope,
@@ -1734,7 +1914,8 @@ class CosmosModel(CosmosPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_hidden_states=encoder_hidden_states,
+            encoder_last_hidden_state=encoder_hidden_states,
+            encoder_hidden_states=encoder_outputs.hidden_states if encoder_outputs is not None else None,
         )
         return output if return_dict else output.to_tuple()
 
@@ -1882,15 +2063,16 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1959,14 +2141,15 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            encoder_input_ids=encoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            pixel_values_videos=pixel_values_videos,
             position_ids=position_ids,
             position_ids_rope=position_ids_rope,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1977,7 +2160,9 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        self.lm_head.weight.data = self.lm_head.weight.data.to(torch.bfloat16)
+
+        # FIXME: @raushan why this is not loaded in bf16 wehn asked?
+        # self.lm_head.weight.data = self.lm_head.weight.data.to(torch.bfloat16)
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
@@ -1996,37 +2181,34 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
 
     @torch.no_grad()
-    def generate(self, encoder_input_ids=None, pixel_values=None, **kwargs):
+    def generate(self, input_ids=None, pixel_values_videos=None, **kwargs):
         # Generation from video input only, so we obtain video input ids and pass to generate
-        input_ids = self.model.get_image_tokens(pixel_values)
-        if encoder_input_ids is None:
-            return super().generate(input_ids, **kwargs)
+        decoder_input_ids = self.model.get_video_tokens(pixel_values_videos)
+        if input_ids is None:
+            return super().generate(decoder_input_ids, **kwargs)
 
         # Else we are in video2world generation. We need to encode the prompt
-        encoder_attention_mask = kwargs.pop("encoder_attention_mask", None)
-        output = self.model.prompt_encoder(encoder_input_ids, attention_mask=encoder_attention_mask)
-        encoder_hidden_states = output.last_hidden_state.to(self.dtype)
-        if encoder_attention_mask is not None:
-            lengths = encoder_attention_mask.sum(dim=1)
-            for batch_id in range(encoder_hidden_states.shape[0]):
-                encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
+        attention_mask = kwargs.pop("attention_mask", None)
+        encoder_outputs = self.model.prompt_encoder(input_ids, attention_mask=attention_mask)
 
+        # Only static cache support, since video shapes are static as well
         self_attn_past_kv = StaticCache(
             config=self.config.get_text_config(),
-            max_batch_size=1,
+            max_batch_size=input_ids.shape[0],
             max_cache_len=12864,
-            dtype=torch.bfloat16,
+            dtype=self.dtype,
         )
         past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
         output = super().generate(
-            input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             **kwargs,
         )
@@ -2034,42 +2216,49 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
 
     def prepare_inputs_for_generation(
         self,
-        input_ids,
+        decoder_input_ids,
         past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
+        decoder_attention_mask=None,
+        decoder_inputs_embeds=None,
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        pixel_values=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        pixel_values_videos=None,
+        encoder_outputs=None,
+        attention_mask=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
+            decoder_input_ids,
             past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             cache_position=cache_position,
             position_ids=position_ids,
-            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             use_cache=use_cache,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            attention_mask=attention_mask,
             **kwargs,
         )
 
         # Cosmos needs 3D positions constructed in custom way. DO NOT overwrite 1D positions, which are used in `AbsolutePosEmbLayer`
         seq_length = cache_position[-1] + 1
         position_ids_rope = self.model.language_model._calculate_position_ids(seq_length, device=cache_position.device)
-        input_length = model_inputs["input_ids"].shape[1]
+        input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+        input_length = model_inputs[input_ids_key].shape[1]
         model_inputs["position_ids_rope"] = position_ids_rope[..., -input_length:]
 
+        # little hack to support encoder-decoder and decoder-only from one model
+        if not self.config.is_encoder_decoder:
+            for input_name in ["input_ids", "attention_mask", "inputs_embeds"]:
+                model_inputs[f"decoder_{input_name}"] = model_inputs.get(input_name, None)
+                model_inputs.pop(input_name, None)
+
         if cache_position[0] != 0:
-            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
 

@@ -87,9 +87,12 @@ class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
         encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -122,9 +125,12 @@ class CosmosCausalLMOutputWithPast(CausalLMOutputWithPast):
         encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class CosmosVQVAEVectorQuantizer(nn.Module):
@@ -1953,7 +1959,11 @@ class CosmosPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
-        "CosmosDecoderLayer",
+        "CosmosVQVAEAttentionBlock",
+        "CosmosVQVAETemporalAttentionBlock",
+        "CosmosVQVAEResnetBlock",
+        "CosmosVQVAEVectorQuantizer",
+        "CosmosTextDecoderLayer",
     ]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
@@ -1990,8 +2000,8 @@ COSMOS_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
-            [`Emu3ImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`CosmosVideoProcessor.__call__`] for details ([]`CosmosProcessor`] uses
+            [`CosmosVideoProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -2157,11 +2167,6 @@ class CosmosModel(CosmosPreTrainedModel):
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
 
-        # seed = 0
-        # random.seed(seed)
-        # np.random.seed(seed)
-        # torch.manual_seed(seed)
-
         outputs = self.language_model(
             input_ids=decoder_input_ids,
             inputs_embeds=decoder_inputs_embeds,
@@ -2183,7 +2188,8 @@ class CosmosModel(CosmosPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_last_hidden_state=encoder_outputs,
+            encoder_last_hidden_state=encoder_hidden_states,
+            encoder_hidden_states=encoder_outputs.hidden_states if encoder_outputs is not None else None,
         )
         return output if return_dict else output.to_tuple()
 
@@ -2446,6 +2452,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
 
