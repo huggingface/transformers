@@ -1378,8 +1378,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr")
         >>> model = AutoModel.from_pretrained("stevenbucaille/efficient_loftr")
 
+        >>> inputs = processor(images, return_tensors="pt")
         >>> with torch.no_grad():
-        >>>     inputs = processor(images, return_tensors="pt")
         >>>     outputs = model(**inputs)
         ```"""
         if labels is not None:
