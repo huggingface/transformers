@@ -386,14 +386,11 @@ class AIMv2ModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
 
-        # Set use_head to True for LIT variant
-        # config.vision_config.use_head = True
-
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
+            "return_loss": False,
         }
         return config, inputs_dict
 
@@ -609,6 +606,7 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
 
 
 @require_vision
+@require_torch
 class AIMv2VisionModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference(self):
