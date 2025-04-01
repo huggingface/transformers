@@ -31,7 +31,7 @@ You can find all the original Falcon checkpoints under the [Falcon](https://hugg
 > [!TIP]
 > Click on the Falcon models in the right sidebar for more examples of how to use Falcon for various NLP tasks.
 
-The examples below demonstrate how to use Falcon with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
