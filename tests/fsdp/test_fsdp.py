@@ -108,6 +108,9 @@ if is_accelerate_available():
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
 
+FSDP2_ACCELERATE_VERSION = "1.6.0"
+require_accelerate_fsdp2 = partial(require_accelerate, min_version=FSDP2_ACCELERATE_VERSION)
+
 
 def get_launcher(distributed=False, use_accelerate=False):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
@@ -132,14 +135,6 @@ def _parameterized_custom_name_func(func, param_num, param):
     # name, as by default it shows only the first param
     param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
     return f"{func.__name__}_{param_based_name}"
-
-
-if is_accelerate_available():
-    from accelerate.accelerator import Accelerator
-
-    is_fsdp2_available = hasattr(Accelerator, "is_fsdp2")
-else:
-    is_fsdp2_available = False
 
 
 @require_accelerate
@@ -327,7 +322,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @slow
     @require_fsdp
-    @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
+    @require_accelerate_fsdp2
     def test_accelerate_fsdp2_integration(self):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         sharding_strategy = "full_shard"
@@ -374,7 +369,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @slow
     @require_fsdp
-    @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
+    @require_accelerate_fsdp2
     def test_fsdp2_cpu_offloading(self):
         # TODO: This file is missing and should be added or the test should be removed
         if not os.path.exists("utils/testing_scripts/fsdp_cpu_offloading.py"):
