@@ -564,7 +564,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
-        first_image_in_list = [images_ for images_ in images if images_][0][0]
+        # filter out empty image lists, then take first image of the first sample
+        first_image_in_list = [sample_images for sample_images in images if sample_images][0][0]
 
         if input_data_format == ChannelDimension.FIRST:
             n_channels = first_image_in_list.shape[0]
