@@ -607,7 +607,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            else self.config.get_text_config().initializer_range
         )
 
         if hasattr(module, "class_embedding"):
