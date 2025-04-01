@@ -20,7 +20,7 @@ You can find all the original Command-R checkpoints under the [Command Models](h
 > [!TIP]
 > Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] and[`AutoModel`].
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -42,27 +42,30 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-# pip install transformers
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
-# Format message with the command-r chat template
-messages = [{"role": "user", "content": "Hello, how are you?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-## <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-
-gen_tokens = model.generate(
+# format message with the Command-R chat template
+messages = [{"role": "user", "content": "How do plants make energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+output = model.generate(
     input_ids, 
     max_new_tokens=100, 
     do_sample=True, 
     temperature=0.3,
-    )
+    cache_implementation="static",
+)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
 
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
+</hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+transformers-cli chat --model_name_or_path CohereForAI/c4ai-command-r-v01 --torch_dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -73,24 +76,24 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
-# pip install transformers bitsandbytes accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import torch
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", torch_dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
 
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config)
-
-gen_tokens = model.generate(
+# format message with the Command-R chat template
+messages = [{"role": "user", "content": "How do plants make energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+output = model.generate(
     input_ids, 
     max_new_tokens=100, 
     do_sample=True, 
     temperature=0.3,
-    )
-
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
+    cache_implementation="static",
+)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
