@@ -16,17 +16,17 @@
 
 import unittest
 
-import numpy as np
 import pytest
 import requests
-from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
-from transformers import CosmosConfig, TextConfig, is_torch_available, is_vision_available, set_seed
+from transformers import CosmosConfig, CosmosProcessor, CosmosTextConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_large_gpu,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -35,6 +35,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ..t5.test_modeling_t5 import T5ModelTester
 
 
 if is_vision_available():
@@ -44,139 +45,25 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Emu3Processor,
-        ForCausalLM,
-        ForConditionalGeneration,
-        TextModel,
+        CosmosForConditionalGeneration,
+        CosmosModel,
+    )
+    from transformers.cache_utils import (
+        DynamicCache,
+        StaticCache,
+    )
+    from transformers.generation import (
+        GenerateDecoderOnlyOutput,
+        GreedySearchDecoderOnlyOutput,
+        SampleDecoderOnlyOutput,
     )
 
 
-class Text2TextModelTester:
+class CosmosModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
-
-        config = self.get_config()
-
-        return config, input_ids, attention_mask
-
-    def get_config(self):
-        return TextConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            max_position_embeddings=self.max_position_embeddings,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
-        return config, inputs_dict
-
-
-@require_torch
-class Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (ForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
-
-    def setUp(self):
-        self.model_tester = Text2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = TextModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = TextModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
-        pass
-
-
-class Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
+        batch_size=3,
         is_training=False,
         vocab_size=99,
         hidden_size=32,
@@ -195,7 +82,6 @@ class Vision2TextModelTester:
         temporal_downsample_factor=1,
         base_channels=32,
         vq_channel_multiplier=[1, 1],
-        image_seq_length=100,
         vq_img_token_start_id=3,
     ):
         self.parent = parent
@@ -219,48 +105,396 @@ class Vision2TextModelTester:
         self.vq_channel_multiplier = vq_channel_multiplier
         self.vq_img_token_start_id = vq_img_token_start_id
         self.base_channels = base_channels
-        self.seq_length = seq_length + image_seq_length
-        self.image_seq_length = image_seq_length
+        self.seq_length = 42
+        self.vision_seq_length = 42
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+
+        pixel_values_videos = floats_tensor(
+            [
+                self.batch_size,
+                9,
+                3,
+                self.image_size,
+                self.image_size,
+            ]
+        )
+        return config, pixel_values_videos
+
+    def get_config(self):
+        text_config = CosmosTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            cross_attn_hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            intermediate_size=self.intermediate_size,
+            max_position_embeddings=self.max_position_embeddings,
+            initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            rope_latent_shape=[3, 2, 3],
+        )
+
+        vq_config = {
+            "codebook_size": self.codebook_size,
+            "temporal_downsample_factor": self.temporal_downsample_factor,
+            "base_channels": self.base_channels,
+            "channel_multiplier": self.vq_channel_multiplier,
+            "hidden_size": self.base_channels,
+            "levels": [2, 2, 2, 2, 2, 2],
+        }
+
+        config = CosmosConfig(
+            text_config=text_config,
+            vq_config=vq_config,
+            image_token_id=self.image_token_id,
+        )
+        return config
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values_videos,
+        ) = config_and_inputs
+        inputs_dict = {
+            "pixel_values_videos": pixel_values_videos,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            CosmosModel,
+            CosmosForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    all_generative_model_classes = ()  # Cosmos generates only video as output, so we use custom tests
+    _custom_generative_model_classes = (CosmosForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {}
+    test_headmasking = False
+    test_pruning = False
+    fx_compatible = False
+
+    def setUp(self):
+        self.model_tester = CosmosModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=CosmosConfig, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @pytest.mark.generate
+    def test_greedy_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length)
+
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=False,
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length
+            )
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self._check_generate_outputs(output_generate, model.config)
+
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=True,  # Enable cache
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length
+            )
+            self._check_generate_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
+    def test_sample_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length)
+
+    @pytest.mark.generate
+    def test_sample_generate_dict_output(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._sample_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                num_return_sequences=2,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=False,
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length
+            )
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
+
+            self._check_generate_outputs(output_generate, model.config, num_return_sequences=2)
+
+    @pytest.mark.generate
+    def test_beam_search_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            beam_kwargs = self._get_beam_kwargs()
+            output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length)
+
+    @pytest.mark.generate
+    def test_generate_with_static_cache(self):
+        """
+        Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
+        has the expected shapes
+        """
+        set_model_tester_for_less_flaky_test(self)
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+
+            config.is_decoder = True
+            batch_size = self.model_tester.batch_size
+            seq_length = self.model_tester.vision_seq_length
+            max_new_tokens = 20
+
+            for dtype in (torch.float32, torch.float16):
+                model = model_class(config).to(torch_device).to(dtype).eval()
+                inputs_dict = {
+                    k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
+                    for k, v in inputs_dict.items()
+                }
+                set_model_for_less_flaky_test(model)
+
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "output_scores": True,
+                    "use_cache": True,
+                }
+
+                static_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict, cache_implementation="static"
+                )
+
+                # Check 1: The cache shapes must match the expected shapes
+                max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
+                text_config = config.text_config if hasattr(config, "text_config") else config
+                head_dim = (
+                    text_config.head_dim
+                    if hasattr(text_config, "head_dim")
+                    else text_config.hidden_size // text_config.num_attention_heads
+                )
+                num_key_value_heads = (
+                    text_config.num_attention_heads
+                    if getattr(text_config, "num_key_value_heads", None) is None
+                    else text_config.num_key_value_heads
+                )
+                num_hidden_layers = text_config.num_hidden_layers
+                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
+                self.assertTrue(len(static_cache_generation.past_key_values.key_cache) == num_hidden_layers)
+                self.assertTrue(static_cache_generation.past_key_values.key_cache[0].shape == cache_shape)
+
+                # Check 2: The outputs must be similar to the case with dynamic cache
+                dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
+                self._check_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+
+    @pytest.mark.generate
+    def test_generate_compile_model_forward(self):
+        """
+        Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
+        ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
+        """
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+
+            model = model_class(config).to(torch_device)
+            model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
+            half_batch_size = self.model_tester.batch_size // 2
+            input_1 = {}
+            input_2 = {}
+            for key, value in inputs_dict.items():
+                if isinstance(value, torch.Tensor):
+                    input_1[key] = value[:half_batch_size, :].to(torch_device)
+                    input_2[key] = value[half_batch_size : half_batch_size * 2, :].to(torch_device)
+                else:
+                    input_1[key] = value
+                    input_2[key] = value
+            model_input_sets = [input_1, input_2]
+            self.assertTrue(
+                model_input_sets[0]["pixel_values_videos"].shape == model_input_sets[1]["pixel_values_videos"].shape
+            )
+
+            torch.compiler.reset()  # prevent cached compilation from being used in the test
+            model.generation_config.compile_config._compile_all_devices = True
+
+            generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
+
+            # get eager + dynamic cache results for future comparison
+            dynamic_outputs = []
+            for model_inputs in model_input_sets:
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                dynamic_outputs.append(gen_out)
+                # sanity checks for the default cache implementation
+                decoder_cache = (
+                    gen_out.past_key_values.self_attention_cache
+                    if config.is_encoder_decoder
+                    else gen_out.past_key_values
+                )
+                self.assertTrue(isinstance(decoder_cache, DynamicCache))
+                self.assertFalse(decoder_cache.is_compileable)
+                self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
+
+            generation_kwargs["cache_implementation"] = "static"
+            compiled_outputs = []
+            for model_inputs in model_input_sets:
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                compiled_outputs.append(gen_out)
+                # sanity checks
+                decoder_cache = (
+                    gen_out.past_key_values.self_attention_cache
+                    if config.is_encoder_decoder
+                    else gen_out.past_key_values
+                )
+                self.assertFalse(isinstance(decoder_cache, DynamicCache))
+                self.assertTrue(decoder_cache.is_compileable)
+
+                self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
+
+            for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
+                self._check_similar_generate_outputs(dynamic_result, compiled_result)
+
+
+class CosmosVideoWorldModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        is_training=False,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        intermediate_size=37,
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        image_token_id=3,
+        image_size=30,
+        codebook_size=20,
+        temporal_downsample_factor=1,
+        base_channels=32,
+        vq_channel_multiplier=[1, 1],
+        vq_img_token_start_id=3,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.intermediate_size = intermediate_size
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.image_token_id = image_token_id
+        self.image_size = image_size
+        self.codebook_size = codebook_size
+        self.temporal_downsample_factor = temporal_downsample_factor
+        self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_img_token_start_id = vq_img_token_start_id
+        self.base_channels = base_channels
+        self.seq_length = seq_length
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
         attention_mask = input_ids.ne(1).to(torch_device)
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = self.image_token_id
 
-        pixel_values = floats_tensor(
+        pixel_values_videos = floats_tensor(
             [
                 self.batch_size,
+                9,
                 3,
                 self.image_size,
                 self.image_size,
             ]
         )
-        image_sizes = [[self.image_size, self.image_size]] * self.batch_size
-        image_sizes = torch.tensor(image_sizes, device=torch_device, dtype=torch.int64)
-
-        return config, input_ids, attention_mask, pixel_values, image_sizes
+        return config, input_ids, attention_mask, pixel_values_videos
 
     def get_config(self):
-        # create dummy vocab map for image2bpe mapping if it needs remapping
-        # we assume that vocab size is big enough to account for `codebook_size` amount of
-        # image tokens somewhere at the beginning of total vocab size
-
-        vocab_map = {i: chr(i) for i in range(self.vocab_size)}
-        start = self.vq_img_token_start_id
-        end = self.vq_img_token_start_id + self.codebook_size
-        for i in range(start, end):
-            # dummy str for each token, anything that fits pattern "<|visual token XXXXXX|>"
-            vocab_map[i] = f"<|visual token{i:06d}|>"
-
-        # add tokens that have to be in the vocab, we'll retrieve their ids later in modeling code
-        vocab_map[self.image_token_id] = "<image>"
-        vocab_map[self.image_token_id + 1] = "<|extra_200|>"
-        vocab_map = {v: k for k, v in vocab_map.items()}
-
-        text_config = TextConfig(
+        text_config = CosmosTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -272,6 +506,8 @@ class Vision2TextModelTester:
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
+            rope_latent_shape=[3, 2, 3],
+            is_video_to_world=True,
         )
 
         vq_config = {
@@ -280,8 +516,19 @@ class Vision2TextModelTester:
             "base_channels": self.base_channels,
             "channel_multiplier": self.vq_channel_multiplier,
             "hidden_size": self.base_channels,
+            "levels": [2, 2, 2, 2, 2, 2],
         }
-        return CosmosConfig(text_config=text_config, vq_config=vq_config, vocabulary_map=vocab_map)
+
+        prompt_encoder_config = T5ModelTester(self).get_config()
+
+        config = CosmosConfig(
+            text_config=text_config,
+            vq_config=vq_config,
+            prompt_encoder_config=prompt_encoder_config,
+            image_token_id=self.image_token_id,
+            is_encoder_decoder=True,
+        )
+        return config
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -289,104 +536,40 @@ class Vision2TextModelTester:
             config,
             input_ids,
             attention_mask,
-            pixel_values,
-            image_sizes,
+            pixel_values_videos,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "image_sizes": image_sizes,
+            "pixel_values_videos": pixel_values_videos,
         }
         return config, inputs_dict
 
 
 @require_torch
-class Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (ForConditionalGeneration,) if is_torch_available() else ()
+class CosmosVideoWorldModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            CosmosModel,
+            CosmosForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    # all_generative_model_classes = () # Cosmos generates only video as output, so we use custom tests
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
     def setUp(self):
-        self.model_tester = Vision2TextModelTester(self)
+        self.model_tester = CosmosVideoWorldModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CosmosConfig, has_text_modality=False, common_properties=["vocabulary_map"]
+            self, config_class=CosmosConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
-    @unittest.skip(
-        " has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(
-        " has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        " has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
-    def test_initialization(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(" has dynamic control flow in vision backbone")
-    def test_generate_with_static_cache(self):
-        pass
 
 
 @require_torch
@@ -394,8 +577,8 @@ class IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
-        model = ForConditionalGeneration.from_pretrained("BAAI/-Chat-hf", load_in_4bit=True)
-        processor = Emu3Processor.from_pretrained("BAAI/-Chat-hf")
+        model = CosmosForConditionalGeneration.from_pretrained("BAAI/-Chat-hf", load_in_4bit=True)
+        processor = CosmosProcessor.from_pretrained("BAAI/-Chat-hf")
 
         image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
         prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
@@ -412,8 +595,8 @@ class IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_gpu
     def test_model_generation_batched(self):
-        model = ForConditionalGeneration.from_pretrained("BAAI/-Chat-hf", load_in_4bit=True)
-        processor = Emu3Processor.from_pretrained("BAAI/-Chat-hf")
+        model = CosmosForConditionalGeneration.from_pretrained("BAAI/-Chat-hf", load_in_4bit=True)
+        processor = CosmosProcessor.from_pretrained("BAAI/-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
         image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
@@ -435,88 +618,3 @@ class IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    @require_bitsandbytes
-    @require_torch_large_gpu
-    def test_model_generation_multi_image(self):
-        model = ForConditionalGeneration.from_pretrained("BAAI/-Chat-hf", load_in_4bit=True)
-        processor = Emu3Processor.from_pretrained("BAAI/-Chat-hf")
-
-        image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
-        prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
-
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
-
-        # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"]  # fmt: skip
-        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    @require_bitsandbytes
-    @require_torch_large_gpu
-    def test_model_generate_images(self):
-        model = ForConditionalGeneration.from_pretrained("BAAI/-Gen-hf", load_in_4bit=True)
-        processor = Emu3Processor.from_pretrained("BAAI/-Gen-hf")
-
-        inputs = processor(
-            text=["a portrait of young girl. masterpiece, film grained, best quality."],
-            padding=True,
-            return_tensors="pt",
-            return_for_image_generation=True,
-            image_area=1600,
-        ).to(model.device)
-        self.assertTrue(inputs.input_ids.shape[1] == 21)
-
-        image_sizes = inputs.pop("image_sizes")
-        HEIGHT, WIDTH = image_sizes[0]
-        VISUAL_TOKENS = model.vocabulary_mapping.image_tokens
-
-        def prefix_allowed_tokens_fn(batch_id, input_ids):
-            height, width = HEIGHT, WIDTH
-            visual_tokens = VISUAL_TOKENS
-            image_wrapper_token_id = torch.tensor([processor.tokenizer.image_wrapper_token_id], device=model.device)
-            eoi_token_id = torch.tensor([processor.tokenizer.eoi_token_id], device=model.device)
-            eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
-            pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
-            eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
-            eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
-
-            position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
-            offset = input_ids.shape[0] - position
-            if offset % (width + 1) == 0:
-                return (eol_token_id,)
-            elif offset == (width + 1) * height + 1:
-                return (eof_token_id,)
-            elif offset == (width + 1) * height + 2:
-                return (eoi_token_id,)
-            elif offset == (width + 1) * height + 3:
-                return (eos_token_id,)
-            elif offset > (width + 1) * height + 3:
-                return (pad_token_id,)
-            else:
-                return visual_tokens
-
-        out = model.generate(
-            **inputs,
-            max_new_tokens=200,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-            do_sample=False,
-        )
-        self.assertTrue(out.shape[1] == 54)
-
-        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
-        images = processor.postprocess(list(image.float()), return_tensors="np")
-        self.assertTrue(images["pixel_values"].shape == (3, 40, 40))
-        self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
-
-        filepath = hf_hub_download(
-            repo_id="raushan-testing-hf/images_test",
-            filename="cosmos_image.npy",
-            repo_type="dataset",
-        )
-        original_pixels = np.load(filepath)
-        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))

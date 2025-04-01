@@ -18,8 +18,10 @@ Processor class for Cosmos.
 
 from typing import List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput, VideoInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -108,11 +110,16 @@ class CosmosProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        # `images` are treated as one frame videos when processing and generating
+        if videos is None and images is not None:
+            images = make_flat_list_of_images(images)
+            videos = [np.array(image)[None, ...] for image in images]
+
         data = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
         if text is not None:
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            text_inputs = {f"encoder_{k}": v for k, v in text_inputs.items()}
 
             data.update(text_inputs)
         return BatchFeature(data=data)

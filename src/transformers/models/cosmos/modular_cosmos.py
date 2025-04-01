@@ -1056,7 +1056,6 @@ class CosmosAbsolutePositionEmbedding(nn.Module):
 class CosmosTextRotaryEmbedding(nn.Module):
     def __init__(self, config: CosmosTextConfig, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling.get("rope_type")
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 

@@ -146,7 +146,7 @@ def convert_model(
     # Initialize Cosmos config. Only text config is different for each model, while same VQ is used
     orig_text_config = json.load(open(f"{llm_weights_path}/config.json", "r"))
     text_config = {
-        "is_video_to_world": "text_and_video" in orig_text_config["input_types"],
+        "is_video_to_world": "Video2World" in llm_weights_path,
         "apply_abs_pos_emb": orig_text_config.get("apply_abs_pos_emb", False),
         "cross_attn_hidden_size": orig_text_config.get("context_dim", None),
         "vocab_size": orig_text_config["vocab_size"],
@@ -167,6 +167,8 @@ def convert_model(
         text_config["insert_cross_attn_layers"] = insert_cross_attn_layers
 
     config = CosmosConfig(text_config=text_config)
+    if "Video2World" in llm_weights_path:
+        config.is_encoder_decoder = True
 
     # LOad model
     with init_empty_weights():

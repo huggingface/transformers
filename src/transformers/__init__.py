@@ -1913,6 +1913,7 @@ else:
         [
             "CosmosForConditionalGeneration",
             "CosmosTextModel",
+            "CosmosModel",
             "CosmosVQVAE",
             "CosmosPreTrainedModel",
         ]
@@ -7032,6 +7033,7 @@ if TYPE_CHECKING:
         )
         from .models.cosmos import (
             CosmosForConditionalGeneration,
+            CosmosModel,
             CosmosPreTrainedModel,
             CosmosTextModel,
             CosmosVQVAE,

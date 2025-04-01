@@ -21,7 +21,6 @@
 # limitations under the License.
 
 import math
-import random
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple, Union
 
@@ -85,12 +84,12 @@ class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
-    encoder_hidden_states: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -120,12 +119,12 @@ class CosmosCausalLMOutputWithPast(CausalLMOutputWithPast):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
             Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
     """
 
-    encoder_hidden_states: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
 
 
 class CosmosVQVAEVectorQuantizer(nn.Module):
@@ -185,7 +184,7 @@ class CosmosVQVAEVectorQuantizer(nn.Module):
     def codes_to_indices(self, codes: torch.Tensor) -> torch.Tensor:
         half_width = self._levels // 2
         codes = (codes * half_width) + half_width
-        indices = (codes.float() * self._basis).sum(dim=-1).to(torch.int32)
+        indices = (codes.float() * self._basis).sum(dim=-1).to(torch.int64)
         return indices
 
     def indices_to_codes(self, indices: torch.Tensor) -> torch.Tensor:
@@ -940,6 +939,7 @@ class CosmosVQVAE(PreTrainedModel):
         "CosmosVQVAEResnetBlock",
         "CosmosVQVAEVectorQuantizer",
     ]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -1104,7 +1104,6 @@ class CosmosAbsolutePositionEmbedding(nn.Module):
 class CosmosTextRotaryEmbedding(nn.Module):
     def __init__(self, config: CosmosTextConfig, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling.get("rope_type")
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -1641,8 +1640,8 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
@@ -1676,20 +1675,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
 
         if use_cache and past_key_values is None:
             if not self.config.insert_cross_attn_layers:
-                past_key_values = StaticCache(
-                    config=self.config,
-                    max_batch_size=1,
-                    max_cache_len=12800,
-                    dtype=torch.bfloat16,
-                )
+                past_key_values = DynamicCache()
             else:
-                self_attn_past_kv = StaticCache(
-                    config=self.config,
-                    max_batch_size=1,
-                    max_cache_len=12864,
-                    dtype=torch.bfloat16,
-                )
-                past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1705,14 +1693,17 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        self_attn_cache = (
+            past_key_values.self_attention_cache
+            if isinstance(past_key_values, EncoderDecoderCache)
+            else past_key_values
+        )
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values,
-            output_attentions,
+            past_key_values=self_attn_cache,
+            output_attentions=output_attentions,
         )
         if encoder_attention_mask is not None:
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
@@ -1997,8 +1988,8 @@ COSMOS_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
             [`Emu3ImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2081,26 +2072,32 @@ class CosmosModel(CosmosPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+    def get_video_tokens(self, pixel_values_videos: torch.FloatTensor):
         """
         Tokenizes images into discrete tokens with Vector Quantizer module.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
         """
-        vq_tokens, _ = self.vqmodel.encode(pixel_values)
+        vq_tokens, _ = self.vqmodel.encode(pixel_values_videos)
         vq_tokens = vq_tokens.flatten(1)  # (batch_size, seq_length)
-        vq_tokens = vq_tokens[:, :-7680]  # remove pad tokens
+
+        # Only supported lengths are 1 for image and 2 for video conditioning (i.e. 1 or 2 time grids of input context)
+        # VAE can support only 5 time grids, so we'll generate the rest 3 or 4 grids
+        latent_context_size = 2 if pixel_values_videos.shape[1] > 1 else 1
+        time, height, width = self.config.text_config.rope_latent_shape
+        num_gen_tokens = int(np.prod([time - latent_context_size, height, width]))
+        vq_tokens = vq_tokens[:, :-num_gen_tokens]  # remove repeated pad tokens
         if self.config.text_config.is_video_to_world:
-            bov_tokens = [[self.config.get_text_config().bos_token_id] * vq_tokens.shape[0]]
+            bov_tokens = [[self.config.get_text_config().bos_token_id]] * vq_tokens.shape[0]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
             vq_tokens = torch.cat([bov_tokens, vq_tokens], dim=-1)
 
         return vq_tokens
 
     @torch.no_grad
-    def decode_image_tokens(self, video_tokens: torch.LongTensor):
+    def decode_video_tokens(self, video_tokens: torch.LongTensor):
         """
         Decodes generated image tokens from language model to continuous pixel values
         with VQGAN module via upsampling.
@@ -2117,15 +2114,16 @@ class CosmosModel(CosmosPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2138,38 +2136,37 @@ class CosmosModel(CosmosPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # if [input_ids, inputs_embeds, pixel_values].count(None) != 2:
-        #     raise ValueError(
-        #         "You have to specify only one of the input_ids, inputs_embeds and pixel values."
-        #     )
+        if (decoder_input_ids is None) ^ (pixel_values_videos is not None):
+            raise ValueError("You must specify exactly one of decoder_input_ids or pixel_values_videos")
 
-        if pixel_values is not None:
-            input_ids = self.get_image_tokens(pixel_values)
+        if pixel_values_videos is not None:
+            decoder_input_ids = self.get_video_tokens(pixel_values_videos)
 
-        if encoder_hidden_states is None and encoder_input_ids is not None:
-            output = self.prompt_encoder(
-                input_ids=encoder_input_ids,
-                attention_mask=encoder_attention_mask,
-                output_hidden_states=True,
-                output_attentions=True,
-            )
-            encoder_hidden_states = output.last_hidden_state
-            if encoder_attention_mask is not None:
-                lengths = encoder_attention_mask.sum(dim=1)
+        encoder_hidden_states = None
+        if self.config.is_encoder_decoder:
+            if encoder_outputs is None:
+                encoder_outputs = self.prompt_encoder(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True,
+                    output_attentions=True,
+                )
+            encoder_hidden_states = encoder_outputs.last_hidden_state
+            if attention_mask is not None:
+                lengths = attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
 
-        seed = 0
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        # seed = 0
+        # random.seed(seed)
+        # np.random.seed(seed)
+        # torch.manual_seed(seed)
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
+            input_ids=decoder_input_ids,
+            inputs_embeds=decoder_inputs_embeds,
+            attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             position_ids=position_ids,
             position_ids_rope=position_ids_rope,
@@ -2186,7 +2183,7 @@ class CosmosModel(CosmosPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_hidden_states=encoder_hidden_states,
+            encoder_last_hidden_state=encoder_outputs,
         )
         return output if return_dict else output.to_tuple()
 
@@ -2330,15 +2327,16 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        encoder_input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2407,14 +2405,15 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            encoder_input_ids=encoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            pixel_values_videos=pixel_values_videos,
             position_ids=position_ids,
             position_ids_rope=position_ids_rope,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2425,7 +2424,9 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        self.lm_head.weight.data = self.lm_head.weight.data.to(torch.bfloat16)
+
+        # FIXME: @raushan why this is not loaded in bf16 wehn asked?
+        # self.lm_head.weight.data = self.lm_head.weight.data.to(torch.bfloat16)
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
@@ -2444,37 +2445,33 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
         )
         return output if return_dict else output.to_tuple()
 
     @torch.no_grad()
-    def generate(self, encoder_input_ids=None, pixel_values=None, **kwargs):
+    def generate(self, input_ids=None, pixel_values_videos=None, **kwargs):
         # Generation from video input only, so we obtain video input ids and pass to generate
-        input_ids = self.model.get_image_tokens(pixel_values)
-        if encoder_input_ids is None:
-            return super().generate(input_ids, **kwargs)
+        decoder_input_ids = self.model.get_video_tokens(pixel_values_videos)
+        if input_ids is None:
+            return super().generate(decoder_input_ids, **kwargs)
 
         # Else we are in video2world generation. We need to encode the prompt
-        encoder_attention_mask = kwargs.pop("encoder_attention_mask", None)
-        output = self.model.prompt_encoder(encoder_input_ids, attention_mask=encoder_attention_mask)
-        encoder_hidden_states = output.last_hidden_state.to(self.dtype)
-        if encoder_attention_mask is not None:
-            lengths = encoder_attention_mask.sum(dim=1)
-            for batch_id in range(encoder_hidden_states.shape[0]):
-                encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
+        attention_mask = kwargs.pop("attention_mask", None)
+        encoder_outputs = self.model.prompt_encoder(input_ids, attention_mask=attention_mask)
 
+        # Only static cache support, since video shapes are static as well
         self_attn_past_kv = StaticCache(
             config=self.config.get_text_config(),
-            max_batch_size=1,
+            max_batch_size=input_ids.shape[0],
             max_cache_len=12864,
-            dtype=torch.bfloat16,
+            dtype=self.dtype,
         )
         past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
         output = super().generate(
-            input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             **kwargs,
         )
@@ -2482,42 +2479,49 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
 
     def prepare_inputs_for_generation(
         self,
-        input_ids,
+        decoder_input_ids,
         past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
+        decoder_attention_mask=None,
+        decoder_inputs_embeds=None,
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        pixel_values=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        pixel_values_videos=None,
+        encoder_outputs=None,
+        attention_mask=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
+            decoder_input_ids,
             past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             cache_position=cache_position,
             position_ids=position_ids,
-            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             use_cache=use_cache,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            attention_mask=attention_mask,
             **kwargs,
         )
 
         # Cosmos needs 3D positions constructed in custom way. DO NOT overwrite 1D positions, which are used in `AbsolutePosEmbLayer`
         seq_length = cache_position[-1] + 1
         position_ids_rope = self.model.language_model._calculate_position_ids(seq_length, device=cache_position.device)
-        input_length = model_inputs["input_ids"].shape[1]
+        input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+        input_length = model_inputs[input_ids_key].shape[1]
         model_inputs["position_ids_rope"] = position_ids_rope[..., -input_length:]
 
+        # little hack to support encoder-decoder and decoder-only from one model
+        if not self.config.is_encoder_decoder:
+            for input_name in ["input_ids", "attention_mask", "inputs_embeds"]:
+                model_inputs[f"decoder_{input_name}"] = model_inputs.get(input_name, None)
+                model_inputs.pop(input_name, None)
+
         if cache_position[0] != 0:
-            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
 

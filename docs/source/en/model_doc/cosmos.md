@@ -28,40 +28,70 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
+The original code can be found [here](https://github.com/NVIDIA/Cosmos/tree/main).
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
+```python
+import torch
+import imageio
+from transformers.image_utils import load_video
+from transformers import CosmosProcessor, CosmosForConditionalGeneration
+
+
+model_id = "NVIDIA/Cosmos-5B-hf"
+proc = CosmosProcessor.from_pretrained(model_id)
+model = CosmosForConditionalGeneration.from_pretrained(
+    model_id,
+    torch_dtype={"text_config": "bfloat16", "vq_config": "bfloat16", "": "bfloat16", "prompt_encoder": "float32"},
+    low_cpu_mem_usage=True
+).to("cuda:0")
+
+# generate from last 9 frames of the video
+video, _ = load_video("/raid/raushan/Cosmos/cosmos1/models/autoregressive/assets/v1p0/input.mp4", backend="decord")
+video = video[-9:]
+text = "A video recorded from a moving vehicle's perspective, capturing roads, buildings, landscapes, and changing weather and lighting conditions."
+inputs = proc(videos=video, text=text, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+
+out = model.generate(**inputs, max_new_tokens=7680)
+
+# decode the video and save
+video_decoded = model.model.decode_video_tokens(out[:, 1:])
+video_decoded = video_decoded.permute(0, 2, 1, 3, 4).float()
+video_processed = proc.postprocess([video_decoded[0]], return_tensors="np")
+imageio.mimsave("generated_video.mp4", video_processed['pixel_values'].squeeze(0), fps=25)
+
+```
 
 ## CosmosConfig
 
 [[autodoc]] CosmosConfig
 
-## VQVAEConfig
+## CosmosVQVAEConfig
 
-[[autodoc]] VQVAEConfig
+[[autodoc]] CosmosVQVAEConfig
 
-## TextConfig
+## CosmosTextConfig
 
-[[autodoc]] TextConfig
+[[autodoc]] CosmosTextConfig
 
-## VQVAE
+## CosmosVQVAE
 
-[[autodoc]] VQVAE
+[[autodoc]] CosmosVQVAE
     - forward
 
-## TextModel
+## CosmosTextModel
 
-[[autodoc]] TextModel
+[[autodoc]] CosmosTextModel
     - forward
 
-## ForCausalLM
+## CosmosModel
 
-[[autodoc]] ForCausalLM
+[[autodoc]] CosmosModel
     - forward
 
-## ForConditionalGeneration
+## CosmosForConditionalGeneration
 
-[[autodoc]] ForConditionalGeneration
+[[autodoc]] CosmosForConditionalGeneration
     - forward

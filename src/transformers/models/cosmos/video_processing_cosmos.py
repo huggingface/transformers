@@ -402,7 +402,7 @@ class CosmosVideoProcessor(BaseImageProcessor):
                 )
             pixel_values.append(video)
 
-        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values_videos": pixel_values}, tensor_type=return_tensors)
 
     def postprocess(
         self,
@@ -476,7 +476,7 @@ class CosmosVideoProcessor(BaseImageProcessor):
                 processed_video.append(image)
             pixel_values.append(processed_video)
 
-        data = {"pixel_values": pixel_values}
+        data = {"pixel_values_videos": pixel_values}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def unnormalize(
