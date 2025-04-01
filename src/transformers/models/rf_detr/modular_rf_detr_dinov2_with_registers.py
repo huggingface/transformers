@@ -10,6 +10,7 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersEmbeddings,
     Dinov2WithRegistersEncoder,
     Dinov2WithRegistersLayer,
+    Dinov2WithRegistersSelfAttention,
 )
 
 
@@ -84,6 +85,12 @@ class RFDetrDinov2WithRegistersEmbeddings(Dinov2WithRegistersEmbeddings):
         embeddings = self.dropout(embeddings)
 
         return embeddings
+
+
+class RFDetrDinov2WithRegistersSelfAttention(Dinov2WithRegistersSelfAttention):
+    def __init__(self, config: RFDetrDinov2WithRegistersConfig):
+        super(Dinov2WithRegistersSelfAttention).__init__(config)
+        self.scaling = None
 
 
 class RFDetrDinov2WithRegistersLayer(Dinov2WithRegistersLayer):

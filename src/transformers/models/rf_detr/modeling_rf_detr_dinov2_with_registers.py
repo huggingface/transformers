@@ -237,7 +237,7 @@ class RFDetrDinov2WithRegistersSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.dropout_prob = config.attention_probs_dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.scaling = None
         self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
