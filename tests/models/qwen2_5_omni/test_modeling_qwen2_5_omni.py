@@ -103,6 +103,24 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "n_window": 100,
             "output_dim": 32,
         },
+        text_config={
+            "model_type": "qwen2_5_omni_text",
+            "hidden_act": "silu",
+            "hidden_size": 32,
+            "intermediate_size": 37,
+            "vocab_size": 99,
+            "num_attention_heads": 4,
+            "num_hidden_layers": 4,
+            "num_key_value_heads": 2,
+            "max_position_embeddings": 1024,
+            "max_window_layers": 3,
+            "rope_scaling": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
+            "use_cache": True,
+            "rope_theta": 1000000.0,
+            "use_sliding_window": False,
+            "sliding_window": 50,
+            "tie_word_embeddings": False
+        },
         rope_scaling={"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
         audio_token_index=1,
         image_token_index=2,
@@ -127,12 +145,15 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         seconds_per_chunk=2,
         audio_start_token_id=4,
         audio_end_token_id=5,
-        user_token_id=6,
+        vision_start_token_id=7,
+        vision_end_token_id=8,
+        user_token_id=9,
         init_std=0.02,
     ):
         self.parent = parent
         self.audio_config = audio_config
         self.vision_config = vision_config
+        self.text_config = text_config
         self.audio_token_index = audio_token_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
@@ -157,6 +178,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self.seconds_per_chunk = seconds_per_chunk
         self.audio_start_token_id = audio_start_token_id
         self.audio_end_token_id = audio_end_token_id
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
         self.user_token_id = user_token_id
         self.init_std = init_std
         self.batch_size = batch_size
@@ -171,6 +194,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         return Qwen2_5OmniThinkerConfig(
             audio_config=self.audio_config,
             vision_config=self.vision_config,
+            text_config=self.text_config,
             audio_token_index=self.audio_token_index,
             image_token_index=self.image_token_index,
             video_token_index=self.video_token_index,
@@ -195,6 +219,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             seconds_per_chunk=self.seconds_per_chunk,
             audio_start_token_id=self.audio_start_token_id,
             audio_end_token_id=self.audio_end_token_id,
+            vision_start_token_id=self.vision_start_token_id,
+            vision_end_token_id=self.vision_end_token_id,
             user_token_id=self.user_token_id,
             init_std=self.init_std,
         )
@@ -214,8 +240,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         ).to(pixel_values.device)
         input_features_values = floats_tensor(
             [
+                self.batch_size,
                 self.audio_config["num_mel_bins"],
-                self.feat_seq_length * self.batch_size,
+                self.feat_seq_length
             ]
         )
         feature_attention_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
@@ -272,11 +299,27 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, unit
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2_5OmniThinkerConfig, has_text_modality=False)
 
+    @unittest.skip(reason="Cpu not yet supported because in QwenOmniThinker models")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Disk offload bin not yet supported because in QwenOmniThinker models")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Disk offload safetensors not yet supported because in QwenOmniThinker models")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(reason="Correct missing keys not yet supported because in QwenOmniThinker models")
+    def test_correct_missing_keys(self):
+        pass
+
     @unittest.skip(reason="Compile not yet supported because in QwenOmniThinker models")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in QwenOmniThinker models")
+    @unittest.skip(reason="Sdpa dispatch not yet supported because in QwenOmniThinker models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -776,7 +819,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=[text], audios=[self.raw_audio], images=[self.raw_image], return_tensors="pt", padding=True
+            text=[text], audio=[self.raw_audio], images=[self.raw_image], return_tensors="pt", padding=True
         )
 
         expected_input_ids = torch.tensor(
@@ -834,7 +877,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text, text],
-            audios=[self.raw_audio, self.raw_audio],
+            audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
             padding=True,
@@ -874,7 +917,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text],
-            audios=[self.raw_audio, self.raw_audio_additional],
+            audio=[self.raw_audio, self.raw_audio_additional],
             images=[self.raw_image],
             return_tensors="pt",
             padding=True,
@@ -907,7 +950,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         audio, _ = librosa.load(BytesIO(urlopen(audio_url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], audios=[audio], return_tensors="pt", padding=True).to(torch_device)
+        inputs = self.processor(text=[text], audio=[audio], return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False)
 
@@ -932,7 +975,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text, text],
-            audios=[self.raw_audio, self.raw_audio],
+            audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
             padding=True,

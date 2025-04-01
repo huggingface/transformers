@@ -55,11 +55,11 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "omni_processor" not in self.processor_class.attributes:
-            self.skipTest(f"omni_processor attribute not present in {self.processor_class}")
-        omni_processor = self.get_component("omni_processor")
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, omni_processor=omni_processor
+            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
         )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
@@ -82,11 +82,11 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "omni_processor" not in self.processor_class.attributes:
-            self.skipTest(f"omni_processor attribute not present in {self.processor_class}")
-        omni_processor = self.get_component("omni_processor")
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, omni_processor=omni_processor
+            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
         )
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -116,11 +116,11 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "omni_processor" not in self.processor_class.attributes:
-            self.skipTest(f"omni_processor attribute not present in {self.processor_class}")
-        omni_processor = self.get_component("omni_processor")
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, omni_processor=omni_processor
+            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
         )
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -150,10 +150,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "omni_processor" not in self.processor_class.attributes:
-            self.skipTest(f"omni_processor attribute not present in {self.processor_class}")
-        omni_processor = self.get_component("omni_processor")
-        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, omni_processor=omni_processor)
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor)
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
@@ -166,10 +166,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "omni_processor" not in self.processor_class.attributes:
-            self.skipTest(f"omni_processor attribute not present in {self.processor_class}")
-        omni_processor = self.get_component("omni_processor")
-        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, omni_processor=omni_processor)
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor)
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -179,8 +179,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
-    def get_omni_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).omni_processor
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     def get_feature_extractor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
@@ -191,53 +191,53 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return audio_inputs
 
     def test_save_load_pretrained_default(self):
-        omni_processor = self.get_omni_processor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
         processor = Qwen2_5OmniProcessor(
-            omni_processor=omni_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
         )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2_5OmniProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.omni_processor.to_json_string(), omni_processor.to_json_string())
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.omni_processor, Qwen2VLImageProcessor)
+        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
 
-    def test_omni_processor(self):
-        omni_processor = self.get_omni_processor()
+    def test_image_processor(self):
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
         processor = Qwen2_5OmniProcessor(
-            omni_processor=omni_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
         )
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = omni_processor(image_input, return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, text="dummy", return_tensors="np")
 
         for key in input_image_proc.keys():
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):
-        omni_processor = self.get_omni_processor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
         processor = Qwen2_5OmniProcessor(
-            omni_processor=omni_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
         )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
         audio_input = self.prepare_audio_inputs()
-        inputs = processor(text=input_str, images=image_input, audios=audio_input)
+        inputs = processor(text=input_str, images=image_input, audio=audio_input)
         keys = list(inputs.keys())
         self.assertListEqual(
             keys,
@@ -260,12 +260,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(images=image_input)
 
     def test_model_input_names(self):
-        omni_processor = self.get_omni_processor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
         processor = Qwen2_5OmniProcessor(
-            omni_processor=omni_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
         )
 
         input_str = "lower newer"
@@ -273,5 +273,5 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_inputs = self.prepare_video_inputs()
         audio_input = self.prepare_audio_inputs()
 
-        inputs = processor(text=input_str, images=image_input, videos=video_inputs, audios=audio_input)
+        inputs = processor(text=input_str, images=image_input, videos=video_inputs, audio=audio_input)
         self.assertListEqual(sorted(inputs.keys()), sorted(processor.model_input_names))
