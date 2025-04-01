@@ -614,7 +614,7 @@ class Llama4ImageProcessor(BaseImageProcessor):
             else:
                 processed_image = split_to_tiles(processed_image, ratio_h, ratio_w)
 
-            aspect_ratios.append([ratio_h, ratio_w])
+            aspect_ratios.append(torch.tensor([ratio_h, ratio_w]))
 
             # add a global tile to the processed tile if there are more than one tile
             if ratio_h * ratio_w > 1:
@@ -646,6 +646,10 @@ class Llama4ImageProcessor(BaseImageProcessor):
             images = [
                 [to_channel_dimension_format(chunk, data_format, input_channel_dim=input_data_format) for chunk in image] for image in images
             ]
+
+        if return_tensors is not None:
+            images = torch.cat(images, dim=0)
+            aspect_ratios = torch.stack(aspect_ratios, dim=0)
 
         return BatchFeature(data={"pixel_values": images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors)
 
