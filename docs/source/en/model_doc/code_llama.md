@@ -135,19 +135,8 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
 visualizer = AttentionMaskVisualizer("meta-llama/CodeLlama-7b-hf")
-visualizer("""def binary_search(arr, target):
-    left, right = 0, len(arr) - 1
-    
-    while left <= right:
-        mid = (left + right) // 2
-        if arr[mid] == target:
-            return mid
-        elif arr[mid] < target:
-            left = mid + 1
-        else:
-            right = mid - 1
-            
-    return -1""")
+visualizer("""def func(a, b):
+  return a + b""")
 ```
 
 <div class="flex justify-center">
