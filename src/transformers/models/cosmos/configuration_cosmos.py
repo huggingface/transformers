@@ -23,6 +23,7 @@
 from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ..auto import AutoConfig
 
 
@@ -248,21 +249,30 @@ class CosmosTextConfig(PretrainedConfig):
         max_position_embeddings: int = 12800,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
+        pad_token_id: int = 64002,
         bos_token_id: int = 64000,
+        eos_token_id: int = 64001,
         tie_word_embeddings: bool = False,
         rope_theta: float = 500000.0,
         rope_scaling: Optional = None,
-        rope_latent_shape: List[int] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        rope_latent_shape: List[int] = None,
         apply_abs_pos_emb: bool = False,
         cross_attn_hidden_size: int = 1024,
         insert_cross_attn_layers: List[int] = None,
         is_video_to_world: bool = False,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -274,23 +284,18 @@ class CosmosTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = {"rope_type": "3d", "original_max_position_embeddings": 8192}
-        self.rope_latent_shape = [5, 40, 64]
+        self.rope_scaling = rope_scaling
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
+        self.rope_latent_shape = rope_latent_shape
+        rope_config_validation(self)
+
+        self.attention_dropout = attention_dropout
         self.apply_abs_pos_emb = apply_abs_pos_emb
         self.cross_attn_hidden_size = cross_attn_hidden_size
         self.insert_cross_attn_layers = insert_cross_attn_layers or []
         self.is_video_to_world = is_video_to_world
-
-        self.attention_dropout = attention_dropout
-
-        super().__init__(
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
 
 
 class CosmosConfig(PretrainedConfig):
@@ -312,22 +317,25 @@ class CosmosConfig(PretrainedConfig):
         prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
-        vocabulary_map (`dict`, *optional*):
-            A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+        image_token_id (`dict`, *optional*m defaults to 64000):
+            An image placeholder token index.
     """
 
     model_type = "cosmos"
     keys_to_ignore_at_inference = ["past_key_values"]
+
     sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "prompt_encoder": AutoConfig}
 
     def __init__(
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
+        vocabulary_map: Dict[int, int] = None,
         prompt_encoder: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         if vq_config is None:
             vq_config = CosmosVQVAEConfig()
         elif isinstance(vq_config, dict):
@@ -337,6 +345,9 @@ class CosmosConfig(PretrainedConfig):
             text_config = CosmosTextConfig()
         elif isinstance(text_config, dict):
             text_config = CosmosTextConfig(**text_config)
+
+        self.vq_config = vq_config
+        self.text_config = text_config
 
         if prompt_encoder is None:
             prompt_encoder_config = {
@@ -357,16 +368,8 @@ class CosmosConfig(PretrainedConfig):
         elif isinstance(prompt_encoder, dict):
             prompt_encoder = AutoConfig.for_model(**prompt_encoder)
 
-        self.vq_config = vq_config
-        self.text_config = text_config
         self.prompt_encoder = prompt_encoder
         self.image_token_id = image_token_id
 
-        super().__init__(**kwargs)
 
-
-__all__ = [
-    "CosmosTextConfig",
-    "CosmosConfig",
-    "CosmosVQVAEConfig",
-]
+__all__ = ["CosmosConfig", "CosmosVQVAEConfig", "CosmosTextConfig"]

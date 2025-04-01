@@ -156,6 +156,8 @@ def convert_model(
         "num_hidden_layers": orig_text_config["n_layers"],
         "intermediate_size": orig_text_config["ffn_hidden_size"],
         "rms_norm_eps": orig_text_config["norm_eps"],
+        "rope_scaling": {"rope_type": "3d", "original_max_position_embeddings": 8192},
+        "rope_latent_shape": [5, 40, 64],
     }
     insert_cross_attn_every_k_layers = orig_text_config.get("insert_cross_attn_every_k_layers", None)
     if insert_cross_attn_every_k_layers is not None:

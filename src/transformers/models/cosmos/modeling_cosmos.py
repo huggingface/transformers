@@ -38,12 +38,19 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from ..auto import AutoModel
 from .configuration_cosmos import CosmosConfig, CosmosTextConfig, CosmosVQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
 _CONFIG_FOR_DOC = "CosmosConfig"
 
 
@@ -312,48 +319,85 @@ class CosmosPatch3D(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def _dwt(self, x, mode="reflect", rescale=False):
-        dtype = x.dtype
-        h = self.wavelets
+    def _dwt(self, hidden_states, mode="reflect", rescale=False):
+        dtype = hidden_states.dtype
+        wavelets = self.wavelets
 
-        n = h.shape[0]
-        g = x.shape[1]
-        hl = h.flip(0).reshape(1, 1, -1).repeat(g, 1, 1)
-        hh = (h * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(g, 1, 1)
-        hh = hh.to(dtype=dtype)
-        hl = hl.to(dtype=dtype)
+        wavelet_len = wavelets.shape[0]
+        seq_len = hidden_states.shape[1]
+        wavelets_low = wavelets.flip(0).reshape(1, 1, -1).repeat(seq_len, 1, 1).to(dtype=dtype)
+        wavelets_high = (wavelets * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(seq_len, 1, 1).to(dtype=dtype)
 
         # Handles temporal axis.
-        x = F.pad(x, pad=(max(0, n - 2), n - 1, n - 2, n - 1, n - 2, n - 1), mode=mode).to(dtype)
-        xl = F.conv3d(x, hl.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
-        xh = F.conv3d(x, hh.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
+        hidden_states = F.pad(
+            hidden_states,
+            pad=(
+                max(0, wavelet_len - 2),
+                wavelet_len - 1,
+                wavelet_len - 2,
+                wavelet_len - 1,
+                wavelet_len - 2,
+                wavelet_len - 1,
+            ),
+            mode=mode,
+        ).to(dtype)
+        hidden_states_low = F.conv3d(
+            hidden_states, wavelets_low.unsqueeze(3).unsqueeze(4), groups=seq_len, stride=(2, 1, 1)
+        )
+        hidden_states_high = F.conv3d(
+            hidden_states, wavelets_high.unsqueeze(3).unsqueeze(4), groups=seq_len, stride=(2, 1, 1)
+        )
 
         # Handles spatial axes.
-        xll = F.conv3d(xl, hl.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xlh = F.conv3d(xl, hh.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xhl = F.conv3d(xh, hl.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xhh = F.conv3d(xh, hh.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
+        hidden_low_low = F.conv3d(
+            hidden_states_low, wavelets_low.unsqueeze(2).unsqueeze(4), groups=seq_len, stride=(1, 2, 1)
+        )
+        hidden_low_hight = F.conv3d(
+            hidden_states_low, wavelets_high.unsqueeze(2).unsqueeze(4), groups=seq_len, stride=(1, 2, 1)
+        )
+        hidden_high_low = F.conv3d(
+            hidden_states_high, wavelets_low.unsqueeze(2).unsqueeze(4), groups=seq_len, stride=(1, 2, 1)
+        )
+        hidden_high_high = F.conv3d(
+            hidden_states_high, wavelets_high.unsqueeze(2).unsqueeze(4), groups=seq_len, stride=(1, 2, 1)
+        )
 
-        xlll = F.conv3d(xll, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xllh = F.conv3d(xll, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xlhl = F.conv3d(xlh, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xlhh = F.conv3d(xlh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhll = F.conv3d(xhl, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhlh = F.conv3d(xhl, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhhl = F.conv3d(xhh, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhhh = F.conv3d(xhh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
+        hidden_lll = F.conv3d(hidden_low_low, wavelets_low.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2))
+        hidden_llh = F.conv3d(
+            hidden_low_low, wavelets_high.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_lhl = F.conv3d(
+            hidden_low_hight, wavelets_low.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_lhh = F.conv3d(
+            hidden_low_hight, wavelets_high.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_hll = F.conv3d(
+            hidden_high_low, wavelets_low.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_hlh = F.conv3d(
+            hidden_high_low, wavelets_high.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_hhl = F.conv3d(
+            hidden_high_high, wavelets_low.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
+        hidden_hhh = F.conv3d(
+            hidden_high_high, wavelets_high.unsqueeze(2).unsqueeze(3), groups=seq_len, stride=(1, 1, 2)
+        )
 
-        out = torch.cat([xlll, xllh, xlhl, xlhh, xhll, xhlh, xhhl, xhhh], dim=1)
+        out = torch.cat(
+            [hidden_lll, hidden_llh, hidden_lhl, hidden_lhh, hidden_hll, hidden_hlh, hidden_hhl, hidden_hhh], dim=1
+        )
         if rescale:
             out = out / (2 * torch.sqrt(torch.tensor(2.0)))
         return out
 
-    def forward(self, hidden_state: torch.Tensor):
-        xi, xv = torch.split(hidden_state, [1, hidden_state.shape[2] - 1], dim=2)
-        hidden_state = torch.cat([xi.repeat_interleave(self.patch_size, dim=2), xv], dim=2)
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states_i, hidden_states_v = torch.split(hidden_states, [1, hidden_states.shape[2] - 1], dim=2)
+        hidden_states = torch.cat([hidden_states_i.repeat_interleave(self.patch_size, dim=2), hidden_states_v], dim=2)
         for _ in self.range:
-            hidden_state = self._dwt(hidden_state, rescale=True)
-        return hidden_state
+            hidden_states = self._dwt(hidden_states, rescale=True)
+        return hidden_states
 
 
 class CosmosUnpatch3D(nn.Module):
@@ -370,17 +414,14 @@ class CosmosUnpatch3D(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def _idwt(self, x, rescale=False):
-        dtype = x.dtype
-        h = self.wavelets
+    def _idwt(self, hidden_states, rescale=False):
+        dtype = hidden_states.dtype
+        wavelets = self.wavelets
 
-        g = x.shape[1] // 8  # split into 8 spatio-temporal filtered tesnors.
-        hl = h.flip([0]).reshape(1, 1, -1).repeat([g, 1, 1])
-        hh = (h * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(g, 1, 1)
-        hl = hl.to(dtype=dtype)
-        hh = hh.to(dtype=dtype)
-
-        xlll, xllh, xlhl, xlhh, xhll, xhlh, xhhl, xhhh = torch.chunk(x, 8, dim=1)
+        g = hidden_states.shape[1] // 8  # split into 8 spatio-temporal filtered tenors.
+        hl = wavelets.flip([0]).reshape(1, 1, -1).repeat([g, 1, 1]).to(dtype=dtype)
+        hh = (wavelets * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(g, 1, 1).to(dtype=dtype)
+        xlll, xllh, xlhl, xlhh, xhll, xhlh, xhhl, xhhh = torch.chunk(hidden_states, 8, dim=1)
 
         # Height height transposed convolutions.
         xll = F.conv_transpose3d(xlll, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
@@ -402,18 +443,18 @@ class CosmosUnpatch3D(nn.Module):
         xh += F.conv_transpose3d(xhh, hh.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
 
         # Handles time axis transposed convolutions.
-        x = F.conv_transpose3d(xl, hl.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
-        x += F.conv_transpose3d(xh, hh.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
+        hidden_states = F.conv_transpose3d(xl, hl.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
+        hidden_states += F.conv_transpose3d(xh, hh.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
 
         if rescale:
-            x = x * (2 * torch.sqrt(torch.tensor(2.0)))
-        return x
+            hidden_states = hidden_states * (2 * torch.sqrt(torch.tensor(2.0)))
+        return hidden_states
 
-    def forward(self, x):
+    def forward(self, hidden_states: torch.FloatTensor):
         for _ in self.range:
-            x = self._idwt(x, rescale=True)
-        x = x[:, :, self.patch_size - 1 :, ...]
-        return x
+            hidden_states = self._idwt(hidden_states, rescale=True)
+        hidden_states = hidden_states[:, :, self.patch_size - 1 :, ...]
+        return hidden_states
 
 
 # Copy from Emu3 fails because each layers init under condition aren't overwritten/skipped correctly
@@ -527,7 +568,6 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -686,11 +726,11 @@ class CosmosVQVAEDownBlock(nn.Module):
 
         base_channels = config.base_channels
         channel_multiplier = config.channel_multiplier
+        self.num_temporal_downs = int(math.log2(config.temporal_downsample_factor)) - int(math.log2(config.patch_size))
 
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
         self.in_channel_multiplier = in_channel_multiplier
         self.down = nn.ModuleList()
-        self.num_temporal_downs = int(math.log2(config.temporal_downsample_factor)) - int(math.log2(config.patch_size))
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
             attn = nn.ModuleList()
@@ -744,11 +784,11 @@ class CosmosVQVAEUpBlock(nn.Module):
 
         self.num_resolutions = len(config.channel_multiplier)
         self.num_res_blocks = config.num_res_blocks
+        self.num_temporal_ups = int(math.log2(config.temporal_downsample_factor)) - int(math.log2(config.patch_size))
 
         block_in = config.base_channels * config.channel_multiplier[-1]
 
         self.up = nn.ModuleList()
-        self.num_temporal_ups = int(math.log2(config.temporal_downsample_factor)) - int(math.log2(config.patch_size))
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
             attn = nn.ModuleList()
@@ -804,9 +844,10 @@ class CosmosVQVAEEncoder(nn.Module):
         double_latent = config.double_latent
         latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
-
-        out_channels = 2 * latent_channels if double_latent else latent_channels
         block_in = base_channels * channel_multiplier[-1]
+        out_channels = 2 * latent_channels if double_latent else latent_channels
+
+        self.patch = CosmosPatch3D(config.patch_size)
         self.conv_in = nn.Sequential(
             CosmosCausalConv3d(in_channels, base_channels, kernel_size=(1, 3, 3), stride=1, padding=1),
             CosmosCausalConv3d(base_channels, base_channels, kernel_size=(3, 1, 1), stride=1, padding=0),
@@ -819,15 +860,12 @@ class CosmosVQVAEEncoder(nn.Module):
             CosmosCausalConv3d(out_channels, out_channels, kernel_size=(3, 1, 1), stride=1, padding=0),
         )
 
-        self.patch = CosmosPatch3D(config.patch_size)
-
     def forward(self, pixel_values: torch.LongTensor):
         hidden_states = self.patch(pixel_values)
 
         # downsampling & middle
         hidden_states = self.conv_in(hidden_states)
         hidden_states = self.down_block(hidden_states)
-
         hidden_states = self.middle_block(hidden_states)
 
         # end
@@ -847,7 +885,6 @@ class CosmosVQVAEDecoder(nn.Module):
             CosmosCausalConv3d(config.latent_channels, block_in, kernel_size=(1, 3, 3), stride=1, padding=1),
             CosmosCausalConv3d(block_in, block_in, kernel_size=(3, 1, 1), stride=1, padding=0),
         )
-
         self.middle_block = CosmosVQVAEMiddleBlock(config, block_in)
         self.up_block = CosmosVQVAEUpBlock(config)
 
@@ -860,7 +897,7 @@ class CosmosVQVAEDecoder(nn.Module):
         )
         self.unpatch = CosmosUnpatch3D(config.patch_size)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.conv_in(hidden_states)
 
         hidden_states = self.middle_block(hidden_states)
@@ -962,26 +999,6 @@ class CosmosVQVAE(PreTrainedModel):
         quant_info, quant_codes = self.encode(pixel_values)
         reconstructions = self.decode(quant_info)
         return reconstructions, quant_info
-
-
-class CosmosTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        CosmosTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class CosmosAbsolutePositionEmbedding(nn.Module):
@@ -1118,6 +1135,26 @@ class CosmosTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+class CosmosTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        CosmosTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class CosmosTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1139,41 +1176,6 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -1214,6 +1216,41 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
+
+
 class CosmosTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1226,19 +1263,19 @@ class CosmosTextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = is_self_attention
-        kv_hidden_size = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
-
-        self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
+        kv_hidden_size = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
         self.k_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+
+        self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1433,13 +1470,15 @@ class CosmosTextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 COSMOS_TEXT_INPUTS_DOCSTRING = r"""
@@ -1466,7 +1505,7 @@ COSMOS_TEXT_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
             `past_key_values`).
 
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_attention_mask`]
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
 
@@ -1531,16 +1570,17 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
 
     def __init__(self, config: CosmosTextConfig):
         super().__init__(config)
+        self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [CosmosTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = CosmosTextRotaryEmbedding(config=config)
-        self.absolute_position_emb = CosmosAbsolutePositionEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.absolute_position_emb = CosmosAbsolutePositionEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1550,36 +1590,6 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def _calculate_position_ids(self, seq_length: int, device: str = "cpu"):
-        """
-        Calculates positions ids for each grid separately for 3D RoPE. Given a sequence length,
-        the position ids will be calculated as follows:
-
-        For width grids, positions are constructed in vanilla way up to `num_width_grid`, after which
-        the counter startes from 0 again. As such with `num_width_grid=2` the width positions are `[0, 1, 0, 1, 0, 1, ...]`
-
-        For height grids, positions are constructed by keeping the same height position until the whole row of `num_width_grid`
-        is exhausted. After that height positions increases by `1`. For example with `num_width_grid=2`,
-        the height position ids will be `[0, 0, 1, 1, 2, 2, ..., `num_height_grid-1`]`
-
-        For temporal grids, positions are very much similar, but this time the counter is increased by `1` only when a new video frame
-        is reached. For example with `num_width_grid=2` and `num_height_grid=3`, the temporal position will be `[0, 0, 0, 0, 0, 0, 1, 1, ...]`.
-        In other words, the ids are updted every `num_width_grid * num_height_grid` positions.
-        """
-        if self.config.is_video_to_world:
-            seq_length -= 1
-
-        num_temporal_grid, num_height_grid, num_width_grid = self.config.rope_latent_shape
-        one_frame_len = num_height_grid * num_width_grid
-        w_grids = math.ceil(seq_length / num_width_grid)
-        num_frames = math.ceil(seq_length / one_frame_len)
-        position_width = torch.tensor(list(range(64)) * w_grids)[:seq_length].unsqueeze(0)
-        position_height = torch.arange(w_grids).repeat_interleave(num_width_grid)[:seq_length].unsqueeze(0)
-        position_height = position_height % num_height_grid
-        position_temporal = torch.arange(num_frames).repeat_interleave(one_frame_len)[:seq_length].unsqueeze(0)
-        position_ids = torch.stack([position_temporal, position_height, position_width], dim=1).to(device)
-        return position_ids
 
     @add_start_docstrings_to_model_forward(COSMOS_TEXT_INPUTS_DOCSTRING)
     def forward(
@@ -1849,111 +1859,89 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
 
         return causal_mask
 
+    def _calculate_position_ids(self, seq_length: int, device: str = "cpu"):
+        """
+        Calculates positions ids for each grid separately for 3D RoPE. Given a sequence length,
+        the position ids will be calculated as follows:
 
-COSMOS_START_DOCSTRING = None
+        For width grids, positions are constructed in vanilla way up to `num_width_grid`, after which
+        the counter startes from 0 again. As such with `num_width_grid=2` the width positions are `[0, 1, 0, 1, 0, 1, ...]`
+
+        For height grids, positions are constructed by keeping the same height position until the whole row of `num_width_grid`
+        is exhausted. After that height positions increases by `1`. For example with `num_width_grid=2`,
+        the height position ids will be `[0, 0, 1, 1, 2, 2, ..., `num_height_grid-1`]`
+
+        For temporal grids, positions are very much similar, but this time the counter is increased by `1` only when a new video frame
+        is reached. For example with `num_width_grid=2` and `num_height_grid=3`, the temporal position will be `[0, 0, 0, 0, 0, 0, 1, 1, ...]`.
+        In other words, the ids are updted every `num_width_grid * num_height_grid` positions.
+        """
+        if self.config.is_video_to_world:
+            seq_length -= 1
+
+        num_temporal_grid, num_height_grid, num_width_grid = self.config.rope_latent_shape
+        one_frame_len = num_height_grid * num_width_grid
+        w_grids = math.ceil(seq_length / num_width_grid)
+        num_frames = math.ceil(seq_length / one_frame_len)
+        position_width = torch.tensor(list(range(64)) * w_grids)[:seq_length].unsqueeze(0)
+        position_height = torch.arange(w_grids).repeat_interleave(num_width_grid)[:seq_length].unsqueeze(0)
+        position_height = position_height % num_height_grid
+        position_temporal = torch.arange(num_frames).repeat_interleave(one_frame_len)[:seq_length].unsqueeze(0)
+        position_ids = torch.stack([position_temporal, position_height, position_width], dim=1).to(device)
+        return position_ids
+
+
+COSMOS_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`CosmosConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 @add_start_docstrings(
-    "The bare Cosmos Model outputting raw hidden-states without any specific head on top.",
-    # COSMOS_START_DOCSTRING,
+    "The bare cosmos Model outputting raw hidden-states without any specific head on top.",
+    COSMOS_START_DOCSTRING,
 )
 class CosmosPreTrainedModel(PreTrainedModel):
     config_class = CosmosConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["CosmosTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _no_split_modules = [
+        "CosmosDecoderLayer",
+    ]
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
     _supports_quantized_cache = True
+    _supports_cache_class = True
     _supports_static_cache = True
-    _supports_attention_backend = True
+    _supports_param_buffer_assignment = False
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, CosmosVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
-COSMOS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
-            [`Emu3ImageProcessor`] for processing images).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Has to be an instance of [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
+COSMOS_INPUTS_DOCSTRING = "Hello"
 
 
 class CosmosModel(CosmosPreTrainedModel):
@@ -2007,7 +1995,7 @@ class CosmosModel(CosmosPreTrainedModel):
         video = self.vqmodel.decode(video_tokens)
         return video
 
-    @add_start_docstrings_to_model_forward(COSMOS_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_model_forward(COSMOS_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2025,7 +2013,6 @@ class CosmosModel(CosmosPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CosmosBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2058,6 +2045,7 @@ class CosmosModel(CosmosPreTrainedModel):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
             input_ids=input_ids,
@@ -2083,6 +2071,129 @@ class CosmosModel(CosmosPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
+
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
+    ):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and (attention_mask == 0.0).any():
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_cache_shape()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type in ["cuda", "xpu"]
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
+    @staticmethod
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        return causal_mask
 
 
 class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
@@ -2293,4 +2404,4 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["CosmosTextModel", "CosmosVQVAE", "CosmosForConditionalGeneration", "CosmosPreTrainedModel"]
+__all__ = ["CosmosForConditionalGeneration", "CosmosTextModel", "CosmosModel", "CosmosVQVAE"]
