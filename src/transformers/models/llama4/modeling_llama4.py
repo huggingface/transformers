@@ -62,7 +62,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "meta-ai/Llama-4-17B"
 _CONFIG_FOR_DOC = "Llama4Config"
 
-
 class Llama4TextExperts(nn.Module):
     def __init__(self, config: Llama4Config):
         super().__init__()
@@ -154,7 +153,12 @@ class Llama4TextMoe(nn.Module):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
-        self.experts = Llama4TextExperts(config)
+        self.num_experts = config.num_local_experts
+        self.for_llm_compressor = config.for_llm_compressor
+        if self.for_llm_compressor:
+            self.experts = nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
+        else:
+            self.experts = Llama4TextExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.shared_expert = Llama4TextMLP(config)
 
@@ -185,8 +189,14 @@ class Llama4TextMoe(nn.Module):
         )
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
-        routed_out = self.experts(routed_in)  # routed in is "sorted" / ready for EP
-
+        expert_routed_out_list = []
+        if self.for_llm_compressor:
+            routed_in = routed_in.reshape(self.num_experts, -1, routed_in.shape[-1])
+            for expert_idx in range(self.num_experts):
+                expert_routed_out_list.append(self.experts[expert_idx](routed_in[expert_idx]))
+            routed_out = torch.cat(expert_routed_out_list, dim=0)
+        else:
+            routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
         # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
@@ -1555,6 +1565,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True

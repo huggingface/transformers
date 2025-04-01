@@ -264,6 +264,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         self.tie_weights()
 
     def tie_weights(self):
+        self.encoder.tie_weights()
+        self.decoder.tie_weights()
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
@@ -278,6 +280,12 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             # attributed not an instance member, therefore modifying it will modify the entire class
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
+
+    def _init_weights(self, module):
+        if module in self.encoder.modules():
+            self.encoder._init_weights(module)
+        elif module in self.decoder.modules():
+            self.decoder._init_weights(module)
 
     def get_encoder(self):
         return self.encoder
@@ -384,14 +392,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
 
                 return model
-
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for EncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 

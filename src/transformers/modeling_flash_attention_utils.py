@@ -19,17 +19,66 @@ from typing import Optional, TypedDict
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal, logging
+from .utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
+    is_torch_npu_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
+flash_attn_func = None
 
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb  # noqa
 
+
+# patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
+if is_torch_npu_available():
+    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
+
+    from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
+    from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
+if flash_attn_func:
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
+
+def is_flash_attn_available():
+    """Determine whether flash-attention can be used or not."""
+
+    # if package `flash-attn` is available, flash-attention can be used natively.
+    if is_flash_attn_2_available():
+        return True
+
+    # flash-attention can be used on Ascend NPU without package `flash-attn`
+    if is_torch_npu_available():
+        return True
+
+    return False
+
+
+def flash_attn_supports_top_left_mask():
+    """Determine whether flash-attention uses top-left or down-right mask"""
+
+    if is_flash_attn_2_available():
+        # top-left mask is used in package `flash-attn` with version lower than 2.1.0
+        return not is_flash_attn_greater_or_equal_2_10()
+
+    if is_torch_npu_available():
+        # down-right mask is used on Ascend NPU by default, set env `NPU_FA2_SPARSE_MODE=2` to activate top-left mask.
+        from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
+
+        return is_npu_fa2_top_left_aligned_causal_mask()
+
+    return False
 
 
 def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
