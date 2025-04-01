@@ -505,60 +505,6 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
-    @is_flaky(description="low likelihood of failure, reason not yet discovered")
-    def test_save_load_fast_init_from_base(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            if config.__class__ not in MODEL_MAPPING:
-                self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
-
-            base_class = MODEL_MAPPING[config.__class__]
-
-            if isinstance(base_class, tuple):
-                base_class = base_class[0]
-
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(model_class):
-                pass
-
-            model_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            model_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = _mock_init_weights
-            model_class_copy.init_weights = _mock_all_init_weights
-
-            model = base_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-                # Before we test anything
-
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
-                    else:
-                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
     @slow
     @require_accelerate
     @mark.accelerate_tests
@@ -639,62 +585,6 @@ class ModelTesterMixin:
         tied_params2 = [names for _, names in tensor_ptrs2.items() if len(names) > 1]
 
         self.assertEqual(tied_params1, tied_params2)
-
-    def test_save_load_fast_init_to_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
-
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(base_class):
-                pass
-
-            base_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            base_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = _mock_init_weights
-            base_class_copy.init_weights = _mock_all_init_weights
-
-            model = model_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.config.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = torch.max(
-                            model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
-                        ).item()
-                    else:
-                        max_diff = torch.max(
-                            torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                        ).item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3189,7 +3079,7 @@ class ModelTesterMixin:
         # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
         # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
         # for `linear` part.
-        with ContextManagers([no_init_weights(True)]):
+        with ContextManagers([no_init_weights()]):
             target_model = MyClass(config=config)
         target_model.apply(target_model._initialize_weights)
 
@@ -4341,7 +4231,7 @@ class ModelTesterMixin:
         loss = model(**inputs).loss
         loss.backward()
 
-        params = {name: param.grad.clone().detach().cpu() for name, param in model.named_parameters()}
+        params = {name: param.grad.detach().to(device="cpu", copy=True) for name, param in model.named_parameters()}
         model.zero_grad()
         del loss
 

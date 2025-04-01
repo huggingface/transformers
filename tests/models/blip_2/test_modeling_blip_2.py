@@ -220,14 +220,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-opt-2.7b"
@@ -507,14 +499,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @require_torch_sdpa
@@ -954,14 +938,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
         pass
@@ -1245,14 +1221,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1419,14 +1387,6 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @unittest.skip(reason="Blip2VisionModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2VisionModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

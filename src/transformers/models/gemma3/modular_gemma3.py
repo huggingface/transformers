@@ -28,6 +28,8 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    ModelOutput,
 )
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -35,6 +37,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -567,7 +570,6 @@ class Gemma3TextModel(Gemma2Model):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
@@ -577,7 +579,6 @@ class Gemma3TextModel(Gemma2Model):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -683,13 +684,12 @@ class Gemma3TextModel(Gemma2Model):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
@@ -1006,6 +1006,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         return causal_mask
 
+    @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1023,7 +1024,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
@@ -1088,7 +1088,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         is_training = token_type_ids is not None and labels is not None
 
@@ -1142,7 +1141,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         causal_mask = self._update_causal_mask(
             attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1150,13 +1149,12 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        logits = outputs.logits
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -1178,9 +1176,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
             flat_labels = shift_labels.view(-1).to(shift_logits.device)
             loss = loss_fct(flat_logits, flat_labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
