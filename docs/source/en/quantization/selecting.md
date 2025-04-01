@@ -123,7 +123,7 @@ See the [compressed-tensors documentation](./compressed_tensors) for more detail
 
 Consider the quantization method below during fine-tuning to save memory.
 
-### bitsandbytes (4-bit NF4 for QLoRA)
+### bitsandbytes[[training]]
 
 *   **Description:** The standard method for QLoRA fine-tuning via PEFT.
 *   **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
