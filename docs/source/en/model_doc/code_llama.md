@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [Code Llama](https://huggingface.co/papers/2308.12950) is a specialized family of large language models based on [Llama 2](./llama2) for coding tasks.  It comes in different flavors - general code, Python-specific, and instruction-following variant - all available in 7B, 13B, 34B, and 70B parameters. Code Llama models can generate, explain, and even fill in missing parts of your code (called "infilling"). It can also handle very long contexts with stable generation up to 100k tokens even though it was trained on sequences of 16K tokens.
 
-You can find all the Code Llama checkpoints [here](https://huggingface.co/models?search=code_llama) and the officially released ones in the  [Meta Llama org](https://huggingface.co/meta-llama).
+You can find all the original Code Llama checkpoints under the [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) collection.
 
 > [!TIP]
 > Click on the Code Llama models in the right sidebar for more examples of how to apply Code Llama to different coding tasks.
