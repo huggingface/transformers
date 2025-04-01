@@ -104,11 +104,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
-# Make sure to have bitsandbytes available in the environment
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-# Configure 4-bit quantization
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_compute_dtype=torch.bfloat16,
@@ -116,18 +114,16 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-# Load tokenizer and model with quantization
-model_id = "tiiuae/falcon-7b"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b")
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
+    "tiiuae/falcon-7b",
+    torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )
 
-# Generate text with the quantized model
-inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to(model.device)
-outputs = model.generate(inputs["input_ids"], max_new_tokens=100)
+inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
