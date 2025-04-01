@@ -152,8 +152,8 @@ class BrosSpadeOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    initial_token_logits: torch.FloatTensor = None
-    subsequent_token_logits: torch.FloatTensor = None
+    initial_token_logits: Optional[torch.FloatTensor] = None
+    subsequent_token_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

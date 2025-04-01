@@ -92,9 +92,9 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    projected_states: torch.FloatTensor = None
-    projected_quantized_states: torch.FloatTensor = None
-    codevector_perplexity: torch.FloatTensor = None
+    projected_states: Optional[torch.FloatTensor] = None
+    projected_quantized_states: Optional[torch.FloatTensor] = None
+    codevector_perplexity: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

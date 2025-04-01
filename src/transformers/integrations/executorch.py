@@ -10,6 +10,8 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
+from typing import Optional
+
 import torch
 
 from transformers.generation.configuration_utils import GenerationConfig
@@ -178,8 +180,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
 def convert_and_export_with_cache(
     model: PreTrainedModel,
-    example_input_ids: torch.Tensor = None,
-    example_cache_position: torch.Tensor = None,
+    example_input_ids: Optional[torch.Tensor] = None,
+    example_cache_position: Optional[torch.Tensor] = None,
 ):
     """
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
