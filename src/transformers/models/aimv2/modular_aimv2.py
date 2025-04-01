@@ -17,7 +17,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -30,6 +30,7 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...activations import ACT2FN
 from ...utils import (
     ModelOutput,
+    can_return_tuple,
     logging,
 )
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
@@ -603,19 +604,18 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values)
 
@@ -624,7 +624,6 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -632,14 +631,12 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
         pooler_output = self.head(last_hidden_state) if self.use_head else None
 
-        output = BaseModelOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-        return output if return_dict else output.to_tuple()
 
 
 class AIMv2TextModel(AIMv2PreTrainedModel):
@@ -662,19 +659,18 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
+    @can_return_tuple
     def forward(
         self,
         input_ids,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(input_ids)
         _, seq_len, _ = hidden_states.shape
@@ -690,7 +686,6 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -702,14 +697,12 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
             (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
         ]
 
-        output = BaseModelOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-        return output if return_dict else output.to_tuple()
 
 
 class AIMv2Model(CLIPModel, nn.Module):
@@ -731,6 +724,7 @@ class AIMv2Model(CLIPModel, nn.Module):
 
         self.post_init()
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -739,8 +733,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, AIMv2Output]:
+    ) -> AIMv2Output:
         r"""
         Returns:
 
@@ -770,21 +763,18 @@ class AIMv2Model(CLIPModel, nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         image_embeds = vision_outputs.pooler_output
@@ -801,7 +791,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
-        output = AIMv2Output(
+        return AIMv2Output(
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
@@ -809,8 +799,6 @@ class AIMv2Model(CLIPModel, nn.Module):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
-
-        return output if return_dict else output.to_tuple()
 
 
 __all__ = [
