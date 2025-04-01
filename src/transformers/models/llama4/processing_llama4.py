@@ -279,7 +279,7 @@ class Llama4Processor(ProcessorMixin):
                         img_string += "<|tile_x_separator|>"
 
                 img_string += "<|tile_y_separator|>"
-        # img_string += "<|image|>"
+        img_string += "<|image|>"
         img_string += "<|patch|>" * num_patches_per_chunk
         img_string += "<|image_end|>"
 
