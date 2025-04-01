@@ -976,7 +976,8 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids[:, -1] = 10
         scores_wo_bias = scores[:, -1].clone()
         out = watermark(input_ids=input_ids, scores=scores)
-        self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
+        greenlist_id = 3 if torch_device == "xpu" else 1
+        self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
 
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):
