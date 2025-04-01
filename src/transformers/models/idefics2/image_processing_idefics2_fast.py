@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import torch
 
@@ -22,6 +22,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    BatchFeature,
     DefaultFastImageProcessorKwargs,
     SizeDict,
 )
@@ -30,9 +31,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...processing_utils import Unpack
-from ...image_processing_utils_fast import BatchFeature
-from ...utils import add_start_docstrings, is_torchvision_available, is_vision_available, logging, TensorType
+from ...utils import add_start_docstrings, is_torchvision_available, is_vision_available, logging
 
 
 if is_vision_available():
@@ -89,9 +88,7 @@ def get_max_height_width(images_list: List[List[torch.Tensor]]) -> Tuple[int, in
     return (max_height, max_width)
 
 
-def make_pixel_mask(
-    image: torch.Tensor, output_size: Tuple[int, int]
-) -> torch.Tensor:
+def make_pixel_mask(image: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
 
@@ -115,14 +112,14 @@ def convert_to_rgb(image: torch.Tensor) -> torch.Tensor:
     if isinstance(image, PIL.Image.Image):
         if image.mode == "RGB":
             return F.pil_to_tensor(image).float() / 255.0
-        
+
         # Use a white background for consistent results with slow processor
         image_rgba = image.convert("RGBA")
         background = PIL.Image.new("RGBA", image_rgba.size, (255, 255, 255))
         alpha_composite = PIL.Image.alpha_composite(background, image_rgba)
         alpha_composite = alpha_composite.convert("RGB")
         return F.pil_to_tensor(alpha_composite).float() / 255.0
-    
+
     return image
 
 
@@ -148,12 +145,12 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
     """
     Fast implementation of Idefics2ImageProcessor that uses torch and torchvision functions for image transformations.
     """
-    
+
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
-    do_rescale = True  
+    do_rescale = True
     do_normalize = True
     do_pad = True
     do_convert_rgb = True
@@ -163,32 +160,21 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = Idefics2FastImageProcessorKwargs
 
     def resize(
-        self,
-        image: torch.Tensor,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
-        **kwargs
+        self, image: torch.Tensor, size: SizeDict, interpolation: Optional["F.InterpolationMode"] = None, **kwargs
     ) -> torch.Tensor:
         """
         Resize an image using torchvision's functional resize.
         """
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        
+
         if size.shortest_edge and size.longest_edge:
             new_size = get_resize_output_image_size(image, size)
         elif size.height and size.width:
             new_size = (size.height, size.width)
         else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys."
-            )
-            
-        image = F.resize(
-            image,
-            size=new_size,
-            interpolation=interpolation,
-            **kwargs
-        )
+            raise ValueError("Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys.")
+
+        image = F.resize(image, size=new_size, interpolation=interpolation, **kwargs)
         return image
 
     def _crop(
@@ -214,7 +200,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
 
         mid_width = width // 2
         mid_height = height // 2
-        
+
         return [
             self._crop(image, 0, 0, mid_width, mid_height),
             self._crop(image, mid_width, 0, width, mid_height),
@@ -224,10 +210,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         ]
 
     def pad(
-        self, 
-        image: torch.Tensor, 
-        padded_size: Tuple[int, int], 
-        fill: int = 0
+        self, image: torch.Tensor, padded_size: Tuple[int, int], fill: int = 0
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Pad an image to the specified size and create the corresponding pixel mask.
@@ -235,22 +218,22 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         original_size = image.size()[-2:]
         padding_bottom = padded_size[0] - original_size[0]
         padding_right = padded_size[1] - original_size[1]
-        
+
         if padding_bottom < 0 or padding_right < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
                 f"original size. Got padded size: {padded_size}, original size: {original_size}."
             )
-            
+
         if original_size != padded_size:
             # Ensure padding is applied consistently with the slow implementation
             padding = [0, 0, padding_right, padding_bottom]
             # Use constant padding to match slow implementation
-            image = F.pad(image, padding, fill=fill, padding_mode='constant')
-        
+            image = F.pad(image, padding, fill=fill, padding_mode="constant")
+
         # Create pixel mask to match the slow implementation
         pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
-        pixel_mask[:original_size[0], :original_size[1]] = 1
+        pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask
 
@@ -263,11 +246,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
             Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
         """,
     )
-    def _preprocess(
-        self,
-        images: List[torch.Tensor],
-        **kwargs
-    ) -> BatchFeature:
+    def _preprocess(self, images: List[torch.Tensor], **kwargs) -> BatchFeature:
         """
         Preprocess a batch of images with optimized torch operations.
         """
@@ -284,7 +263,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         do_pad = kwargs.get("do_pad", self.do_pad)
         do_image_splitting = kwargs.get("do_image_splitting", self.do_image_splitting)
         return_tensors = kwargs.get("return_tensors", None)
-        
+
         # The rest of the implementation remains the same
         images_list = []
         for image_group in images:
@@ -299,7 +278,6 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
                 if do_convert_rgb and isinstance(image_group, PIL.Image.Image):
                     image_group = convert_to_rgb(image_group)
                 images_list.append([image_group])
-                
 
         if do_image_splitting:
             new_images_list = []
@@ -310,75 +288,79 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
                 new_images_list.append(new_images)
             images_list = new_images_list
 
-
         if do_resize:
             for i, images in enumerate(images_list):
                 for j, image in enumerate(images):
                     images_list[i][j] = self.resize(image, size=size, interpolation=interpolation)
 
-
         for i, images in enumerate(images_list):
             for j, image in enumerate(images):
-                if do_rescale and not (isinstance(image, PIL.Image.Image) or (isinstance(image, torch.Tensor) and image.max() <= 1.0)):
+                if do_rescale and not (
+                    isinstance(image, PIL.Image.Image) or (isinstance(image, torch.Tensor) and image.max() <= 1.0)
+                ):
                     images_list[i][j] = image * rescale_factor
-                
 
                 if do_normalize:
                     if isinstance(images_list[i][j], PIL.Image.Image):
                         images_list[i][j] = F.pil_to_tensor(images_list[i][j]).float() / 255.0
-                    
-                    images_list[i][j] = F.normalize(images_list[i][j], mean=image_mean, std=image_std)
 
+                    images_list[i][j] = F.normalize(images_list[i][j], mean=image_mean, std=image_std)
 
         if do_pad:
             padded_size = get_max_height_width(images_list)
             padded_images = []
             pixel_masks = []
-            
+
             for images in images_list:
                 batch_padded_images = []
                 batch_pixel_masks = []
-                
+
                 for image in images:
                     padded_image, pixel_mask = self.pad(image, padded_size)
                     batch_padded_images.append(padded_image)
                     batch_pixel_masks.append(pixel_mask)
-                
+
                 padded_images.append(batch_padded_images)
                 pixel_masks.append(batch_pixel_masks)
-            
+
             # Make sure to preserve batch dimension
             if len(padded_images) == 1:
                 return BatchFeature(
                     {
-                        "pixel_values": torch.stack(padded_images[0]).unsqueeze(0) if do_image_splitting else torch.stack(padded_images[0]),
-                        "pixel_attention_mask": torch.stack(pixel_masks[0]).unsqueeze(0) if do_image_splitting else torch.stack(pixel_masks[0])
+                        "pixel_values": torch.stack(padded_images[0]).unsqueeze(0)
+                        if do_image_splitting
+                        else torch.stack(padded_images[0]),
+                        "pixel_attention_mask": torch.stack(pixel_masks[0]).unsqueeze(0)
+                        if do_image_splitting
+                        else torch.stack(pixel_masks[0]),
                     },
-                    tensor_type=return_tensors
+                    tensor_type=return_tensors,
                 )
             else:
                 batch_pixel_values = [torch.stack(imgs) for imgs in padded_images]
                 batch_pixel_masks = [torch.stack(masks) for masks in pixel_masks]
-                
+
                 return BatchFeature(
                     {
                         "pixel_values": torch.stack(batch_pixel_values),
-                        "pixel_attention_mask": torch.stack(batch_pixel_masks)
+                        "pixel_attention_mask": torch.stack(batch_pixel_masks),
                     },
-                    tensor_type=return_tensors
+                    tensor_type=return_tensors,
                 )
         else:
             # Make sure to preserve batch dimension
             if len(images_list) == 1:
                 return BatchFeature(
-                    {"pixel_values": torch.stack(images_list[0]).unsqueeze(0) if do_image_splitting else torch.stack(images_list[0])},
-                    tensor_type=return_tensors
+                    {
+                        "pixel_values": torch.stack(images_list[0]).unsqueeze(0)
+                        if do_image_splitting
+                        else torch.stack(images_list[0])
+                    },
+                    tensor_type=return_tensors,
                 )
             else:
                 processed_images = [torch.stack(images) for images in images_list]
-                return BatchFeature(
-                    {"pixel_values": torch.stack(processed_images)},
-                    tensor_type=return_tensors
-                )
-            
+                return BatchFeature({"pixel_values": torch.stack(processed_images)}, tensor_type=return_tensors)
+
+
 __all__ = ["Idefics2ImageProcessorFast"]

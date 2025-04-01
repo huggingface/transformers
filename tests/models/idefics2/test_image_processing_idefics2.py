@@ -14,19 +14,26 @@
 # limitations under the License.
 
 import unittest
+
 import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
 from ...test_image_processing_common import ImageProcessingTestMixin
+
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import Idefics2ImageProcessor
+
     if is_torchvision_available():
         from transformers import Idefics2ImageProcessorFast
 
 if is_torch_available():
     import torch
+
 
 class Idefics2ImageProcessingTester:
     def __init__(
@@ -276,111 +283,100 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 tuple(encoded_images.shape),
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
-            
+
     def test_image_splitting(self):
         for image_processing_class in self.image_processor_list:
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_image_splitting"] = True
             image_processing = image_processing_class(**image_processor_dict)
-            
+
             image_inputs = self.image_processor_tester.prepare_image_inputs(
-                equal_resolution=True, 
-                torchify=True,
-                num_images=1
+                equal_resolution=True, torchify=True, num_images=1
             )
-            
+
             result = image_processing(image_inputs[0], return_tensors="pt")
             self.assertEqual(result.pixel_values.shape[1], 5)
-            
+
             image_processor_dict["do_image_splitting"] = False
             image_processing = image_processing_class(**image_processor_dict)
-            
+
             result = image_processing(image_inputs[0], return_tensors="pt")
             if len(result.pixel_values.shape) == 5:
-                self.assertEqual(result.pixel_values.shape[1], 1)  
+                self.assertEqual(result.pixel_values.shape[1], 1)
             else:
                 self.assertEqual(result.pixel_values.shape[1], self.image_processor_tester.num_channels)
-            
+
     def test_pixel_attention_mask(self):
         for image_processing_class in self.image_processor_list:
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_pad"] = True
             image_processing = image_processing_class(**image_processor_dict)
-            
-            image_inputs = self.image_processor_tester.prepare_image_inputs(
-                equal_resolution=False,
-                torchify=True
-            )
-            
+
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
             result = image_processing(image_inputs, return_tensors="pt")
             self.assertIn("pixel_attention_mask", result)
-            
-            self.assertEqual(
-                result.pixel_attention_mask.shape[-2:], 
-                result.pixel_values.shape[-2:]
-            )
-            
+
+            self.assertEqual(result.pixel_attention_mask.shape[-2:], result.pixel_values.shape[-2:])
+
             image_processor_dict["do_pad"] = False
             image_processor_dict["do_image_splitting"] = False
             image_processing = image_processing_class(**image_processor_dict)
-            
-            equal_size_inputs = self.image_processor_tester.prepare_image_inputs(
-                equal_resolution=True,
-                torchify=True
-            )
-            
+
+            equal_size_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
             result = image_processing(equal_size_inputs, return_tensors="pt")
             self.assertNotIn("pixel_attention_mask", result)
-            
+
     def test_convert_rgb(self):
         if not is_vision_available():
             return
-            
+
         for image_processing_class in self.image_processor_list:
             rgba_image = Image.new("RGBA", (100, 100), (255, 0, 0, 128))
-            
+
             # Test with do_convert_rgb=True - this should work for all processors
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_convert_rgb"] = True
             image_processing = image_processing_class(**image_processor_dict)
-            
+
             result = image_processing([rgba_image], return_tensors="pt")
             self.assertIsNotNone(result.pixel_values)
             rgb_image = rgba_image.convert("RGB")
-            
+
             image_processor_dict["do_convert_rgb"] = False
             image_processing = image_processing_class(**image_processor_dict)
-            
+
             # Use the RGB image instead of RGBA when do_convert_rgb=False
             result = image_processing([rgb_image], return_tensors="pt")
             self.assertIsNotNone(result.pixel_values)
-            
+
             # Additional test: verifying proper handling of regular RGB images
             rgb_image = Image.new("RGB", (100, 100), (255, 0, 0))
             result = image_processing([rgb_image], return_tensors="pt")
             self.assertIsNotNone(result.pixel_values)
-                
+
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
-    
+
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-    
+
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
-    
+
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-    
+
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
-    
+
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        
+
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
         )
