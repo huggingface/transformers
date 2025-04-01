@@ -142,27 +142,15 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """,
 )
 class FlavaImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BICUBIC
     image_mean = FLAVA_IMAGE_MEAN
     image_std = FLAVA_IMAGE_STD
     size = {"height": 224, "width": 224}
-    default_to_square = None
     crop_size = {"height": 224, "width": 224}
     do_resize = True
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
 
     # Mask related params
     return_image_mask = False
@@ -502,7 +490,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 mask_group_min_aspect_ratio=mask_group_min_aspect_ratio,
                 mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
             )
-            masks = [mask_generator() for _ in range(images.size(0))]
+            masks = [mask_generator() for _ in range(len(images))]
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
