@@ -495,6 +495,7 @@ str_to_torch_dtype = {
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn
 }
 
 if is_torch_greater_or_equal("2.1.0"):

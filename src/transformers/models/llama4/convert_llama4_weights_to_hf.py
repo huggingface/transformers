@@ -21,6 +21,8 @@ from transformers import (
 from transformers.integrations.tiktoken import TikTokenConverter
 
 
+_OFFLINE_QUANT_COMPATIBLE = os.environ.get("OFFLINE_QUANT_COMPATIBLE", "0") == "1"
+
 torch.serialization.add_safe_globals([io.BytesIO])
 # fmt: off
 
@@ -29,6 +31,8 @@ torch.serialization.add_safe_globals([io.BytesIO])
 # Still not sure what to do with those!
 # `None` means we drop the key
 
+
+weight_postfix = ".weight" if _OFFLINE_QUANT_COMPATIBLE else ""
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # CausalLM keys
     r"output.weight":                                        r"language_model.lm_head.weight",
@@ -44,9 +48,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"layers.(\d+).attention.wqkv.weight":                   r"language_model.model.layers.\1.self_attn.qkv_proj.weight",
 
     # MoE keys: no simple MLPmodel.
-    r"layers.(\d+).feed_forward.experts.moe_w_in_eD_F":      r"language_model.model.layers.\1.feed_forward.experts.gate_proj",       # will be fused with up
-    r"layers.(\d+).feed_forward.experts.moe_w_out_eF_D":     r"language_model.model.layers.\1.feed_forward.experts.down_proj",       # expert win
-    r"layers.(\d+).feed_forward.experts.moe_w_swiglu_eD_F":  r"language_model.model.layers.\1.feed_forward.experts.up_proj",         # fused with up
+    r"layers.(\d+).feed_forward.experts.moe_w_in_eD_F":      r"language_model.model.layers.\1.feed_forward.experts.gate_proj" + weight_postfix,       # will be fused with up
+    r"layers.(\d+).feed_forward.experts.moe_w_out_eF_D":     r"language_model.model.layers.\1.feed_forward.experts.down_proj" + weight_postfix,       # expert win
+    r"layers.(\d+).feed_forward.experts.moe_w_swiglu_eD_F":  r"language_model.model.layers.\1.feed_forward.experts.up_proj" + weight_postfix,         # fused with up
     r"layers.(\d+).feed_forward.router_DE":                  r"language_model.model.layers.\1.feed_forward.router.weight",           # used for top
     r"layers.(\d+).feed_forward.w_in_shared_FD":             r"language_model.model.layers.\1.feed_forward.shared_expert.gate_proj", # might need to be fused for efficiency?
     r"layers.(\d+).feed_forward.w_out_shared_DF":            r"language_model.model.layers.\1.feed_forward.shared_expert.down_proj", # might need to be fused for efficiency?
@@ -262,6 +266,7 @@ def write_model(
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
+        for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
     # default vision config frmo params
@@ -380,6 +385,16 @@ def write_model(
                 v = new_key.replace("qkv", "v")
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
+            elif _OFFLINE_QUANT_COMPATIBLE and "feed_forward.experts." in new_key:
+                # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
+                expert_lists = []
+                for k in current_parameter:
+                    expert_lists.append(list(k.reshape(num_experts, -1, k.shape[-1]).unbind(0))) # [#expert * IN, OUT] -> #experts * [IN, OUT]
+                for i in range(num_experts):
+                    expert = torch.cat([expert_list[i] for expert_list in expert_lists], dim=concat_dim)
+                    expert_key = new_key.replace("experts.", f"experts.{i}.")
+                    state_dict[expert_key] = expert.transpose(0,1).contiguous() #[OUT, IN]
+                    tqdm.write(f"Processing: {key.ljust(50)}  ->\t {expert_key}, {state_dict[expert_key].shape}")
             elif re.search(r"(gate|up)_proj", new_key):
                 path = new_key.split(".")
                 gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
@@ -408,6 +423,7 @@ def write_model(
                         gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
                         new_key = new_key.replace("up_proj", "gate_up_proj")
                         state_dict[new_key] = gate_up_proj.contiguous()
+
                     tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
             elif "down_proj" in new_key:
                 current_parameter = torch.cat(current_parameter, dim=concat_dim)

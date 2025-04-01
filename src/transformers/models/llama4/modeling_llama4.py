@@ -47,7 +47,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -60,7 +59,6 @@ logger = logging.get_logger(__name__)
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "meta-ai/Llama-4-17B"
 _CONFIG_FOR_DOC = "Llama4Config"
-
 
 class Llama4TextExperts(nn.Module):
     def __init__(self, config: Llama4Config):
@@ -153,7 +151,12 @@ class Llama4TextMoe(nn.Module):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
-        self.experts = Llama4TextExperts(config)
+        self.num_experts = config.num_local_experts
+        self.for_llm_compressor = config.for_llm_compressor
+        if self.for_llm_compressor:
+            self.experts = nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
+        else:
+            self.experts = Llama4TextExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.shared_expert = Llama4TextMLP(config)
 
@@ -184,8 +187,14 @@ class Llama4TextMoe(nn.Module):
         )
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
-        routed_out = self.experts(routed_in)  # routed in is "sorted" / ready for EP
-
+        expert_routed_out_list = []
+        if self.for_llm_compressor:
+            routed_in = routed_in.reshape(self.num_experts, -1, routed_in.shape[-1])
+            for expert_idx in range(self.num_experts):
+                expert_routed_out_list.append(self.experts[expert_idx](routed_in[expert_idx]))
+            routed_out = torch.cat(expert_routed_out_list, dim=0)
+        else:
+            routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
         # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
@@ -1706,7 +1715,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            final_mask = special_image_mask.to(inputs_embeds.device) 
+            final_mask = special_image_mask.to(inputs_embeds.device)
             inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
             final_mask_1d = final_mask[..., 0].reshape(-1)
