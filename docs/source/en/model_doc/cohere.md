@@ -16,7 +16,6 @@ Command-R is a **scalable generative model** optimized for long-context tasks su
 
 You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
 
-This model was contributed by [Saurabh Dash](https://huggingface.co/saurabhdash) and [Ahmet Üstün](https://huggingface.co/ahmetustun). The code of the implementation in Hugging Face is based on [GPT-NeoX](https://github.com/EleutherAI/gpt-neox).
 
 > [!TIP]
 > Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
