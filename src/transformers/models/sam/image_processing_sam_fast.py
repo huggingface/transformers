@@ -305,7 +305,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 img_h, img_w = original_sizes[i]
                 if mask_h != img_h or mask_w != img_w:
                     raise ValueError(
-                        f"Segmentation map size ({mask_h}, {mask_w}) does not match " f"image size ({img_h}, {img_w})"
+                        f"Segmentation map size ({mask_h}, {mask_w}) does not match image size ({img_h}, {img_w})"
                     )
 
                 if do_resize and mask_size is not None:
