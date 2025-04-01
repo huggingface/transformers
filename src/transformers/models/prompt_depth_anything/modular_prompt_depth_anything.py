@@ -217,6 +217,7 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
+
 class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
         super().__init__()
