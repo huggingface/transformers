@@ -18,28 +18,29 @@ rendered properly in your Markdown viewer.
 
 This guide helps you navigate the most common and production-ready quantization techniques available in Transformers and associated libraries. For a comprehensive overview of all supported methods and their features, refer back to the [Quantization Overview](./overview) table.
 
-## TLDR
+## Inference
+
+**TLDR (Inference):**
 
 *   For ease of use and QLoRA fine-tuning on NVIDIA GPUs: **bitsandbytes**
 *   For good 4-bit accuracy with upfront calibration: **GPTQModel** or **AWQ**
 *   For speed via `torch.compile` and flexibility: **torchao**
 *   For fast on-the-fly quantization without calibration: **HQQ** is worth considering.
+*   For loading specific formats (FP8, Sparse) and nice quantized models: **compressed-tensors** 
 
-## Production-Ready & Widely Used Methods
 
+## Production-Ready & Widely Used Inference Methods:
 These methods are generally well-tested, widely adopted, and suitable for many production scenarios.
 
 ### 1. bitsandbytes (`load_in_8bit` / `load_in_4bit`)
 
-*   **Description:** Enables 4-bit training/inference (QLoRA using NF4) and 8-bit inference (LLM.int8).
+*   **Description:** Enables 4-bit and 8-bit inference.
 *   **Pros:**
-    *   No calibration dataset required for basic inference quantization.
-    *   The standard and necessary backend for **QLoRA** fine-tuning.
+    *   Very simple, no calibration dataset required for inference
     *   Good community support and widely adopted.
 *   **Cons:**
-    *   Primarily optimized for NVIDIA GPUs (CUDA). There is [ongoing work](https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/docs/source/installation.mdx#multi-backend) to support other hardware (Intel/AMD, Apple M-series, etc.)
-    *   Inference speedup compared to fp16/bf16 might not always be significant.
-    *   LLM.int8 (8-bit) can sometimes have higher accuracy degradation than PTQ methods for 8-bit.
+    *   Primarily optimized for NVIDIA GPUs (CUDA).  There is [ongoing work](https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/docs/source/installation.mdx#multi-backend) to support other hardware.
+    *   Inference speedup isn't guaranteed
 
 See the [bitsandbytes documentation](./bitsandbytes) for more details.
 
@@ -48,8 +49,7 @@ See the [bitsandbytes documentation](./bitsandbytes) for more details.
 *   **Description:** quantizes weights (commonly to 4-bit, but supports others) by processing calibration data. 
 *   **Pros:**
     *   Often achieves high accuracy
-    *   Can lead to inference speedups, especially when used with optimized kernels like ExLlamaV2 or Marlin (primarily NVIDIA GPUs).
-    *   `GPTQModel` library offers broader hardware support (including ROCm, CPU, Metal) and features compared to the original AutoGPTQ.
+    *   Can lead to inference speedups
     *   There are many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). This means you can often skip doing the quantization yourself and directly download a GPTQ-quantized model.
 *   **Cons:**
     *   Requires a calibration dataset and a separate calibration step before inference. This takes time and compute resources.
@@ -62,12 +62,11 @@ See the [GPTQ documentation](./gptq) for more details.
 *   **Description:** Similar to GPTQ in workflow, that also typically targets 4-bit quantization.
 *   **Pros:**
     *   Often achieves high accuracy at 4-bit, sometimes surpassing GPTQ for specific tasks.
-    *   Fast inference kernels and offers fused modules for potential speedups on supported architectures.
+    *   Can lead to inference speedups
     *   Shorter calibration time than GPTQ.
     *   There are many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). This means you can often skip doing the quantization yourself and directly download a AWQ-quantized model.
 *   **Cons:**
-    *   Requires a calibration dataset and a separate calibration step before inference.
-    *   Fused modules might have limitations (e.g., incompatibility with FlashAttention).
+    *   Requires calibration if quantizing yourself.
 
 See the [AWQ documentation](./awq) for more details.
 
@@ -96,9 +95,31 @@ See the [torchao documentation](./torchao) for more details.
 *   **Cons:**
     *   Accuracy at very low bit depths (<4-bit) can degrade significantly and requires careful evaluation for the specific task.
     *   While quantization is fast, inference speed might not be faster than other methods unless using specific backends or `torch.compile`.
-    *   Saving/loading quantized models directly with Transformers `save_pretrained` might have limitations (check HQQ docs).
-
 See the [HQQ documentation](./hqq) for more details.
+
+### 6. compressed-tensors
+
+*   **Description:** Allows loading models saved in specific compressed formats (like FP8, INT8/4, potentially with sparsity).
+*   **Pros:** 
+    *   Supports flexible formats including FP8 and sparsity.
+*   **Cons:** 
+    *   Primarily for loading pre-quantized models, not performing the quantization within Transformers itself.
+
+See the [compressed-tensors documentation](./compressed_tensors) for more details.
+
+## Fine-Tuning
+
+Quantization can also be used during fine-tuning to save memory, most commonly with PEFT's QLoRA.
+
+### bitsandbytes (4-bit NF4 for QLoRA)
+
+*   **Description:** The standard method for QLoRA fine-tuning via PEFT.
+*   **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
+*   **Cons:** Primarily for NVIDIA GPUs.
+
+Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
+
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details. 
 
 ## Advanced & Research-Oriented Methods
 
@@ -110,5 +131,6 @@ Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), e
     *   You have significant compute resources available for potentially complex quantization procedures.
 *   Recommendation: Consult their specific documentation and associated papers carefully before choosing them for production use.
 
+---
 
 Always benchmark the performance (accuracy and speed) of the quantized model on your specific task and hardware to ensure it meets your requirements. Refer to the individual documentation pages linked above for detailed usage instructions.
