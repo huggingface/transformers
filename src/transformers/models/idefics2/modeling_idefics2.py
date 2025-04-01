@@ -14,9 +14,8 @@
 # limitations under the License.
 """PyTorch Idefics2 model."""
 
-import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,9 +26,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -39,10 +37,6 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
-
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -185,6 +179,33 @@ class Idefics2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if hasattr(module, "num_key_value_groups"):
+        key = repeat_kv(key, module.num_key_value_groups)
+        value = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Copied from transformers.models.siglip.modeling_siglip.SiglipAttention with Siglip->Idefics2Vision
 class Idefics2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -220,152 +241,44 @@ class Idefics2VisionAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, q_len, _ = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
-
-        if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, k_v_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, q_len, k_v_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, q_len, k_v_seq_len)}, but is {attention_mask.size()}"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
-    """
-    Idefics2Vision flash attention module. This module inherits from `Idefics2VisionAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
-        key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (Idefics2VisionRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
             attention_mask,
-            q_len,
-            dropout=dropout_rate,
             is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
 
         return attn_output, attn_weights
-
-
-IDEFICS_VISION_ATTENTION_CLASSES = {
-    "eager": Idefics2VisionAttention,
-    "flash_attention_2": Idefics2VisionFlashAttention2,
-}
 
 
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMLP with Siglip->Idefics2Vision
@@ -437,7 +350,7 @@ class Idefics2EncoderLayer(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = Idefics2VisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -600,6 +513,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -646,8 +560,10 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
-    _supports_sdpa = False
     config_class = Idefics2VisionConfig
+    _supports_sdpa = True
+    _supports_flash_attention_2 = True
+    _supports_flex_attn = True
 
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__(config)
@@ -761,7 +677,7 @@ class Idefics2PerceiverAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None) -> None:
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
-
+        self.config = config
         self.layer_idx = None
         self.hidden_size = config.hidden_size
         self.num_heads = config.resampler_n_heads
@@ -769,6 +685,7 @@ class Idefics2PerceiverAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -804,191 +721,47 @@ class Idefics2PerceiverAttention(nn.Module):
 
         hidden_states = torch.concat([context, latents], dim=-2)
 
-        query_states = self.q_proj(latents)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = self.q_proj(latents)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        values = values.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+            keys, values = past_key_value.update(keys, values, self.layer_idx)
 
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-
-            attn_weights = attn_weights + attention_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim)
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-
-# NO LONGER EXIST Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
-# TODO cyril: modular
-class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
-    """
-    Idefics2 flash attention module. This module inherits from `Idefics2PerceiverAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    # Ignore copy
-    def forward(
-        self,
-        latents: torch.Tensor,
-        context: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        bsz, q_len, _ = latents.size()
-        kv_seq_len = q_len + context.size()[1]
-
-        # Query, Key, Value Projections --> Note that in Flamingo, latents are *concatenated* with context prior to attn!
-        #   Note: This results in queries w/ `seq = n_latents`, and keys, values with `seq = len(context) + n_latents`
-        query_states = self.q_proj(latents)
-        key_states = self.k_proj(torch.cat([context, latents], dim=-2))
-        value_states = self.v_proj(torch.cat([context, latents], dim=-2))
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
-        key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-
-        if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
-                slicing_tokens = kv_seq_len - self.config.sliding_window
-
-                past_key = past_key_value[0]
-                past_value = past_key_value[1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        "past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1,"
-                        f" head_dim`), got {past_key.shape}"
-                    )
-
-                past_key_value = (past_key, past_value)
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        # Reashape to the expected shape for Flash Attention
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
             attention_mask,
-            q_len,
-            dropout=dropout_rate,
-            sliding_window=None,
             is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-
-IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
-    "eager": Idefics2PerceiverAttention,
-    "flash_attention_2": Idefics2PerceiverFlashAttention2,
-}
 
 
 class Idefics2PerceiverLayer(nn.Module):
@@ -1001,7 +774,7 @@ class Idefics2PerceiverLayer(nn.Module):
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+        self.self_attn = Idefics2PerceiverAttention(config, layer_idx=layer_idx)
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
             hidden_size=config.hidden_size,
@@ -1084,8 +857,10 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
-    _supports_sdpa = False
     config_class = Idefics2PerceiverConfig
+    _supports_sdpa = True
+    _supports_flash_attention_2 = True
+    _supports_flex_attn = True
 
     def __init__(self, config) -> None:
         super().__init__(config)
