@@ -33,12 +33,13 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
