@@ -186,7 +186,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             model_config.save_pretrained(tmpdirname)
             # copy relevant files
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
-            # create emtpy sample processor
+            # create empty sample processor
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 f.write("{}")
 
@@ -344,6 +344,40 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertEqual(processor.processor_attr_1, 1)
             self.assertEqual(processor.processor_attr_2, False)
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
+                del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in TOKENIZER_MAPPING._extra_content:
+                del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in PROCESSOR_MAPPING._extra_content:
+                del PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
+        class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
+            pass
+
+        class NewTokenizer(BertTokenizer):
+            pass
+
+        class NewProcessor(ProcessorMixin):
+            feature_extractor_class = "NewFeatureExtractor"
+            tokenizer_class = "NewTokenizer"
+
+            def __init__(self, feature_extractor, tokenizer):
+                super().__init__(feature_extractor, tokenizer)
+
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoFeatureExtractor.register(CustomConfig, NewFeatureExtractor)
+            AutoTokenizer.register(CustomConfig, slow_tokenizer_class=NewTokenizer)
+            AutoProcessor.register(CustomConfig, NewProcessor)
+            # If remote code is not set, the default is to use local classes.
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor",
+            )
+            self.assertEqual(processor.__class__.__name__, "NewProcessor")
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["custom"]

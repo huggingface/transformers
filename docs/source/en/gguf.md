@@ -24,21 +24,23 @@ rendered properly in your Markdown viewer.
 
 The GGUF format also supports many quantized data types (refer to [quantization type table](https://hf.co/docs/hub/en/gguf#quantization-types) for a complete list of supported quantization types) which saves a significant amount of memory, making inference with large models like Whisper and Llama feasible on local and edge devices.
 
-Transformers supports loading models stored in the GGUF format for further training or finetuning. The GGUF format is dequantized to fp32 where the full model weights are available and compatible with PyTorch.
+Transformers supports loading models stored in the GGUF format for further training or finetuning. The GGUF checkpoint is **dequantized to fp32** where the full model weights are available and compatible with PyTorch.
 
 > [!TIP]
-> Models that support GGUF include Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, and Starcoder2.
+> Models that support GGUF include Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, Starcoder2, and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py)
 
 Add the `gguf_file` parameter to [`~PreTrainedModel.from_pretrained`] to specify the GGUF file to load.
 
 ```py
+# pip install gguf
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
 filename = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
 
+torch_dtype = torch.float32 # could be torch.float16 or torch.bfloat16 too
 tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
-model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
+model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, torch_dtype=torch_dtype)
 ```
 
 Once you're done tinkering with the model, save and convert it back to the GGUF format with the [convert-hf-to-gguf.py](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py) script.

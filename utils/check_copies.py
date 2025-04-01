@@ -245,7 +245,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
             ["block_without_name", "block_with_name"],
         ]:
             raise ValueError(
-                f"""Class defined in {filename} doesn't have the expected stucture.
+                f"""Class defined in {filename} doesn't have the expected structure.
                 See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`""",
             )
 
@@ -652,7 +652,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
     Returns:
         `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
-        with the name of the object having a diff and the line number where theere is the first diff.
+        with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
 

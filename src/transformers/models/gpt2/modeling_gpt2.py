@@ -1400,7 +1400,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

@@ -49,7 +49,7 @@ demonstrate its capabilities for on-device computations in a proof-of-concept ex
 study.*
 
 This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
+contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers-research-projects/tree/main/distillation).
 
 ## Usage tips
 
