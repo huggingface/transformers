@@ -171,7 +171,7 @@ class InformerModelTester:
         embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         ).to(torch_device)
-        embed_positions.weight = embed_positions._init_weight(embed_positions.weight)
+        embed_positions._init_weight()
         self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
         self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
 
