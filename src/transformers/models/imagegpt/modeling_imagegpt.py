@@ -951,7 +951,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         >>> height = image_processor.size["height"]
         >>> width = image_processor.size["width"]
 
-        >>> samples = output[:, 1:].cpu().detach().numpy()
+        >>> samples = output[:, 1:].detach().cpu().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [height, width, 3]).astype(np.uint8) for s in samples
         ... ]  # convert color cluster tokens back to pixels
