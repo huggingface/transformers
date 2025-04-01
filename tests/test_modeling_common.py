@@ -523,9 +523,11 @@ class ModelTesterMixin:
             # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
             # `_init_weights` so that it can add the seed for composite models as well)
             original_initialize_weights = PreTrainedModel._initialize_weights
+
             def seeded_initialize_weights(self, module):
                 set_seed(0)
                 original_initialize_weights(self, module)
+
             PreTrainedModel._initialize_weights = seeded_initialize_weights
 
             # First, initialize the model from config -> this ensure everything is correctly initialized, even if
@@ -557,7 +559,6 @@ class ModelTesterMixin:
                 len(different_weights) == 0,
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
             )
-
 
     @slow
     @require_accelerate

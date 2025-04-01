@@ -255,11 +255,8 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_sdpa = True
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextPreTrainedModel._init_weights
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextPreTrainedModel._init_weights with LlavaNext->LlavaOnevision
     def _init_weights(self, module):
-        # important: this ported version of LlavaNext isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -273,6 +270,9 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, LlavaOnevisionForConditionalGeneration):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
