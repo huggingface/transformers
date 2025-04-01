@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Falcon
 
-Falcon is a series of causal decoder-only language models developed by the [Technology Innovation Institute (TII)](https://www.tii.ae/). Falcon models utilize multi-query attention and are optimized for efficient inference while maintaining strong performance. The models were trained on large-scale datasets (1+ trillion tokens) with a focus on the high-quality [RefinedWeb](https://arxiv.org/abs/2306.01116) corpus.
+[Falcon](https://huggingface.co/papers/2311.16867) is a family of large language models, available in 7B, 40B, and 180B parameters, as pretrained and instruction tuned variants. This model focuses on scaling pretraining over three categories, performance, data, and hardware. Falcon uses multigroup attention to significantly reduce inference memory requirements and rotary positional embeddings (RoPE). These models are pretrained on [RefinedWeb](https://huggingface.co/datasets/tiiuae/falcon-refinedweb), a high-quality and deduplicated 5T token dataset.
 
 You can find the research paper at https://huggingface.co/papers/2311.16867 and check out the official checkpoints under the [Falcon](https://huggingface.co/collections/tiiuae/falcon-64fb432660017eeec9837b5a) collection.
 
