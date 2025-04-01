@@ -510,12 +510,12 @@ class LongformerSelfAttention(nn.Module):
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -549,9 +549,9 @@ class LongformerSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        assert embed_dim == self.embed_dim, (
+            f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        )
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -619,9 +619,9 @@ class LongformerSelfAttention(nn.Module):
         )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            )
             attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -813,9 +813,9 @@ class LongformerSelfAttention(nn.Module):
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
-        assert (
-            seq_len % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
+        assert seq_len % (window_overlap * 2) == 0, (
+            f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
+        )
         assert query.size() == key.size()
 
         chunks_count = torch.div(seq_len, window_overlap, rounding_mode="trunc") - 1
@@ -1086,9 +1086,9 @@ class LongformerSelfAttention(nn.Module):
 
         # apply layer head masking
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            )
             global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
                 batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
@@ -1287,9 +1287,9 @@ class LongformerEncoder(nn.Module):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layer)
-            ), f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size()[0] == (len(self.layer)), (
+                f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
+            )
         for idx, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1590,8 +1590,7 @@ class LongformerModel(LongformerPreTrainedModel):
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
             logger.warning_once(
-                f"Input ids are automatically padded to be a multiple of "
-                f"`config.attention_window`: {attention_window}"
+                f"Input ids are automatically padded to be a multiple of `config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)

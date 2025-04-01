@@ -48,6 +48,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -79,6 +80,7 @@ from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flax_available,
     is_tf_available,
+    is_torch_npu_available,
     is_torch_sdpa_available,
     is_torchdynamo_available,
 )
@@ -482,9 +484,11 @@ class ModelUtilsTest(TestCasePlus):
         # test that from_pretrained works with torch_dtype being strings like "float32" for PyTorch backend
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float32")
         self.assertEqual(model.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float16")
         self.assertEqual(model.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -495,14 +499,22 @@ class ModelUtilsTest(TestCasePlus):
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
+        # Load without dtype specified
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set torch_dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -511,6 +523,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -519,6 +532,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
         config = copy.deepcopy(model.config)
@@ -529,6 +543,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
@@ -536,6 +551,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -639,7 +655,7 @@ class ModelUtilsTest(TestCasePlus):
         if is_torch_sdpa_available():
             attn_implementation_available.append("sdpa")
 
-        if is_flash_attn_2_available():
+        if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
         for requested_attn_implementation in attn_implementation_available:
@@ -663,7 +679,7 @@ class ModelUtilsTest(TestCasePlus):
         if is_torch_sdpa_available():
             attn_implementation_available.append("sdpa")
 
-        if is_flash_attn_2_available():
+        if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
         for requested_attn_implementation in attn_implementation_available:
@@ -751,7 +767,7 @@ class ModelUtilsTest(TestCasePlus):
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
-                        state_dict = torch.load(shard_file)
+                        state_dict = torch.load(shard_file, weights_only=True)
                         self.assertEqual(len(state_dict), 1)
 
                 # Check the index and the shard files found match
@@ -2362,14 +2378,14 @@ class AttentionMaskTester(unittest.TestCase):
             num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
 
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+                assert (mask_4d != 0).sum().item() == num_tokens_masked
             if 0 in mask_2d:
                 # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
+                assert (mask_4d != 0).sum().item() >= num_tokens_masked
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
         elif not mask_converter.is_causal and context is None:
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == 0
+                assert (mask_4d != 0).sum().item() == 0
             if 0 in mask_2d:
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
         elif mask_converter.is_causal and context is not None:
@@ -2378,10 +2394,10 @@ class AttentionMaskTester(unittest.TestCase):
             num_tokens_masked = bsz * num_tokens_masked
 
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+                assert (mask_4d != 0).sum().item() == num_tokens_masked
             if 0 in mask_2d:
                 # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
+                assert (mask_4d != 0).sum().item() >= num_tokens_masked
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
 
     def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
@@ -2399,15 +2415,15 @@ class AttentionMaskTester(unittest.TestCase):
             # k * (k+1) / 2 tokens are masked in triangualar masks
             num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
 
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+            assert (mask_4d != 0).sum().item() == num_tokens_masked
         elif not mask_converter.is_causal and context is None:
-            assert (mask_4d != 0).sum().cpu().item() == 0
+            assert (mask_4d != 0).sum().item() == 0
         elif mask_converter.is_causal and context is not None:
             # k * (k+1) / 2 tokens are masked in triangualar masks
             num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
             num_tokens_masked = bsz * num_tokens_masked
 
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+            assert (mask_4d != 0).sum().item() == num_tokens_masked
 
     def compute_num_context_mask(self, kv_len, context, q_len):
         # This function computes the # of attention tokens that are added for
@@ -2662,6 +2678,11 @@ class TestAttentionImplementation(unittest.TestCase):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
+
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
@@ -2671,6 +2692,11 @@ class TestAttentionImplementation(unittest.TestCase):
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
+
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
 
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 

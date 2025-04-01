@@ -162,7 +162,7 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     elif pvt_size == "large":
         config_path = "Zetatech/pvt-large-224"
     else:
-        raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
+        raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but '{pvt_size}' was given")
     config = PvtConfig(name_or_path=config_path)
     # load original model from https://github.com/whai362/PVT
     state_dict = torch.load(pvt_checkpoint, map_location="cpu")
@@ -192,7 +192,7 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     elif pvt_size == "large":
         expected_slice_logits = torch.tensor([0.3740, -0.7739, -0.4214])
     else:
-        raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
+        raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but '{pvt_size}' was given")
 
     assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
 
