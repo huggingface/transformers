@@ -70,7 +70,7 @@ print(gen_text)
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below demonstrates loading a 4bit quantized model using [bitsandbytes](../quantization/bitsandbytes).
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
 # pip install transformers bitsandbytes accelerate
