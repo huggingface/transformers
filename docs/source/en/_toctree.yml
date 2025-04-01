@@ -357,6 +357,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/baichuan_m1
+        title: BaichuanM1
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
