@@ -52,9 +52,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
-        if major < 9:
+        if (major < 8) or (major == 8 and minor < 9):
             raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                f", actual = `{major}.{minor}`"
             )
 
         device_map = kwargs.get("device_map", None)
