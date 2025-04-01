@@ -385,26 +385,6 @@ def get_state_dict_dtype(state_dict):
         return next(state_dict.values()).dtype
 
 
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`.
-
-    Example:
-
-    ```py
-    >>> dtype_byte_size(torch.float32)
-    4
-    ```
-    """
-    if dtype == torch.bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)_?", str(dtype))
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
-
-
 def check_support_param_buffer_assignment(model_to_load, state_dict):
     """
     Checks if `model_to_load` supports param buffer assignment (such
