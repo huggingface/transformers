@@ -545,6 +545,7 @@ def shard_and_distribute_module(
         )
     else:
         # TODO log no plan modules in set
+        print("No plan for", parameter_name,end ="\r")
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()

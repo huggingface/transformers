@@ -25,10 +25,6 @@ _OFFLINE_QUANT_COMPATIBLE = os.environ.get("OFFLINE_QUANT_COMPATIBLE", "0") == "
 
 torch.serialization.add_safe_globals([io.BytesIO])
 # fmt: off
-
-# layers.29.feed_forward.model.norm.weight
-# layers.30.attention.wqkv.layer_model.norm.weight
-# Still not sure what to do with those!
 # `None` means we drop the key
 
 

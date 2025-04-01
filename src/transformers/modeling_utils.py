@@ -1930,22 +1930,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        if self.base_model is self:
-            self._pp_plan = (
-                self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-            )
-            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        else:
-            self._tp_plan = self._tp_plan or {}
-            for name, module in self.named_children():
-                if plan := getattr(module, "_tp_plan", None):
-                    self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
+        self._pp_plan = (
+            self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        )
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
-            for _, v in self._tp_plan.items():
+            unique_names =  {re.sub(r"\d+", "*", name) for name, _ in self.named_children() if len(name) > 0}
+            for k, v in self._tp_plan.items():
                 if v not in SUPPORTED_TP_STYLES:
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
+                    )
+                if k not in unique_names:
+                    raise ValueError(
+                        f"Unsupported tensor parallel mapping: {k} is not part of the model"
                     )
 
     def dequantize(self):
@@ -5819,10 +5821,10 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
             param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
 
-        parameter_count[device] += param_byte_count
+        total_byte_count[device] += param_byte_count
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
-    for device, byte_count in parameter_count.items():
+    for device, byte_count in total_byte_count.items():
         if device.type == "cuda":
             index = device.index if device.index is not None else torch.cuda.current_device()
             device_memory = torch.cuda.mem_get_info(index)[0]
