@@ -37,63 +37,49 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
-# For text generation with Falcon-7B-Instruct
-generator = pipeline(
-    "text-generation", 
+pipeline = pipeline(
+    task="text-generation", 
     model="tiiuae/falcon-7b-instruct",
-    device_map="auto"
+    torch_dtype=torch.bfloat16,
+    device=0
 )
-response = generator(
+pipeline(
     "Write a short poem about coding",
     max_length=100,
     do_sample=True,
     temperature=0.7
 )
-print(response[0]["generated_text"])
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Load tokenizer and model
-model_id = "tiiuae/falcon-7b-instruct"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    torch_dtype=torch.bfloat16,  # Load in bfloat16 for faster inference
-    device_map="auto",  # Automatically determine device mapping
-    attn_implementation="sdpa", # Use scaled dot product attention
+    "tiiuae/falcon-7b-instruct",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa",
 )
 
-# Prepare input
-text = "Write a function in Python to calculate the Fibonacci sequence:"
-inputs = tokenizer(text, return_tensors="pt").to(model.device)
+input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to("cuda")
 
-# Generate
-with torch.no_grad():
-    output = model.generate(
-        inputs["input_ids"],
-        max_new_tokens=512,
-        temperature=0.7,
-        do_sample=True,
-    )
-
-# Decode and print result
-generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-print(generated_text)
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
 <hfoption id="transformers-cli">
 
 ```bash
-transformers-cli chat --model_name_or_path tiiuae/falcon-7b-instruct
+transformers-cli chat --model_name_or_path tiiuae/falcon-7b-instruct --torch_dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -129,8 +115,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Notes
 
-- If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format using the conversion script located in the
-[Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon). 
+- If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format for better stability and performance using the conversion script located in the [Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon). To use this script, simply call it with `python convert_custom_code_checkpoint.py --checkpoint_dir my_model`.
 
 ## FalconConfig
 
