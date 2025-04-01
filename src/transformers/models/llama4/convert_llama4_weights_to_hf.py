@@ -262,7 +262,6 @@ def write_model(
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
-        for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
     # default vision config frmo params
