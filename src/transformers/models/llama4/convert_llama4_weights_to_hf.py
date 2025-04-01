@@ -55,6 +55,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Unused keys in load hooks (explicitly removed)
     r'layers.(\d+).attention.wqkv._extra_state':             None,
     r'layers.(\d+).attention.wo._extra_state':               None,
+
+    # MLP layer variant
+    r"layers.(\d+).feed_forward.w1.weight":                  r"language_model.model.layers.\1.feed_forward.gate_proj.weight",               # might need to be fused for efficiency?
+    r"layers.(\d+).feed_forward.w3.weight":                  r"language_model.model.layers.\1.feed_forward.up_proj.weight",                 # might need to be fused for efficiency?
+    # r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
+    r"layers.(\d+).feed_forward.mlp.fc2_weight":             r"language_model.model.layers.\1.feed_forward.down_proj.weight",
+    r"layers.(\d+).feed_forward.mlp.layer_norm.weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
+
     # Vision encoder mapping
     r"vision_embeddings.vision_encoder.conv1._linear":                                            r"vision_model.patch_embedding.linear",
     r'vision_embeddings.vision_adapter.mlp.c_fc':                                                 r"vision_model.vision_adapter.mlp.fc1",
@@ -142,6 +150,9 @@ def get_concat_dim(key):
         "experts.gate_proj",
         "experts.up_proj",
         "expert.down_proj",
+        # "feed_forward.up_proj",
+        # "feed_forward.gate_proj",
+        "feed_forward.down_proj",
         "global_gate_stats",
         # vision dim1 sharded stuff
         "mlp.fc2.weight", # covers all rowparallels across vis
@@ -164,6 +175,20 @@ def safe_load(filename):
     shard = torch.load(filename, weights_only=True, map_location="cpu", mmap=True)
     shard = {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
     return shard
+
+
+# Unpack mlp projections - possibly to be removed when they are fused
+def preprocess_keys(state_dict):
+    new_state_dict = dict()
+    for key, value in state_dict.items():
+        if "mlp.fc1_weight" in key:
+            prefix = key.split("mlp.fc1_weight")[0]
+            w1, w3 = value.chunk(2, dim=0)
+            new_state_dict[prefix + "w1.weight"] = w1
+            new_state_dict[prefix + "w3.weight"] = w3
+        else:
+            new_state_dict[key] = value
+    return new_state_dict
 
 
 def write_model(
@@ -194,14 +219,17 @@ def write_model(
     rms_norm_eps = params["norm_eps"]
     rope_theta = params["rope_theta"]
 
-    # some constans from original code
-    rope_scaling = {
-        "rope_type": "llama3",
-        "factor": 8.0,
-        "low_freq_factor": 1.0,
-        "high_freq_factor": 4.0,
-        "original_max_position_embeddings": 8192,
-    }
+    config_kwargs = {}
+    if params["use_scaled_rope"]:
+        # some constans from original code
+        rope_scaling = {
+            "rope_type": "llama3",
+            "factor": 8.0,
+            "low_freq_factor": 1.0,
+            "high_freq_factor": 4.0,
+            "original_max_position_embeddings": 8192,
+        }
+        config_kwargs.update(dict(rope_scaling=rope_scaling))
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
@@ -211,9 +239,10 @@ def write_model(
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
     num_experts = params["moe_args"]["num_experts"]
+    interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
 
     bos_token_id = 200000
-    eos_token_id = [200001, 200002, 200003] if instruct else 200001
+    eos_token_id = [200001, 200002, 200003, 200008] if instruct else 200001
     pad_token_id = 200008
 
     text_config = Llama4TextConfig(
@@ -224,13 +253,16 @@ def write_model(
         rope_theta=rope_theta,
         num_hidden_layers=num_layers,
         intermediate_size=8192,
-        rope_scaling=rope_scaling,
+        intermediate_size_mlp=16384,
         num_local_experts=num_experts,
+        interleave_moe_layer_step=interleave_moe_layer_step,
+        use_qk_norm=params["use_qk_norm"],
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
+        **config_kwargs,
     )
     # default vision config frmo params
 
@@ -273,6 +305,7 @@ def write_model(
                 safe_load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"))
                 for i in tqdm(range(num_shards), desc="Loading shards", unit="shard")
             ]
+        loaded = [preprocess_keys(d) for d in loaded]
 
         all_keys_raw = list(loaded[0].keys())
         repeated_keys = []
@@ -354,7 +387,7 @@ def write_model(
                 if gate_key == new_key:
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                 elif new_key == up_key:
-                    if "shared" in new_key:
+                    if "experts" not in new_key:
                         gate_proj = state_dict.pop(gate_key)
                         up_proj = torch.cat(current_parameter, dim=concat_dim)
                         state_dict[gate_key] = gate_proj
@@ -365,11 +398,11 @@ def write_model(
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
-                            gate_proj.reshape(16, -1, 8, 1024)[:, :, k, :].reshape(16, -1, 1024) for k in range(8)
+                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
                         ]
                         gate_proj = torch.cat(gate_proj, dim=-1)
 
-                        up_proj = [k.reshape(16, -1, 8, 1024).reshape(16, -1, 1024) for k in current_parameter]
+                        up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
                         up_proj = torch.cat(up_proj, dim=-1)
 
                         gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
@@ -432,10 +465,7 @@ def write_model(
         print("Loading the checkpoint in a Llama4 model.")
         state_dict.pop("")
         model.load_state_dict(state_dict, strict=True, assign=True)
-        print("Model reloaded successfully. Checking logits...")
-        # ipdb.set_trace()
-        # zero_out = model.forward(inputs_embeds=torch.zeros((1,743, 4096)))
-        # ipdb.set_trace()
+        print("Model reloaded successfully.")
         print("Saving the model.")
         model.save_pretrained(model_path, safe_serialization=safe_serialization)
         del state_dict, model
@@ -448,8 +478,7 @@ def write_model(
         model = Llama4ForConditionalGeneration.from_pretrained(
             model_path, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
         )
-        # ipdb.set_trace()
-        model.eval()
+
         model.generation_config.top_p = 0.9
         model.generation_config.temperature = 0.6
         print("Model reloaded successfully.")
@@ -458,7 +487,7 @@ def write_model(
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
-        out = model.generate(**inputs, max_new_tokens=10)
+        out = model.generate(**inputs, max_new_tokens=4)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:

@@ -96,17 +96,22 @@ class Llama4TextExperts(nn.Module):
 
 # Phi3MLP
 class Llama4TextMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
+
+        if intermediate_size is None:
+            intermediate_size = config.intermediate_size
+
         self.config = config
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.activation_fn(self.gate_proj(x)) * self.up_proj(x)
         return self.down_proj(down_proj)
+
 
 class Llama4TextL2Norm(torch.nn.Module):
     def __init__(self, dim: int=None, eps: float = 1e-6):
@@ -193,7 +198,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        self.rope_type = "llama3"
+        self.rope_type = "llama3" if config.rope_scaling is not None else "default"
 
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -319,7 +324,8 @@ class Llama4TextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.qk_norm = Llama4TextL2Norm()
+        if self.config.use_qk_norm:
+            self.qk_norm = Llama4TextL2Norm()
 
     def forward(
         self,
@@ -341,16 +347,7 @@ class Llama4TextAttention(nn.Module):
             query_states, key_states, position_embeddings.to(query_states.device)
         )
 
-        # because L2 is computed on the shards, we need to find an appropriate reshape
-        # here, to make sure in TP but also non TP settings. Logits diverge otherwise
-        if query_states.shape[-1] == self.num_attention_heads * self.head_dim:
-            query_states = self.qk_norm(
-                query_states.view(input_shape[0], input_shape[1], self.pretraining_tp, -1)
-            ).reshape(hidden_shape)
-            key_states = self.qk_norm(
-                key_states.view(input_shape[0], input_shape[1], self.pretraining_tp, -1)
-            ).reshape((*input_shape, self.pretraining_tp, -1))
-        else:
+        if self.config.use_qk_norm:
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
@@ -394,7 +391,11 @@ class Llama4TextDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.feed_forward = Llama4TextMoe(config)
+        self.is_moe_layer = (layer_idx + 1) % config.interleave_moe_layer_step == 0
+        if self.is_moe_layer:
+            self.feed_forward = Llama4TextMoe(config)
+        else:
+            self.feed_forward = Llama4TextMLP(config, intermediate_size=config.intermediate_size_mlp)
 
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -457,7 +458,11 @@ class Llama4TextDecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, router_logits = self.feed_forward(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        if self.is_moe_layer:
+            hidden_states, router_logits = hidden_states
+        else:
+            router_logits = None
         hidden_states = residual + hidden_states.view(residual.shape)
 
         outputs = (hidden_states,)

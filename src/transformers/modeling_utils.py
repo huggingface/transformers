@@ -5883,10 +5883,10 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
             param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
 
-        total_byte_count[device] += param_byte_count
+        parameter_count[device] += param_byte_count
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
-    for device, byte_count in total_byte_count.items():
+    for device, byte_count in parameter_count.items():
         if device.type == "cuda":
             index = device.index if device.index is not None else torch.cuda.current_device()
             device_memory = torch.cuda.mem_get_info(index)[0]
