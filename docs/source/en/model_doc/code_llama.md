@@ -47,7 +47,7 @@ pipe = pipeline(
     device_map="auto"
 )
 
-# Basic code generation
+# basic code generation
 result = pipe("# Function to calculate the factorial of a number\ndef factorial(n):", max_new_tokens=256)
 print(result[0]['generated_text'])
 
