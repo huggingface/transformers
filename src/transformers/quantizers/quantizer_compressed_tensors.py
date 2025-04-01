@@ -123,16 +123,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             and hasattr(model.language_model, "model")
             and hasattr(model.language_model.model, "layers")
         ):
-            from transformers.models.llama4.modeling_llama4 import Llama4TextExperts, Llama4TextMLP
+            from ..models.llama4.modeling_llama4 import Llama4TextExperts
+            from ..integrations.compressed_tensors import CompressedExpertsLinear
 
             # Iterate through all layers to find and replace Llama4TextExperts
             for layer_idx, layer in enumerate(model.language_model.model.layers):
                 if hasattr(layer, "feed_forward") and hasattr(layer.feed_forward, "experts"):
                     if isinstance(layer.feed_forward.experts, Llama4TextExperts):
                         config = model.config.text_config
-                        num_experts = config.num_local_experts
-
-                        expert_modules = nn.ModuleList([Llama4TextMLP(config) for _ in range(num_experts)])
+                        expert_modules = CompressedExpertsLinear(config)
 
                         # Replace the experts with the ModuleList
                         layer.feed_forward.experts = expert_modules
