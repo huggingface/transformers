@@ -23,7 +23,6 @@ import math
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
-import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -48,7 +47,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
