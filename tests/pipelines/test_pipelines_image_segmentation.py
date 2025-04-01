@@ -140,19 +140,19 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         # RGBA
         outputs = image_segmenter(
-            self.dataset[0]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+            self._dataset[0]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
         )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
         outputs = image_segmenter(
-            self.dataset[1]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+            self._dataset[1]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
         )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
         outputs = image_segmenter(
-            self.dataset[2]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+            self._dataset[2]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
         )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)

@@ -108,11 +108,11 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                self.dataset[0]["image"],
+                self._dataset[0]["image"],
                 # LA
-                self.dataset[1]["image"],
+                self._dataset[1]["image"],
                 # L
-                self.dataset[2]["image"],
+                self._dataset[2]["image"],
             ]
         )
         self.assertEqual(
