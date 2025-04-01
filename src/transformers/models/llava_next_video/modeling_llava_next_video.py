@@ -129,58 +129,6 @@ class LlavaNextVideoPooler(nn.Module):
         return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
 
 
-LLAVA_NEXT_VIDEO_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`LlavaNextVideoConfig`] or [`LlavaNextVideoVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAVA_NEXT_VIDEO_START_DOCSTRING,
-)
-class LlavaNextVideoPreTrainedModel(PreTrainedModel):
-    config_class = LlavaNextVideoConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaNextVideoVisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        # important: this ported version of LlavaNextVideo isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next_video should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-        if module in self.vision_tower.modules():
-            self.vision_tower._init_weights(module)
-        elif module in self.language_model.modules():
-            self.language_model._init_weights(module)
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-
 class LlavaNextVideoMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaNextVideoConfig):
         super().__init__()
@@ -201,6 +149,23 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+LLAVA_NEXT_VIDEO_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`LlavaNextVideoConfig`] or [`LlavaNextVideoVisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -388,6 +353,41 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
+
+
+@add_start_docstrings(
+    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    LLAVA_NEXT_VIDEO_START_DOCSTRING,
+)
+class LlavaNextVideoPreTrainedModel(PreTrainedModel):
+    config_class = LlavaNextVideoConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlavaNextVideoVisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+        if module in self.vision_tower.modules():
+            self.vision_tower._init_weights(module)
+        elif module in self.language_model.modules():
+            self.language_model._init_weights(module)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, LlavaNextVideoForConditionalGeneration):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 @add_start_docstrings(

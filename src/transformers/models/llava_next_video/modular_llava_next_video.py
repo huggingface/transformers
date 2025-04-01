@@ -223,7 +223,23 @@ class LlavaNextVideoPooler(nn.Module):
 
 
 class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+        if module in self.vision_tower.modules():
+            self.vision_tower._init_weights(module)
+        elif module in self.language_model.modules():
+            self.language_model._init_weights(module)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, LlavaNextVideoForConditionalGeneration):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):

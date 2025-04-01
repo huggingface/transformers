@@ -127,9 +127,6 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False
 
     def _init_weights(self, module):
-        # important: this ported version of AyaVision isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/AyaVision/tree/main/aya_vision should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -143,6 +140,9 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 @dataclass
