@@ -325,7 +325,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -382,7 +382,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self,
         image,
         max_image_size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -461,7 +461,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         vision_encoder_max_size: int,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
