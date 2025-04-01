@@ -159,6 +159,11 @@ _import_structure = {
     ],
     # Models
     "models": [],
+    "models.aimv2": [
+        "AIMv2Config",
+        "AIMv2TextConfig",
+        "AIMv2VisionConfig",
+    ],
     "models.albert": ["AlbertConfig"],
     "models.align": [
         "AlignConfig",
@@ -288,11 +293,6 @@ _import_structure = {
         "CLIPTextConfig",
         "CLIPTokenizer",
         "CLIPVisionConfig",
-    ],
-    "models.aimv2": [
-        "AIMv2Config",
-        "AIMv2TextConfig",
-        "AIMv2VisionConfig",
     ],
     "models.clipseg": [
         "CLIPSegConfig",
