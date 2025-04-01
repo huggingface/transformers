@@ -14,48 +14,129 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Falcon
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Falcon
 
-Falcon is a class of causal decoder-only models built by [TII](https://www.tii.ae/). The largest Falcon checkpoints
-have been trained on >=1T tokens of text, with a particular emphasis on the [RefinedWeb](https://arxiv.org/abs/2306.01116)
-corpus. They are made available under the Apache 2.0 license.
+Falcon is a powerful family of language models created by the [Technology Innovation Institute (TII)](https://www.tii.ae/). What makes Falcon special is its optimized architecture that balances impressive performance with efficient inference. The models use multi-query attention - a clever technique that reduces memory requirements while maintaining quality. Falcon models have been trained on massive datasets (1+ trillion tokens) with a focus on the high-quality [RefinedWeb](https://arxiv.org/abs/2306.01116) corpus.
 
+You can find the research paper at https://huggingface.co/papers/2311.16867 and check out the official checkpoints under the [Falcon](https://huggingface.co/collections/tiiuae/falcon-64fb432660017eeec9837b5a) collection.
 
-Falcon's architecture is modern and optimized for inference, with multi-query attention and support for efficient
-attention variants like `FlashAttention`. Both 'base' models trained only as causal language models as well as
-'instruct' models that have received further fine-tuning are available.
+> [!TIP]
+> Click on the Falcon models in the right sidebar for more examples of how to use Falcon for various NLP tasks.
 
+The examples below demonstrate how to use Falcon with [`Pipeline`], [`AutoModel`], and from the command line.
 
-Falcon models are (as of 2023) some of the largest and most powerful open-source language models,
-and consistently rank highly in the [OpenLLM leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Converting custom checkpoints 
+```py
+from transformers import pipeline
 
-<Tip>
+# For text generation with Falcon-7B-Instruct
+generator = pipeline(
+    "text-generation", 
+    model="tiiuae/falcon-7b-instruct",
+    device_map="auto"
+)
+response = generator(
+    "Write a short poem about coding",
+    max_length=100,
+    do_sample=True,
+    temperature=0.7
+)
+print(response[0]["generated_text"])
+```
 
-Falcon models were initially added to the Hugging Face Hub as custom code checkpoints. However, Falcon is now fully
-supported in the Transformers library. If you fine-tuned a model from a custom code checkpoint, we recommend converting
-your checkpoint to the new in-library format, as this should give significant improvements to stability and
-performance, especially for generation, as well as removing the need to use `trust_remote_code=True`!
+</hfoption>
+<hfoption id="AutoModel">
 
-</Tip>
+```py
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
-You can convert custom code checkpoints to full Transformers checkpoints using the `convert_custom_code_checkpoint.py` 
-script located in the
-[Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon)
-of the Transformers library. To use this script, simply call it with 
-`python convert_custom_code_checkpoint.py --checkpoint_dir my_model`. This will convert your checkpoint in-place, and
-you can immediately load it from the directory afterwards with e.g. `from_pretrained()`. If your model hasn't been
-uploaded to the Hub, we recommend making a backup before attempting the conversion, just in case!
+# Load tokenizer and model
+model_id = "tiiuae/falcon-7b-instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    torch_dtype=torch.bfloat16,  # Load in bfloat16 for faster inference
+    device_map="auto",  # Automatically determine device mapping
+    attn_implementation="sdpa", # Use scaled dot product attention
+)
 
+# Prepare input
+text = "Write a function in Python to calculate the Fibonacci sequence:"
+inputs = tokenizer(text, return_tensors="pt").to(model.device)
+
+# Generate
+with torch.no_grad():
+    output = model.generate(
+        inputs["input_ids"],
+        max_new_tokens=512,
+        temperature=0.7,
+        do_sample=True,
+    )
+
+# Decode and print result
+generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+print(generated_text)
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+transformers-cli chat --model_name_or_path tiiuae/falcon-7b-instruct
+```
+
+</hfoption>
+</hfoptions>
+
+## Quantization for Efficient Inference
+
+For lower memory usage, you can load Falcon with 4-bit quantization:
+
+```python
+# Make sure to have bitsandbytes available in the environment
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import torch
+
+# Configure 4-bit quantization
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+)
+
+# Load tokenizer and model with quantization
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    quantization_config=quantization_config,
+)
+
+# Generate text with the quantized model
+inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to(model.device)
+outputs = model.generate(inputs["input_ids"], max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- Falcon models come in different sizes (7B, 40B, 180B parameters) and variants (base and instruct).
+- The "instruct" versions have been fine-tuned on instruction data and are better for conversational or instruction-following tasks.
+- For most applications, using FlashAttention or SDPA optimization is recommended for the best performance.
+- If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format using the conversion script to benefit from improved stability and performance.
 
 ## FalconConfig
 
@@ -86,5 +167,3 @@ uploaded to the Hub, we recommend making a backup before attempting the conversi
 
 [[autodoc]] FalconForQuestionAnswering
     - forward
-
-
