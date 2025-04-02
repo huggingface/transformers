@@ -49,6 +49,7 @@ from ...utils import (
 )
 from .image_processing_idefics3 import get_resize_output_image_size as get_resize_output_max_side_image_size
 
+
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
@@ -156,7 +157,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
                 "want full consistency with the original model."
             )
             interpolation = F.InterpolationMode.BICUBIC
-            
+
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -310,7 +311,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = None
         if return_pixel_mask:
-            pixel_mask = torch.zeros_like(image[...,0,:,:], dtype=torch.int64)
+            pixel_mask = torch.zeros_like(image[..., 0, :, :], dtype=torch.int64)
             pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask

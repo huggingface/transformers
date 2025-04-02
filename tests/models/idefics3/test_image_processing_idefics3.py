@@ -15,9 +15,9 @@
 
 
 import unittest
-import requests
 
 import numpy as np
+import requests
 
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
@@ -291,9 +291,7 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def _assertEquivalence(self, a, b):
         self.assertTrue(torch.allclose(a, b, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(a - b)).item(), 1e-3
-        )
+        self.assertLessEqual(torch.mean(torch.abs(a - b)).item(), 1e-3)
 
     @require_vision
     @require_torch
