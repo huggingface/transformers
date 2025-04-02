@@ -277,14 +277,9 @@ class GotOcr2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-        if module in self.language_model.modules():
-            self.language_model._init_weights(module)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

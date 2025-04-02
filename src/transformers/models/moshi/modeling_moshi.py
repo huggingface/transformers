@@ -849,9 +849,8 @@ class MoshiPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if hasattr(self, "audio_encoder") and module in self.audio_encoder.modules():
-            self.audio_encoder._init_weights(module)
-        elif isinstance(module, nn.Linear):
+
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

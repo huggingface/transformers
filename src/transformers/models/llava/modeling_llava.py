@@ -144,16 +144,9 @@ class LlavaPreTrainedModel(PreTrainedModel):
         # important: this ported version of Llava isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
         # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-        if module in self.vision_tower.modules():
-            self.vision_tower._init_weights(module)
-        elif module in self.language_model.modules():
-            self.language_model._init_weights(module)
-        elif isinstance(module, nn.Linear):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
