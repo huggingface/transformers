@@ -44,7 +44,6 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
 
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
@@ -399,6 +398,11 @@ class Speech2Text2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Speech2Text2SinusoidalPositionalEmbedding):
+            weight = module.get_embedding(*module.weight.shape, module.padding_idx)
+            weight = nn.Parameter(weight, requires_grad=False)
+            weight.detach_()
+            module.weight = weight
 
 
 SPEECH_TO_TEXT_2_START_DOCSTRING = r"""
