@@ -937,9 +937,13 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
 
     # Special casing: We allow the name of this arg to differ
-    js_generate_args = [js_arg for js_arg in hub_args if js_arg.startswith("generate")]
+    js_generate_args = [
+        js_arg for js_arg in hub_args if js_arg.startswith("generate") or js_arg.startswith("generation")
+    ]
     docstring_generate_args = [
-        docstring_arg for docstring_arg in docstring_args if docstring_arg.startswith("generate")
+        docstring_arg
+        for docstring_arg in docstring_args
+        if docstring_arg.startswith("generate") or docstring_arg.startswith("generation")
     ]
     if (
         len(js_generate_args) == 1
