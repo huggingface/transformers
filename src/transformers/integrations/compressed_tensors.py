@@ -1,12 +1,13 @@
-from typing import List, Optional, Tuple, Union
 
 from transformers.utils import is_torch_available
+
 
 if is_torch_available():
     import torch
     import torch.nn as nn
 
 from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
+
 
 def skip(*args, **kwargs):
         pass

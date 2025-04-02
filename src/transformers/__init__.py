@@ -7857,9 +7857,9 @@ if TYPE_CHECKING:
             Llama4ForCausalLM,
             Llama4ForConditionalGeneration,
             Llama4Model,
+            Llama4PreTrainedModel,
             Llama4TextModel,
             Llama4VisionModel,
-            Llama4PreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
