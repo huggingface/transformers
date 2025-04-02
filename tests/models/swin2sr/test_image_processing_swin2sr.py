@@ -188,22 +188,11 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-    def test_slow_fast_equivalence(self):
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
-
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-
-        encoded_slow = image_processor_slow(image_inputs, return_tensors="pt").pixel_values
-        encoded_fast = image_processor_fast(image_inputs, return_tensors="pt").pixel_values
-
-        self.assertTrue(torch.allclose(encoded_slow, encoded_fast, atol=1e-1))
-
     def test_slow_fast_equivalence_batched(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoded_slow = image_processor_slow(image_inputs, return_tensors="pt").pixel_values
         encoded_fast = image_processor_fast(image_inputs, return_tensors="pt").pixel_values

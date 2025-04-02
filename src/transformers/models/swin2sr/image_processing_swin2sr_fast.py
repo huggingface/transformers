@@ -51,7 +51,6 @@ if is_torchvision_available():
 
 
 class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
     pad_size: Optional[int]
 
@@ -59,18 +58,14 @@ class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 @add_start_docstrings(
     "Constructs a fast Swin2SR image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    """
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to make the height and width divisible by `window_size`.
+        pad_size (`int`, *optional*, defaults to `8`):
+            The size of the sliding window for the local attention.
+    """
 )
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     do_rescale = True
     rescale_factor = 1 / 255
     do_pad = True
@@ -83,6 +78,10 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
         """
+            do_pad (`bool`, *optional*, defaults to `True`):
+                Whether to pad the image to make the height and width divisible by `window_size`.
+            pad_size (`int`, *optional*, defaults to `8`):
+                The size of the sliding window for the local attention.
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
