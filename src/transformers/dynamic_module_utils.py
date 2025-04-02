@@ -90,7 +90,7 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> list[str]:
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of relative imports in the module.
+        `list[str]`: The list of relative imports in the module.
     """
     with open(module_file, encoding="utf-8") as f:
         content = f.read()
@@ -112,7 +112,7 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
+        `list[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
         of module files a given module needs.
     """
     no_change = False
@@ -144,7 +144,7 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
         filename (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all packages required to use the input module.
+        `list[str]`: The list of all packages required to use the input module.
     """
     with open(filename, encoding="utf-8") as f:
         content = f.read()
@@ -175,7 +175,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> list[str]:
         filename (`str` or `os.PathLike`): The module file to check.
 
     Returns:
-        `List[str]`: The list of relative imports in the file.
+        `list[str]`: The list of relative imports in the file.
     """
     imports = get_imports(filename)
     missing_packages = []
