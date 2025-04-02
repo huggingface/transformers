@@ -89,6 +89,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         window_size=112,
         out_hidden_size=3584,
         fullatt_block_indexes=[7, 15, 23, 31],
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,6 +107,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.window_size = window_size
         self.fullatt_block_indexes = fullatt_block_indexes
         self.out_hidden_size = out_hidden_size
+        self.initializer_range = initializer_range
 
 
 class Qwen2_5_VLConfig(Qwen2VLConfig):

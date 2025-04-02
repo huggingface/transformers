@@ -100,7 +100,7 @@ class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
             if hasattr(self.config, "initializer_range")
             else self.config.get_text_config().initializer_range
         )
-        
+
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:

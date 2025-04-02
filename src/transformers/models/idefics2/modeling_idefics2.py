@@ -523,9 +523,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             else self.config.get_text_config().initializer_range
         )
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -534,6 +531,17 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Idefics2RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.MultiheadAttention):
+            module._reset_parameters()  # native torch init
+        elif isinstance(module, Idefics2MultiheadAttentionPoolingHead):
+            module.probe.data.normal_()
+        elif isinstance(module, Idefics2PerceiverResampler):
+            module.latents.data.fill_(1.0)
 
 
 IDEFICS2_INPUTS_DOCSTRING = r"""
