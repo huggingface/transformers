@@ -302,8 +302,8 @@ class StaticCacheConfig(CacheConfig):
 
     cache_implementation = "static"
 
-    def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
-        self.batch_size = batch_size
+    def __init__(self, max_batch_size: int, max_cache_len: int, device="cpu"):
+        self.max_batch_size = max_batch_size
         self.max_cache_len = max_cache_len
         self.device = device
 
@@ -315,12 +315,12 @@ class StaticCacheConfig(CacheConfig):
             "but found {found_value}"
         )
 
-        if self.batch_size <= 0:
+        if self.max_batch_size <= 0:
             raise ValueError(
                 incorrect_arg_msg.format(
-                    key="batch_size",
+                    key="max_batch_size",
                     correct_value="> 0",
-                    found_value=self.batch_size,
+                    found_value=self.max_batch_size,
                 ),
             )
 

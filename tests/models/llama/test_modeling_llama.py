@@ -781,7 +781,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                     cache_implementation=cache_implementation,
                     max_length=max_generation_length,
                     cache_config={
-                        "batch_size": batch_size,
+                        "max_batch_size": batch_size,
                         "max_cache_len": max_generation_length,
                         "device": device,
                     },
@@ -946,7 +946,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -994,7 +994,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,

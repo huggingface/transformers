@@ -862,6 +862,7 @@ class ModelTesterMixin:
                     model_eager.save_pretrained(tmpdir)
                     with torch.device(torch_device):
                         model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
+                        model = model.to(torch_device)
                         inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
                         inputs_dict["labels"] = inputs_dict["input_ids"]
                         _ = model(**inputs_dict, return_dict=False)

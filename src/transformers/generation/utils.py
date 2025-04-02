@@ -35,7 +35,6 @@ from ..cache_utils import (
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
-    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -470,16 +469,14 @@ class GenerationMixin:
         # with compilation (static cache, flex attention, etc).
         base_model = getattr(self, self.base_model_prefix, None)
         if base_model is None:
-            causal_mask_creation_function = getattr(
-                self, "_update_causal_mask", None
-            )
+            causal_mask_creation_function = getattr(self, "_update_causal_mask", None)
         else:
-            causal_mask_creation_function = getattr(
-                base_model, "_update_causal_mask", None
-            )
+            causal_mask_creation_function = getattr(base_model, "_update_causal_mask", None)
 
         if causal_mask_creation_function is None:
-            compilation_will_likely_happen = (past_key_values is not None and past_key_values.is_compileable) or self.config._attn_implementation == "flex_attention"
+            compilation_will_likely_happen = (
+                past_key_values is not None and past_key_values.is_compileable
+            ) or self.config._attn_implementation == "flex_attention"
             if compilation_will_likely_happen:
                 logger.warning_once(
                     f"{self.__class__.__name__} has no `_update_causal_mask` method defined in its base modeling "
@@ -488,7 +485,11 @@ class GenerationMixin:
                 )
         else:
             # TODO (joao): check if this works on all models? If not, generate needs to prepare inputs_embeds here too
-            input_tensor = (model_inputs.get("inputs_embeds") or model_inputs[input_ids_key]).to(self.dtype)
+            input_tensor = (
+                model_inputs["inputs_embeds"]
+                if model_inputs.get("inputs_embeds") is not None
+                else model_inputs[input_ids_key]
+            ).to(self.dtype)
             attention_mask = causal_mask_creation_function(
                 attention_mask,
                 input_tensor=input_tensor,

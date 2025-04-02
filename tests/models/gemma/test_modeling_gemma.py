@@ -823,7 +823,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 cache_implementation=cache_implementation,
                 max_length=max_generation_length,
                 cache_config={
-                    "batch_size": batch_size,
+                    "max_batch_size": batch_size,
                     "max_cache_len": max_generation_length,
                 },
             ),
