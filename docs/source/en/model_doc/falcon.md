@@ -118,9 +118,9 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 - If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format for better stability and performance using the conversion script located in the [Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon).
 
-```bash
-python convert_custom_code_checkpoint.py --checkpoint_dir my_model
-```
+   ```bash
+   python convert_custom_code_checkpoint.py --checkpoint_dir my_model
+   ```
 
 ## FalconConfig
 
