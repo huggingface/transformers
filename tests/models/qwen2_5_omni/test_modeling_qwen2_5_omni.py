@@ -15,14 +15,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2.5-Omni model."""
 
-import inspect
 import tempfile
 import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
-import numpy as np
 import requests
 from parameterized import parameterized
 
@@ -36,31 +34,20 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_deepspeed,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
-    set_config_for_less_flaky_test,
-    set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
-)
-from transformers.utils import (
-    is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _deepspeed_zero3,
     floats_tensor,
     ids_tensor,
-    sdpa_kernel,
 )
 
 
@@ -161,7 +148,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self.image_size = image_size
         self.seq_length = seq_length
         self.is_training = False
-        self.num_hidden_states_types = 0
 
         # Used from `self.model_tester` by common model tests
         self.num_hidden_layers = self.text_config["num_hidden_layers"]
@@ -211,13 +197,33 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         config, pixel_values, pixel_grid_thw, input_features_values, feature_attention_mask = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.get_text_config().vocab_size - 3) + 3
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        input_ids[input_ids == config.image_token_index] = config.text_config.pad_token_id
-        input_ids[input_ids == config.audio_token_index] = config.text_config.pad_token_id
+
+        # Make sure no other tokens are set to special, to prevetn flakiness
+        tokens_to_replace = torch.tensor(
+            [
+                config.image_token_index,
+                config.audio_token_index,
+                config.audio_start_token_id,
+                config.audio_end_token_id,
+                config.vision_start_token_id,
+                config.vision_end_token_id,
+            ],
+            device=input_ids.device,
+        )
+        input_ids[torch.isin(input_ids, tokens_to_replace)] = config.text_config.pad_token_id
 
         attention_mask[:, :1] = 0
+
+        # Audio token placeholders should be wrapped in start and end token ids
         audio_feat_length = ((self.feat_seq_length - 1) // 2 + 1 - 2) // 2 + 1
-        input_ids[:, 1 : (1 + audio_feat_length)] = config.audio_token_index
-        input_ids[:, -2] = config.image_token_index
+        input_ids[:, 1] = config.audio_start_token_id
+        input_ids[:, 2 : (2 + audio_feat_length)] = config.audio_token_index
+        input_ids[:, 2 + audio_feat_length] = config.audio_end_token_id
+
+        # Image token placeholders should be wrapped in start and end token ids
+        input_ids[:, -4:-1] = torch.tensor(
+            [config.vision_start_token_id, config.image_token_index, config.vision_end_token_id]
+        )
         inputs_dict = {
             "input_features": input_features_values,
             "feature_attention_mask": feature_attention_mask,
@@ -249,11 +255,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     """
 
     all_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
-    # Doesn't run generation tests. We have a custom `generate` with partial feature
-    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
@@ -290,390 +295,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     @unittest.skip(reason="QwenOmniThinker does not support output_hidden_states test")
     def test_model_outputs_equivalence(self):
         pass
-
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = self.has_attentions
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        output = outputs[0]
-
-        # Encoder-/Decoder-only models
-        hidden_states = outputs.hidden_states[-1][0]
-        hidden_states.retain_grad()
-
-        if self.has_attentions:
-            attentions = outputs.attentions[0]
-            attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(hidden_states.grad)
-
-        if self.has_attentions:
-            self.assertIsNotNone(attentions.grad)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states[1]
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
-    def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-    ):
-        # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
-        # models have a custom mixin, which we detect to skip this test.
-        if not any(".ModelTesterMixin" in str(base) for base in self.__class__.__bases__):
-            self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
-
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self.all_model_classes[0]._supports_sdpa:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        # convert shorthand name to torch.dtype
-        if torch_dtype == "fp16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bf16":
-            torch_dtype = torch.bfloat16
-        elif torch_dtype == "fp32":
-            torch_dtype = torch.float32
-
-        if not is_torch_fp16_available_on_device(torch_device) and torch_dtype == torch.float16:
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if not is_torch_bf16_available_on_device(torch_device) and torch_dtype == torch.bfloat16:
-            self.skipTest(
-                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
-            )
-
-        # Dictionary of tolerances for eager <> sdpa tests. Key = (device, sdpa_kernels_enabled, dtype)
-        atols = {
-            ("cpu", False, torch.float32): 1e-6,
-            ("cpu", False, torch.float16): 5e-3,
-            ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-6,
-            ("cpu", True, torch.float16): 5e-3,
-            ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-6,
-            ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-6,
-            ("cuda", True, torch.bfloat16): 1e-2,
-            ("cuda", True, torch.float16): 5e-3,
-        }
-        rtols = {
-            ("cpu", False, torch.float32): 1e-4,
-            ("cpu", False, torch.float16): 5e-3,
-            ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-4,
-            ("cpu", True, torch.float16): 5e-3,
-            ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-4,
-            ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-4,
-            ("cuda", True, torch.bfloat16): 3e-2,
-            ("cuda", True, torch.float16): 5e-3,
-        }
-
-        set_model_tester_for_less_flaky_test(self)
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            set_config_for_less_flaky_test(config)
-            model = model_class(config)
-            # TODO: standardize the interfaces for musicgen models, see other todo in this test
-            if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
-                is_encoder_decoder = True
-            else:
-                is_encoder_decoder = model.config.is_encoder_decoder
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_from_pretrained_kwargs = {
-                    "pretrained_model_name_or_path": tmpdirname,
-                    "torch_dtype": torch_dtype,
-                }
-
-                if (
-                    hasattr(config, "use_mask_token")
-                    or "use_mask_token" in inspect.signature(model.__init__).parameters
-                ):
-                    model_from_pretrained_kwargs["use_mask_token"] = True
-
-                # TODO: remove this try/except, models should have a shared API
-                try:
-                    model_sdpa = model_class.from_pretrained(
-                        **model_from_pretrained_kwargs, attn_implementation="sdpa"
-                    )
-                except ValueError:
-                    model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
-                model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
-
-                model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
-
-                set_model_for_less_flaky_test(model_eager)
-                set_model_for_less_flaky_test(model_sdpa)
-
-                can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                if not (self.has_attentions and can_output_attn) and output_attentions:
-                    self.skipTest(reason="Model does not support output_attentions")
-
-                # TODO: if we can also check with `batch_size=1` without being flaky?
-                for batch_size in [7]:
-                    # musicgen decoder models; TODO: find better abstraction
-                    if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
-                        input_data_batch_size = batch_size * self.model_tester.num_codebooks
-                    else:
-                        input_data_batch_size = batch_size
-
-                    dummy_input = inputs_dict[model.main_input_name]
-
-                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                        dummy_input = dummy_input.to(torch_dtype)
-
-                    dummy_input = dummy_input[:input_data_batch_size]
-                    if dummy_input.shape[0] != input_data_batch_size:
-                        if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                            extension = torch.rand(
-                                input_data_batch_size - dummy_input.shape[0],
-                                *dummy_input.shape[1:],
-                                dtype=torch_dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                        else:
-                            extension = torch.randint(
-                                high=5,
-                                size=(input_data_batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                dtype=dummy_input.dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-
-                    if not use_attention_mask:
-                        dummy_attention_mask = None
-                    else:
-                        dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                        if dummy_attention_mask is None:
-                            if is_encoder_decoder:
-                                seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
-                            else:
-                                seqlen = dummy_input.shape[-1]
-                            dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-
-                        dummy_attention_mask = dummy_attention_mask[:batch_size]
-                        if dummy_attention_mask.shape[0] != batch_size:
-                            extension = torch.ones(
-                                batch_size - dummy_attention_mask.shape[0],
-                                *dummy_attention_mask.shape[1:],
-                                dtype=dummy_attention_mask.dtype,
-                                device=torch_device,
-                            )
-                            dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                            dummy_attention_mask = dummy_attention_mask.to(torch_device)
-
-                        dummy_attention_mask[:] = 1
-                        if padding_side == "left":
-                            dummy_attention_mask[-1, :2] = 0
-                            dummy_attention_mask[-1, 2:] = 1
-                        elif padding_side == "right":
-                            dummy_attention_mask[-1, -2:] = 0
-                            dummy_attention_mask[-1, :-2] = 1
-
-                    if is_encoder_decoder:
-                        # musicgen encoder-decoder models; TODO: find better abstraction
-                        if hasattr(self.model_tester, "num_codebooks"):
-                            input_data_batch_size = batch_size * self.model_tester.num_codebooks
-                        else:
-                            input_data_batch_size = batch_size
-
-                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:input_data_batch_size]
-                        if decoder_input_ids.shape[0] != input_data_batch_size:
-                            extension = torch.ones(
-                                input_data_batch_size - decoder_input_ids.shape[0],
-                                *decoder_input_ids.shape[1:],
-                                dtype=decoder_input_ids.dtype,
-                                device=torch_device,
-                            )
-                            decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                            decoder_input_ids = decoder_input_ids.to(torch_device)
-
-                        # TODO: never an `attention_mask` arg here?
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
-                            "decoder_input_ids": decoder_input_ids,
-                            "decoder_attention_mask": dummy_attention_mask,
-                            "output_hidden_states": True,
-                        }
-                    else:
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
-                            "output_hidden_states": True,
-                        }
-
-                        # Otherwise fails for e.g. WhisperEncoderModel
-                        if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                            processed_inputs["attention_mask"] = dummy_attention_mask
-
-                        if (
-                            self.has_attentions
-                            and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                        ):
-                            processed_inputs["output_attentions"] = output_attentions
-                    if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
-                        dummy_mask = torch.ones((self.model_tester.num_masks,))
-
-                        # In case of additional token (like class) we define a custom `mask_length`
-                        if hasattr(self.model_tester, "mask_length"):
-                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
-                        else:
-                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
-                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
-
-                    if "noise" in inspect.signature(model_eager.forward).parameters:
-                        np.random.seed(2)
-                        num_patches = int((self.model_tester.image_size // self.model_tester.patch_size) ** 2)
-                        noise = np.random.uniform(size=(batch_size, num_patches))
-                        processed_inputs["noise"] = torch.from_numpy(noise)
-
-                    # TODO: test gradients as well (& for FA2 as well!)
-                    with torch.no_grad():
-                        with sdpa_kernel(
-                            enable_flash=enable_kernels,
-                            enable_math=True,
-                            enable_mem_efficient=enable_kernels,
-                        ):
-                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                            outputs_eager = model_eager(**prepared_inputs)
-                            outputs_sdpa = model_sdpa(**prepared_inputs)
-
-                    # TODO: rename logits -> hidden_states
-                    if hasattr(outputs_eager, "vision_hidden_states"):
-                        logits_eager = outputs_eager.vision_hidden_states[-1]
-                        logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
-                    elif hasattr(outputs_eager, "audio_values"):
-                        logits_eager = outputs_eager.audio_values
-                        logits_sdpa = outputs_sdpa.audio_values
-                    else:
-                        logits_eager = (
-                            outputs_eager.decoder_hidden_states[-1]
-                            if hasattr(outputs_eager, "decoder_hidden_states")
-                            else outputs_eager.hidden_states[1][-1]
-                        )
-                        logits_sdpa = (
-                            outputs_sdpa.decoder_hidden_states[-1]
-                            if hasattr(outputs_sdpa, "decoder_hidden_states")
-                            else outputs_sdpa.hidden_states[1][-1]
-                        )
-
-                    if torch_device in ["cpu", "cuda"]:
-                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                    elif torch_device == "xpu":
-                        # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
-                        # which is implemented on PyTorch level using aten operators and is
-                        # device agnostic with respect to implementation of each aten operator.
-                        atol = atols["cuda", False, torch_dtype]
-                        rtol = rtols["cuda", False, torch_dtype]
-                    else:
-                        atol = 1e-7
-                        rtol = 1e-4
-
-                    # Masked tokens output slightly deviates - we don't mind that.
-                    if use_attention_mask:
-                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
-                        _logits_eager = torch.zeros_like(input=logits_eager)
-
-                        _logits_sdpa[:-1] = logits_sdpa[:-1]
-                        _logits_eager[:-1] = logits_eager[:-1]
-
-                        if padding_side == "left":
-                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
-                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
-
-                        elif padding_side == "right":
-                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
-                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
-
-                        logits_sdpa = _logits_sdpa
-                        logits_eager = _logits_eager
-
-                    results = [
-                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
-                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
-                    ]
-                    # If 80% batch elements have matched results, it's fine
-                    if np.mean(results) < 0.8:
-                        mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
-                        raise ValueError(
-                            f"mean relative difference: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
-                            f"{rtol}"
-                        )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -715,31 +336,50 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    @require_deepspeed
-    @require_torch_gpu
-    def test_resize_tokens_embeddings_with_deepspeed(self):
-        ds_config = {
-            "zero_optimization": {
-                "stage": 3,
-                "offload_param": {"device": "cpu", "pin_memory": True},
-            },
-            "train_batch_size": 3,
-        }
-        with _deepspeed_zero3(ds_config):
-            self.test_resize_tokens_embeddings()
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip("Cannot generate from inputs embeds")
+    def test_generate_from_inputs_embeds(self):
+        pass
 
-    @require_deepspeed
-    @require_torch_gpu
-    def test_resize_embeddings_untied_with_deepspeed(self):
-        ds_config = {
-            "zero_optimization": {
-                "stage": 3,
-                "offload_param": {"device": "cpu", "pin_memory": True},
-            },
-            "train_batch_size": 3,
-        }
-        with _deepspeed_zero3(ds_config):
-            self.test_resize_embeddings_untied()
+    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip("Cannot do constraint generation, has custom `generate()`")
+    def test_constrained_beam_search_generate_dict_output(self):
+        pass
+
+    @unittest.skip("Cannot do dola generation, has custom `generate()`")
+    def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip("Cannot generate from inputs embeds")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("Cannot handle 4D attention mask")
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Cannot handle 4D attention mask")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("Cannot handle 4D attention mask")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("Cannot handle 4D attention mask")
+    def test_custom_4d_attention_mask(self):
+        pass
 
 
 @require_torch

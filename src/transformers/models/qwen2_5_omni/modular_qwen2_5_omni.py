@@ -1530,8 +1530,6 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        attention_mask (`torch.FloatTensor`, *optional*):
-            Attentions mask, used to update attention mask and position_ids.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
     """
@@ -1541,7 +1539,6 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    attention_mask: Optional[torch.FloatTensor] = None
     rope_deltas: Optional[torch.LongTensor] = None
 
 
@@ -2420,10 +2417,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        embeds_to_talker = inputs_embeds.clone()
 
         # 2. Merge text , audios , image and video
-        if input_ids.shape[1] != 1:  # Prefill stage
+        if input_ids is not None and input_ids.shape[1] != 1:  # Prefill stage
             if input_features is not None:
                 audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
                     audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
@@ -2447,7 +2443,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-                embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
@@ -2460,7 +2455,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-                embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
 
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
@@ -2473,7 +2467,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-                embeds_to_talker = embeds_to_talker.masked_scatter(video_mask, torch.zeros_like(video_embeds))
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
@@ -2498,16 +2491,15 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
 
         if not return_dict:
-            output = (logits,) + ((embeds_to_talker, outputs[0])) + outputs[1:]
+            output = (logits,) + outputs
             return (loss,) + output if loss is not None else output
 
         return Qwen2_5OmniThinkerCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=(embeds_to_talker, outputs.hidden_states),
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            attention_mask=attention_mask,
             rope_deltas=self.rope_deltas,
         )
 
@@ -2557,23 +2549,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         return model_inputs
 
-    def _update_model_kwargs_for_generation(
-        self,
-        outputs: ModelOutput,
-        model_kwargs: Dict[str, Any],
-        is_encoder_decoder: bool = False,
-        num_new_tokens: int = 1,
-    ) -> Dict[str, Any]:
-        # update attention_mask
-        if getattr(outputs, "attention_mask", None) is not None:
-            model_kwargs["attention_mask"] = outputs.attention_mask
-
-        model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
-        )
-
-        return model_kwargs
-
 
 ############################
 #       Start Talker       #
@@ -2607,8 +2582,6 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        attention_mask (`torch.FloatTensor`, *optional*):
-            Attentions mask, used to update attention mask and position_ids.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
     """
@@ -2618,7 +2591,6 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    attention_mask: Optional[torch.FloatTensor] = None
     rope_deltas: Optional[torch.LongTensor] = None
     thinker_reply_part: torch.FloatTensor = None
 
@@ -2802,7 +2774,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             past_key_values=outputs.past_key_values,
             hidden_states=hidden_states,
             attentions=outputs.attentions,
-            attention_mask=attention_mask,
             rope_deltas=self.rope_deltas,
             thinker_reply_part=thinker_reply_part,
         )
@@ -2865,10 +2836,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
-        # update attention_mask
-        if getattr(outputs, "attention_mask", None) is not None:
-            model_kwargs["attention_mask"] = outputs.attention_mask
-
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
