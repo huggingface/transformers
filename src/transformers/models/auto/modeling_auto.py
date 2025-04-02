@@ -708,7 +708,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "EfficientFormerForImageClassificationWithTeacher",
             ),
         ),
-        ("donut-swin","DonutSwinForImageClassification")
+        ("donut-swin", "DonutSwinForImageClassification"),
         ("efficientnet", "EfficientNetForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
         ("hiera", "HieraForImageClassification"),
