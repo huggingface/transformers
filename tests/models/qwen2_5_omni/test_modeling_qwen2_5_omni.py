@@ -125,6 +125,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "sliding_window": 50,
             "max_window_layers": 3,
             "attention_dropout": 0.0,
+            "pad_token_id": 0,
             "initializer_range": 0.02,
         },
         audio_token_index=1,
@@ -210,6 +211,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         config, pixel_values, pixel_grid_thw, input_features_values, feature_attention_mask = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.get_text_config().vocab_size - 3) + 3
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        input_ids[input_ids == config.image_token_index] = config.text_config.pad_token_id
+        input_ids[input_ids == config.audio_token_index] = config.text_config.pad_token_id
 
         attention_mask[:, :1] = 0
         audio_feat_length = ((self.feat_seq_length - 1) // 2 + 1 - 2) // 2 + 1
