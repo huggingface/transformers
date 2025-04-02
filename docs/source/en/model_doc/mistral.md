@@ -49,7 +49,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
-chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3")
+chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", torch_dtype=torch.bfloat16, device=0)
 chatbot(messages)
 
 ```
