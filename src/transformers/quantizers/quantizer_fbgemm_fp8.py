@@ -185,12 +185,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 new_value = new_value_flat.reshape(original_shape)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
 
-            module._buffers[f"{tensor_name}_scale"] = weight_scale.to(target_device)
+            module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.to(target_device))
         else : 
             new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
-            module._buffers[f"{tensor_name}_scale"] = weight_scale.view(weight_scale.shape[0], 1).to(target_device)
+            module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1).to(target_device))
         
-        module._buffers[tensor_name] = new_value.to(target_device)
+        module._parameters[tensor_name] = torch.nn.Parameter(new_value.to(target_device))
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)

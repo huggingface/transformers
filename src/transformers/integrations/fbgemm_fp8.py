@@ -28,18 +28,18 @@ if is_fbgemm_gpu_available():
 logger = logging.get_logger(__name__)
 
 
-class FbgemmFp8Linear(torch.nn.Module):
+class FbgemmFp8Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
-        super().__init__()
+        super().__init__(in_features, out_features, bias)
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer("weight", torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
-        self.register_buffer("weight_scale", torch.zeros((out_features, 1), dtype=weight_dtype))
+        self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
+        self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=weight_dtype))
         self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
-            self.register_buffer("bias", torch.zeros((self.out_features), dtype=weight_dtype))
+            self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=weight_dtype))
         else:
             self.bias = None
 
@@ -77,11 +77,11 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.expert_dim = self.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         # Register FP8 buffers for gate_up_proj
-        self.register_buffer("gate_up_proj", torch.zeros((self.num_experts, 2 * self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
-        self.register_buffer("gate_up_proj_scale", torch.zeros((self.num_experts, self.expert_dim, 2), dtype=dtype))
+        self.gate_up_proj = torch.nn.Parameter(torch.zeros((self.num_experts, 2 * self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
+        self.gate_up_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.expert_dim, 2), dtype=dtype))
         # Register FP8 buffers for down_proj
-        self.register_buffer("down_proj", torch.zeros((self.num_experts, self.hidden_size, self.expert_dim), dtype=torch.float8_e4m3fn))
-        self.register_buffer("down_proj_scale", torch.zeros((self.num_experts, self.hidden_size, 1), dtype=dtype))
+        self.down_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, self.expert_dim), dtype=torch.float8_e4m3fn))
+        self.down_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 1), dtype=dtype))
         # Register input scale upper bound
         self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
 
