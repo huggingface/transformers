@@ -136,6 +136,7 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.input_layernorm.weight": "sequence_parallel",
         "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
         "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
         "layers.*.feed_forward.shared_expert.down_proj": "local_rowwise",
@@ -178,7 +179,7 @@ class Llama4TextConfig(PretrainedConfig):
         rope_scaling=None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
-        attention_chunk_size=3,
+        attention_chunk_size=8192,
         for_llm_compressor=False,
         **kwargs,
     ):
@@ -334,6 +335,7 @@ class Llama4Config(PretrainedConfig):
         image_token_index=200092,
         **kwargs,
     ):
+        self.max_position_embeddings=4096 * 32,
         if vision_config is None:
             self.vision_config = Llama4VisionConfig()
             logger.info("vision_config is None, using default llama4 vision config")

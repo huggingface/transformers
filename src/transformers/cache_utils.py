@@ -1663,10 +1663,11 @@ class HybridCache(Cache):
         max_batch_size: int,
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
-        dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype = torch.bfloat16,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
+        config.sliding_window = 8192 // 2
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -1683,9 +1684,8 @@ class HybridCache(Cache):
         self._dtype = dtype
         self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
-        )
-
-        layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
+        ) // 8 # TODO support TP properly
+        layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 5  # 2 is for BC
         self.is_sliding = torch.tensor(
             [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
         )
@@ -1707,6 +1707,7 @@ class HybridCache(Cache):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
+            cache_shape = sliding_cache_shape
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             torch._dynamo.mark_static_address(new_layer_key_cache)

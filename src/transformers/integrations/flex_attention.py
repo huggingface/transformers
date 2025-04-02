@@ -70,7 +70,6 @@ class WrappedFlexAttention:
     def __call__(self):
         return self._compiled_flex_attention
 
-@torch.compiler.disable(recursive=True)
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None
 ) -> "BlockMask":
@@ -133,7 +132,7 @@ def make_flex_block_causal_mask(
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        _compile=False
+        _compile=True
     )
 
 

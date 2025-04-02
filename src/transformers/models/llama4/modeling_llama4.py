@@ -459,7 +459,7 @@ class Llama4TextDecoderLayer(nn.Module):
         else:
             router_logits = None
         hidden_states = residual + hidden_states.view(residual.shape)
-
+        print(f"Out of layer {self.layer_idx}")
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -1006,7 +1006,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-
+        print("generated a token")
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
