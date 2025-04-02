@@ -1184,7 +1184,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
 
-    dict_b : the default config dictionnary. We want to remove values that are in this one
+    dict_b : the default config dictionary. We want to remove values that are in this one
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}

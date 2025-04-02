@@ -46,6 +46,12 @@ from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
 
+from transformers.utils import is_torchao_available
+
+
+if is_torchao_available():
+    from torchao.quantization import Int4WeightOnlyConfig
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
@@ -752,14 +758,15 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors")
+    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+        QuantizationMethod.HQQ,
+        QuantizationMethod.BITS_AND_BYTES,
+    ]
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
-    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
-    # we need to make sure they are not loaded as tied weights!
-    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -829,14 +836,8 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                # avoid tied weights
-                if param.data_ptr() in data_ptrs:
-                    param = param.clone()
-
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
-                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
-                data_ptrs.add(model.state_dict()[param_name].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
@@ -4828,6 +4829,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
+        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+            QuantizationMethod.HQQ,
+            QuantizationMethod.BITS_AND_BYTES,
+        ]
         # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights
@@ -4835,13 +4840,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
 
             map_location = "cpu"
-            if shard_file.endswith(".safetensors"):
+            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb:
                 map_location = "meta"
             elif (
                 device_map is not None
                 and hf_quantizer is not None
                 and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                and (
+                    hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                    or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+                )
             ):
                 map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
