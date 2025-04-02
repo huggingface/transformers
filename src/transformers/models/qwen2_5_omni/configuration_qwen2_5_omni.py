@@ -132,9 +132,6 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         d_model (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -180,7 +177,6 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         encoder_layers=32,
         encoder_attention_heads=20,
         encoder_ffn_dim=5120,
-        encoder_layerdrop=0,
         d_model=1280,
         dropout=0,
         attention_dropout=0,
@@ -204,7 +200,6 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_function = activation_function
         self.activation_dropout = activation_dropout
-        self.encoder_layerdrop = encoder_layerdrop
         self.num_hidden_layers = encoder_layers
         self.init_std = init_std
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True

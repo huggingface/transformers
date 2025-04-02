@@ -170,9 +170,6 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         d_model (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -218,7 +215,6 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
         encoder_layers=32,
         encoder_attention_heads=20,
         encoder_ffn_dim=5120,
-        encoder_layerdrop=0,
         d_model=1280,
         dropout=0,
         attention_dropout=0,
@@ -236,7 +232,6 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
             encoder_layers,
             encoder_attention_heads,
             encoder_ffn_dim,
-            encoder_layerdrop,
             d_model,
             dropout,
             attention_dropout,
@@ -249,6 +244,7 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
         )
         self.n_window = n_window
         self.output_dim = output_dim
+        del self.encoder_layerdrop
 
 
 class Qwen2_5OmniTextConfig(PretrainedConfig):
@@ -1791,7 +1787,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
@@ -1858,30 +1853,19 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         ).to(torch.int32)
 
         for idx, encoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            # Ignore copy
-            if to_drop:
-                layer_outputs = (None, None)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    cu_seqlens,
+                )
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        cu_seqlens,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        cu_seqlens,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    cu_seqlens,
+                )
 
-                hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
         token_audio_list = []
@@ -2088,12 +2072,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
-    def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.gate_proj.weight.dtype
-
-    def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.gate_proj.weight.device
-
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -2185,11 +2163,6 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
 
-        # if (self.head_dim * self.num_heads) != self.hidden_size:
-        #     raise ValueError(
-        #         f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-        #         f" and `num_heads`: {self.num_heads})."
-        #     )
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
@@ -2477,7 +2450,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
 
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.visual.get_dtype())
+                pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.image_token_index)
@@ -2490,7 +2463,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
 
             if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 video_mask = (
                     (input_ids == self.config.video_token_index)
@@ -2921,13 +2894,18 @@ class RotaryEmbedding(nn.Module):
 
     def forward(self, x):
         batch_size, seq_len = x.shape[0], x.shape[1]
-        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)
-        freqs = torch.einsum("i , j -> i j", t.type_as(self.inv_freq), self.inv_freq)
-        freqs = torch.stack((freqs, freqs), dim=-1)
-        freqs = freqs.reshape(*freqs.shape[:-2], -1)
-        freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
+        t = torch.arange(seq_len, device=x.device)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = t.unsqueeze(1).float() @ self.inv_freq.unsqueeze(0).float()
+            freqs = torch.stack((freqs, freqs), dim=-1)
+            freqs = freqs.reshape(*freqs.shape[:-2], -1)
+            freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
+            cos = freqs.cos()
+            sin = freqs.sin()
 
-        return freqs.cos(), freqs.sin()
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Modified from Llama with a different rotate function, will fixed in next release
@@ -3397,8 +3375,8 @@ class DiTAttention(nn.Module):
     def forward(
         self,
         hidden_states,  # noised input x
-        rope=None,  # rotary position embedding for x
-        mask=None,
+        position_embeddings=None,  # rotary position embedding for x
+        attention_mask=None,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
 
@@ -3416,7 +3394,7 @@ class DiTAttention(nn.Module):
 
         # apply rotary position embedding
         # Due to training process, only first head is applied with RoPE, will be fixed at next release
-        cos, sin = rope
+        cos, sin = position_embeddings
         query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS[self._attn_implementation]
@@ -3425,7 +3403,7 @@ class DiTAttention(nn.Module):
             query,
             key,
             value,
-            attention_mask=mask,
+            attention_mask=attention_mask,
             is_causal=False,
         )
 
@@ -3481,15 +3459,18 @@ class DiTDecoderLayer(nn.Module):
         self.ff_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
         self.ff = FeedForward(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
 
-    def forward(self, hidden_states, timestep, rope=None, block_diff=None):  # x: noised input, t: time embedding
+    def forward(
+        self, hidden_states, timestep, position_embeddings=None, block_diff=None
+    ):  # x: noised input, t: time embedding
         # pre-norm & modulation for attention input
         norm, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.attn_norm(hidden_states, emb=timestep)
 
         # attention
         attn_output = self.attn(
             hidden_states=norm,
-            rope=rope,
-            mask=(block_diff >= -float(self.look_backward_block)) & (block_diff <= float(self.look_ahead_block)),
+            position_embeddings=position_embeddings,
+            attention_mask=(block_diff >= -float(self.look_backward_block))
+            & (block_diff <= float(self.look_ahead_block)),
         )
 
         # process attention output for input x
@@ -3956,12 +3937,14 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         )
 
         # rope = self.rotary_embed(x, torch.arange(seq_len, device=x.device).repeat(batch, 1))
-        rope = self.rotary_embed(hidden_states)
+        position_embeddings = self.rotary_embed(hidden_states)
 
         block_diff = self._create_block_diff(hidden_states)
 
         for block in self.transformer_blocks:
-            hidden_states = block(hidden_states, time_embedding, rope=rope, block_diff=block_diff)
+            hidden_states = block(
+                hidden_states, time_embedding, position_embeddings=position_embeddings, block_diff=block_diff
+            )
 
         hidden_states = self.norm_out(hidden_states, time_embedding)
         output = self.proj_out(hidden_states)
@@ -4164,7 +4147,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         speaker: str = "Chelsie",
         use_audio_in_video: bool = False,
         return_audio: Optional[bool] = None,
