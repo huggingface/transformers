@@ -218,6 +218,8 @@ def write_model(
     num_heads = params["n_heads"]
     rms_norm_eps = params["norm_eps"]
     rope_theta = params["rope_theta"]
+    no_rope_layer_interval = params["nope_layer_interval"]
+    attention_chunk_size = params["attention_chunk_size"]       # to be used when #14 is merged
 
     config_kwargs = {}
     if params["use_scaled_rope"]:
@@ -257,6 +259,8 @@ def write_model(
         num_local_experts=num_experts,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
+        no_rope_layer_interval=no_rope_layer_interval,
+        # attention_chunk_size=attention_chunk_size,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
