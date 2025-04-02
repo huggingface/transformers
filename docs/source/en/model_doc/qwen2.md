@@ -126,7 +126,6 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,       
 )
 
-# Load tokenizer and quantized model
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B") 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-7B", # Use base model
