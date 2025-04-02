@@ -623,18 +623,17 @@ class Trainer:
 
         # Just in case the model was wrapped outside of the `Trainer`
         unwrapped_model = self.accelerator.unwrap_model(model)
-        model_forward = (
-            unwrapped_model.forward
-            if not _is_peft_model(unwrapped_model)
-            else unwrapped_model.get_base_model().forward
-        )
-        forward_params = inspect.signature(model_forward).parameters
+        # We also unwrap peft model
+        if _is_peft_model(unwrapped_model):
+            unwrapped_model = unwrapped_model.get_base_model()
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
-        if hasattr(model, "accepts_loss_kwargs"):
-            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        print(unwrapped_model.accepts_loss_kwargs)
+        if hasattr(unwrapped_model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
+            forward_params = inspect.signature(unwrapped_model.forward).parameters
             self.model_accepts_loss_kwargs = any(
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
@@ -3767,6 +3766,7 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting
             if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
+                print("diviving the loss as expected")
                 loss = loss / self.args.gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
