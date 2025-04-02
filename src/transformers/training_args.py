@@ -188,19 +188,6 @@ class OptimizerNames(ExplicitEnum):
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
 
 
-# Sometimes users will pass in a `str` repr of a dict in the CLI
-# We need to track what fields those can be. Each time a new arg
-# has a dict type, it must be added to this list.
-# Important: These should be typed with Optional[Union[dict,str,...]]
-_VALID_DICT_FIELDS = [
-    "accelerator_config",
-    "fsdp_config",
-    "deepspeed",
-    "gradient_checkpointing_kwargs",
-    "lr_scheduler_kwargs",
-]
-
-
 def _convert_str_dict(passed_value: dict):
     "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
     for key, value in passed_value.items():
@@ -813,6 +800,18 @@ class TrainingArguments:
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
     """
+
+    # Sometimes users will pass in a `str` repr of a dict in the CLI
+    # We need to track what fields those can be. Each time a new arg
+    # has a dict type, it must be added to this list.
+    # Important: These should be typed with Optional[Union[dict,str,...]]
+    _VALID_DICT_FIELDS = [
+        "accelerator_config",
+        "fsdp_config",
+        "deepspeed",
+        "gradient_checkpointing_kwargs",
+        "lr_scheduler_kwargs",
+    ]
 
     framework = "pt"
     output_dir: Optional[str] = field(
@@ -1561,7 +1560,7 @@ class TrainingArguments:
             )
 
         # Parse in args that could be `dict` sent in from the CLI as a string
-        for field in _VALID_DICT_FIELDS:
+        for field in self._VALID_DICT_FIELDS:
             passed_value = getattr(self, field)
             # We only want to do this if the str starts with a bracket to indicate a `dict`
             # else its likely a filename if supported

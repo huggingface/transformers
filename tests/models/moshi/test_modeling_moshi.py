@@ -951,8 +951,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         expected_text_token = 452
         expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810]  # fmt: skip
 
-        self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
-        self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
+        self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].item())
+        self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].tolist())
 
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
@@ -966,7 +966,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         )
 
         # eager equivalence is not as strict as sdpa.
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
@@ -986,8 +986,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     @require_torch_fp16
@@ -1008,8 +1008,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     @require_torch_fp16
@@ -1030,5 +1030,5 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= 2048)
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
