@@ -78,7 +78,7 @@ The base model can be used as follows:
 The instruction tuned model can be used as follows:
 
 ```python
-import torch
+>>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.3", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
