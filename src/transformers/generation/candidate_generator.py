@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
+    from ..modeling_outputs import BaseModelOutput
 
 
 class CandidateGenerator:
@@ -57,7 +58,7 @@ class CandidateGenerator:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call `get_candidates`."
         )
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, **kwargs):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -219,7 +220,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
         return candidate_ids, candidate_logits
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, **kwargs):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -993,7 +994,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, **kwargs):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -1064,6 +1065,107 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
         base_model.config.num_hidden_layers = original_num_hidden_layers
         return candidate_ids, candidate_logits
+
+
+class MLPSpeculatorCandidateGenerator(CandidateGenerator):
+    """
+    `CandidateGenerator` class to be used for assisted generation via speculative decoding with MLPSpeculator:
+    https://pytorch.org/blog/hitchhikers-guide-speculative-decoding/
+    This class generates candidates through the use of a speculator trained to predict the base model's outputs.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The speculator model to be used for generating candidates
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    def __init__(
+        self,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+    ):
+        self.assistant_model = assistant_model
+        self.last_hidden_state = None
+        self.last_token_id = None
+        if not generation_config.output_hidden_states:
+            raise ValueError(
+                    "Speculative decoding with MLPSpeculator requires hidden state from the base model."
+                    "Please set generation_config.output_hidden_states to True"
+                    )
+
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor
+    ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        """
+        Fetches the candidates to be tried for the current input.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+
+        Return:
+            `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
+            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            vocabulary_size)` containing the logits associated to each candidate.
+        """
+        if self.last_hidden_state is None:
+            return input_ids, None
+
+        output_ids = self.assistant_model.generate_suffixes(
+            state=self.last_hidden_state,
+            ind=self.last_token_id,
+            topk=self.assistant_model.config.top_k_tokens_per_head,
+            n_candidates=1)
+
+        # drop n_candidate dimension; only supporting 1 candidate sequence for now
+        # [batch_size x n_candidates x n_predict] -> [batch_size x n_predict]
+        output_ids_squeezed = torch.squeeze(output_ids, 1)
+        candidate_ids = torch.cat([input_ids, output_ids_squeezed], dim=-1)
+        return candidate_ids, None
+
+
+    def update_candidate_strategy(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        num_matches: int,
+        model_outputs: "BaseModelOutput" = None,
+        valid_tokens: torch.LongTensor = None,
+        **kwargs
+    ):
+        """
+        Updates the candidate generation strategy based on the outcomes.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+                Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
+                beam search or log softmax for each vocabulary token when using beam search
+            num_matches (`int`):
+                The number of matches between the candidate sequences and the model predictions.
+            model_outputs (`BaseModelOutput`):
+                Current iteration's generation output from the base model containing hidden states
+            valid_tokens (`torch.LongTensor` of shape `(batch_size, num_matches+1)`):
+                Token ids for the tokens generated by the model in the current iteration
+
+        """
+        if not model_outputs:
+            return
+
+        if self.last_hidden_state is None: # first generation iteration
+            last_token_idx = -1 # use the hidden state from the latest token generated by the base model
+        else:
+            last_token_idx = num_matches # use the hidden state of the last valid token
+ 
+        last_layer_idx = -1
+
+        # [num_layers x batch_size x num_tokens x hidden_dim] -> [batch_size x 1 x hidden_dim]
+        self.last_hidden_state = model_outputs.hidden_states[last_layer_idx][:, last_token_idx, :].unsqueeze(1)
+        self.last_token_id = valid_tokens[:,-1].unsqueeze(1) # shape [batch_size x 1]
 
 
 def _crop_past_key_values(model, past_key_values, max_length):

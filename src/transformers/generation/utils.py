@@ -58,6 +58,7 @@ from .candidate_generator import (
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
+    MLPSpeculatorCandidateGenerator,
     PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
     _crop_past_key_values,
@@ -958,6 +959,11 @@ class GenerationMixin:
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
                 max_matching_ngram_size=generation_config.max_matching_ngram_size,
                 max_length=generation_config.max_length,
+            )
+        elif 'MLPSpeculatorPreTrainedModel' in assistant_model.config.architectures:
+            candidate_generator = MLPSpeculatorCandidateGenerator(
+                assistant_model=assistant_model,
+                generation_config=generation_config,
             )
         elif different_tokenizers:
             if generation_config.do_sample is True:
@@ -4763,7 +4769,8 @@ class GenerationMixin:
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
 
             # 5. Update the candidate generation strategy if needed
-            candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
+            candidate_generator.update_candidate_strategy(
+                    input_ids, new_logits, n_matches, model_outputs=outputs, valid_tokens=valid_tokens)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -4825,6 +4832,7 @@ class GenerationMixin:
 
         if (
             hasattr(candidate_generator, "assistant_model")
+            and candidate_generator.assistant_model.generation_config
             and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
         ):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (

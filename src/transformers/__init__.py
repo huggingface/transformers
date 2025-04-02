@@ -620,6 +620,7 @@ _import_structure = {
         "MllamaConfig",
         "MllamaProcessor",
     ],
+    "models.mlp_speculator": ["MLPSpeculatorConfig"],
     "models.mluke": [],
     "models.mobilebert": [
         "MobileBertConfig",
@@ -3004,6 +3005,12 @@ else:
             "MllamaProcessor",
             "MllamaTextModel",
             "MllamaVisionModel",
+        ]
+    )
+    _import_structure["models.mlp_speculator"].extend(
+        [
+            "MLPSpeculatorPreTrainedModel",
+            "MLPSpeculator",
         ]
     )
     _import_structure["models.mobilebert"].extend(
@@ -5872,6 +5879,7 @@ if TYPE_CHECKING:
         MllamaConfig,
         MllamaProcessor,
     )
+    from .models.mlp_speculator import MLPSpeculatorConfig
     from .models.mobilebert import (
         MobileBertConfig,
         MobileBertTokenizer,
@@ -7968,6 +7976,10 @@ if TYPE_CHECKING:
             MllamaProcessor,
             MllamaTextModel,
             MllamaVisionModel,
+        )
+        from .models.mlp_speculator import (
+            MLPSpeculatorPreTrainedModel,
+            MLPSpeculator,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,

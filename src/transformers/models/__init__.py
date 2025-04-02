@@ -173,6 +173,7 @@ from . import (
     mistral3,
     mixtral,
     mllama,
+    mlp_speculator,
     mluke,
     mobilebert,
     mobilenet_v1,
