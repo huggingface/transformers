@@ -67,7 +67,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 device = "cuda" # or "cpu" or "mps"
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen2-7B-Instruct",
+    "Qwen/Qwen2-1.5B-Instruct",
     torch_dtype=torch.bfloat16, # use torch.bfloat16 for optimal performance
     device_map="auto",
     attn_implementation="flash_attention_2" # use "sdpa" or None for CPU compatibility
