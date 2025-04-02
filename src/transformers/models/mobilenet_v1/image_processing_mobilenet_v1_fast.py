@@ -29,16 +29,6 @@ from ...utils import add_start_docstrings
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
 class MobileNetV1ImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
