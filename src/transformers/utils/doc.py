@@ -140,7 +140,6 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None, add_i
     Prepares the return part of the docstring using `output_type`.
     """
     output_docstring = output_type.__doc__
-    return """"""
     params_docstring = None
     if output_docstring is not None:
         # Remove the head of the docstring to keep the list of args only
@@ -163,7 +162,9 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None, add_i
         intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
         intro = intro.format(full_output_type=full_output_type, config_class=config_class)
     else:
-        intro = f"Returns: {full_output_type}"
+        intro = f"\nReturns:\n    [`{full_output_type}`]"
+        if params_docstring is not None:
+            intro += ":\n"
 
     result = intro
     if params_docstring is not None:
