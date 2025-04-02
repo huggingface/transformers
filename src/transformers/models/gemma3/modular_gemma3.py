@@ -374,7 +374,7 @@ class Gemma3RMSNorm(nn.Module):
 
     def forward(self, x):
         output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Gemma2 is (x * w).to(float16)
+        # Llama does x.to(float16) * w whilst Gemma3 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * ((1.0 + self.weight.float()) * self.activation_scale)
         return output.type_as(x)
