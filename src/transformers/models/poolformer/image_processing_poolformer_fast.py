@@ -36,7 +36,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
     get_image_size_for_max_height_width,
 )
 from ...processing_utils import Unpack
@@ -202,7 +201,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         """
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        image_height, image_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        image_height, image_width = image.shape[-2:]
         crop_height, crop_width = size.height, size.width
 
         if crop_width > image_width or crop_height > image_height:
@@ -213,7 +212,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                 (crop_height - image_height + 1) // 2 if crop_height > image_height else 0,
             ]
             image = F.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
-            image_height, image_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+            image_height, image_width = image.shape[-2:]
             if crop_width == image_width and crop_height == image_height:
                 return image
 
