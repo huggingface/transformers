@@ -2453,30 +2453,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def initialize_weights(self):
         """
         This is equivalent to calling `self.apply(self._initialize_weights)`, but instead of full depth-first recursion,
-        it handles correctly composite models. Indeed, depth-first recursion fails with composite models as it will usually
+        it correctly handles composite models. Indeed, depth-first recursion fails with composite models as it will usually
         initialize the basic blocks (e.g. nn.Linear, nn.Embedding, etc) first, which will cause them to be initialized according
         to the `_init_weights` of the outer-most model instead of the given sub-model.
-        This function first searches for sub-models, initialize them, then initialize only remaining modules.
+        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the 
+        module graph along the recursion. It can handle an arbitrary number of sub-models.
         """
-        sub_models = []
-        for module_name, module in self.named_modules():
-            # self is of course not a sub-model
-            if module is self:
-                continue
-            if hasattr(module, "_init_weights"):
-                sub_models.append(module_name)
+        if not hasattr(torch.nn.Module, "smart_apply"):
+            # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function 
+            # to apply as we go down the graph
+            def smart_apply(self, fn):
+                for module in self.children():
+                    # We found a sub-model: recursively dispatch its own init function now!
+                    if hasattr(module, "_init_weights"):
+                        module.smart_apply(module._initialize_weights)
+                    else:
+                        module.smart_apply(fn)
+                fn(self)
+                return self
+        
+            torch.nn.Module.smart_apply = smart_apply
 
-        # sort according to depth, in order to initialize the dept-most sub-models first (to avoid issue mentionned in docstring)
-        # Note that the ordering of similar depth modules is not important, as they cannot have common modules
-        sub_models = sorted(sub_models, key=lambda x: len(x.split(".")), reverse=True)
-
-        for module_name in sub_models:
-            module = self.get_submodule(module_name)
-            # This will set the `_is_hf_initialized` flag everywhere, making future calls on the same module to be skipped
-            module.apply(module._initialize_weights)
-
-        # Finally, apply it to self as well to finalize missing modules
-        self.apply(self._initialize_weights)
+        # Let the magic happen with this simple call
+        self.smart_apply(self._initialize_weights)
 
     def tie_weights(self):
         """
