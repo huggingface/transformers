@@ -503,7 +503,6 @@ class AIMv2PreTrainedModel(PreTrainedModel):
 
 class AIMv2VisionModel(AIMv2PreTrainedModel):
     main_input_name = "pixel_values"
-    base_model_prefix = "aimv2_vision_model"
 
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__(config)
