@@ -119,12 +119,10 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 
 ## Notes
 
-In order to run optimized Mamba implementations, you first need to install `mamba-ssm` and `causal-conv1d`:
-```bash
-pip install mamba-ssm causal-conv1d>=1.2.0
 ```
 
-You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model. It is also recommended to read this [article](https://huggingface.co/docs/accelerate/usage_guides/big_modeling) on how to perform inference
+- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`].
+- Don't quantize the Mamba blocks to prevent model performance degradation.
 for big models.
 
 
