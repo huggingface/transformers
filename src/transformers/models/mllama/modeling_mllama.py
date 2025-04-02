@@ -1055,6 +1055,9 @@ class MllamaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MllamaCrossAttentionDecoderLayer):
             module.cross_attn_attn_gate.data.zero_()
             module.cross_attn_mlp_gate.data.zero_()
+        elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
+            if module.is_gated:
+                module.gate.data.zero_()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(

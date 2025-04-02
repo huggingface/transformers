@@ -1658,6 +1658,9 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Phi4MultimodalRMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalImageEmbedding):
+            module.global_img_feature_extensor.data.zero_()
+            module.sub_img_feature_extensor.data.zero_()
 
 
 class Phi4MultimodalRotaryEmbedding(nn.Module):
