@@ -15,6 +15,8 @@
 
 import random
 import unittest
+from PIL import Image
+import requests
 
 import numpy as np
 
@@ -109,7 +111,7 @@ class FlavaImageProcessingTester:
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
-        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.LANCZOS
+        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.BICUBIC
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
         self.codebook_do_map_pixels = codebook_do_map_pixels
@@ -394,3 +396,30 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     expected_width,
                 ),
             )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True)
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True)
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+        )
+
+        self.assertTrue(torch.allclose(encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.codebook_pixel_values - encoding_fast.codebook_pixel_values)).item(), 1e-3
+        )

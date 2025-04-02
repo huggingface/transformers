@@ -14,8 +14,10 @@
 # limitations under the License.
 """Fast Image processor class for Flava."""
 
+import math
+import random
 from functools import lru_cache
-from typing import Any, Dict, Iterable, Optional, Union
+from typing import Any, Dict, Iterable, Optional, Union, Tuple
 
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -26,7 +28,7 @@ from ...image_processing_utils_fast import (
     get_size_dict,
 )
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling, SizeDict, validate_kwargs
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -41,7 +43,6 @@ from .image_processing_flava import (
     FLAVA_IMAGE_MEAN,
     FLAVA_IMAGE_STD,
     LOGIT_LAPLACE_EPS,
-    FlavaMaskingGenerator,
 )
 
 
@@ -55,6 +56,82 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+
+
+class FlavaMaskingGenerator:
+    def __init__(
+        self,
+        input_size: Union[int, Tuple[int, int]] = 14,
+        total_mask_patches: int = 75,
+        mask_group_max_patches: Optional[int] = None,
+        mask_group_min_patches: int = 16,
+        mask_group_min_aspect_ratio: Optional[float] = 0.3,
+        mask_group_max_aspect_ratio: float = None,
+    ):
+        if not isinstance(input_size, tuple):
+            input_size = (input_size,) * 2
+        self.height, self.width = input_size
+
+        self.num_patches = self.height * self.width
+        self.total_mask_patches = total_mask_patches
+
+        self.mask_group_min_patches = mask_group_min_patches
+        self.mask_group_max_patches = total_mask_patches if mask_group_max_patches is None else mask_group_max_patches
+
+        mask_group_max_aspect_ratio = mask_group_max_aspect_ratio or 1 / mask_group_min_aspect_ratio
+        self.log_aspect_ratio = (math.log(mask_group_min_aspect_ratio), math.log(mask_group_max_aspect_ratio))
+
+    def __repr__(self):
+        repr_str = "MaskingGenerator(%d, %d -> [%d ~ %d], max = %d, %.3f ~ %.3f)" % (
+            self.height,
+            self.width,
+            self.mask_group_min_patches,
+            self.mask_group_max_patches,
+            self.total_mask_patches,
+            self.log_aspect_ratio[0],
+            self.log_aspect_ratio[1],
+        )
+        return repr_str
+
+    def get_shape(self):
+        return self.height, self.width
+
+    def _mask(self, mask, max_mask_patches):
+        delta = 0
+        for _attempt in range(10):
+            target_area = random.uniform(self.mask_group_min_patches, max_mask_patches)
+            aspect_ratio = math.exp(random.uniform(*self.log_aspect_ratio))
+            height = int(round(math.sqrt(target_area * aspect_ratio)))
+            width = int(round(math.sqrt(target_area / aspect_ratio)))
+            if width < self.width and height < self.height:
+                top = random.randint(0, self.height - height)
+                left = random.randint(0, self.width - width)
+
+                num_masked = mask[top : top + height, left : left + width].sum()
+                # Overlap
+                if 0 < height * width - num_masked <= max_mask_patches:
+                    zeros_pos = mask[top:top+height, left:left+width] == 0
+                    mask[top:top+height, left:left+width][zeros_pos] = 1
+                    delta += zeros_pos.sum()
+
+                if delta > 0:
+                    break
+        return delta
+
+    def __call__(self):
+        mask = torch.zeros(self.get_shape(), dtype=torch.int)
+        mask_count = 0
+        while mask_count < self.total_mask_patches:
+            max_mask_patches = self.total_mask_patches - mask_count
+            max_mask_patches = min(max_mask_patches, self.mask_group_max_patches)
+
+            delta = self._mask(mask, max_mask_patches)
+            if delta == 0:
+                break
+            else:
+                mask_count += delta
+
+        return mask
 
 
 class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -164,7 +241,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
     return_codebook_pixels = False
     codebook_do_resize = True
     codebook_size = {"height": 112, "width": 112}
-    codebook_resample = PILImageResampling.LANCZOS
+    codebook_resample = PILImageResampling.BICUBIC
     codebook_do_center_crop = True
     codebook_crop_size = {"height": 112, "width": 112}
     codebook_do_rescale = True
@@ -238,42 +315,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-        resample = kwargs.pop("codebook_resample")
-        kwargs["codebook_interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        return self._preprocess(images=images, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -321,6 +363,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         codebook_crop_size: Optional[SizeDict] = None,
         codebook_image_mean: Optional[Union[float, list[float]]] = None,
         codebook_image_std: Optional[Union[float, list[float]]] = None,
+        codebook_resample: Optional[PILImageResampling] = None,
         data_format: Optional[ChannelDimension] = None,
         **kwargs,
     ) -> dict:
@@ -359,6 +402,9 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         kwargs["codebook_image_mean"] = codebook_image_mean
         kwargs["codebook_image_std"] = codebook_image_std
         kwargs["data_format"] = data_format
+        kwargs["codebook_interpolation"] = (
+            pil_torch_interpolation_mapping[codebook_resample] if isinstance(codebook_resample, (PILImageResampling, int)) else codebook_resample
+        )
 
         return kwargs
 
@@ -432,7 +478,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return_codebook_pixels: Optional[bool],
         codebook_do_resize: Optional[bool],
         codebook_size: Optional[SizeDict],
-        codebook_interpolation: Optional[int],
+        codebook_interpolation: Optional["F.InterpolationMode"],
         codebook_do_center_crop: Optional[bool],
         codebook_crop_size: Optional[SizeDict],
         codebook_do_rescale: Optional[bool],
@@ -491,6 +537,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
             )
             masks = [mask_generator() for _ in range(len(images))]
+            masks = torch.stack(masks, dim=0) if return_tensors else masks
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
