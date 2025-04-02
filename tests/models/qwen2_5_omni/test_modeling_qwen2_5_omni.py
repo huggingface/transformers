@@ -119,7 +119,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "rope_theta": 1000000.0,
             "use_sliding_window": False,
             "sliding_window": 50,
-            "tie_word_embeddings": False
+            "tie_word_embeddings": False,
         },
         rope_scaling={"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
         audio_token_index=1,
@@ -239,11 +239,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             [[1, self.image_size / patch_size, self.image_size / patch_size]] * self.batch_size
         ).to(pixel_values.device)
         input_features_values = floats_tensor(
-            [
-                self.batch_size,
-                self.audio_config["num_mel_bins"],
-                self.feat_seq_length
-            ]
+            [self.batch_size, self.audio_config["num_mel_bins"], self.feat_seq_length]
         )
         feature_attention_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
         return config, pixel_values, pixel_grid_thw, input_features_values, feature_attention_mask
