@@ -751,6 +751,8 @@ _import_structure = {
         "Qwen2VLConfig",
         "Qwen2VLProcessor",
     ],
+    "models.qwen3": ["Qwen3Config"],
+    "models.qwen3_moe": ["Qwen3MoeConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -1042,7 +1044,6 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
-        "is_torch_tpu_available",
         "is_torchvision_available",
         "is_torch_xla_available",
         "is_torch_xpu_available",
@@ -3463,6 +3464,26 @@ else:
             "Qwen2VLPreTrainedModel",
         ]
     )
+    _import_structure["models.qwen3"].extend(
+        [
+            "Qwen3ForCausalLM",
+            "Qwen3ForQuestionAnswering",
+            "Qwen3ForSequenceClassification",
+            "Qwen3ForTokenClassification",
+            "Qwen3Model",
+            "Qwen3PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen3_moe"].extend(
+        [
+            "Qwen3MoeForCausalLM",
+            "Qwen3MoeForQuestionAnswering",
+            "Qwen3MoeForSequenceClassification",
+            "Qwen3MoeForTokenClassification",
+            "Qwen3MoeModel",
+            "Qwen3MoePreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "RagModel",
@@ -3590,6 +3611,7 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+            "SamVisionModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -4758,6 +4780,7 @@ else:
         [
             "TFSamModel",
             "TFSamPreTrainedModel",
+            "TFSamVisionModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -6022,6 +6045,8 @@ if TYPE_CHECKING:
         Qwen2VLConfig,
         Qwen2VLProcessor,
     )
+    from .models.qwen3 import Qwen3Config
+    from .models.qwen3_moe import Qwen3MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
@@ -6346,7 +6371,6 @@ if TYPE_CHECKING:
         is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
-        is_torch_tpu_available,
         is_torch_xla_available,
         is_torch_xpu_available,
         is_torchvision_available,
@@ -8335,6 +8359,22 @@ if TYPE_CHECKING:
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
         )
+        from .models.qwen3 import (
+            Qwen3ForCausalLM,
+            Qwen3ForQuestionAnswering,
+            Qwen3ForSequenceClassification,
+            Qwen3ForTokenClassification,
+            Qwen3Model,
+            Qwen3PreTrainedModel,
+        )
+        from .models.qwen3_moe import (
+            Qwen3MoeForCausalLM,
+            Qwen3MoeForQuestionAnswering,
+            Qwen3MoeForSequenceClassification,
+            Qwen3MoeForTokenClassification,
+            Qwen3MoeModel,
+            Qwen3MoePreTrainedModel,
+        )
         from .models.rag import (
             RagModel,
             RagPreTrainedModel,
@@ -8435,6 +8475,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+            SamVisionModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
@@ -9376,6 +9417,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             TFSamModel,
             TFSamPreTrainedModel,
+            TFSamVisionModel,
         )
         from .models.segformer import (
             TFSegformerDecodeHead,

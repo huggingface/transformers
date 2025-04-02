@@ -2454,7 +2454,7 @@ class Trainer:
         self.state.init_training_references(self, max_steps, num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
-        tr_loss = torch.tensor(0.0).to(args.device)
+        tr_loss = torch.tensor(0.0, device=args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
@@ -2524,9 +2524,7 @@ class Trainer:
                         else:
                             input_tokens = inputs[main_input_name].numel()
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                            self.state.num_input_tokens_seen += (
-                                self.accelerator.gather(input_tokens).sum().cpu().item()
-                            )
+                            self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
@@ -3076,7 +3074,7 @@ class Trainer:
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if grad_norm is not None:
-                logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+                logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
                 logs["learning_rate"] = learning_rate
             else:
@@ -4559,7 +4557,7 @@ class Trainer:
                 if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    loss = loss.mean().detach()
+                    loss = loss.detach().mean()
 
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
@@ -5234,13 +5232,29 @@ class Trainer:
     def get_batch_samples(self, epoch_iterator, num_batches, device):
         batch_samples = []
         num_items_in_batch = None
+
         for _ in range(num_batches):
             try:
-                batch_samples += [next(epoch_iterator)]
+                batch_samples.append(next(epoch_iterator))
             except StopIteration:
                 break
 
-        if len(batch_samples) > 0 and "labels" in batch_samples[0]:
+        count_num_items_in_batch = (
+            len(batch_samples) > 0
+            and "labels" in batch_samples[0]
+            and (
+                # num_items_in_batch is passed to model forward
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3757
+                self.model_accepts_loss_kwargs
+                # num_items_in_batch is passed to compute_loss_func
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3773
+                or self.compute_loss_func is not None
+                # num_items_in_batch is also verified if (self.model_accepts_loss_kwargs or self.compute_loss_func)
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3790
+            )
+        )
+
+        if count_num_items_in_batch:
             # For now we don't support object detection
             try:
                 num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
