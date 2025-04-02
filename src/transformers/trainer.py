@@ -3765,7 +3765,6 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting
             if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
-                print("diviving the loss as expected")
                 loss = loss / self.args.gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
