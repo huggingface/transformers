@@ -1329,7 +1329,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset=eval_dataset,
         )
 
-        # when calling train, it will set limit_max_eval_sample to True and will apply limit
+        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method 
         trainer.train()
         self.assertEqual(args.max_eval_batches, trainer.observed_num_batches)
 
