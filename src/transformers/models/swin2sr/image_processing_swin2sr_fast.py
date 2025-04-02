@@ -63,7 +63,7 @@ class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to pad the image to make the height and width divisible by `window_size`.
         pad_size (`int`, *optional*, defaults to `8`):
             The size of the sliding window for the local attention.
-    """
+    """,
 )
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
@@ -92,8 +92,8 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         Pad an image to make the height and width divisible by `size`.
 
         Args:
-            image (`torch.Tensor`):
-                Image to pad.
+            images (`torch.Tensor`):
+                Images to pad.
             size (`int`):
                 The size to make the height and width divisible by.
 
