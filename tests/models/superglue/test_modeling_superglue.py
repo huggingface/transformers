@@ -126,9 +126,10 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     has_attentions = True
 
-    def setUp(self):
-        self.model_tester = SuperGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SuperGlueModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()

@@ -158,9 +158,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = Qwen2AudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2AudioConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Qwen2AudioModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Qwen2AudioConfig, has_text_modality=False)
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_compile_dynamic(self):

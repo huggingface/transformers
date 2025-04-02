@@ -167,9 +167,10 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
 
-    def setUp(self):
-        self.model_tester = ClvpEncoderTester(self)
-        self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig, hidden_size=32)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ClvpEncoderTester(cls)
+        cls.encoder_config_tester = ConfigTester(cls, config_class=ClvpEncoderConfig, hidden_size=32)
 
     def tearDown(self):
         super().tearDown()

@@ -174,10 +174,11 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_torchscript = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = Swin2SRModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Swin2SRModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=Swin2SRConfig,
             embed_dim=37,
             has_text_modality=False,

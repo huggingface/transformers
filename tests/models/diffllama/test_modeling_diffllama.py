@@ -319,9 +319,10 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DiffLlamaForCausalLM if is_torch_available() else None
 
-    def setUp(self):
-        self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DiffLlamaModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=DiffLlamaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

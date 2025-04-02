@@ -149,10 +149,11 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = SwiftFormerModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SwiftFormerModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=SwiftFormerConfig,
             has_text_modality=False,
             hidden_size=37,

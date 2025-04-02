@@ -109,8 +109,9 @@ class WhisperFeatureExtractionTester:
 class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = WhisperFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = WhisperFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = WhisperFeatureExtractionTester(cls)
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)

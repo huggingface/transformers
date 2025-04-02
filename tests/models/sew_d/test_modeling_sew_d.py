@@ -335,9 +335,10 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    def setUp(self):
-        self.model_tester = SEWDModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SEWDConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SEWDModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SEWDConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

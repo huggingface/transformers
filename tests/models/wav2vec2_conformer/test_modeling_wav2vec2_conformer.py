@@ -441,9 +441,10 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_headmasking = False
     test_torchscript = False
 
-    def setUp(self):
-        self.model_tester = Wav2Vec2ConformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2ConformerConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Wav2Vec2ConformerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Wav2Vec2ConformerConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

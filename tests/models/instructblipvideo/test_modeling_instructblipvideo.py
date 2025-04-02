@@ -157,11 +157,12 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = InstructBlipVideoVisionModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = InstructBlipVideoVisionModelTester(cls)
         common_properties = ["num_query_tokens", "video_token_index"]
-        self.config_tester = ConfigTester(
-            self, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
+        cls.config_tester = ConfigTester(
+            cls, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):

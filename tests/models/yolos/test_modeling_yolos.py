@@ -200,9 +200,10 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = YolosModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=YolosConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = YolosModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=YolosConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

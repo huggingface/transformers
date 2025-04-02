@@ -220,9 +220,10 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_torch_exportable = True
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = TextNetModelTester(self)
-        self.config_tester = TextNetConfigTester(self, config_class=TextNetConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = TextNetModelTester(cls)
+        cls.config_tester = TextNetConfigTester(cls, config_class=TextNetConfig, has_text_modality=False)
 
     @unittest.skip(reason="TextNet does not output attentions")
     def test_attention_outputs(self):

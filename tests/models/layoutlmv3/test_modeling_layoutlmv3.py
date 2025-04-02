@@ -307,9 +307,10 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # (see the line `embedding_output = torch.cat([embedding_output, visual_embeddings], dim=1)`)
         return True
 
-    def setUp(self):
-        self.model_tester = LayoutLMv3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = LayoutLMv3ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=LayoutLMv3Config, hidden_size=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

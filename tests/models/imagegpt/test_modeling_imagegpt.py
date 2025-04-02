@@ -261,9 +261,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_beam_search_generate_dict_outputs_use_cache(self):
         super().test_beam_search_generate_dict_outputs_use_cache()
 
-    def setUp(self):
-        self.model_tester = ImageGPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ImageGPTConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ImageGPTModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ImageGPTConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

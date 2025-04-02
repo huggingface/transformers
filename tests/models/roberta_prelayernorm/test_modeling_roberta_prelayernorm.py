@@ -395,9 +395,10 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setUp with Roberta->RobertaPreLayerNorm
-    def setUp(self):
-        self.model_tester = RobertaPreLayerNormModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RobertaPreLayerNormModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=RobertaPreLayerNormConfig, hidden_size=37)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_config
     def test_config(self):

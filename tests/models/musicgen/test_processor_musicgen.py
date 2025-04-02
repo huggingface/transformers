@@ -50,9 +50,10 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_torch
 @require_sentencepiece
 class MusicgenProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.checkpoint = "facebook/musicgen-small"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "facebook/musicgen-small"
+        cls.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return T5Tokenizer.from_pretrained(self.checkpoint, **kwargs)

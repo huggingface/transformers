@@ -135,10 +135,11 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = RegNetModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RegNetModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=RegNetConfig,
             has_text_modality=False,
             common_properties=["num_channels", "hidden_sizes"],

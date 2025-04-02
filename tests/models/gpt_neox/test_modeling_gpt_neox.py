@@ -291,9 +291,10 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_model_parallel = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = GPTNeoXModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GPTNeoXModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8)
 
     def test_config(self):
         self.config_tester.run_common_tests()

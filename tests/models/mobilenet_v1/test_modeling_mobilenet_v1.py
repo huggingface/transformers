@@ -156,9 +156,10 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = MobileNetV1ModelTester(self)
-        self.config_tester = MobileNetV1ConfigTester(self, config_class=MobileNetV1Config, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MobileNetV1ModelTester(cls)
+        cls.config_tester = MobileNetV1ConfigTester(cls, config_class=MobileNetV1Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

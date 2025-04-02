@@ -109,12 +109,13 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
     test_model_parallel = False
 
-    def setUp(self):
-        self.config_class = TimmWrapperConfig
-        self.model_tester = TimmWrapperModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=self.config_class,
+    @classmethod
+    def setUpClass(cls):
+        cls.config_class = TimmWrapperConfig
+        cls.model_tester = TimmWrapperModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
+            config_class=cls.config_class,
             has_text_modality=False,
             common_properties=[],
             model_name="timm/resnet18.a1_in1k",

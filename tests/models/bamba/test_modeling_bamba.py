@@ -269,9 +269,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def setUp(self):
-        self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BambaModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BambaConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -172,9 +172,10 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
 
-    def setUp(self):
-        self.model_tester = EsmFoldModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = EsmFoldModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=EsmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

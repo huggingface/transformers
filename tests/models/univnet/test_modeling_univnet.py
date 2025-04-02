@@ -117,10 +117,11 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = UnivNetModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=UnivNetConfig, has_text_modality=False, common_properties=["num_mel_bins"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = UnivNetModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=UnivNetConfig, has_text_modality=False, common_properties=["num_mel_bins"]
         )
 
     @unittest.skip(reason="fix this once it gets more usage")

@@ -242,9 +242,10 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     test_pruning = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = BlenderbotModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlenderbotConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BlenderbotModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BlenderbotConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

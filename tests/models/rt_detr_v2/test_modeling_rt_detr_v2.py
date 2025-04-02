@@ -281,10 +281,11 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = RTDetrV2ModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RTDetrV2ModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=RTDetrV2Config,
             has_text_modality=False,
             common_properties=["hidden_size", "num_attention_heads"],

@@ -43,13 +43,14 @@ if is_vision_available():
 class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FlavaProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]  # fmt: skip
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
 
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -76,8 +77,8 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "codebook_image_std": FLAVA_CODEBOOK_STD,
         }
 
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
     def get_tokenizer(self, **kwargs):

@@ -31,15 +31,16 @@ if is_vision_available():
 class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = BlipProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = BlipImageProcessor()
         tokenizer = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
 
         processor = BlipProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

@@ -540,9 +540,10 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
     test_resize_embeddings = True
 
-    def setUp(self):
-        self.model_tester = BarkSemanticModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BarkSemanticModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

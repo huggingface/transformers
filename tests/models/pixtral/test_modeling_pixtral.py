@@ -141,9 +141,10 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
 
-    def setUp(self):
-        self.model_tester = PixtralVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PixtralVisionConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PixtralVisionModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PixtralVisionConfig, has_text_modality=False)
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

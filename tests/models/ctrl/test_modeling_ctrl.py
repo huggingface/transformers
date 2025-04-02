@@ -226,9 +226,10 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         return False
 
-    def setUp(self):
-        self.model_tester = CTRLModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CTRLConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CTRLModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=CTRLConfig, n_embd=37)
 
     def tearDown(self):
         super().tearDown()

@@ -26,9 +26,10 @@ from .test_feature_extraction_clvp import floats_list
 
 @require_torch
 class ClvpProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.checkpoint = "susnato/clvp_dev"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "susnato/clvp_dev"
+        cls.tmpdirname = tempfile.mkdtemp()
 
     def tearDown(self):
         super().tearDown()

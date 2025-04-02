@@ -296,9 +296,10 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def setUp(self):
-        self.model_tester = GraniteMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteMoeConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GraniteMoeModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=GraniteMoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

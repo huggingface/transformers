@@ -246,9 +246,10 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     ):
         return pipeline_test_case_name == "TextGenerationPipelineTests"
 
-    def setUp(self):
-        self.model_tester = BlenderbotSmallModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BlenderbotSmallModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BlenderbotSmallConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

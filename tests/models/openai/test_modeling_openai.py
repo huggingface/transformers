@@ -248,9 +248,10 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = OpenAIGPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OpenAIGPTConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = OpenAIGPTModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=OpenAIGPTConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

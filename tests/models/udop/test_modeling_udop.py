@@ -291,9 +291,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     # The small UDOP model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
-    def setUp(self):
-        self.model_tester = UdopModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = UdopModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=UdopConfig, d_model=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

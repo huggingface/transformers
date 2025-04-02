@@ -608,9 +608,10 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     test_torchscript = False
     test_sequence_classification_problem_types = True
 
-    def setUp(self):
-        self.model_tester = ReformerModelTester(self, text_seq_length=16)
-        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ReformerModelTester(cls, text_seq_length=16)
+        cls.config_tester = ConfigTester(cls, config_class=ReformerConfig, hidden_size=37)
 
     @slow
     def test_model_from_pretrained(self):

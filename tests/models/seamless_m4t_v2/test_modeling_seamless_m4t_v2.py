@@ -376,9 +376,10 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     # Doesn't run generation tests. Has custom generation method with a different interface
     all_generative_model_classes = ()
 
-    def setUp(self):
-        self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
-        self.config_tester = ConfigTester(self, config_class=SeamlessM4Tv2Config)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SeamlessM4Tv2ModelTester(cls, input_modality="speech")
+        cls.config_tester = ConfigTester(cls, config_class=SeamlessM4Tv2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

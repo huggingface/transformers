@@ -219,9 +219,10 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = True
 
-    def setUp(self):
-        self.model_tester = MPNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MPNetConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MPNetModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MPNetConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

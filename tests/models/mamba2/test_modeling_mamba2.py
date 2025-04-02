@@ -226,10 +226,11 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
     )
 
-    def setUp(self):
-        self.model_tester = Mamba2ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Mamba2ModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def test_mamba2_caching(self):

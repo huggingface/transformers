@@ -181,9 +181,10 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return False
 
-    def setUp(self):
-        self.model_tester = ASTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ASTConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ASTModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ASTConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

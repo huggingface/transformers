@@ -344,9 +344,10 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     ):
         return True
 
-    def setUp(self):
-        self.model_tester = Qwen3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen3Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Qwen3ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Qwen3Config, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

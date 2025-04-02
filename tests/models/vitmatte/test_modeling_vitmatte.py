@@ -145,10 +145,11 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = VitMatteModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = VitMatteModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=VitMatteConfig,
             has_text_modality=False,
             hidden_size=37,

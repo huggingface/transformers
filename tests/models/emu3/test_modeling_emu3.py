@@ -135,9 +135,10 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     test_pruning = False
     fx_compatible = False
 
-    def setUp(self):
-        self.model_tester = Emu3Text2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Emu3Text2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Emu3TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

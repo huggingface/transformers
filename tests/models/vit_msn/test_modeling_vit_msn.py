@@ -167,9 +167,10 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = ViTMSNModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ViTMSNModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

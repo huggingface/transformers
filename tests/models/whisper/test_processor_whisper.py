@@ -36,9 +36,10 @@ NOTIMESTAMPS = 50362
 @require_torchaudio
 @require_sentencepiece
 class WhisperProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.checkpoint = "openai/whisper-small.en"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "openai/whisper-small.en"
+        cls.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return WhisperTokenizer.from_pretrained(self.checkpoint, **kwargs)

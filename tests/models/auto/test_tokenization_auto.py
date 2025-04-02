@@ -66,7 +66,8 @@ if is_tokenizers_available():
 
 
 class AutoTokenizerTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     @slow

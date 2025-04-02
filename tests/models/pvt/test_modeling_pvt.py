@@ -168,9 +168,10 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = PvtModelTester(self)
-        self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PvtModelTester(cls)
+        cls.config_tester = PvtConfigTester(cls, config_class=PvtConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

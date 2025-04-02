@@ -252,9 +252,10 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_pruning = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = PegasusModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PegasusConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PegasusModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PegasusConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

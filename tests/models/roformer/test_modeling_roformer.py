@@ -408,9 +408,10 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    def setUp(self):
-        self.model_tester = RoFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RoFormerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=RoFormerConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

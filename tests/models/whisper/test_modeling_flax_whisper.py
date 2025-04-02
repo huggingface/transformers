@@ -736,15 +736,16 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     input_name = "input_features"
 
-    def setUp(self):
-        self.model_tester = FlaxWhisperEncoderModelTester(self)
-        _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FlaxWhisperEncoderModelTester(cls)
+        _, inputs_dict = cls.model_tester.prepare_config_and_inputs_for_common()
+        cls.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
-        self.all_model_classes = (
-            make_partial_class(model_class, input_shape=self.init_shape) for model_class in self.all_model_classes
+        cls.all_model_classes = (
+            make_partial_class(model_class, input_shape=cls.init_shape) for model_class in cls.all_model_classes
         )
-        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+        cls.config_tester = ConfigTester(cls, config_class=WhisperConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

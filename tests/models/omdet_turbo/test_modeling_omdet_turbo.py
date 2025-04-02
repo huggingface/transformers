@@ -208,10 +208,11 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = OmDetTurboModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = OmDetTurboModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=OmDetTurboConfig,
             has_text_modality=False,
             common_properties=["d_model", "encoder_attention_heads", "decoder_num_heads"],

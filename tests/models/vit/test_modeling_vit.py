@@ -209,9 +209,10 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ViTModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
 
     @unittest.skip(
         "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."

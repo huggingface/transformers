@@ -239,10 +239,11 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = Dinov2WithRegistersModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=37
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Dinov2WithRegistersModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_initialization(self):

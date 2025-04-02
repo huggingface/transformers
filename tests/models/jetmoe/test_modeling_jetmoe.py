@@ -297,10 +297,11 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
 
-    def setUp(self):
-        self.model_tester = JetMoeModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=JetMoeConfig, common_properties=["hidden_size", "num_hidden_layers"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = JetMoeModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=JetMoeConfig, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config

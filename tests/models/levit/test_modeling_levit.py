@@ -188,10 +188,11 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = LevitModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=LevitConfig, has_text_modality=False, common_properties=["image_size", "num_channels"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = LevitModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=LevitConfig, has_text_modality=False, common_properties=["image_size", "num_channels"]
         )
 
     def test_config(self):

@@ -155,10 +155,11 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = InstructBlipVisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = InstructBlipVisionModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=InstructBlipConfig,
             has_text_modality=False,
             common_properties=["num_query_tokens", "image_token_index"],

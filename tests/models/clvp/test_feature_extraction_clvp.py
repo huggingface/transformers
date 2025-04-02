@@ -115,8 +115,9 @@ class ClvpFeatureExtractionTester:
 class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ClvpFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = ClvpFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = ClvpFeatureExtractionTester(cls)
 
     def tearDown(self):
         super().tearDown()

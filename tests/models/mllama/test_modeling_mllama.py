@@ -127,9 +127,10 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     test_pruning = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = MllamaText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MllamaText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MllamaTextConfig, has_text_modality=True)
 
 
 class MllamaVisionText2TextModelTester:

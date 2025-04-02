@@ -47,11 +47,12 @@ if is_torch_available():
 
 @require_pyctcdecode
 class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         vocab = "| <pad> <unk> <s> </s> a b c d e f g h i j k".split()
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.add_kwargs_tokens_map = {
+        cls.add_kwargs_tokens_map = {
             "unk_token": "<unk>",
             "bos_token": "<s>",
             "eos_token": "</s>",
@@ -64,17 +65,17 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             "do_normalize": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
         # load decoder from hub
-        self.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
+        cls.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()

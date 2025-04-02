@@ -162,10 +162,11 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs_dict.pop("output_hidden_states")
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = EncodecModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = EncodecModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):

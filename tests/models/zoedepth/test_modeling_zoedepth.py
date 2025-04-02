@@ -149,10 +149,11 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = ZoeDepthModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ZoeDepthModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
         )
 
     def test_config(self):

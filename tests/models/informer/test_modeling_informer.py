@@ -199,13 +199,14 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_torchscript = False
     test_inputs_embeds = False
 
-    def setUp(self):
-        self.model_tester = InformerModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = InformerModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=InformerConfig,
             has_text_modality=False,
-            prediction_length=self.model_tester.prediction_length,
+            prediction_length=cls.model_tester.prediction_length,
         )
 
     def test_config(self):

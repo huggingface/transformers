@@ -150,10 +150,11 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = Pix2StructVisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Pix2StructVisionModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):

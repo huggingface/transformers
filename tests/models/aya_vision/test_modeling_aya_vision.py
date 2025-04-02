@@ -199,9 +199,10 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = AyaVisionVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AyaVisionConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = AyaVisionVisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=AyaVisionConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -183,10 +183,11 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = MaskFormerSwinModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MaskFormerSwinModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=MaskFormerSwinConfig,
             has_text_modality=False,
             embed_dim=37,

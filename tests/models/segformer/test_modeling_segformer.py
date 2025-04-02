@@ -182,9 +182,10 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_resize_embeddings = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = SegformerModelTester(self)
-        self.config_tester = SegformerConfigTester(self, config_class=SegformerConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SegformerModelTester(cls)
+        cls.config_tester = SegformerConfigTester(cls, config_class=SegformerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

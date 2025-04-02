@@ -139,10 +139,11 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = AlignVisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = AlignVisionModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=AlignVisionConfig,
             has_text_modality=False,
             hidden_size=37,

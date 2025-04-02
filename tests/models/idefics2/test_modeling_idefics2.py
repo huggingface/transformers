@@ -182,10 +182,11 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = Idefics2VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Idefics2Config, has_text_modality=False, common_properties=["image_token_id"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Idefics2VisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Idefics2Config, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):

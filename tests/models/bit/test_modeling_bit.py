@@ -172,10 +172,11 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = BitModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=BitConfig, has_text_modality=False, common_properties=["num_channels"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BitModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=BitConfig, has_text_modality=False, common_properties=["num_channels"]
         )
 
     def test_config(self):

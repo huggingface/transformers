@@ -207,9 +207,10 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_missing_keys = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = Mask2FormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Mask2FormerConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Mask2FormerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Mask2FormerConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

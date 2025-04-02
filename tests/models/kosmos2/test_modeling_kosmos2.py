@@ -305,10 +305,11 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = Kosmos2ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Kosmos2ModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
         )
 
     def test_config(self):

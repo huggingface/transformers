@@ -148,9 +148,10 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_resize_embeddings = False
 
-    def setUp(self):
-        self.model_tester = CpmAntModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CpmAntConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CpmAntModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=CpmAntConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

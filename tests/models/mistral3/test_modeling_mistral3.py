@@ -203,9 +203,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_headmasking = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = Mistral3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Mistral3Config, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Mistral3VisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Mistral3Config, has_text_modality=False)
 
     def test_config(self):
         # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077

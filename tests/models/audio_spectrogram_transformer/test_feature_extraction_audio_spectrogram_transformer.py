@@ -107,8 +107,9 @@ class ASTFeatureExtractionTester:
 class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ASTFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = ASTFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = ASTFeatureExtractionTester(cls)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

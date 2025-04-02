@@ -222,9 +222,10 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = ConditionalDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConditionalDetrConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ConditionalDetrModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ConditionalDetrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

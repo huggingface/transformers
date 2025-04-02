@@ -23,20 +23,21 @@ if is_vision_available():
 @require_vision
 @require_torchvision
 class TestFuyuImageProcessor(unittest.TestCase):
-    def setUp(self):
-        self.size = {"height": 160, "width": 320}
-        self.processor = FuyuImageProcessor(size=self.size, padding_value=1.0)
-        self.batch_size = 3
-        self.channels = 3
-        self.height = 300
-        self.width = 300
+    @classmethod
+    def setUpClass(cls):
+        cls.size = {"height": 160, "width": 320}
+        cls.processor = FuyuImageProcessor(size=cls.size, padding_value=1.0)
+        cls.batch_size = 3
+        cls.channels = 3
+        cls.height = 300
+        cls.width = 300
 
-        self.image_input = torch.rand(self.batch_size, self.channels, self.height, self.width)
+        cls.image_input = torch.rand(cls.batch_size, cls.channels, cls.height, cls.width)
 
-        self.image_patch_dim_h = 30
-        self.image_patch_dim_w = 30
-        self.sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
-        self.sample_image_pil = Image.fromarray(self.sample_image)
+        cls.image_patch_dim_h = 30
+        cls.image_patch_dim_w = 30
+        cls.sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
+        cls.sample_image_pil = Image.fromarray(cls.sample_image)
 
     def test_patches(self):
         expected_num_patches = self.processor.get_num_patches(image_height=self.height, image_width=self.width)

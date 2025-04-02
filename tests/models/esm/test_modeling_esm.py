@@ -209,9 +209,10 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_sequence_classification_problem_types = True
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def setUp(self):
-        self.model_tester = EsmModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = EsmModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=EsmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

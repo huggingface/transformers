@@ -36,8 +36,9 @@ if is_vision_available():
 class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AlignProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = [
             "[UNK]",
@@ -56,8 +57,8 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "low",
             "lowest",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -67,8 +68,8 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
     def get_tokenizer(self, **kwargs):

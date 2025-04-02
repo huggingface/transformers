@@ -91,7 +91,8 @@ if is_torch_available():
 
 @require_torch
 class AutoModelTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     @slow

@@ -345,9 +345,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems not to be supported
 
-    def setUp(self):
-        self.model_tester = BloomModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BloomConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BloomModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BloomConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

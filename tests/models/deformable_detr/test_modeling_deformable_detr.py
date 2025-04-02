@@ -228,10 +228,11 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = DeformableDetrModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DeformableDetrModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=DeformableDetrConfig,
             has_text_modality=False,
             common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],

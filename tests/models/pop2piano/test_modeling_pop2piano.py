@@ -517,9 +517,10 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_model_parallel = False
     is_encoder_decoder = True
 
-    def setUp(self):
-        self.model_tester = Pop2PianoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig, d_model=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Pop2PianoModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Pop2PianoConfig, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

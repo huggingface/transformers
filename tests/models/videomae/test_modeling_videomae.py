@@ -198,9 +198,10 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = VideoMAEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = VideoMAEModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

@@ -360,9 +360,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     # Doesn't run generation tests. Custom generation method with a different interface
     all_generative_model_classes = ()
 
-    def setUp(self):
-        self.model_tester = SeamlessM4TModelTester(self, input_modality="speech")
-        self.config_tester = ConfigTester(self, config_class=SeamlessM4TConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SeamlessM4TModelTester(cls, input_modality="speech")
+        cls.config_tester = ConfigTester(cls, config_class=SeamlessM4TConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

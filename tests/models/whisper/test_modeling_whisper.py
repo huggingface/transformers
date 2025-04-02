@@ -429,10 +429,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
         return beam_kwargs
 
-    def setUp(self):
-        self.model_tester = WhisperModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-        self.maxDiff = 3000
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = WhisperModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=WhisperConfig)
+        cls.maxDiff = 3000
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)

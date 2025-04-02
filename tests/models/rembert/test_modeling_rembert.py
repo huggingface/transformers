@@ -389,9 +389,10 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    def setUp(self):
-        self.model_tester = RemBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RemBertConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RemBertModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=RemBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -519,9 +519,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_model_parallel = False
     is_encoder_decoder = True
 
-    def setUp(self):
-        self.model_tester = LongT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = LongT5ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=LongT5Config, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

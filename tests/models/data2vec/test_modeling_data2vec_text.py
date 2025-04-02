@@ -388,9 +388,10 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     )
     model_split_percents = [0.5, 0.9]
 
-    def setUp(self):
-        self.model_tester = Data2VecTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Data2VecTextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Data2VecTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -60,7 +60,8 @@ SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 class AutoFeatureExtractorTest(unittest.TestCase):
     vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     def test_processor_from_model_shortcut(self):

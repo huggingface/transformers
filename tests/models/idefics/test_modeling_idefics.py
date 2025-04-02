@@ -366,9 +366,10 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         finally:
             self.all_model_classes = orig
 
-    def setUp(self):
-        self.model_tester = IdeficsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = IdeficsModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=IdeficsConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

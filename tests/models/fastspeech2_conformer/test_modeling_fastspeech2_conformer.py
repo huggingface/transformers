@@ -127,9 +127,10 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = True
 
-    def setUp(self):
-        self.model_tester = FastSpeech2ConformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FastSpeech2ConformerConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FastSpeech2ConformerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=FastSpeech2ConformerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -360,9 +360,10 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         return True
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phimoe
-    def setUp(self):
-        self.model_tester = PhimoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PhimoeConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PhimoeModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PhimoeConfig, hidden_size=37)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):

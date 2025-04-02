@@ -43,7 +43,8 @@ SAMPLE_CONFIG = get_tests_dir("fixtures/dummy-config.json")
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     def test_feature_extractor_from_model_shortcut(self):

@@ -202,9 +202,10 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = MobileViTV2ModelTester(self)
-        self.config_tester = MobileViTV2ConfigTester(self, config_class=MobileViTV2Config, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MobileViTV2ModelTester(cls)
+        cls.config_tester = MobileViTV2ConfigTester(cls, config_class=MobileViTV2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

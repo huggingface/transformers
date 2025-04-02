@@ -104,12 +104,13 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     test_pruning = False
     has_attentions = False
 
-    def setUp(self):
-        # self.config_class = PretrainedConfig
-        self.config_class = TimmBackboneConfig
-        self.model_tester = TimmBackboneModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
+    @classmethod
+    def setUpClass(cls):
+        # cls.config_class = PretrainedConfig
+        cls.config_class = TimmBackboneConfig
+        cls.model_tester = TimmBackboneModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=cls.config_class, has_text_modality=False, common_properties=["num_channels"]
         )
 
     def test_config(self):

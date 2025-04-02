@@ -99,8 +99,9 @@ class Wav2Vec2FeatureExtractionTester:
 class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = Wav2Vec2FeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = Wav2Vec2FeatureExtractionTester(cls)
 
     def _check_zero_mean_unit_variance(self, input_vector):
         self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))

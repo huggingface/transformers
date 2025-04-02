@@ -246,9 +246,10 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_pruning = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = MarianModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MarianConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MarianModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MarianConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

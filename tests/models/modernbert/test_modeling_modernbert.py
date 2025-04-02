@@ -266,9 +266,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 )
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = ModernBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ModernBertModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ModernBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

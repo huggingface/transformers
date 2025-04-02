@@ -173,10 +173,11 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = SmolVLMVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=SmolVLMConfig, has_text_modality=False, common_properties=["image_token_id"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SmolVLMVisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=SmolVLMConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):

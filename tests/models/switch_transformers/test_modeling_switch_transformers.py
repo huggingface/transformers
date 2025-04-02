@@ -578,9 +578,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
     test_all_params_have_gradient = False
 
-    def setUp(self):
-        self.model_tester = SwitchTransformersModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SwitchTransformersModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SwitchTransformersConfig, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -331,9 +331,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def extract_output(self, outputs, model_class):
         return outputs["pooler_output"] if model_class == "BridgeTowerModel" else outputs["logits"]
 
-    def setUp(self):
-        self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BridgeTowerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
 
     def test_config(self):
         self.config_tester.run_common_tests()

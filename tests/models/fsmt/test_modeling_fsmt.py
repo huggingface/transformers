@@ -177,17 +177,18 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = FSMTModelTester(self)
-        self.langs = ["en", "ru"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FSMTModelTester(cls)
+        cls.langs = ["en", "ru"]
         config = {
-            "langs": self.langs,
+            "langs": cls.langs,
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
         # XXX: hack to appease to all other models requiring `vocab_size`
         config["vocab_size"] = 99  # no such thing in FSMT
-        self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
+        cls.config_tester = ConfigTester(cls, config_class=FSMTConfig, **config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

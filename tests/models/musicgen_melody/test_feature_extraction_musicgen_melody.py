@@ -123,8 +123,9 @@ class MusicgenMelodyFeatureExtractionTester:
 class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = MusicgenMelodyFeatureExtractor if is_torchaudio_available() else None
 
-    def setUp(self):
-        self.feat_extract_tester = MusicgenMelodyFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = MusicgenMelodyFeatureExtractionTester(cls)
 
     # Copied from tests.models.seamless_m4t.test_feature_extraction_seamless_m4t.SeamlessM4TFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):

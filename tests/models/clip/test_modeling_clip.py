@@ -386,9 +386,10 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = CLIPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CLIPVisionModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

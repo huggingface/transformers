@@ -44,29 +44,30 @@ class MarkupLMProcessorTest(unittest.TestCase):
     tokenizer_class = MarkupLMTokenizer
     rust_tokenizer_class = MarkupLMTokenizerFast
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "\u0120", "\u0120l", "\u0120n", "\u0120lo", "\u0120low", "er", "\u0120lowest", "\u0120newer", "\u0120wider", "\u0120hello", "\u0120world", "<unk>",]  # fmt: skip
-        self.tmpdirname = tempfile.mkdtemp()
+        cls.tmpdirname = tempfile.mkdtemp()
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.tags_dict = {"a": 0, "abbr": 1, "acronym": 2, "address": 3}
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.tags_dict = {"a": 0, "abbr": 1, "acronym": 2, "address": 3}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        self.tokenizer_config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        cls.tokenizer_config_file = os.path.join(cls.tmpdirname, "tokenizer_config.json")
 
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
-        with open(self.tokenizer_config_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps({"tags_dict": self.tags_dict}))
+        with open(cls.tokenizer_config_file, "w", encoding="utf-8") as fp:
+            fp.write(json.dumps({"tags_dict": cls.tags_dict}))
 
         feature_extractor_map = {"feature_extractor_type": "MarkupLMFeatureExtractor"}
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:

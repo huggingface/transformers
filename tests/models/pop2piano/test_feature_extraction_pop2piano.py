@@ -91,8 +91,9 @@ class Pop2PianoFeatureExtractionTester:
 class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Pop2PianoFeatureExtractor if requirements_available else None
 
-    def setUp(self):
-        self.feat_extract_tester = Pop2PianoFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = Pop2PianoFeatureExtractionTester(cls)
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)

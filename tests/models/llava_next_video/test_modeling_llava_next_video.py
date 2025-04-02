@@ -235,11 +235,12 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = LlavaNextVideoVisionText2TextModelTester(cls)
         common_properties = ["image_token_index", "video_token_index", "vision_feature_layer", "image_seq_length"]
-        self.config_tester = ConfigTester(
-            self, config_class=LlavaNextVideoConfig, has_text_modality=False, common_properties=common_properties
+        cls.config_tester = ConfigTester(
+            cls, config_class=LlavaNextVideoConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):

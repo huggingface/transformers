@@ -41,7 +41,8 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutLMv2TokenizerFast
     processor_class = LayoutLMv2Processor
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         vocab_tokens = [
             "[UNK]",
             "[CLS]",
@@ -66,12 +67,12 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "apply_ocr": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.image_processing_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processing_file, "w", encoding="utf-8") as fp:
+        cls.image_processing_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.image_processing_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:

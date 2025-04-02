@@ -316,11 +316,12 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     test_pruning = False
     test_headmasking = False
 
-    def setUp(self):
-        self.model_tester = UniSpeechModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = UniSpeechModelTester(
+            cls, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechConfig, hidden_size=37)
+        cls.config_tester = ConfigTester(cls, config_class=UniSpeechConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

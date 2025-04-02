@@ -347,9 +347,10 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV3ForCausalLM if is_torch_available() else None
 
-    def setUp(self):
-        self.model_tester = DeepseekV3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DeepseekV3ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=DeepseekV3Config, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):

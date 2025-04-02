@@ -313,13 +313,14 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     maxDiff = None
 
-    def setUp(self):
-        self.model_tester = PerceiverModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PerceiverModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=PerceiverConfig,
             hidden_size=37,
-            common_properties=["d_model", "num_self_attention_heads", "num_cross_attention_heads"],
+            common_properties=["d_model", "num_cls_attention_heads", "num_cross_attention_heads"],
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

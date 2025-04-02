@@ -162,10 +162,11 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = Blip2VisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=37
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Blip2VisionModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):

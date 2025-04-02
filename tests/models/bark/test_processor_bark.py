@@ -25,13 +25,14 @@ from transformers.testing_utils import require_torch, slow
 
 @require_torch
 class BarkProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.checkpoint = "suno/bark-small"
-        self.tmpdirname = tempfile.mkdtemp()
-        self.voice_preset = "en_speaker_1"
-        self.input_string = "This is a test string"
-        self.speaker_embeddings_dict_path = "speaker_embeddings_path.json"
-        self.speaker_embeddings_directory = "speaker_embeddings"
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "suno/bark-small"
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.voice_preset = "en_speaker_1"
+        cls.input_string = "This is a test string"
+        cls.speaker_embeddings_dict_path = "speaker_embeddings_path.json"
+        cls.speaker_embeddings_directory = "speaker_embeddings"
 
     def get_tokenizer(self, **kwargs):
         return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)

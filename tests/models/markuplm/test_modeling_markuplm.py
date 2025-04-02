@@ -314,9 +314,10 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # (batch of pretokenized examples).
         return True
 
-    def setUp(self):
-        self.model_tester = MarkupLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MarkupLMConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MarkupLMModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MarkupLMConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

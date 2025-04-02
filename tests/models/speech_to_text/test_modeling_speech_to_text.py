@@ -281,10 +281,11 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     test_pruning = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = Speech2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
-        self.maxDiff = 3000
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Speech2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Speech2TextConfig)
+        cls.maxDiff = 3000
 
     def test_config(self):
         self.config_tester.run_common_tests()

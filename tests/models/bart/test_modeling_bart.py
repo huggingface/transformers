@@ -438,9 +438,10 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = False  # Fix me Michael
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = BartModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BartConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BartModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

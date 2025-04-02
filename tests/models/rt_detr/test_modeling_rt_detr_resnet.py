@@ -126,5 +126,6 @@ class RTDetrResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     has_attentions = False
     config_class = RTDetrResNetConfig
 
-    def setUp(self):
-        self.model_tester = RTDetrResNetModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RTDetrResNetModelTester(cls)

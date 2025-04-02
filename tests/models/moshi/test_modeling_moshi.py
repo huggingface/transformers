@@ -169,13 +169,14 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
 
-    def setUp(self):
-        self.model_tester = MoshiDecoderTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MoshiDecoderTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=MoshiConfig,
             hidden_size=16,
-            audio_encoder_config={"model_type": self.model_tester.audio_encoder_type},
+            audio_encoder_config={"model_type": cls.model_tester.audio_encoder_type},
         )
 
     @unittest.skip(reason="The MoshiModel does not have support dynamic compile yet")

@@ -151,10 +151,11 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = DonutSwinModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DonutSwinModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=DonutSwinConfig,
             has_text_modality=False,
             embed_dim=37,

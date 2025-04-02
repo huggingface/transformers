@@ -238,10 +238,11 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = CanineModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CanineModelTester(cls)
         # we set has_text_modality to False as the config has no vocab_size attribute
-        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
+        cls.config_tester = ConfigTester(cls, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

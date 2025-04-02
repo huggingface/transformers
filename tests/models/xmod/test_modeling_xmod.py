@@ -399,9 +399,10 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         return False
 
-    def setUp(self):
-        self.model_tester = XmodModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XmodConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = XmodModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=XmodConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -290,9 +290,10 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_missing_keys = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = XGLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XGLMConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = XGLMModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=XGLMConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

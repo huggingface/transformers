@@ -25,9 +25,10 @@ from .test_feature_extraction_clap import floats_list
 @require_torchaudio
 @require_sentencepiece
 class ClapProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.checkpoint = "laion/clap-htsat-unfused"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "laion/clap-htsat-unfused"
+        cls.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return RobertaTokenizer.from_pretrained(self.checkpoint, **kwargs)

@@ -240,10 +240,11 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_head_masking = False  # Rwkv does not support head masking
 
-    def setUp(self):
-        self.model_tester = RwkvModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RwkvModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def assertInterval(self, member, container, msg=None):

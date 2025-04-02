@@ -258,9 +258,10 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_head_masking = False
     is_encoder_decoder = False
 
-    def setUp(self):
-        self.model_tester = DebertaV2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DebertaV2Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DebertaV2ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=DebertaV2Config, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -182,9 +182,10 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_headmasking = False
 
-    def setUp(self):
-        self.model_tester = MoonshineModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MoonshineConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MoonshineModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MoonshineConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

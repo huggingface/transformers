@@ -180,10 +180,11 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = ResNetModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ResNetModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=ResNetConfig,
             has_text_modality=False,
             common_properties=["num_channels", "hidden_sizes"],

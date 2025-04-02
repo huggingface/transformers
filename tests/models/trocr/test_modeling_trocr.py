@@ -165,9 +165,10 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
     fx_compatible = True
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = TrOCRStandaloneDecoderModelTester(self, is_training=False)
-        self.config_tester = ConfigTester(self, config_class=TrOCRConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = TrOCRStandaloneDecoderModelTester(cls, is_training=False)
+        cls.config_tester = ConfigTester(cls, config_class=TrOCRConfig)
 
     @unittest.skip(reason="Not yet implemented")
     def test_inputs_embeds(self):

@@ -71,9 +71,10 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
-    def setUp(self):
-        self.model_tester = HeliumModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HeliumConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = HeliumModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=HeliumConfig, hidden_size=37)
 
 
 @slow

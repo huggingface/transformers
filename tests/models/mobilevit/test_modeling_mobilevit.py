@@ -200,9 +200,10 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = MobileViTModelTester(self)
-        self.config_tester = MobileViTConfigTester(self, config_class=MobileViTConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MobileViTModelTester(cls)
+        cls.config_tester = MobileViTConfigTester(cls, config_class=MobileViTConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

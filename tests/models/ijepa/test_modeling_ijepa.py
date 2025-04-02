@@ -209,10 +209,11 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = IJepaModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = IJepaModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=IJepaConfig,
             has_text_modality=False,
             hidden_size=37,

@@ -233,13 +233,14 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_model_parallel = False
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = PatchTSMixerModelTester()
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PatchTSMixerModelTester()
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=PatchTSMixerConfig,
             has_text_modality=False,
-            prediction_length=self.model_tester.prediction_length,
+            prediction_length=cls.model_tester.prediction_length,
             common_properties=["hidden_size", "expansion_factor", "num_hidden_layers"],
         )
 

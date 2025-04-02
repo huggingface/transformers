@@ -182,10 +182,11 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = ConvNextModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ConvNextModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=ConvNextConfig,
             has_text_modality=False,
             hidden_size=37,

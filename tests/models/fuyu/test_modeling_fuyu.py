@@ -278,8 +278,9 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_disk_offload = False
     test_model_parallel = False
 
-    def setUp(self):
-        self.model_tester = FuyuModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FuyuModelTester(cls)
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

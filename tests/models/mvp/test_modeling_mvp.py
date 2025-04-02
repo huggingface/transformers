@@ -461,9 +461,10 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         return False
 
-    def setUp(self):
-        self.model_tester = MvpModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MvpConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MvpModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MvpConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -154,9 +154,10 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = GLPNModelTester(self)
-        self.config_tester = GLPNConfigTester(self, config_class=GLPNConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GLPNModelTester(cls)
+        cls.config_tester = GLPNConfigTester(cls, config_class=GLPNConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

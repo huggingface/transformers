@@ -218,9 +218,10 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_head_masking = False
     test_missing_keys = False
 
-    def setUp(self):
-        self.model_tester = PegasusXModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PegasusXModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PegasusXConfig)
 
     @unittest.skip(
         "`PegasusXGlobalLocalAttention` returns attentions as dictionary - not compatible with torchscript "

@@ -151,8 +151,9 @@ class UnivNetFeatureExtractionTester:
 class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = UnivNetFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = UnivNetFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = UnivNetFeatureExtractionTester(cls)
 
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):

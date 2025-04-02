@@ -312,9 +312,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
-    def setUp(self):
-        self.model_tester = LlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = LlamaModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=LlamaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

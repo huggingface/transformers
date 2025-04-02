@@ -289,9 +289,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         return False
 
-    def setUp(self):
-        self.model_tester = BigBirdPegasusModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BigBirdPegasusConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = BigBirdPegasusModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=BigBirdPegasusConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

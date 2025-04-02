@@ -316,8 +316,9 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     # The small UMT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def setUp(self):
-        self.model_tester = UMT5ModelTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = UMT5ModelTester(cls)
 
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)

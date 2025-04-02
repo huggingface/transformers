@@ -233,9 +233,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_pruning = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2_5_VLConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Qwen2_5_VLVisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Qwen2_5_VLConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -260,9 +260,10 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         return False
 
-    def setUp(self):
-        self.model_tester = PLBartModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PLBartConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PLBartModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PLBartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

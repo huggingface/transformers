@@ -35,12 +35,13 @@ if is_vision_available():
 class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VisionTextDualEncoderProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]  # fmt: skip
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -50,14 +51,14 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
             "image_mean": [0.5, 0.5, 0.5],
             "image_std": [0.5, 0.5, 0.5],
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)

@@ -173,10 +173,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict.pop("output_hidden_states")
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = MimiModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MimiModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):

@@ -279,10 +279,11 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
 
-    def setUp(self):
-        self.model_tester = FalconMambaModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=FalconMambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FalconMambaModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=FalconMambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def assertInterval(self, member, container, msg=None):

@@ -168,9 +168,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     has_attentions = False
 
-    def setUp(self):
-        self.model_tester = VitsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = VitsModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=VitsConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

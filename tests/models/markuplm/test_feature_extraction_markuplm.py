@@ -76,8 +76,9 @@ def get_html_strings():
 class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
     feature_extraction_class = MarkupLMFeatureExtractor if is_bs4_available() else None
 
-    def setUp(self):
-        self.feature_extract_tester = MarkupLMFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feature_extract_tester = MarkupLMFeatureExtractionTester(cls)
 
     @property
     def feat_extract_dict(self):

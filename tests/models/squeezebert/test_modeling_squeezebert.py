@@ -243,9 +243,10 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = True
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = SqueezeBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SqueezeBertConfig, dim=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SqueezeBertModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SqueezeBertConfig, dim=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

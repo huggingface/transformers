@@ -183,9 +183,10 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = PaliGemma2VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PaliGemma2VisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=PaliGemmaConfig, has_text_modality=False)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):

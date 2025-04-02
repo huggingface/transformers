@@ -290,9 +290,10 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def setUp(self):
-        self.model_tester = CohereModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CohereConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CohereModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=CohereConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

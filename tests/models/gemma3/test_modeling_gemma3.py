@@ -71,9 +71,10 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
-    def setUp(self):
-        self.model_tester = Gemma3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Gemma3ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Gemma3Config, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):

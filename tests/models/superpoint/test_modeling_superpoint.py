@@ -121,10 +121,11 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
 
-    def setUp(self):
-        self.model_tester = SuperPointModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SuperPointModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=SuperPointConfig,
             has_text_modality=False,
             hidden_size=37,

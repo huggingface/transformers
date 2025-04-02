@@ -309,9 +309,10 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    def setUp(self):
-        self.model_tester = YosoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=YosoConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = YosoModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=YosoConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

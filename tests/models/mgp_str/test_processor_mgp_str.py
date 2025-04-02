@@ -48,15 +48,16 @@ class MgpstrProcessorTest(unittest.TestCase):
     def image_processor_dict(self):
         return self.prepare_image_processor_dict()
 
-    def setUp(self):
-        self.image_size = (3, 32, 128)
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.image_size = (3, 32, 128)
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab = ['[GO]', '[s]', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
         image_processor_map = {
@@ -66,8 +67,8 @@ class MgpstrProcessorTest(unittest.TestCase):
             "resample": 3,
             "size": {"height": 32, "width": 128},
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
     # We copy here rather than use the ProcessorTesterMixin as this processor has a `char_tokenizer` instead of a

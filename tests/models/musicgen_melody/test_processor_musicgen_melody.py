@@ -52,10 +52,11 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_torchaudio
 # Copied from tests.models.musicgen.test_processor_musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask, input_values->input_features
 class MusicgenMelodyProcessorTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         # Ignore copy
-        self.checkpoint = "facebook/musicgen-melody"
-        self.tmpdirname = tempfile.mkdtemp()
+        cls.checkpoint = "facebook/musicgen-melody"
+        cls.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return T5Tokenizer.from_pretrained(self.checkpoint, **kwargs)

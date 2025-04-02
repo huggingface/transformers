@@ -171,9 +171,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = VitDetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = VitDetModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
 
     @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
     def test_initialization(self):

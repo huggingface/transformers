@@ -134,9 +134,10 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = PoolFormerModelTester(self)
-        self.config_tester = PoolFormerConfigTester(self, config_class=PoolFormerConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PoolFormerModelTester(cls)
+        cls.config_tester = PoolFormerConfigTester(cls, config_class=PoolFormerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

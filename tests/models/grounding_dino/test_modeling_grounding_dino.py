@@ -284,10 +284,11 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = GroundingDinoModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GroundingDinoModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=GroundingDinoConfig,
             has_text_modality=False,
             common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],

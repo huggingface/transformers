@@ -39,17 +39,18 @@ if is_torch_available:
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaOnevisionImageProcessor()
         video_processor = LlavaOnevisionVideoProcessor()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
 
         processor = LlavaOnevisionProcessor(
             video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

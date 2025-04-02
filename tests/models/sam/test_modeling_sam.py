@@ -165,9 +165,10 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = SamVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SamVisionModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SamVisionConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -299,9 +299,10 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_headmasking = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = GlmModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GlmConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GlmModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=GlmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

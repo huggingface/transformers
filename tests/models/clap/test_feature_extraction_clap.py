@@ -115,8 +115,9 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
     feature_extraction_class = ClapFeatureExtractor
 
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.setUp with Whisper->Clap
-    def setUp(self):
-        self.feat_extract_tester = ClapFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = ClapFeatureExtractionTester(cls)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

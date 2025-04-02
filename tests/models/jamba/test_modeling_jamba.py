@@ -340,9 +340,10 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_headmasking = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = JambaModelTester(self)
-        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = JambaModelTester(cls)
+        cls.config_tester = JambaConfigTester(cls, config_class=JambaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

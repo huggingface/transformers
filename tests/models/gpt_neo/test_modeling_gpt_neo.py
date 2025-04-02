@@ -398,9 +398,10 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = GPTNeoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoConfig, n_embd=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GPTNeoModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=GPTNeoConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

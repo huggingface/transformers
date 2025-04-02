@@ -432,9 +432,10 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(hidden_states.grad)
 
-    def setUp(self):
-        self.model_tester = FNetModelTester(self)
-        self.config_tester = FNetConfigTester(self, config_class=FNetConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = FNetModelTester(cls)
+        cls.config_tester = FNetConfigTester(cls, config_class=FNetConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

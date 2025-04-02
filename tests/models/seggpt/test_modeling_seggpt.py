@@ -178,9 +178,10 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
     )
 
-    def setUp(self):
-        self.model_tester = SegGptModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SegGptConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SegGptModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SegGptConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

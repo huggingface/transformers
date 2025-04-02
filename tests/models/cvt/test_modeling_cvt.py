@@ -161,10 +161,11 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = CvtModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = CvtModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=CvtConfig,
             has_text_modality=False,
             hidden_size=37,

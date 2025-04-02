@@ -41,7 +41,8 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     processor_class = LayoutLMv3Processor
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
             "l",
@@ -65,16 +66,16 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "\u0120wider",
             "<unk>",
         ]
-        self.tmpdirname = tempfile.mkdtemp()
+        cls.tmpdirname = tempfile.mkdtemp()
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
         image_processor_map = {
@@ -83,8 +84,8 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "apply_ocr": True,
         }
 
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:

@@ -40,7 +40,8 @@ from test_module.custom_image_processing import CustomImageProcessor  # noqa E40
 
 
 class AutoImageProcessorTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     def test_image_processor_from_model_shortcut(self):

@@ -282,10 +282,11 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
-    def setUp(self):
-        self.model_tester = Siglip2VisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Siglip2VisionModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):

@@ -315,9 +315,10 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 )
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = MegatronBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MegatronBertModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MegatronBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

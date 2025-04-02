@@ -250,10 +250,11 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
 
-    def setUp(self):
-        self.model_tester = MambaModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MambaModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def assertInterval(self, member, container, msg=None):

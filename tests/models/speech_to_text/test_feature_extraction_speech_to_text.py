@@ -106,8 +106,9 @@ class Speech2TextFeatureExtractionTester:
 class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Speech2TextFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = Speech2TextFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = Speech2TextFeatureExtractionTester(cls)
 
     def _check_zero_mean_unit_variance(self, input_vector):
         self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))

@@ -315,9 +315,10 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = Zamba2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Zamba2ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Zamba2Config, hidden_size=37)
 
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):

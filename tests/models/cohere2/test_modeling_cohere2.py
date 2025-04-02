@@ -65,9 +65,10 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     )
     _is_stateful = True
 
-    def setUp(self):
-        self.model_tester = Cohere2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Cohere2ModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Cohere2Config, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):

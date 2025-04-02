@@ -147,10 +147,11 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = PromptDepthAnythingModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PromptDepthAnythingModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=PromptDepthAnythingConfig,
             has_text_modality=False,
             hidden_size=37,

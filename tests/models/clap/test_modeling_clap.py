@@ -166,9 +166,10 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = ClapAudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ClapAudioModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

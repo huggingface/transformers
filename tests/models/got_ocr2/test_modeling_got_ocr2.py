@@ -180,9 +180,10 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_headmasking = False
     test_pruning = False
 
-    def setUp(self):
-        self.model_tester = GotOcr2VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GotOcr2Config, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = GotOcr2VisionText2TextModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=GotOcr2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

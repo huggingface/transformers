@@ -195,8 +195,9 @@ class OneFormerProcessingTest(unittest.TestCase):
     # only for test_feat_extracttion_common.test_feat_extract_to_json_string
     feature_extraction_class = processing_class
 
-    def setUp(self):
-        self.processing_tester = OneFormerProcessorTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.processing_tester = OneFormerProcessorTester(cls)
 
     @property
     def processor_dict(self):

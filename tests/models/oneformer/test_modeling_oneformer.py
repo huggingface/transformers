@@ -262,9 +262,10 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
         return False
 
-    def setUp(self):
-        self.model_tester = OneFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OneFormerConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = OneFormerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=OneFormerConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

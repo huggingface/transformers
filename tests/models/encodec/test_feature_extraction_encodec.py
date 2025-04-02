@@ -103,8 +103,9 @@ class EnCodecFeatureExtractionTester:
 class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = EncodecFeatureExtractor
 
-    def setUp(self):
-        self.feat_extract_tester = EnCodecFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = EnCodecFeatureExtractionTester(cls)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

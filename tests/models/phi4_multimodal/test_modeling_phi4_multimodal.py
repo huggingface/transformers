@@ -215,9 +215,10 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     test_head_masking = False
     _is_composite = True
 
-    def setUp(self):
-        self.model_tester = Phi4MultimodalModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Phi4MultimodalConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Phi4MultimodalModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Phi4MultimodalConfig)
 
     @unittest.skip(reason="Unstable test")
     def test_initialization(self):

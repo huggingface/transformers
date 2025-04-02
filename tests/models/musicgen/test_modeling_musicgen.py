@@ -184,9 +184,10 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     test_pruning = False
     test_resize_embeddings = False
 
-    def setUp(self):
-        self.model_tester = MusicgenDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MusicgenDecoderConfig, hidden_size=16)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MusicgenDecoderTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MusicgenDecoderConfig, hidden_size=16)
 
     def test_config(self):
         self.config_tester.run_common_tests()

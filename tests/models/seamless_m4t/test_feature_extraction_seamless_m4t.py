@@ -112,8 +112,9 @@ class SeamlessM4TFeatureExtractionTester:
 class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = SeamlessM4TFeatureExtractor if is_speech_available() else None
 
-    def setUp(self):
-        self.feat_extract_tester = SeamlessM4TFeatureExtractionTester(self)
+    @classmethod
+    def setUpClass(cls):
+        cls.feat_extract_tester = SeamlessM4TFeatureExtractionTester(cls)
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)

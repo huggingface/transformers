@@ -172,13 +172,14 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_model_parallel = False
     has_attentions = True
 
-    def setUp(self):
-        self.model_tester = PatchTSTModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = PatchTSTModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=PatchTSTConfig,
             has_text_modality=False,
-            prediction_length=self.model_tester.prediction_length,
+            prediction_length=cls.model_tester.prediction_length,
         )
 
     def test_config(self):

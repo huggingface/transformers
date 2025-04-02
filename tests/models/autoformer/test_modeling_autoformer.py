@@ -212,9 +212,10 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_torchscript = False
     test_inputs_embeds = False
 
-    def setUp(self):
-        self.model_tester = AutoformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AutoformerConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = AutoformerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=AutoformerConfig, has_text_modality=False)
 
     # TODO: (ydshieh) Fix the wrong logic for `tmp_delay` is possible
     @unittest.skip(

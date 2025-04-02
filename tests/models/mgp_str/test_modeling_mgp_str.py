@@ -130,9 +130,10 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_attention_outputs = False
 
-    def setUp(self):
-        self.model_tester = MgpstrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MgpstrConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MgpstrModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MgpstrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

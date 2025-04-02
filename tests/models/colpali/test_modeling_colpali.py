@@ -186,9 +186,10 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = ColPaliForRetrievalModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ColPaliForRetrievalModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ColPaliConfig, has_text_modality=False)
 
         # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
 

@@ -35,9 +35,10 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
 @require_faiss
 @require_torch
 class RagTokenizerTest(TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        self.retrieval_vector_size = 8
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.retrieval_vector_size = 8
 
         # DPR tok
         vocab_tokens = [
@@ -57,10 +58,10 @@ class RagTokenizerTest(TestCase):
             "low",
             "lowest",
         ]
-        dpr_tokenizer_path = os.path.join(self.tmpdirname, "dpr_tokenizer")
+        dpr_tokenizer_path = os.path.join(cls.tmpdirname, "dpr_tokenizer")
         os.makedirs(dpr_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(dpr_tokenizer_path, DPR_VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(dpr_tokenizer_path, DPR_VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         # BART tok
@@ -88,15 +89,15 @@ class RagTokenizerTest(TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        bart_tokenizer_path = os.path.join(self.tmpdirname, "bart_tokenizer")
+        bart_tokenizer_path = os.path.join(cls.tmpdirname, "bart_tokenizer")
         os.makedirs(bart_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
     def get_dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:

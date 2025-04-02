@@ -426,9 +426,10 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = XLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = XLMModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=XLMConfig, emb_dim=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

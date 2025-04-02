@@ -313,9 +313,10 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
 
-    def setUp(self):
-        self.model_tester = SEWModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SEWConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = SEWModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=SEWConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

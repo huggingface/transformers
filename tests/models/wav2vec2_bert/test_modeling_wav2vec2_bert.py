@@ -450,9 +450,10 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_headmasking = False
     test_torchscript = False
 
-    def setUp(self):
-        self.model_tester = Wav2Vec2BertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2BertConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = Wav2Vec2BertModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=Wav2Vec2BertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

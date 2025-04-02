@@ -396,9 +396,10 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     fx_compatible = True
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def setUp(self):
-        self.model_tester = RobertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = RobertaModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=RobertaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -277,9 +277,10 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Saving the slow tokenizer after saving the fast tokenizer causes the loading of the later hanging forever.
         return True
 
-    def setUp(self):
-        self.model_tester = NllbMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NllbMoeConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = NllbMoeModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=NllbMoeConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

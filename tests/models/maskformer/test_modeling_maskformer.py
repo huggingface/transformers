@@ -211,9 +211,10 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     zero_init_hidden_state = True
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = MaskFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MaskFormerConfig, has_text_modality=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = MaskFormerModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=MaskFormerConfig, has_text_modality=False)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

@@ -148,10 +148,11 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_head_masking = False
     test_torch_exportable = True
 
-    def setUp(self):
-        self.model_tester = DepthAnythingModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = DepthAnythingModelTester(cls)
+        cls.config_tester = ConfigTester(
+            cls,
             config_class=DepthAnythingConfig,
             has_text_modality=False,
             hidden_size=37,

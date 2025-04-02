@@ -922,9 +922,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         return False
 
-    def setUp(self):
-        self.model_tester = ProphetNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_tester = ProphetNetModelTester(cls)
+        cls.config_tester = ConfigTester(cls, config_class=ProphetNetConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
