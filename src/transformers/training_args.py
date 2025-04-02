@@ -297,7 +297,7 @@ class TrainingArguments:
             `max_steps` is reached.
         max_eval_batches (`int`, *optional*, defaults to -1)
             The maximum number of evaluation samples batches to be used per epoch during training only.
-            If not set to any number, the whole evaluation dataset will be used during training.
+           The whole evaluation dataset will be used during training by default
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
         lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
