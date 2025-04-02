@@ -1,7 +1,7 @@
 import io
 import tempfile
 import unittest
-from pathlib import Path
+from shutil import rmtree
 
 import requests
 
@@ -36,7 +36,8 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: Path(tempdir).unlink(missing_ok=True))
+        # Ensure tempdir is cleaned up even if there's a failure
+        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: rmtree(tempdir))
 
         image_processor = FuyuImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("adept/fuyu-8b")
