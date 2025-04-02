@@ -757,7 +757,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
-                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, past_key_values.get_max_cache_shape())
+                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
                 attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length= past_key_values.get_max_cache_shape())
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
