@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 # CLIP
 
-[CLIP](https://huggingface.co/papers/2103.00020) is a is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs with an image encoder and text encoder. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
+[CLIP](https://huggingface.co/papers/2103.00020) is a is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs. Pretraining on this scale enables zero-shot transfer to downstream tasks. CLIP uses an image encoder and text encoder to get visual features and text features. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
 
 You can find all the original CLIP checkpoints under the [OpenAI](https://huggingface.co/openai) organization.
 
