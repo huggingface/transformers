@@ -1370,7 +1370,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # reset number of batches seen
         trainer.observed_num_batches = 0
 
-        # when calling evaluate directly, it will set limit_max_eval_sample to False and won't apply the limit
+         # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False 
         trainer.evaluate()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
