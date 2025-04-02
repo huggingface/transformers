@@ -13,15 +13,15 @@
 # limitations under the License.
 
 
-import unittest
 import time
+import unittest
+
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
-from transformers.testing_utils import is_flaky
 
 
 if is_torch_available():
@@ -233,29 +233,12 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
-
-        # Calculate mean difference for each image
-        batch_size = encoding_slow.pixel_values.shape[0]
-        num_frames = encoding_slow.pixel_values.shape[1]
-        
-        # Reshape to (batch_size * num_frames, channels, height, width)
-        slow_reshaped = encoding_slow.pixel_values.view(-1, *encoding_slow.pixel_values.shape[2:])
-        fast_reshaped = encoding_fast.pixel_values.view(-1, *encoding_fast.pixel_values.shape[2:])
-        
-        # Calculate mean difference per image
-        diffs = torch.mean(torch.abs(slow_reshaped - fast_reshaped), dim=(1,2,3))
-        
-        # Reshape back to (batch_size, num_frames)
-        diffs = diffs.view(batch_size, num_frames)
-
-        print(diffs, batch_size, num_frames)
-
 
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
         self.assertLessEqual(
@@ -285,7 +268,7 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             avg_time = sum(sorted(all_times[:3])) / 3.0
             return avg_time
 
-        dummy_images = [torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8) for _ in range(4)]
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
