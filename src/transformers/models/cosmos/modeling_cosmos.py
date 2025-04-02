@@ -34,7 +34,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -54,7 +54,7 @@ _CONFIG_FOR_DOC = "CosmosConfig"
 
 
 @dataclass
-class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
+class CosmosBaseModelOutputWithPast(BaseModelOutputWithPastAndCrossAttentions):
     """
     Base class for Cosmos Model's outputs.
 
@@ -73,12 +73,12 @@ class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
             `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
             input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
@@ -86,51 +86,23 @@ class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
             heads.
         encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
-            Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+            Last hidden states of the prompt encoder, obtianed when `encoder_input_ids is not None`.
         encoder_hidden_states (`torch.FloatTensor`, *optional*):
-            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
+            Hidden states of the prompt encoder, obtianed when `encoder_input_ids is not None`.
+        encoder_attentions (`torch.FloatTensor`, *optional*):
+            Attentions of the prompt encoder, obatained when `encoder_input_ids is not None`.
     """
 
+    decoder_hidden_states: Optional[torch.FloatTensor] = None
+    decoder_attentions: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[torch.FloatTensor] = None
+    encoder_attentions: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class CosmosCausalLMOutputWithPast(CausalLMOutputWithPast):
-    """
-    Base class for Cosmos Conditional model outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, prommp_length, hidden_size)`.
-            Last hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
-        encoder_hidden_states (`torch.FloatTensor`, *optional*):
-            Hidden states of the prompt encoder, obatined when `encoder_input_ids is not None`.
-    """
-
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[torch.FloatTensor] = None
+class CosmosCausalLMOutputWithPast(Seq2SeqLMOutput):
+    pass
 
 
 class CosmosVQVAEVectorQuantizer(nn.Module):
@@ -423,33 +395,33 @@ class CosmosUnpatch3D(nn.Module):
         dtype = hidden_states.dtype
         wavelets = self.wavelets
 
-        g = hidden_states.shape[1] // 8  # split into 8 spatio-temporal filtered tenors.
-        hl = wavelets.flip([0]).reshape(1, 1, -1).repeat([g, 1, 1]).to(dtype=dtype)
-        hh = (wavelets * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(g, 1, 1).to(dtype=dtype)
+        groups = hidden_states.shape[1] // 8  # split into 8 spatio-temporal filtered tenors.
+        hl = wavelets.flip([0]).reshape(1, 1, -1).repeat([groups, 1, 1]).to(dtype=dtype)
+        hh = (wavelets * ((-1) ** self._arange)).reshape(1, 1, -1).repeat(groups, 1, 1).to(dtype=dtype)
         xlll, xllh, xlhl, xlhh, xhll, xhlh, xhhl, xhhh = torch.chunk(hidden_states, 8, dim=1)
 
         # Height height transposed convolutions.
-        xll = F.conv_transpose3d(xlll, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xll += F.conv_transpose3d(xllh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
+        xll = F.conv_transpose3d(xlll, hl.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
+        xll += F.conv_transpose3d(xllh, hh.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
 
-        xlh = F.conv_transpose3d(xlhl, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xlh += F.conv_transpose3d(xlhh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
+        xlh = F.conv_transpose3d(xlhl, hl.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
+        xlh += F.conv_transpose3d(xlhh, hh.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
 
-        xhl = F.conv_transpose3d(xhll, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhl += F.conv_transpose3d(xhlh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
+        xhl = F.conv_transpose3d(xhll, hl.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
+        xhl += F.conv_transpose3d(xhlh, hh.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
 
-        xhh = F.conv_transpose3d(xhhl, hl.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
-        xhh += F.conv_transpose3d(xhhh, hh.unsqueeze(2).unsqueeze(3), groups=g, stride=(1, 1, 2))
+        xhh = F.conv_transpose3d(xhhl, hl.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
+        xhh += F.conv_transpose3d(xhhh, hh.unsqueeze(2).unsqueeze(3), groups=groups, stride=(1, 1, 2))
 
         # Handles width transposed convolutions.
-        xl = F.conv_transpose3d(xll, hl.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xl += F.conv_transpose3d(xlh, hh.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xh = F.conv_transpose3d(xhl, hl.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
-        xh += F.conv_transpose3d(xhh, hh.unsqueeze(2).unsqueeze(4), groups=g, stride=(1, 2, 1))
+        xl = F.conv_transpose3d(xll, hl.unsqueeze(2).unsqueeze(4), groups=groups, stride=(1, 2, 1))
+        xl += F.conv_transpose3d(xlh, hh.unsqueeze(2).unsqueeze(4), groups=groups, stride=(1, 2, 1))
+        xh = F.conv_transpose3d(xhl, hl.unsqueeze(2).unsqueeze(4), groups=groups, stride=(1, 2, 1))
+        xh += F.conv_transpose3d(xhh, hh.unsqueeze(2).unsqueeze(4), groups=groups, stride=(1, 2, 1))
 
         # Handles time axis transposed convolutions.
-        hidden_states = F.conv_transpose3d(xl, hl.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
-        hidden_states += F.conv_transpose3d(xh, hh.unsqueeze(3).unsqueeze(4), groups=g, stride=(2, 1, 1))
+        hidden_states = F.conv_transpose3d(xl, hl.unsqueeze(3).unsqueeze(4), groups=groups, stride=(2, 1, 1))
+        hidden_states += F.conv_transpose3d(xh, hh.unsqueeze(3).unsqueeze(4), groups=groups, stride=(2, 1, 1))
 
         if rescale:
             hidden_states = hidden_states * (2 * torch.sqrt(torch.tensor(2.0)))
@@ -462,7 +434,9 @@ class CosmosUnpatch3D(nn.Module):
         return hidden_states
 
 
-# Copy from Emu3 fails because each layers init under condition aren't overwritten/skipped correctly
+# NOTE: Copy from Emu3 fails for all subsequent modules, because layers init under condition or
+# for loop aren't overwritten/skipped correctly. Modular cannot handle it correctly yet
+# A bigger refactor to make VAE a models of its own, reusable by all VLMs is a better long-term solution (@raushan TODO)
 class CosmosVQVAEResnetBlock(nn.Module):
     def __init__(
         self,
@@ -673,7 +647,7 @@ class CosmosVQVAEAttention(nn.Module):
         residual = hidden_states
         hidden_states = self.attn_norm_1(hidden_states)
 
-        # b c t h w -> (b t) c h w
+        # b c t h w -> (b t) c (h w)
         batch_size, channels, temporal, height, width = hidden_states.shape
         hidden_states = hidden_states.permute(0, 2, 1, 3, 4).contiguous()
         hidden_states = hidden_states.view(batch_size * temporal, channels, height * width).transpose(1, 2)
@@ -1013,8 +987,6 @@ class CosmosVQVAE(PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = self.config.base_channels * self.config.channel_multiplier[-1]
         batch_size = input_tensor.shape[0] * 40 * 64
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             sequence_length=sequence_length,
             dtype=dtype,
@@ -1454,13 +1426,15 @@ class CosmosTextDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
+        cross_attn_weights = None
         if self.self_attn.layer_idx in self.config.insert_cross_attn_layers:
             residual = hidden_states
             hidden_states = self.cross_input_layernorm(hidden_states)
 
             # NOTE: orig impl overrides mask with all ones for all cases, but why?
-            cross_attention_mask = torch.zeros_like(cross_attention_mask)
-            hidden_states, self_attn_weights = self.cross_attn(
+            if cross_attention_mask is not None:
+                cross_attention_mask = torch.zeros_like(cross_attention_mask)
+            hidden_states, cross_attn_weights = self.cross_attn(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=cross_attention_mask,
@@ -1480,7 +1454,7 @@ class CosmosTextDecoderLayer(nn.Module):
 
         outputs = (hidden_states,)
         if output_attentions:
-            outputs += (self_attn_weights,)
+            outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
 
@@ -1723,6 +1697,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_cross_attns = () if output_attentions else None
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
@@ -1764,6 +1739,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+                all_cross_attns += (layer_outputs[2],)
 
         hidden_states = self.norm(hidden_states)
 
@@ -1771,11 +1747,12 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        output = BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            cross_attentions=all_cross_attns,
         )
         return output if return_dict else output.to_tuple()
 
@@ -1919,7 +1896,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         In other words, the ids are updted every `num_width_grid * num_height_grid` positions.
         """
         if self.config.is_video_to_world:
-            seq_length -= 1
+            seq_length -= 1  # `bov` token not counted to positions
 
         num_temporal_grid, num_height_grid, num_width_grid = self.config.rope_latent_shape
         one_frame_len = num_height_grid * num_width_grid
@@ -2064,16 +2041,12 @@ COSMOS_INPUTS_DOCSTRING = r"""
 
 
 class CosmosModel(CosmosPreTrainedModel):
-    _tied_weights_keys = ["language_model.lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
         if config.text_config.is_video_to_world:
             self.prompt_encoder = AutoModel.from_config(config.prompt_encoder_config).encoder
-
-        print(self.prompt_encoder.config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2101,6 +2074,8 @@ class CosmosModel(CosmosPreTrainedModel):
         time, height, width = self.config.text_config.rope_latent_shape
         num_gen_tokens = int(np.prod([time - latent_context_size, height, width]))
         vq_tokens = vq_tokens[:, :-num_gen_tokens]  # remove repeated pad tokens
+
+        # This is always added by `generate()`. We need to handle it also in `forward()`
         if self.config.text_config.is_video_to_world:
             bov_tokens = [[self.config.get_text_config().bos_token_id]] * vq_tokens.shape[0]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
@@ -2160,6 +2135,7 @@ class CosmosModel(CosmosPreTrainedModel):
                 encoder_outputs = self.prompt_encoder(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
+                    inputs_embeds=inputs_embeds,
                     output_hidden_states=True,
                     output_attentions=True,
                 )
@@ -2181,17 +2157,19 @@ class CosmosModel(CosmosPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
         output = CosmosBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            decoder_hidden_states=outputs.hidden_states,
+            decoder_attentions=outputs.attentions,
             encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states if encoder_outputs is not None else None,
+            encoder_attentions=encoder_outputs.attentions if encoder_outputs is not None else None,
+            cross_attentions=outputs.cross_attentions,
         )
         return output if return_dict else output.to_tuple()
 
@@ -2320,7 +2298,7 @@ class CosmosModel(CosmosPreTrainedModel):
 
 
 class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["language_model.lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2330,8 +2308,14 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, value):
+        self.lm_head = value
+
     @add_start_docstrings_to_model_forward(COSMOS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CosmosCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2353,7 +2337,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, CosmosCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2425,7 +2409,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
@@ -2451,10 +2435,11 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
         return output if return_dict else output.to_tuple()
 
@@ -2462,26 +2447,29 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
     def generate(self, input_ids=None, pixel_values_videos=None, **kwargs):
         # Generation from video input only, so we obtain video input ids and pass to generate
         decoder_input_ids = self.model.get_video_tokens(pixel_values_videos)
+        kwargs["cache_implementation"] = "static"
         if input_ids is None:
             return super().generate(decoder_input_ids, **kwargs)
 
         # Else we are in video2world generation. We need to encode the prompt
         attention_mask = kwargs.pop("attention_mask", None)
-        encoder_outputs = self.model.prompt_encoder(input_ids, attention_mask=attention_mask)
+        encoder_outputs = self.model.prompt_encoder(
+            input_ids, attention_mask=attention_mask, output_hidden_states=True, output_attentions=True
+        )
 
         # Only static cache support, since video shapes are static as well
-        self_attn_past_kv = StaticCache(
-            config=self.config.get_text_config(),
-            max_batch_size=input_ids.shape[0],
-            max_cache_len=12864,
-            dtype=self.dtype,
-        )
-        past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
+        # self_attn_past_kv = StaticCache(
+        #     config=self.config.get_text_config(),
+        #     max_batch_size=input_ids.shape[0],
+        #     max_cache_len=12864,
+        #     dtype=self.dtype,
+        # )
+        # past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
         output = super().generate(
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
+            # past_key_values=past_key_values if kwargs.get("use_cache", False) else None,
             **kwargs,
         )
         return output
@@ -2523,7 +2511,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         input_length = model_inputs[input_ids_key].shape[1]
         model_inputs["position_ids_rope"] = position_ids_rope[..., -input_length:]
 
-        # little hack to support encoder-decoder and decoder-only from one model
+        # little hack to support encoder-decoder and decoder-only from one model class
         if not self.config.is_encoder_decoder:
             for input_name in ["input_ids", "attention_mask", "inputs_embeds"]:
                 model_inputs[f"decoder_{input_name}"] = model_inputs.get(input_name, None)

@@ -124,6 +124,12 @@ class CosmosVideoProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        crop_size = (
+            get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+            if crop_size is not None
+            else crop_size
+        )
+        size = get_size_dict(size, param_name="size", default_to_square=True) if size is not None else size
         self.do_resize = do_resize
         self.resample = resample
         self.do_rescale = do_rescale
@@ -345,7 +351,7 @@ class CosmosVideoProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
+        size = get_size_dict(size, param_name="size", default_to_square=True)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size

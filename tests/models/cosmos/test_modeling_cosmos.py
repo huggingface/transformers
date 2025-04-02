@@ -49,13 +49,16 @@ if is_torch_available():
         CosmosModel,
     )
     from transformers.cache_utils import (
-        DynamicCache,
+        EncoderDecoderCache,
         StaticCache,
     )
     from transformers.generation import (
         GenerateDecoderOnlyOutput,
+        GenerateEncoderDecoderOutput,
         GreedySearchDecoderOnlyOutput,
+        GreedySearchEncoderDecoderOutput,
         SampleDecoderOnlyOutput,
+        SampleEncoderDecoderOutput,
     )
 
 
@@ -202,6 +205,7 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length)
 
     @pytest.mark.generate
+    @unittest.skip("Cannot return attentions due to clashing keys, ask @gante if similar models")
     def test_greedy_generate_dict_outputs(self):
         for model_class in self._custom_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -228,6 +232,7 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self._check_generate_outputs(output_generate, model.config)
 
     @pytest.mark.generate
+    @unittest.skip("Cannot return attentions due to clashing keys, ask @gante if similar models")
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self._custom_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -261,6 +266,7 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length)
 
     @pytest.mark.generate
+    @unittest.skip("Cannot return attentions due to clashing keys, ask @gante if similar models")
     def test_sample_generate_dict_output(self):
         for model_class in self._custom_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -403,8 +409,8 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if config.is_encoder_decoder
                     else gen_out.past_key_values
                 )
-                self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                self.assertFalse(decoder_cache.is_compileable)
+                self.assertTrue(isinstance(decoder_cache, StaticCache))
+                self.assertTrue(decoder_cache.is_compileable)
                 self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
 
             generation_kwargs["cache_implementation"] = "static"
@@ -418,13 +424,98 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if config.is_encoder_decoder
                     else gen_out.past_key_values
                 )
-                self.assertFalse(isinstance(decoder_cache, DynamicCache))
+                self.assertTrue(isinstance(decoder_cache, StaticCache))
                 self.assertTrue(decoder_cache.is_compileable)
 
                 self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
+
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
+        internal_batch_size = (
+            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        )
+
+        prompt_length = getattr(self.model_tester, "seq_length", None)
+        config = config.text_config if hasattr(config, "text_config") else config
+
+        generated_length = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - prompt_length
+        )
+        decoder_past_key_values = getattr(output, "past_key_values", None)
+        if config.is_encoder_decoder and isinstance(decoder_past_key_values, EncoderDecoderCache):
+            decoder_past_key_values = decoder_past_key_values.self_attention_cache
+
+        # in some models we subsample the sequence length in inner layers
+        if hasattr(self.model_tester, "get_subsampled_output_lengths"):
+            prompt_length = self.model_tester.get_subsampled_output_lengths(prompt_length)
+
+        # scores
+        self._check_scores(
+            batch_size=internal_batch_size, scores=output.scores, generated_length=generated_length, config=config
+        )
+
+        # unprocessed logits
+        self._check_logits(batch_size=internal_batch_size, logits=output.logits, config=config)
+
+        self._check_attentions_for_generate(
+            batch_size=internal_batch_size,
+            attentions=output.decoder_attentions,
+            prompt_length=prompt_length,
+            output_length=output.sequences.shape[-1],
+            config=config,
+            decoder_past_key_values=decoder_past_key_values,
+        )
+
+        self._check_hidden_states_for_generate(
+            batch_size=internal_batch_size,
+            hidden_states=output.decoder_hidden_states,
+            prompt_length=prompt_length,
+            output_length=output.sequences.shape[-1],
+            config=config,
+            use_cache=use_cache,
+        )
+
+        if use_cache:
+            cache_length = output.sequences.shape[-1] - 1
+            self._check_past_key_values_for_generate(
+                batch_size=internal_batch_size,
+                decoder_past_key_values=decoder_past_key_values,
+                cache_length=cache_length,
+                config=config,
+            )
+        elif use_cache is False:
+            self.assertTrue(decoder_past_key_values is None)
+
+    @unittest.skip("Cosmos Video has no input ids")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Cosmos Video has no input ids")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Cosmos Video has no input ids")
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(
+        "Needs to check prompt encoder config, skip instead of overriding because we already check attn in generate tests"
+    )
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(
+        "Needs to check prompt encoder config, skip instead of overriding because we already check hiddens in generate tests"
+    )
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("We write custom generation tests")
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
 
 class CosmosVideoWorldModelTester:
@@ -451,6 +542,7 @@ class CosmosVideoWorldModelTester:
         temporal_downsample_factor=1,
         base_channels=32,
         vq_channel_multiplier=[1, 1],
+        insert_cross_attn_layers=[0, 1],
         vq_img_token_start_id=3,
     ):
         self.parent = parent
@@ -473,8 +565,11 @@ class CosmosVideoWorldModelTester:
         self.temporal_downsample_factor = temporal_downsample_factor
         self.vq_channel_multiplier = vq_channel_multiplier
         self.vq_img_token_start_id = vq_img_token_start_id
+        self.insert_cross_attn_layers = insert_cross_attn_layers
         self.base_channels = base_channels
+        self.vision_seq_length = 42  # video seq length when tokenizer
         self.seq_length = seq_length
+        self.encoder_seq_length = seq_length + self.vision_seq_length + 1
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -497,6 +592,7 @@ class CosmosVideoWorldModelTester:
         text_config = CosmosTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            cross_attn_hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
@@ -508,6 +604,7 @@ class CosmosVideoWorldModelTester:
             eos_token_id=self.eos_token_id,
             rope_latent_shape=[3, 2, 3],
             is_video_to_world=True,
+            insert_cross_attn_layers=self.insert_cross_attn_layers,
         )
 
         vq_config = {
@@ -556,7 +653,8 @@ class CosmosVideoWorldModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_torch_available()
         else ()
     )
-    # all_generative_model_classes = () # Cosmos generates only video as output, so we use custom tests
+    all_generative_model_classes = ()  # Cosmos generates only video as output, so we use custom tests
+    _custom_generative_model_classes = (CosmosForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False
@@ -570,6 +668,325 @@ class CosmosVideoWorldModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @pytest.mark.generate
+    def test_greedy_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1)
+
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=False,
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1
+            )
+            self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+            self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
+            self._check_generate_outputs(output_generate, model.config)
+
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._greedy_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=True,  # Enable cache
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1
+            )
+            self._check_generate_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
+    def test_sample_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1)
+
+    @pytest.mark.generate
+    def test_sample_generate_dict_output(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
+
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._sample_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                num_return_sequences=2,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=False,
+            )
+
+            self.assertTrue(
+                output_generate.sequences.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1
+            )
+            self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+            self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
+
+            self._check_generate_outputs(output_generate, model.config, num_return_sequences=2)
+
+    @pytest.mark.generate
+    def test_beam_search_generate(self):
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            beam_kwargs = self._get_beam_kwargs()
+            output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
+            self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + self.model_tester.vision_seq_length + 1)
+
+    @pytest.mark.generate
+    def test_generate_with_static_cache(self):
+        """
+        Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
+        has the expected shapes
+        """
+        set_model_tester_for_less_flaky_test(self)
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+
+            config.is_decoder = True
+            batch_size = inputs_dict["pixel_values_videos"].shape[0]
+            seq_length = self.model_tester.vision_seq_length
+            max_new_tokens = 20
+
+            for dtype in (torch.float32, torch.float16):
+                model = model_class(config).to(torch_device).to(dtype).eval()
+                inputs_dict = {
+                    k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
+                    for k, v in inputs_dict.items()
+                }
+                set_model_for_less_flaky_test(model)
+
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "output_scores": True,
+                    "use_cache": True,
+                }
+
+                static_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict, cache_implementation="static"
+                )
+
+                # Check 1: The cache shapes must match the expected shapes
+                max_cache_len = seq_length + max_new_tokens
+                text_config = config.text_config if hasattr(config, "text_config") else config
+                head_dim = (
+                    text_config.head_dim
+                    if hasattr(text_config, "head_dim")
+                    else text_config.hidden_size // text_config.num_attention_heads
+                )
+                num_key_value_heads = (
+                    text_config.num_attention_heads
+                    if getattr(text_config, "num_key_value_heads", None) is None
+                    else text_config.num_key_value_heads
+                )
+                num_hidden_layers = text_config.num_hidden_layers
+                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+                cache = static_cache_generation.past_key_values.self_attention_cache
+                self.assertTrue(isinstance(cache, StaticCache))
+                self.assertTrue(len(cache.key_cache) == num_hidden_layers)
+                self.assertTrue(cache.key_cache[0].shape == cache_shape)
+
+                # Check 2: The outputs must be similar to the case with dynamic cache
+                dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
+                self._check_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+
+    @pytest.mark.generate
+    def test_generate_compile_model_forward(self):
+        """
+        Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
+        ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
+        """
+        for model_class in self._custom_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+
+            model = model_class(config).to(torch_device)
+            model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
+            half_batch_size = self.model_tester.batch_size // 2
+            input_1 = {}
+            input_2 = {}
+            for key, value in inputs_dict.items():
+                if isinstance(value, torch.Tensor):
+                    input_1[key] = value[:half_batch_size, :].to(torch_device)
+                    input_2[key] = value[half_batch_size : half_batch_size * 2, :].to(torch_device)
+                else:
+                    input_1[key] = value
+                    input_2[key] = value
+            model_input_sets = [input_1, input_2]
+            self.assertTrue(
+                model_input_sets[0]["pixel_values_videos"].shape == model_input_sets[1]["pixel_values_videos"].shape
+            )
+
+            torch.compiler.reset()  # prevent cached compilation from being used in the test
+            model.generation_config.compile_config._compile_all_devices = True
+
+            generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
+
+            # get eager + dynamic cache results for future comparison
+            dynamic_outputs = []
+            for model_inputs in model_input_sets:
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                dynamic_outputs.append(gen_out)
+                # sanity checks for the default cache implementation
+                decoder_cache = (
+                    gen_out.past_key_values.self_attention_cache
+                    if config.is_encoder_decoder
+                    else gen_out.past_key_values
+                )
+                self.assertTrue(isinstance(decoder_cache, StaticCache))  # Cosmos uses only static cache
+                self.assertTrue(decoder_cache.is_compileable)
+                self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
+
+            generation_kwargs["cache_implementation"] = "static"
+            compiled_outputs = []
+            for model_inputs in model_input_sets:
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                compiled_outputs.append(gen_out)
+                # sanity checks
+                decoder_cache = (
+                    gen_out.past_key_values.self_attention_cache
+                    if config.is_encoder_decoder
+                    else gen_out.past_key_values
+                )
+                self.assertTrue(isinstance(decoder_cache, StaticCache))
+                self.assertTrue(decoder_cache.is_compileable)
+
+                self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
+
+            for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
+                self._check_similar_generate_outputs(dynamic_result, compiled_result)
+
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
+        internal_batch_size = (
+            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        )
+
+        prompt_length = getattr(self.model_tester, "seq_length", None)
+        text_config = config.text_config if hasattr(config, "text_config") else config
+
+        generated_length = output.sequences.shape[-1] - 1 - self.model_tester.vision_seq_length
+        decoder_past_key_values = getattr(output, "past_key_values", None)
+        if config.is_encoder_decoder and isinstance(decoder_past_key_values, EncoderDecoderCache):
+            decoder_past_key_values = decoder_past_key_values.self_attention_cache
+
+        # scores
+        self._check_scores(
+            batch_size=internal_batch_size, scores=output.scores, generated_length=generated_length, config=config
+        )
+
+        # unprocessed logits
+        self._check_logits(batch_size=internal_batch_size, logits=output.logits, config=config)
+
+        # Attentions
+        self._check_encoder_attention_for_generate(
+            attentions=output.encoder_attentions,
+            batch_size=input_batch_size,
+            config=config.prompt_encoder_config,
+            prompt_length=prompt_length,
+        )
+        self._check_attentions_for_generate(
+            batch_size=internal_batch_size,
+            attentions=output.decoder_attentions,
+            prompt_length=1 + self.model_tester.vision_seq_length,  # the BOS token
+            output_length=output.sequences.shape[-1],
+            config=text_config,
+            decoder_past_key_values=decoder_past_key_values,
+        )
+
+        # Hidden States
+        self._check_encoder_hidden_states_for_generate(
+            hidden_states=output.encoder_hidden_states,
+            batch_size=input_batch_size,
+            config=config.prompt_encoder_config,
+            prompt_length=prompt_length,
+        )
+        self._check_hidden_states_for_generate(
+            batch_size=internal_batch_size,
+            hidden_states=output.decoder_hidden_states,
+            prompt_length=1 + self.model_tester.vision_seq_length,  # the BOS token
+            output_length=output.sequences.shape[-1],
+            config=text_config,
+            use_cache=use_cache,
+        )
+
+        if use_cache:
+            cache_length = output.sequences.shape[-1] - 1
+            self._check_past_key_values_for_generate(
+                batch_size=internal_batch_size,
+                decoder_past_key_values=decoder_past_key_values,
+                cache_length=cache_length,
+                config=config,
+            )
+        elif use_cache is False:
+            self.assertTrue(decoder_past_key_values is None)
+
+    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
+    def test_initialization(self):
+        pass
+
+    @unittest.skip(
+        "Needs to check prompt encoder config, skip instead of overriding because we already check attn in generate tests"
+    )
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(
+        "Needs to check prompt encoder config, skip instead of overriding because we already check hiddens in generate tests"
+    )
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("We write custom generation tests")
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
 
 @require_torch

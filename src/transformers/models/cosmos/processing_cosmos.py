@@ -70,7 +70,6 @@ class CosmosProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[CosmosProcessorKwargs],
     ) -> BatchFeature:
