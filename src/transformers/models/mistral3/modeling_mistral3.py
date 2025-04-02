@@ -201,11 +201,8 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
         if module in self.vision_tower.modules():
             self.vision_tower._init_weights(module)
         elif module in self.language_model.modules():

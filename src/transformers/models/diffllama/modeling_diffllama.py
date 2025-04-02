@@ -624,8 +624,13 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DiffLlamaRMSNorm):
+        elif isinstance(module, DiffLlamaRMSNorm):  # noqa: F821
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DiffLlamaAttention):
+            module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q2.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k2.data.normal_(0, self.config.lambda_std_dev)
 
 
 class DiffLlamaRotaryEmbedding(nn.Module):
