@@ -30,17 +30,19 @@ The abstract from the technical report is the following:
 
 *We present Qwen2.5-Omni, an end-to-end multimodal model designed to perceive diverse modalities, including text, images, audio, and video, while simultaneously generating text and natural speech responses in a streaming manner. To enable the streaming of multimodal information inputs, both audio and visual encoders utilize a block-wise processing approach. This strategy effectively decouples the handling of long sequences of multimodal data, assigning the perceptual responsibilities to the multimodal encoder and entrusting the modeling of extended sequences to a large language model. Such a division of labor enhances the fusion of different modalities via the shared attention mechanism. To synchronize the timestamps of video inputs with audio, we organized the audio and video sequentially in an interleaved manner and propose a novel position embedding approach, named TMRoPE (Time-aligned Multimodal RoPE). To concurrently generate text and speech while avoiding interference between the two modalities, we propose Thinker-Talker architecture. In this framework, Thinker functions as a large language model tasked with text generation, while Talker is a dual-track autoregressive model that directly utilizes the hidden representations from the Thinker to produce audio tokens as output. Both the Thinker and Talker models are designed to be trained and inferred in an end-to-end manner. For decoding audio tokens in a streaming manner, we introduce a sliding-window DiT that restricts the receptive field, aiming to reduce the initial package delay. Qwen2.5-Omni outperforms the similarly sized Qwen2-VL and Qwen2-Audio in both image and audio capabilities. Furthermore, Qwen2.5-Omni achieves state-of-the-art performance on multimodal benchmarks like Omni-Bench. Notably, Qwen2.5-Omni is the first open-source model to achieve a level of performance in end-to-end speech instruction following that is comparable to its capabilities with text inputs, as evidenced by benchmarks such as MMLU and GSM8K. As for speech generation, Qwen2.5-Omni’s streaming Talker outperform most existing streaming and non-streaming alternatives in robustness and naturalness.*
 
+
+
 ## Usage example
+
 `Qwen2.5-Omni` can be found on the [Huggingface Hub](https://huggingface.co/Qwen).
+
 ### Single Media inference
 
 The model can accept text, images, audio and videos as input. Here's an example code for inference.
 
 ```python
 import soundfile as sf
-
 from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
-from qwen_omni_utils import process_mm_info
 
 model = Qwen2_5OmniModel.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
@@ -48,12 +50,13 @@ model = Qwen2_5OmniModel.from_pretrained(
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-USE_AUDIO_IN_VIDEO = True
 
 conversation = [
     {
         "role": "system",
-        "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
     },
     {
         "role": "user",
@@ -64,17 +67,80 @@ conversation = [
     },
 ]
 
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+inputs = processor.apply_chat_template(
+    conversations,
+    load_audio_from_video=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    video_fps=1,
 
-# Need install ffmpeg to read non wav&flac audios
-audios, images, videos = process_mm_info(conversation, USE_AUDIO_IN_VIDEO)
+    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    padding=True,
+    use_audio_in_video=True,
+).to(model.device)
 
-inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=USE_AUDIO_IN_VIDEO)
-inputs = inputs.to(model.device)
-
-text_ids, audio = model.generate(**inputs, use_audio_in_video=USE_AUDIO_IN_VIDEO)
-
+text_ids, audio = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
+sf.write(
+    "output.wav",
+    audio.reshape(-1).detach().cpu().numpy(),
+    samplerate=24000,
+)
+print(text)
+```
+
+### Text-only generation
+
+To generate only text output and save compute by not loading the audio generation model, we can set `enable_audio_output=False` when loading the model.  
+
+```python
+from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
+
+model = Qwen2_5OmniModel.from_pretrained(
+    "Qwen/Qwen2.5-Omni-7B",
+    torch_dtype="auto",
+    device_map="auto",
+    enable_audio_output=False,
+)
+processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+
+conversation = [
+    {
+        "role": "system",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": "/path/to/video.mp4"},
+            {"type": "text", "text": "What cant you hear and see in this video?"},
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    conversations,
+    load_audio_from_video=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    video_fps=1,
+
+    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    padding=True,
+    use_audio_in_video=True,
+).to(model.device)
+
+
+text_ids = model.generate(**inputs, use_audio_in_video=True, return_audio=False)
+text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
 sf.write(
     "output.wav",
     audio.reshape(-1).detach().cpu().numpy(),
@@ -89,9 +155,7 @@ The model can batch inputs composed of mixed samples of various types such as te
 
 ```python
 import soundfile as sf
-
 from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
-from qwen_omni_utils import process_mm_info
 
 model = Qwen2_5OmniModel.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",

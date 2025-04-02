@@ -85,11 +85,14 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
             "hidden_size": 32,
+            "out_hidden_size": 32,
+            "intermediate_size": 24,
             "mlp_ratio": 4,
             "num_heads": 4,
             "patch_size": 14,
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
+            "fullatt_block_indexes": [0],
             "initializer_range": 0.02,
         },
         audio_config={
@@ -158,6 +161,12 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self.seq_length = seq_length
         self.is_training = False
         self.num_hidden_states_types = 0
+
+        # Used from `self.model_tester` by common model tests
+        self.num_hidden_layers = self.text_config["num_hidden_layers"]
+        self.hidden_size = self.text_config["hidden_size"]
+        self.num_attention_heads = self.text_config["num_attention_heads"]
+        self.vocab_size = self.text_config["vocab_size"]
 
     def get_config(self):
         return Qwen2_5OmniThinkerConfig(
