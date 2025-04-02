@@ -1068,7 +1068,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
     SWIN_START_DOCSTRING,
 )
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DonutSwinConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1083,7 +1083,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         self.post_init()
         
         # no loss for ForImageClassification
-        self.loss_function = ForSequenceClassificationLoss
+        # self.loss_function = ForSequenceClassificationLoss
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
