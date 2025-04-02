@@ -2455,7 +2455,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
         This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the
         module graph along the recursion. It can handle an arbitrary number of sub-models. Without it, every composite
-        model would have to recurse a second time on all sub-models explicitly on the outer-most `_init_weights`, which
+        model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
         is extremely error prone and inefficient.
 
         Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
