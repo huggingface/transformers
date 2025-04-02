@@ -45,9 +45,11 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    logging,
 )
 from .image_processing_idefics3 import get_resize_output_image_size as get_resize_output_max_side_image_size
 
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -92,7 +94,7 @@ class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """,
 )
 class Idefics3ImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BICUBIC
+    resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"longest_edge": 4 * 364}
@@ -147,6 +149,14 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             `torch.Tensor`: The resized image.
         """
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        if interpolation == F.InterpolationMode.LANCZOS:
+            logger.warning_once(
+                "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
+                "BICUBIC resample will be used as an alternative. Please fall back to slow image processor if you "
+                "want full consistency with the original model."
+            )
+            interpolation = F.InterpolationMode.BICUBIC
+            
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
