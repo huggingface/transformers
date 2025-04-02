@@ -92,7 +92,6 @@ generated_ids = model.generate(
     top_k=50,        
     top_p=0.95       
 )
-# Slice the output to remove the input tokens
 generated_ids = [
     output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
 ]
