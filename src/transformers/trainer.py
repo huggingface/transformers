@@ -629,7 +629,6 @@ class Trainer:
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
-        print(unwrapped_model.accepts_loss_kwargs)
         if hasattr(unwrapped_model, "accepts_loss_kwargs"):
             self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
