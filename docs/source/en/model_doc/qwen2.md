@@ -40,7 +40,6 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-# Use a pipeline as a high-level helper
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen2-1.5B-Instruct",
