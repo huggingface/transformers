@@ -85,10 +85,8 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
             if hasattr(self.config, "initializer_range")
             else self.config.get_text_config().initializer_range
         )
-        text_model_module = self.text_model if hasattr(self, "text_model") else self.model.text_model
-        if module in text_model_module.modules():
-            text_model_module._init_weights(module)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
