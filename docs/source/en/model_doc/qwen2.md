@@ -128,7 +128,7 @@ quantization_config = BitsAndBytesConfig(
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B") 
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen2-7B", # Use base model
+    "Qwen/Qwen2-7B",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
