@@ -121,7 +121,6 @@ class GlmConfig(PretrainedConfig):
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         attention_bias=True,
-        sandwich=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -140,7 +139,6 @@ class GlmConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.sandwich = sandwich
 
         super().__init__(
             pad_token_id=pad_token_id,
