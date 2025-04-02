@@ -1219,11 +1219,7 @@ class ProcessorTesterMixin:
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-                    },
-                    {"type": "text", "text": "Is it the same sound?"},
+                    {"type": "text", "text": "Tell me all about this animal."},
                 ],
             },
         ]
@@ -1240,13 +1236,13 @@ class ProcessorTesterMixin:
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.video_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 2)  # 2 audios in the conversation
-        self.assertEqual(len(out_dict[self.video_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
 
     @require_librosa
     def test_audio_chat_template_single(self):

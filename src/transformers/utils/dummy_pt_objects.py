@@ -8117,7 +8117,7 @@ class Qwen2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Qwen2_5OmniModel(metaclass=DummyObject):
+class Qwen2_5OmniForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
