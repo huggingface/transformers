@@ -61,7 +61,7 @@ print(outputs[0]["generated_text"][-1]['content']) # Print the assistant's respo
 </hfoption>
 <hfoption id="AutoModel">
 
-```
+```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -106,7 +106,7 @@ print(response)
 </hfoption>
 <hfoption id="transformers-cli">
 
-```
+```bash
 # Make sure you are logged in (`huggingface-cli login`)
 # Requires transformers>=4.37.0
 transformers-cli chat --model Qwen/Qwen2-7B-Instruct --torch_dtype auto --attn_implementation flash_attention_2 --device auto
@@ -116,11 +116,11 @@ transformers-cli chat --model Qwen/Qwen2-7B-Instruct --torch_dtype auto --attn_i
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the Quantization overview for more available quantization backends.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses bitsandbytes to quantize the weights to 4-bits. Note that quantization usually works best with base models.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits. Note that quantization usually works best with base models.
 
-```
+```python
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -148,81 +148,84 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-Processing Long Contexts
-Larger Qwen2 models (like Qwen2-72B) support context lengths up to 131,072 tokens using YARN scaling.
+## Processing Long Contexts
+
+Larger Qwen2 models (like Qwen2-72B) support context lengths up to 131,072 tokens using [YARN](https://arxiv.org/abs/2309.00071) scaling.
 
 For deployment, using vLLM is recommended. To enable long-context capabilities:
 
-1. Install vLLM:
+1.  **Install vLLM**:
+    ```bash
+    pip install "vllm>=0.4.3"
+    # Or install from source: https://github.com/vllm-project/vllm/
+    ```
 
-```
-pip install "vllm>=0.4.3"
-# Or install from source: https://github.com/vllm-project/vllm/
-```
+2.  **Configure Model Settings**: Modify the model's `config.json` file by adding the `rope_scaling` attribute:
+    ```json
+        {
+            "architectures": [
+                "Qwen2ForCausalLM"
+            ],
+            // ... other config ...
+            "vocab_size": 152064, // Example vocab size, check your model's config
 
-2. Configure Model Settings: Modify the model's config.json file by adding the rope_scaling attribute:
-
-```
-    {
-        "architectures": [
-            "Qwen2ForCausalLM"
-        ],
-        // ... other config ...
-        "vocab_size": 152064, // Example vocab size, check your model's config
-
-        // --- Add this section ---
-        "rope_scaling": {
-            "factor": 4.0, // Adjust factor based on model/desired length if needed
-            "original_max_position_embeddings": 32768, // Base context length before scaling
-            "type": "yarn"
+            // --- Add this section ---
+            "rope_scaling": {
+                "factor": 4.0, // Adjust factor based on model/desired length if needed
+                "original_max_position_embeddings": 32768, // Base context length before scaling
+                "type": "yarn"
+            }
+            // --- End section ---
         }
-        // --- End section ---
-    }
-```
+    ```
 
-3. Deploy with vLLM: Start a vLLM server pointing to the modified model weights directory:
+3.  **Deploy with vLLM**: Start a vLLM server pointing to the modified model weights directory:
+    ```bash
+    python -m vllm.entrypoints.openai.api_server --served-model-name Qwen2-72B-Instruct --model /path/to/your/modified/qwen2/weights
+    ```
+    You can then interact with the API (e.g., via `curl`) using the extended context length.
 
-```
-python -m vllm.entrypoints.openai.api_server --served-model-name Qwen2-72B-Instruct --model /path/to/your/modified/qwen2/weights
-```
+> [!NOTE]
+> vLLM currently supports static YARN, meaning the scaling factor is fixed. This might slightly impact performance on very short texts compared to not using YARN scaling. Consider enabling `rope_scaling` only when long context processing is essential.
 
-You can then interact with the API (e.g., via curl) using the extended context length.
+## Notes
 
-[!NOTE]
-vLLM currently supports static YARN, meaning the scaling factor is fixed. This might slightly impact performance on very short texts compared to not using YARN scaling. Consider enabling rope_scaling only when long context processing is essential.
+- Qwen2 requires `transformers>=4.37.0` for full support. Ensure your `transformers` library is up-to-date.
 
-Notes
-Qwen2 requires transformers>=4.37.0 for full support. Ensure your transformers library is up-to-date.
+## Qwen2Config
 
-Qwen2Config
 [[autodoc]] Qwen2Config
 
-Qwen2Tokenizer
-[[autodoc]] Qwen2Tokenizer
-- save_vocabulary
+## Qwen2Tokenizer
 
-Qwen2TokenizerFast
+[[autodoc]] Qwen2Tokenizer
+    - save_vocabulary
+
+## Qwen2TokenizerFast
+
 [[autodoc]] Qwen2TokenizerFast
 
-Qwen2Model
+## Qwen2Model
+
 [[autodoc]] Qwen2Model
-- forward
+    - forward
 
-Qwen2ForCausalLM
+## Qwen2ForCausalLM
+
 [[autodoc]] Qwen2ForCausalLM
-- forward
+    - forward
 
-Qwen2ForSequenceClassification
+## Qwen2ForSequenceClassification
+
 [[autodoc]] Qwen2ForSequenceClassification
-- forward
+    - forward
 
-Qwen2ForTokenClassification
+## Qwen2ForTokenClassification
+
 [[autodoc]] Qwen2ForTokenClassification
-- forward
+    - forward
 
-Qwen2ForQuestionAnswering
+## Qwen2ForQuestionAnswering
+
 [[autodoc]] Qwen2ForQuestionAnswering
-- forward
-
-
- 
+    - forward
