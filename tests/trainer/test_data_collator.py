@@ -183,14 +183,14 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
         self.assertEqual(batch["cu_seq_lens_k"].shape, torch.Size([4]))
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_q"].shape, torch.Size([4]))
         self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
-        self.assertEqual(batch["max_length_k"].shape, torch.Size([1]))
-        self.assertEqual(batch["max_length_k"].tolist(), [7])
-        self.assertEqual(batch["max_length_q"].shape, torch.Size([1]))
-        self.assertEqual(batch["max_length_q"].tolist(), [7])
+        # The flash attn max_length_{k,q} are simple python ints
+        self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
 
     def test_data_collator_with_flattening_seq_idx(self):
         features = [
@@ -1950,14 +1950,14 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
         self.assertEqual(batch["cu_seq_lens_k"].shape, (4,))
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_q"].shape, (4,))
         self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
-        self.assertEqual(batch["max_length_k"].shape, (1,))
-        self.assertEqual(batch["max_length_k"].tolist(), [7])
-        self.assertEqual(batch["max_length_q"].shape, (1,))
-        self.assertEqual(batch["max_length_q"].tolist(), [7])
+        # The flash attn max_length_{k,q} are simple python ints
+        self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
 
     def test_data_collator_with_flattening_seq_idx(self):
         features = [

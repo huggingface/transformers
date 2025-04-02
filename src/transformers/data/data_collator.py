@@ -2004,6 +2004,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_seq_idx = return_seq_idx
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
+        self._py_int_keys = {"max_length_q", "max_length_k"}
 
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
@@ -2036,7 +2037,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
 
         if self.return_flash_attn_kwargs:
             batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
-            batch["max_length_q"] = batch["max_length_k"] = [max_length]
+            batch["max_length_q"] = batch["max_length_k"] = max_length
 
         # FlashAttentionKwargs and seq_idx are expected to be int32s.
         if return_tensors == "pt":
@@ -2055,6 +2056,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         for k, v in batch.items():
             if k in self._batch_dim_keys:
                 v = [v]
-            batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
+            # Flash attention max_len_{q,k} are python ints
+            if k not in self._py_int_keys:
+                batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
 
         return batch

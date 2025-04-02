@@ -4157,7 +4157,7 @@ class ModelTesterMixin:
                 # add position_ids + fa_kwargs
                 data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
                 batch = data_collator(features)
-                batch_cuda = {k: t.cuda() for k, t in batch.items()}
+                batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in batch.items()}
 
                 res_padded = model(**inputs_dict)
                 res_padfree = model(**batch_cuda)
