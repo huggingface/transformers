@@ -617,26 +617,6 @@ def input_processing(func, config, **kwargs):
     return output
 
 
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`.
-
-    Example:
-
-    ```py
-    >>> dtype_byte_size(tf.float32)
-    4
-    ```
-    """
-    if dtype == tf.bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)$", dtype.name)
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
-
-
 def strip_model_name_and_prefix(name, _prefix=None):
     if _prefix is not None and name.startswith(_prefix):
         name = name[len(_prefix) :]
@@ -678,7 +658,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB", weights_name: str = TF2_
     total_size = 0
 
     for item in weights:
-        weight_size = item.numpy().size * dtype_byte_size(item.dtype)
+        weight_size = item.numpy().size * item.dtype.size
 
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
