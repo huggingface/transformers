@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [Qwen2](https://huggingface.co/papers/2407.10671) is a family of large language models (pretrained, instruction-tuned and mixture-of-experts) available in sizes from 0.5B to 72B parameters. The models are built on the Transformer architecture featuring enhancements like group query attention (GQA), rotary positional embeddings (RoPE), a mix of sliding window and full attention, and dual chunk attention with YARN for training stability. Qwen2 models support multiple languages and context lengths up to 131,072 tokens.
 
-You can find all the official Qwen2 checkpoints under the [Qwen2 Collection](https://huggingface.co/collections/qwen/qwen2-6659360b3352f8ffa74171a3).
+You can find all the official Qwen2 checkpoints under the [Qwen2](https://huggingface.co/collections/Qwen/qwen2-6659360b33528ced941e557f) collection.
 
 > [!TIP]
 > Click on the Qwen2 models in the right sidebar for more examples of how to apply Qwen2 to different language tasks.
