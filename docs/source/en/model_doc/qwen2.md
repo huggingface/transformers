@@ -143,7 +143,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Notes
 
-- Qwen2 requires `transformers>=4.37.0` for full support. Ensure your `transformers` library is up-to-date.
+- Ensure your Transformers library version is up-to-date. Qwen2 requires Transformers>=4.37.0 for full support.
 
 ## Qwen2Config
 
