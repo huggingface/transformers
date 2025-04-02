@@ -135,7 +135,6 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="flash_attention_2" 
 )
 
-# Prepare input and generate
 inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda") 
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
