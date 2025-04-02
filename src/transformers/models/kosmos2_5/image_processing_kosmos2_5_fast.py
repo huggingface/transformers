@@ -120,7 +120,6 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         num_elements = torch.tensor(torch.numel(image[0]))
         adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
 
-        breakpoint()
         return super().normalize(
             image,
             mean=mean,
@@ -220,8 +219,10 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         processed_image_patches_grouped = {}
         grouped_images, grouped_images_index = group_images_by_shape(images)
         for shape, stacked_images in grouped_images.items():
+            # TODO: if it's possible to do in batch mode
             if do_normalize:
-                stacked_images = self.normalize(stacked_images, **kwargs)
+                stacked_images = [self.normalize(x.unsqueeze(0), **kwargs) for x in stacked_images]
+                stacked_images = torch.stack(stacked_images)
 
             # TODO: we need this to be in batch from
             # convert to torch tensor and permute
