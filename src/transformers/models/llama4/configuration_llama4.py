@@ -142,6 +142,8 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
         "layers.*.feed_forward.experts": "local",
+        "layers.*.feed_forward.gate_proj": "local_colwise",
+        "layers.*.feed_forward.up_proj": "local_colwise",
         "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward": "gather",
     }
