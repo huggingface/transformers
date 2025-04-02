@@ -114,7 +114,6 @@ class ClapFeatureExtractionTester:
 class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ClapFeatureExtractor
 
-    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.setUp with Whisper->Clap
     @classmethod
     def setUpClass(cls):
         cls.feat_extract_tester = ClapFeatureExtractionTester(cls)

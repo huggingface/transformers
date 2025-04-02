@@ -299,7 +299,6 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_headmasking = False
     test_pruning = False
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Persimmon
     @classmethod
     def setUpClass(cls):
         cls.model_tester = PersimmonModelTester(cls)

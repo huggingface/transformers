@@ -359,7 +359,6 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     ):
         return True
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phimoe
     @classmethod
     def setUpClass(cls):
         cls.model_tester = PhimoeModelTester(cls)

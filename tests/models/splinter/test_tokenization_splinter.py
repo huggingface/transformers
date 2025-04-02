@@ -40,7 +40,6 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece_ignore_case = False
     pre_trained_model_path = "tau/splinter-base"
 
-    # Copied from transformers.models.siglip.SiglipTokenizationTest.setUp
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

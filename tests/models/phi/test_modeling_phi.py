@@ -306,7 +306,6 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     ):
         return True
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi
     @classmethod
     def setUpClass(cls):
         cls.model_tester = PhiModelTester(cls)
