@@ -100,9 +100,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio` and `kwrags` arguments to
+        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
         WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. To prepare the vision inputs,
-        this method forwards the `vision_infos` and `kwrags` arguments to Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`]
+        this method forwards the `vision_infos` and `kwargs` arguments to Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`]
         if `vision_infos` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -133,7 +133,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
+        fps = output_kwargs["videos_kwargs"].pop("fps", None)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here

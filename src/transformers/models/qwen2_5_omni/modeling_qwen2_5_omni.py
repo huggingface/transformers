@@ -4237,10 +4237,10 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         def fn(t, x):
             if guidance_scale < 1e-5:
-                pred = self(x=x, spk=cond, cond=ref_mel, code=code, time=t, drop_audio_cond=False, drop_code=False)
+                pred = self(x, ref_mel, cond, code=code, time=t, drop_audio_cond=False, drop_code=False)
                 return pred
 
-            out_put = self(x=x, code=code, spk=cond, cond=ref_mel, time=t, cfg=True)
+            out_put = self(x, ref_mel, cond, code=code, time=t, apply_cfg=True)
             pred, null_pred = torch.chunk(out_put, 2, dim=0)
 
             return pred + (pred - null_pred) * guidance_scale
