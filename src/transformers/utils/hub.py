@@ -149,7 +149,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
-) -> List[str]:
+) -> list[str]:
     """List template files from a repo.
 
     A template is a jinja file located under the `templates/` folder.
