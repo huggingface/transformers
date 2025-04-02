@@ -1077,9 +1077,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         self.donut = DonutSwinModel(config)
 
         # Classifier head
-        self.classifier = (
-            nn.Linear(self.donut.num_features, self.num_labels) if self.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = nn.Linear(self.donut.num_features, self.num_labels) if self.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
