@@ -70,7 +70,7 @@ class WrappedFlexAttention:
     def __call__(self):
         return self._compiled_flex_attention
 
-
+# @torch.compiler.disable(recursive=False)
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None
 ) -> "BlockMask":
@@ -165,7 +165,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-# @torch.compiler.disable(recursive=False)
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,

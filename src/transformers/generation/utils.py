@@ -3316,7 +3316,7 @@ class GenerationMixin:
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                # model_forward = self.get_compiled_call(generation_config.compile_config)
+                model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
