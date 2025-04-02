@@ -140,8 +140,6 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-> [!NOTE]
-> vLLM currently supports static YARN, meaning the scaling factor is fixed. This might slightly impact performance on very short texts compared to not using YARN scaling. Consider enabling `rope_scaling` only when long context processing is essential.
 
 ## Notes
 
