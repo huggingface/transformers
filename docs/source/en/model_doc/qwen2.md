@@ -88,6 +88,7 @@ model_inputs = tokenizer([text], return_tensors="pt").to(device)
 
 generated_ids = model.generate(
     model_inputs.input_ids,
+    cache_implementation="static",
     max_new_tokens=512,
     do_sample=True, # Enable sampling
     temperature=0.7, # Control randomness
