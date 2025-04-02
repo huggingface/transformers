@@ -3088,7 +3088,6 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            # When calling evaluate directly, it will only limit with max_eval_sample=True
             metrics = self._evaluate(trial, ignore_keys_for_eval, limit_eval_sample_size=True)
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
 
