@@ -1237,7 +1237,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             inv_dt = dt + torch.log(-torch.expm1(-dt))
             module.dt_bias.data.copy_(inv_dt)
 
-            A = torch.arange(1, self.num_heads + 1)
+            A = torch.arange(1, module.num_heads + 1)
             module.A_log.data.copy_(torch.log(A))
             module.D.data.fill_(1.0)
 
