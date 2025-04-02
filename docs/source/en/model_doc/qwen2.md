@@ -70,7 +70,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
     torch_dtype=torch.bfloat16, 
     device_map="auto",
-    attn_implementation="flash_attention_2" # use "sdpa" or None for CPU compatibility
+    attn_implementation="sdpa" # use "sdpa" or None for CPU compatibility
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-Instruct")
 
