@@ -222,7 +222,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             # TODO: if it's possible to do in batch mode
             if do_normalize:
                 stacked_images = [self.normalize(x.unsqueeze(0), **kwargs) for x in stacked_images]
-                stacked_images = torch.stack(stacked_images)
+                stacked_images = torch.cat(stacked_images, dim=0)
 
             # TODO: we need this to be in batch from
             # convert to torch tensor and permute
