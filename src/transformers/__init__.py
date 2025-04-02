@@ -635,7 +635,7 @@ _import_structure = {
     ],
     "models.conversational_speech_model": [
         "ConversationalSpeechModelConfig",
-        "ConversationalSpeechModelDepthConfig",
+        "ConversationalSpeechModelDepthDecoderConfig",
     ],
     "models.mpnet": [
         "MPNetConfig",
@@ -3038,14 +3038,9 @@ else:
     _import_structure["models.conversational_speech_model"].extend(
         [
             "ConversationalSpeechModelForCausalLM",
-            "ConversationalSpeechModelForConditionalGeneration",
-            "ConversationalSpeechModelModel",
-            "ConversationalSpeechModelPreTrainedModel",
-            "ConversationalSpeechModelDepthDecoder",
-            "ConversationalSpeechModelDepthDecoderConfig",
             "ConversationalSpeechModelDepthDecoderForCausalLM",
-            "ConversationalSpeechModelBackboneModel",
-            "ConversationalSpeechModelBackboneModelForCausalLM",
+            "ConversationalSpeechModelDepthDecoder",
+            "ConversationalSpeechModelBackbone",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5485,7 +5480,7 @@ if TYPE_CHECKING:
     )
     from .models.conversational_speech_model import (
         ConversationalSpeechModelConfig,
-        ConversationalSpeechModelDepthConfig,
+        ConversationalSpeechModelDepthDecoderConfig,
     )
     from .models.convnext import ConvNextConfig
     from .models.convnextv2 import (
@@ -7046,9 +7041,9 @@ if TYPE_CHECKING:
         )
         from .models.conversational_speech_model import (
             ConversationalSpeechModelForCausalLM,
-            ConversationalSpeechModelForConditionalGeneration,
-            ConversationalSpeechModelModel,
-            ConversationalSpeechModelPreTrainedModel,
+            ConversationalSpeechModelDepthDecoderForCausalLM,
+            ConversationalSpeechModelDepthDecoder,
+            ConversationalSpeechModelBackbone,
         )
         from .models.convnext import (
             ConvNextBackbone,

@@ -721,7 +721,7 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
         )
 
 
-class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
+class ConversationalSpeechModelBackboneEmbeddings(nn.Module):
     def __init__(
         self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, text_padding_idx, codebook_padding_idx
     ):
@@ -767,7 +767,7 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
     "The bare ConversationalSpeechBackboneModel Model outputting raw hidden-states without any specific head on top.",
     CONVERSATIONAL_SPEECH_MODEL_BACKBONE_START_DOCSTRING,
 )
-class ConversationalSpeechModelBackboneModel(LlamaModel):
+class ConversationalSpeechModelBackbone(LlamaModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConversationalSpeechModelDecoderLayer`]
 
@@ -777,7 +777,7 @@ class ConversationalSpeechModelBackboneModel(LlamaModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(
+        self.embed_tokens = ConversationalSpeechModelBackboneEmbeddings(
             config.hidden_size,
             config.vocab_size,
             config.num_codebooks,
@@ -814,7 +814,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
         super().__init__(config)
         del self.model
         self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM._from_config(config.depth_decoder_config)
-        self.backbone_model = ConversationalSpeechModelBackboneModel._from_config(config.backbone_config)
+        self.backbone_model = ConversationalSpeechModelBackbone._from_config(config.backbone_config)
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(CONVERSATIONAL_SPEECH_MODEL_INPUTS_DOCSTRING)
@@ -1284,6 +1284,6 @@ __all__ = [
     "ConversationalSpeechModelConfig",
     "ConversationalSpeechModelDepthDecoder",
     "ConversationalSpeechModelDepthDecoderForCausalLM",
-    "ConversationalSpeechModelBackboneModel",
+    "ConversationalSpeechModelBackbone",
     "ConversationalSpeechModelForCausalLM",
 ]

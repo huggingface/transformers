@@ -460,6 +460,7 @@ CONVERSATIONAL_SPEECH_MODEL_DEPTH_DECODER_START_DOCSTRING = START_DOCSTRING_BASE
     config_class="ConversationalSpeechModelDepthDecoderConfig"
 )
 
+
 INPUTS_DOCSTRING_BASE = r"""
     Args:
         {input_ids_docstring}
@@ -975,7 +976,7 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModel
         )
 
 
-class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
+class ConversationalSpeechModelBackboneEmbeddings(nn.Module):
     def __init__(
         self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, text_padding_idx, codebook_padding_idx
     ):
@@ -1046,7 +1047,7 @@ CONVERSATIONAL_SPEECH_MODEL_BACKBONE_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.fo
     "The bare ConversationalSpeechBackboneModel Model outputting raw hidden-states without any specific head on top.",
     CONVERSATIONAL_SPEECH_MODEL_BACKBONE_START_DOCSTRING,
 )
-class ConversationalSpeechModelBackboneModel(ConversationalSpeechModelPreTrainedModel):
+class ConversationalSpeechModelBackbone(ConversationalSpeechModelPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConversationalSpeechModelDecoderLayer`]
 
@@ -1058,7 +1059,7 @@ class ConversationalSpeechModelBackboneModel(ConversationalSpeechModelPreTrained
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(
+        self.embed_tokens = ConversationalSpeechModelBackboneEmbeddings(
             config.hidden_size,
             config.vocab_size,
             config.num_codebooks,
@@ -1413,7 +1414,7 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM._from_config(config.depth_decoder_config)
-        self.backbone_model = ConversationalSpeechModelBackboneModel._from_config(config.backbone_config)
+        self.backbone_model = ConversationalSpeechModelBackbone._from_config(config.backbone_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1901,6 +1902,6 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
 __all__ = [
     "ConversationalSpeechModelDepthDecoder",
     "ConversationalSpeechModelDepthDecoderForCausalLM",
-    "ConversationalSpeechModelBackboneModel",
+    "ConversationalSpeechModelBackbone",
     "ConversationalSpeechModelForCausalLM",
 ]

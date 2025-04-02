@@ -73,7 +73,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cohere2", "Cohere2Model"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
-        ("conversational_speech_model", "ConversationalSpeechModelModel"),
+        ("conversational_speech_model", "ConversationalSpeechModelForCausalLM"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
         ("cpmant", "CpmAntModel"),
