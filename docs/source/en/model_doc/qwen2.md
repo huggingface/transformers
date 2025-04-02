@@ -62,7 +62,6 @@ print(outputs[0]["generated_text"][-1]['content'])
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-device = "cuda"
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
     torch_dtype=torch.bfloat16, 
