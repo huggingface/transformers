@@ -61,6 +61,7 @@ print(outputs[0]["generated_text"][-1]['content']) # Print the assistant's respo
 </hfoption>
 <hfoption id="AutoModel">
 
+```
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -100,14 +101,17 @@ generated_ids = [
 
 response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
+```
 
 </hfoption>
 <hfoption id="transformers-cli">
 
+```
 # Make sure you are logged in (`huggingface-cli login`)
 # Requires transformers>=4.37.0
 transformers-cli chat --model Qwen/Qwen2-7B-Instruct --torch_dtype auto --attn_implementation flash_attention_2 --device auto
 # You can then type your messages in the terminal
+```
 
 </hfoption>
 </hfoptions>
@@ -116,6 +120,7 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses bitsandbytes to quantize the weights to 4-bits. Note that quantization usually works best with base models.
 
+```
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -141,6 +146,7 @@ model = AutoModelForCausalLM.from_pretrained(
 inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda") # Adjust device if needed
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
 
 Processing Long Contexts
 Larger Qwen2 models (like Qwen2-72B) support context lengths up to 131,072 tokens using YARN scaling.
@@ -149,11 +155,14 @@ For deployment, using vLLM is recommended. To enable long-context capabilities:
 
 1. Install vLLM:
 
+```
 pip install "vllm>=0.4.3"
 # Or install from source: https://github.com/vllm-project/vllm/
+```
 
 2. Configure Model Settings: Modify the model's config.json file by adding the rope_scaling attribute:
 
+```
     {
         "architectures": [
             "Qwen2ForCausalLM"
@@ -169,10 +178,13 @@ pip install "vllm>=0.4.3"
         }
         // --- End section ---
     }
+```
 
 3. Deploy with vLLM: Start a vLLM server pointing to the modified model weights directory:
 
+```
 python -m vllm.entrypoints.openai.api_server --served-model-name Qwen2-72B-Instruct --model /path/to/your/modified/qwen2/weights
+```
 
 You can then interact with the API (e.g., via curl) using the extended context length.
 
