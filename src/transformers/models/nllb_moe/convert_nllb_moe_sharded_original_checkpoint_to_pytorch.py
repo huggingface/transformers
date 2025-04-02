@@ -19,7 +19,6 @@ import torch
 from torch import nn
 
 from transformers import NllbMoeConfig, NllbMoeModel
-from transformers.modeling_utils import dtype_byte_size
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 
 
@@ -86,8 +85,8 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
-            total_size += sum([value.numel() for key, value in expert_state.items()]) * dtype_byte_size(
-                expert_state[list(expert_state)[0]].dtype
+            total_size += sum([value.numel() for key, value in expert_state.items()]) * (
+                expert_state[list(expert_state)[0]].element_size()
             )
 
     # Add the last block

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,8 @@
 
 import enum
 import inspect
-from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
@@ -75,9 +75,9 @@ def verify_out_features_out_indices(
 
 
 def _align_output_features_output_indices(
-    out_features: Optional[List[str]],
-    out_indices: Optional[Union[List[int], Tuple[int]]],
-    stage_names: List[str],
+    out_features: Optional[list[str]],
+    out_indices: Optional[Union[list[int], tuple[int]]],
+    stage_names: list[str],
 ):
     """
     Finds the corresponding `out_features` and `out_indices` for the given `stage_names`.
@@ -106,10 +106,10 @@ def _align_output_features_output_indices(
 
 
 def get_aligned_output_features_output_indices(
-    out_features: Optional[List[str]],
-    out_indices: Optional[Union[List[int], Tuple[int]]],
-    stage_names: List[str],
-) -> Tuple[List[str], List[int]]:
+    out_features: Optional[list[str]],
+    out_indices: Optional[Union[list[int], tuple[int]]],
+    stage_names: list[str],
+) -> tuple[list[str], list[int]]:
     """
     Get the `out_features` and `out_indices` so that they are aligned.
 
@@ -198,7 +198,7 @@ class BackboneMixin:
         return self._out_features
 
     @out_features.setter
-    def out_features(self, out_features: List[str]):
+    def out_features(self, out_features: list[str]):
         """
         Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
         """
@@ -211,7 +211,7 @@ class BackboneMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[Tuple[int], List[int]]):
+    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
@@ -264,7 +264,7 @@ class BackboneConfigMixin:
         return self._out_features
 
     @out_features.setter
-    def out_features(self, out_features: List[str]):
+    def out_features(self, out_features: list[str]):
         """
         Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
         """
@@ -277,7 +277,7 @@ class BackboneConfigMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[Tuple[int], List[int]]):
+    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
