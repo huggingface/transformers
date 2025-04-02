@@ -65,10 +65,10 @@ print(outputs[0]["generated_text"][-1]['content']) # Print the assistant's respo
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-device = "cuda" # or "cpu" or "mps"
+device = "cuda"
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
-    torch_dtype=torch.bfloat16, # use torch.bfloat16 for optimal performance
+    torch_dtype=torch.bfloat16, 
     device_map="auto",
     attn_implementation="flash_attention_2" # use "sdpa" or None for CPU compatibility
 )
@@ -90,10 +90,10 @@ generated_ids = model.generate(
     model_inputs.input_ids,
     cache_implementation="static",
     max_new_tokens=512,
-    do_sample=True, # Enable sampling
-    temperature=0.7, # Control randomness
-    top_k=50,        # Control diversity
-    top_p=0.95       # Control diversity
+    do_sample=True, 
+    temperature=0.7, 
+    top_k=50,        
+    top_p=0.95       
 )
 # Slice the output to remove the input tokens
 generated_ids = [
@@ -127,63 +127,26 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 # Configure quantization
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16, # Recommended compute dtype
-    bnb_4bit_quant_type="nf4",             # Use NF4 quantization
-    bnb_4bit_use_double_quant=True,        # Enable double quantization
+    bnb_4bit_compute_dtype=torch.bfloat16, 
+    bnb_4bit_quant_type="nf4",             
+    bnb_4bit_use_double_quant=True,       
 )
 
 # Load tokenizer and quantized model
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B") # Use base model
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B") 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-7B", # Use base model
-    torch_dtype=torch.bfloat16, # Load weights in bfloat16 before quantizing
+    torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
-    attn_implementation="flash_attention_2" # Recommended for speed
+    attn_implementation="flash_attention_2" 
 )
 
 # Prepare input and generate
-inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda") # Adjust device if needed
+inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda") 
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-
-## Processing Long Contexts
-
-Larger Qwen2 models (like Qwen2-72B) support context lengths up to 131,072 tokens using [YARN](https://arxiv.org/abs/2309.00071) scaling.
-
-For deployment, using vLLM is recommended. To enable long-context capabilities:
-
-1.  **Install vLLM**:
-    ```bash
-    pip install "vllm>=0.4.3"
-    # Or install from source: https://github.com/vllm-project/vllm/
-    ```
-
-2.  **Configure Model Settings**: Modify the model's `config.json` file by adding the `rope_scaling` attribute:
-    ```json
-        {
-            "architectures": [
-                "Qwen2ForCausalLM"
-            ],
-            // ... other config ...
-            "vocab_size": 152064, // Example vocab size, check your model's config
-
-            // --- Add this section ---
-            "rope_scaling": {
-                "factor": 4.0, // Adjust factor based on model/desired length if needed
-                "original_max_position_embeddings": 32768, // Base context length before scaling
-                "type": "yarn"
-            }
-            // --- End section ---
-        }
-    ```
-
-3.  **Deploy with vLLM**: Start a vLLM server pointing to the modified model weights directory:
-    ```bash
-    python -m vllm.entrypoints.openai.api_server --served-model-name Qwen2-72B-Instruct --model /path/to/your/modified/qwen2/weights
-    ```
-    You can then interact with the API (e.g., via `curl`) using the extended context length.
 
 > [!NOTE]
 > vLLM currently supports static YARN, meaning the scaling factor is fixed. This might slightly impact performance on very short texts compared to not using YARN scaling. Consider enabling `rope_scaling` only when long context processing is essential.
