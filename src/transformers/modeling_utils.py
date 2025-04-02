@@ -2479,14 +2479,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         it correctly handles composite models. Indeed, depth-first recursion fails with composite models as it will usually
         initialize the basic blocks (e.g. nn.Linear, nn.Embedding, etc) first, which will cause them to be initialized according
         to the `_init_weights` of the outer-most model instead of the given sub-model.
-        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the 
+        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the
         module graph along the recursion. It can handle an arbitrary number of sub-models.
 
         Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as `module.weight.data.zero_()`.
         """
         if not hasattr(torch.nn.Module, "smart_apply"):
-            # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function 
+            # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
             def smart_apply(self, fn):
                 for module in self.children():
@@ -2497,7 +2497,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module.smart_apply(fn)
                 fn(self)
                 return self
-        
+
             torch.nn.Module.smart_apply = smart_apply
 
         # Let the magic happen with this simple call
