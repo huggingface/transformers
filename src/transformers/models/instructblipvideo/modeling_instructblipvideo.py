@@ -326,7 +326,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+        factor = self.config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=factor)
