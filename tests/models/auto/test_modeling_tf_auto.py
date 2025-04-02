@@ -23,7 +23,6 @@ from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5C
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
-    RequestCounter,
     require_tensorflow_probability,
     require_tf,
     slow,
