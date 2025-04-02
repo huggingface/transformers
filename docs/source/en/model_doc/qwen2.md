@@ -106,7 +106,6 @@ print(response)
 ```bash
 # pip install -U flash-attn --no-build-isolation
 transformers-cli chat --model_name_or_path Qwen/Qwen2-7B-Instruct --torch_dtype auto --attn_implementation flash_attention_2 --device 0
-# You can then type your messages in the terminal
 ```
 
 </hfoption>
