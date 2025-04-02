@@ -368,7 +368,7 @@ class Llama4TextAttention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position, "sliding_window": self.use_rope}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -394,6 +394,7 @@ class Llama4TextAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+        print("out of attn layer")
         return attn_output, attn_weights
 
 
@@ -758,7 +759,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if isinstance(attention_mask, torch.Tensor):
                 # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
-                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length= past_key_values.get_max_cache_shape())
+                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=25336)
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
@@ -1006,7 +1007,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        print("generated a token")
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
