@@ -18,21 +18,35 @@ Processor class for Qwen2.5Omni.
 """
 
 import logging
+import re
 from typing import List, Optional, Union
 
 import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 
 
+class Qwen2_5_VLVideosKwargs(VideosKwargs):
+    fps: Optional[List[int]] = (None,)
+    use_audio_in_video: Optional[bool] = (None,)
+    seconds_per_chunk: Optional[float] = None
+    position_id_per_seconds: Optional[int] = None
+
+
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
+    videos_kwargs: Qwen2_5_VLVideosKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
             "padding_side": "left",
+        },
+        "videos_kwargs": {
+            "seconds_per_chunk": 2.0,
+            "position_id_per_seconds": 25,
+            "use_audio_in_video": False,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -81,10 +95,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         images: ImageInput = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        fps: Optional[List[int]] = None,
-        use_audio_in_video: Optional[bool] = False,
-        seconds_per_chunk: Optional[float] = 2.0,
-        position_id_per_seconds: Optional[int] = 25,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -111,11 +121,19 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array.
         """
 
+        if text is None:
+            raise ValueError("You need to specify either a `text` input to process.")
+
         output_kwargs = self._merge_kwargs(
             Qwen2_5OmniProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
+        position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
+        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
+        fps = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -151,30 +169,22 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             videos_inputs = {}
             video_grid_thw = None
 
-        if text is None:
-            raise ValueError("You need to specify either a `text` input to process.")
-
         if not isinstance(text, list):
             text = [text]
 
         text = text.copy()
 
         # Extend mm token length
-
         merge_length = self.image_processor.merge_size**2
         audio_index = 0
         image_index = 0
         video_index = 0
+
         for i in range(len(text)):
-            positions = []
-            for special_token in [self.audio_token, self.image_token, self.video_token]:
-                start = 0
-                while True:
-                    pos = text[i].find(special_token, start)
-                    if pos == -1:
-                        break
-                    positions.append((pos, special_token))
-                    start = pos + len(special_token)
+            special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
+            pattern = "|".join(special_tokens)
+            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, text[i])])
+
             positions.sort(key=lambda x: x[0])
             for _, special_token in positions:
                 if audio is not None and special_token == self.audio_token:
@@ -250,6 +260,16 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         )
 
     def get_chunked_index(self, t_index, t_ntoken_per_chunk):
+        """
+        Divides a list of indices into chunks based on token count per chunk.
+        Args:
+            t_index: A list of integers representing token indices.
+            t_ntoken_per_chunk: The maximum number of tokens allowed in each chunk.
+        Returns:
+            A list of tuples, where each tuple represents the start and end
+            indices of a chunk.
+        """
+
         def _iter():
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
@@ -308,4 +328,4 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         )
 
 
-__all__ = [Qwen2_5OmniProcessor]
+__all__ = ["Qwen2_5OmniProcessor"]

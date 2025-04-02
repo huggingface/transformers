@@ -777,11 +777,11 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         enc_dilations (`List[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
             A list of dilations for each layer in the encoder.
         enc_attention_channels (`int`, *optional*, defaults to 64):
-            The number of attention channels in the SEBlock.
+            The number of attention channels in the SqueezeExcitationBlock.
         enc_res2net_scale (`int`, *optional*, defaults to 2):
             The scale of the Res2Net block in the encoder.
         enc_se_channels (`int`, *optional*, defaults to 64):
-            The number of output channels after squeeze in the SEBlock.
+            The number of output channels after squeeze in the SqueezeExcitationBlock.
     """
 
     model_type = "qwen2_5_omni_dit"
