@@ -1153,6 +1153,7 @@ class Llama4VisionAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_key_value_groups = 1
         self.attention_dropout = config.attention_dropout
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
