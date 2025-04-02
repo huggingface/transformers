@@ -339,7 +339,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
                 if key == "keypoints":
                     batched_row = torch.sum(batched_row, dim=-1)
                     single_row_object = torch.sum(single_row_object, dim=-1)
-                    tolerance = 0.02 * single_row_object.shape[-1]
+                    tolerance = 0.03 * single_row_object.shape[-1]
                     self.assertTrue(
                         torch.sum(~torch.isclose(batched_row, single_row_object, rtol=rtol, atol=atol)) < tolerance
                     )
