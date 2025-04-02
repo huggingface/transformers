@@ -59,7 +59,7 @@ class FbgemmFp8Linear(torch.nn.Module):
         self.weight_scale = self.weight_scale.to(torch.float32)
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
             x_quantized, self.weight, x_scale, self.weight_scale, use_fast_accum=True
-        )
+        )   
         output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
@@ -97,9 +97,6 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
 
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            raise RuntimeError("NaN or inf values detected in hidden_states")
-        # Process each expert separately
         next_states = []
         for i in range(self.num_experts):
             # Extract expert's hidden states
@@ -108,13 +105,13 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             # Quantize for this expert
             expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
                 expert_hidden_reshaped, num_tokens, self.input_scale_ub
-            )    
+            )
             self.gate_up_proj_scale = self.gate_up_proj_scale.to(torch.float32)
             gate = torch.ops.fbgemm.f8f8bf16_rowwise(
                 expert_quantized,
                 self.gate_up_proj[i][:self.expert_dim], 
                 expert_scale,
-                self.gate_up_proj_scale[i][:, 0:1], 
+                self.gate_up_proj_scale[i][:, 0], 
                 use_fast_accum=True
             )
 
@@ -122,23 +119,14 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
                 expert_quantized, 
                 self.gate_up_proj[i][self.expert_dim:], 
                 expert_scale, 
-                self.gate_up_proj_scale[i][:, 1:2], 
+                self.gate_up_proj_scale[i][:, 1], 
                 use_fast_accum=True
             )
-    
-            # Apply activation function
             activated = up * self.act_fn(gate)
-            # Check for NaN or inf values in activated
-            if torch.isnan(activated).any() or torch.isinf(activated).any():
-                raise RuntimeError("NaN or inf values detected in activated after activation function")
 
-            # Quantize activated output for down projection
             activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
                 activated, num_tokens, self.input_scale_ub
             )
-            # Check for NaN or inf values after quantization
-            if torch.isnan(activated_scale).any() or torch.isinf(activated_scale).any():
-                raise RuntimeError("NaN or inf values detected in activated_scale after quantization")
 
             self.down_proj_scale = self.down_proj_scale.to(torch.float32)
             # Compute down projection using FP8 operations
@@ -149,15 +137,11 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
                 self.down_proj_scale[i], 
                 use_fast_accum=True
             )
-            # Check for NaN or inf values in expert_output
-            if torch.isnan(expert_output).any() or torch.isinf(expert_output).any():
-                raise RuntimeError("NaN or inf values detected in expert_output after f8f8bf16_rowwise operation")
 
             next_states.append(expert_output)
 
         # Combine expert outputs
         next_states = torch.cat(next_states, dim=0)
-        next_states = next_states.to(hidden_states.dtype)
         next_states = next_states.to(hidden_states.device)
         return next_states.view(-1, self.hidden_size)
 

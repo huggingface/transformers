@@ -153,8 +153,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         from ..integrations import FbgemmFp8Llama4TextExperts
         module, tensor_name = get_module_from_name(model, param_name)
-        # print(module, tensor_name, param_name)
-        # print(param_name, module, tensor_name)
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately
@@ -225,11 +223,11 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        from ..integrations import FbgemmFp8Linear
+        from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, FbgemmFp8Linear):
+            if isinstance(module, FbgemmFp8Linear) or isinstance(module, FbgemmFp8Llama4TextExperts):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
