@@ -36,6 +36,7 @@ from ...utils import (
 )
 from .image_processing_layoutlmv2 import apply_tesseract
 
+
 if is_torch_available():
     import torch
 
@@ -48,8 +49,7 @@ if is_torchvision_available():
 
 def flip(x, dim):
     indices = [slice(None)] * x.dim()
-    indices[dim] = torch.arange(x.size(dim) - 1, -1, -1,
-                                dtype=torch.long, device=x.device)
+    indices[dim] = torch.arange(x.size(dim) - 1, -1, -1, dtype=torch.long, device=x.device)
     return x[tuple(indices)]
 
 

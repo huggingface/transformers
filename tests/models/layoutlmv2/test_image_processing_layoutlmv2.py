@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
 import unittest
 
+import requests
+
 from transformers.testing_utils import require_pytesseract, require_torch, require_vision
-from transformers.utils import is_pytesseract_available, is_torchvision_available, is_torch_available
+from transformers.utils import is_pytesseract_available, is_torch_available, is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -107,6 +109,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @unittest.skip(reason="Tesseract version is not correct in ci. @Arthur FIXME")
     def test_layoutlmv2_integration_test(self):
         from datasets import load_dataset
+
         ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         for image_processing_class in self.image_processor_list:
@@ -153,9 +156,16 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values.float()/255, encoding_fast.pixel_values.float()/255, atol=1e-1))
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
+            )
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float())/255).item(), 1e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
+            ).item(),
+            1e-3,
         )
 
     @require_vision
@@ -179,7 +189,14 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values.float()/255, encoding_fast.pixel_values.float()/255, atol=1e-1))
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
+            )
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float())/255).item(), 1e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
+            ).item(),
+            1e-3,
         )
