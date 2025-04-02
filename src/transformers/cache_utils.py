@@ -1717,9 +1717,7 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        print("sliding", cache_position, key_states.shape, k_out.shape)
         if cache_position.shape[0] > max_cache_len:
-            print(key_states.shape)
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
@@ -1727,7 +1725,6 @@ class HybridCache(Cache):
             self.value_cache[layer_idx] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
-            print(key_states.shape)
             return key_states, value_states
 
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
@@ -1748,9 +1745,6 @@ class HybridCache(Cache):
         return k_out, v_out
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        print("static", cache_position, key_states.shape, k_out.shape)
-        print("\n")
-        exit(0)
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
