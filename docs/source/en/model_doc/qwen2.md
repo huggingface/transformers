@@ -45,7 +45,7 @@ pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen2-7B-Instruct",
     torch_dtype=torch.bfloat16,
-    device_map="auto" # or device=0 for single GPU
+    device_map=0
 )
 
 messages = [
