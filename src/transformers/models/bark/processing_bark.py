@@ -78,7 +78,7 @@ class BarkProcessor(ProcessorMixin):
                 - a path to a *directory* containing a processor saved using the [`~BarkProcessor.save_pretrained`]
                   method, e.g., `./my_model_directory/`.
             speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):
-                The name of the `.json` file containing the speaker_embeddings dictionnary located in
+                The name of the `.json` file containing the speaker_embeddings dictionary located in
                 `pretrained_model_name_or_path`. If `None`, no speaker_embeddings is loaded.
             **kwargs
                 Additional keyword arguments passed along to both
@@ -105,7 +105,7 @@ class BarkProcessor(ProcessorMixin):
                 logger.warning(
                     f"""`{os.path.join(pretrained_processor_name_or_path, speaker_embeddings_dict_path)}` does not exists
                     , no preloaded speaker embeddings will be used - Make sure to provide a correct path to the json
-                    dictionnary if wanted, otherwise set `speaker_embeddings_dict_path=None`."""
+                    dictionary if wanted, otherwise set `speaker_embeddings_dict_path=None`."""
                 )
                 speaker_embeddings = None
             else:
@@ -135,7 +135,7 @@ class BarkProcessor(ProcessorMixin):
                 Directory where the tokenizer files and the speaker embeddings will be saved (directory will be created
                 if it does not exist).
             speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):
-                The name of the `.json` file that will contains the speaker_embeddings nested path dictionnary, if it
+                The name of the `.json` file that will contains the speaker_embeddings nested path dictionary, if it
                 exists, and that will be located in `pretrained_model_name_or_path/speaker_embeddings_directory`.
             speaker_embeddings_directory (`str`, *optional*, defaults to `"speaker_embeddings/"`):
                 The name of the folder in which the speaker_embeddings arrays will be saved.
@@ -246,7 +246,7 @@ class BarkProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             voice_preset (`str`, `Dict[np.ndarray]`):
                 The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
-                `"en_speaker_1"`, or directly a dictionnary of `np.ndarray` embeddings for each submodel of `Bark`. Or
+                `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
                 it can be a valid file name of a local `.npz` single voice preset.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
