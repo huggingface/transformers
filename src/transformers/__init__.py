@@ -2296,9 +2296,9 @@ else:
     )
     _import_structure["models.donut"].extend(
         [
+            "DonutSwinForImageClassification",
             "DonutSwinModel",
             "DonutSwinPreTrainedModel",
-            "DonutSwinForImageClassification"
         ]
     )
     _import_structure["models.dpr"].extend(
@@ -7424,9 +7424,9 @@ if TYPE_CHECKING:
             DistilBertPreTrainedModel,
         )
         from .models.donut import (
+            DonutSwinForImageClassification,
             DonutSwinModel,
             DonutSwinPreTrainedModel,
-            DonutSwinForImageClassification
         )
         from .models.dpr import (
             DPRContextEncoder,
