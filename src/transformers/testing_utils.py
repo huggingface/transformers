@@ -3098,7 +3098,9 @@ def get_device_properties() -> DeviceProperties:
         import torch
 
         arch = torch.xpu.get_device_capability()["architecture"]
-        return ("xpu", arch)
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen)
     else:
         return (torch_device, None)
 
