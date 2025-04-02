@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Qwen2
 
-[Qwen2](https://huggingface.co/collections/qwen/qwen2-6659360b3352f8ffa74171a3) is a family of large language models (LLMs) developed by the Qwen team, Alibaba Cloud. Available in sizes from 0.5B to 72B parameters, including a Mixture-of-Experts model, Qwen2 offers both pretrained base models and instruction-tuned chat models. The models are built on the Transformer architecture featuring enhancements like SwiGLU activation, group query attention (GQA), and a mix of sliding window and full attention. Qwen2 models utilize an improved tokenizer optimized for multiple languages and code, and support context lengths up to 131,072 tokens (via YARN scaling for larger models). They demonstrate state-of-the-art performance across various benchmarks.
+[Qwen2](https://huggingface.co/papers/2407.10671) is a family of large language models (pretrained, instruction-tuned and mixture-of-experts) available in sizes from 0.5B to 72B parameters. The models are built on the Transformer architecture featuring enhancements like group query attention (GQA), rotary positional embeddings (RoPE), a mix of sliding window and full attention, and dual chunk attention with YARN for training stability. Qwen2 models support multiple languages and context lengths up to 131,072 tokens.
 
 You can find all the official Qwen2 checkpoints under the [Qwen2 Collection](https://huggingface.co/collections/qwen/qwen2-6659360b3352f8ffa74171a3).
 
