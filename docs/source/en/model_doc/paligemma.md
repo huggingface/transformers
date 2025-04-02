@@ -63,7 +63,7 @@ raw_image = Image.open(requests.get(image_file, stream=True).raw)
 inputs = processor(raw_image, prompt, return_tensors="pt")
 output = model.generate(**inputs, max_new_tokens=20)
 
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
+print(processor.decode(output[0], skip_special_tokens=True)[len(prompt): ])
 ```
 
 ### Multi-image Inference
@@ -86,7 +86,7 @@ snow_image = Image.open(
 inputs = processor(images=[[snow_image, stop_sign_image]], text=prompt, return_tensors="pt")
 
 output = model.generate(**inputs, max_new_tokens=20)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
+print(processor.decode(output[0], skip_special_tokens=True)[len(prompt): ])
 
 ```
 
