@@ -49,9 +49,8 @@ if is_torchvision_available():
     else:
         from torchvision.transforms import functional as F
 
-
-if is_torchvision_available():
     from ...image_utils import pil_torch_interpolation_mapping
+
 
 if is_torch_available():
     import torch
