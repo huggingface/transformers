@@ -257,7 +257,6 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
         super().__init__(**kwargs)
      
 
-
 @dataclass
 class ConversationalSpeechModelOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
@@ -626,22 +625,34 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
         depth_decoder_loss = None
         depth_decoder_outputs = None
         if labels is not None:
+            # select first codebook as labels for the backbone model
             backbone_labels = labels[:, :, 0] if labels is not None else None
             backbone_loss = self.loss_function(
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
+            # for the depth decoder, we need to select the frames to train on
+            # those are frames where the label is not uniformly `ignore_index` along the codebook dimension
             depth_decoder_labels = labels[:, :, : self.config.num_codebooks]
             mask_idxs = (depth_decoder_labels[:, :, 1:] == -100).all(dim=-1)
             train_idxs = (~mask_idxs).nonzero()
 
-            depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], :self.config.num_codebooks - 1]
+            depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], : self.config.num_codebooks - 1]
             backbone_last_hidden_states = backbone_hidden_states[train_idxs[:, 0], train_idxs[:, 1] - 1, :]
             depth_decoder_labels = depth_decoder_labels[train_idxs[:, 0], train_idxs[:, 1], :]
 
+            codebook_idxs = torch.arange(self.config.num_codebooks - 1, device=depth_decoder_input_ids.device, dtype=torch.long)
+            codebook_idxs = codebook_idxs.expand(depth_decoder_input_ids.shape[0], -1)
+            inputs_embeds = torch.cat(
+                [
+                    backbone_last_hidden_states.unsqueeze(1),
+                    self.depth_decoder.get_input_embeddings()(depth_decoder_input_ids, codebook_idxs) 
+                ], 
+                dim=1
+            )
+
             depth_decoder_outputs = self.depth_decoder(
-                input_ids=depth_decoder_input_ids,
-                backbone_last_hidden_states=backbone_last_hidden_states,
+                inputs_embeds=inputs_embeds,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -805,7 +816,9 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
                 streamer.put(next_tokens.cpu())
 
             # for the eos stopping criteria, is it expected that the eos token is the same for each codebook !!!!
-            unfinished_sequences = unfinished_sequences & ~(input_ids[:, -1, :] == self.config.backbone_config.eos_token_id).all(-1) 
+            unfinished_sequences = unfinished_sequences & ~(
+                input_ids[:, -1, :-1] == self.config.backbone_config.codebook_eos_token_id
+            ).all(-1)
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
             cur_len += 1
