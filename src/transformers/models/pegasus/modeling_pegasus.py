@@ -75,22 +75,20 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
 
-    @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+    def _init_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
         """
-        n_pos, dim = out.shape
+        n_pos, dim = self.weight.shape
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        out = torch.empty(n_pos, dim, dtype=self.weight.dtype, requires_grad=False)
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
+        self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
@@ -321,9 +319,7 @@ class PegasusEncoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
+        if hidden_states.dtype == torch.float16:
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -468,7 +464,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, PegasusSinusoidalPositionalEmbedding):
-            module.weight = module._init_weight(module.weight)
+            module._init_weight()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -664,7 +660,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        self.embed_positions.weight = self.embed_positions._init_weight(self.embed_positions.weight)
+        self.embed_positions._init_weight()
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -868,7 +864,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        self.embed_positions.weight = self.embed_positions._init_weight(self.embed_positions.weight)
+        self.embed_positions._init_weight()
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:

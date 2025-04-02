@@ -391,7 +391,6 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def test_Qwen2Moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -445,10 +444,6 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
-
-    @unittest.skip(reason="Qwen2Moe buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(reason="Qwen2Moe uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):

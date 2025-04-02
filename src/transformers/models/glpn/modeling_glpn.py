@@ -437,7 +437,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 

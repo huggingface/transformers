@@ -286,9 +286,12 @@ class ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, ConvNextLayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ConvNextLayer):
+            if module.layer_scale_parameter is not None:
+                module.layer_scale_parameter.data.fill_(self.config.layer_scale_init_value)
 
 
 CONVNEXT_START_DOCSTRING = r"""

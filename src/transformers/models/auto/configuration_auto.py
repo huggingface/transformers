@@ -254,6 +254,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
         ("qwen2_moe", "Qwen2MoeConfig"),
         ("qwen2_vl", "Qwen2VLConfig"),
+        ("qwen3", "Qwen3Config"),
+        ("qwen3_moe", "Qwen3MoeConfig"),
         ("rag", "RagConfig"),
         ("realm", "RealmConfig"),
         ("recurrent_gemma", "RecurrentGemmaConfig"),
@@ -271,6 +273,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Config"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
+        ("sam_vision_model", "SamVisionConfig"),
         ("seamless_m4t", "SeamlessM4TConfig"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Config"),
         ("segformer", "SegformerConfig"),
@@ -609,6 +612,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoE"),
         ("qwen2_vl", "Qwen2VL"),
+        ("qwen3", "Qwen3"),
+        ("qwen3_moe", "Qwen3MoE"),
         ("rag", "RAG"),
         ("realm", "REALM"),
         ("recurrent_gemma", "RecurrentGemma"),
@@ -626,6 +631,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rt_detr_v2", "RT-DETRv2"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
+        ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4T"),
         ("seamless_m4t_v2", "SeamlessM4Tv2"),
         ("segformer", "SegFormer"),
@@ -769,6 +775,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
+        ("sam_vision_model", "sam"),
     ]
 )
 
