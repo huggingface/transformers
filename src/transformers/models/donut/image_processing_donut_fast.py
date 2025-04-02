@@ -31,7 +31,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -130,7 +129,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The aligned image.
         """
-        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        input_height, input_width = image.shape[-2:]
         output_height, output_width = size.height, size.width
 
         if (output_width < output_height and input_width > input_height) or (
@@ -163,7 +162,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         output_height, output_width = size.height, size.width
-        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        input_height, input_width = image.shape[-2:]
 
         delta_width = output_width - input_width
         delta_height = output_height - input_height
@@ -206,7 +205,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        input_height, input_width = image.shape[-2:]
         output_height, output_width = size.height, size.width
 
         # We always resize to the smallest of either the input or output size.
