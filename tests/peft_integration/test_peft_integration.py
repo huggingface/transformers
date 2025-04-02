@@ -815,7 +815,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     with self.assertRaisesRegex(RuntimeError, msg):
                         trainer.train()
 
-    def test_peft_pipelines_unnessesary_msg(self):
+    def test_peft_pipeline_no_warning(self):
         """
         Test to verify that the warning message "The model 'PeftModel' is not supported for text-generation"
         does not appear when using PeftModel with text-generation pipeline.
@@ -844,8 +844,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         )
 
         # Create pipeline with PEFT model while capturing log output
-        pipeline_logger = logging.get_logger("transformers.pipelines.text_generation")
-        with CaptureLogger(pipeline_logger) as cl:
+        # Check that the warning message is not present in the logs
+        pipeline_logger = logging.get_logger("transformers.pipelines.base")
+        with self.assertNoLogs(pipeline_logger, logging.ERROR) as cl:
             lora_generator = pipeline(
                 task="text-generation",
                 model=lora_model,
