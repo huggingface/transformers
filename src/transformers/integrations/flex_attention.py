@@ -72,7 +72,7 @@ class WrappedFlexAttention:
 
 
 def make_flex_block_causal_mask(
-    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None
+    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, key_length = None
 ) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
@@ -121,7 +121,7 @@ def make_flex_block_causal_mask(
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
         padding_mask = document_ids[batch_idx, q_idx] > 0
         final_mask = causal_mask & padding_mask
-        final_mask &= document_mask 
+        final_mask = final_mask & document_mask
         return final_mask
 
 
@@ -177,7 +177,9 @@ def flex_attention_forward(
     block_mask = None
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
-        block_mask = attention_mask
+        block_mask = attention_mask #._adjust(query.shape[2], key.shape[2])
+        if query.shape[2] != key.shape[2]:
+            block_mask = block_mask._adjust(query.shape[2], key.shape[2])
     else:
         causal_mask = attention_mask
 
@@ -195,6 +197,8 @@ def flex_attention_forward(
 
     enable_gqa = True
     num_local_query_heads = query.shape[1]
+
+    # When running TP this helps:
     if not((num_local_query_heads & (num_local_query_heads - 1)) == 0):
         key = repeat_kv(key, num_local_query_heads)
         value = repeat_kv(value, num_local_query_heads)

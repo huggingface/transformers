@@ -322,7 +322,7 @@ class Llama4TextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.use_rope = not layer_idx in config.no_rope_layers
+        self.use_rope = layer_idx not in config.no_rope_layers
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -335,7 +335,7 @@ class Llama4TextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        if self.config.use_qk_norm and not self.use_rope:
+        if self.config.use_qk_norm and self.use_rope:
             self.qk_norm = Llama4TextL2Norm()
 
     def forward(
@@ -402,7 +402,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = layer_idx in config.no_rope_layers
+        self.use_chunked_attention = layer_idx not in config.no_rope_layers
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -742,7 +742,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
+        chunked_attention_mask=None
     ):
         sequence_length = input_tensor.shape[1]
         if self.config._attn_implementation == "flash_attention_2":
@@ -754,7 +755,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
                 chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask, chunked_attention_mask
+                return attention_mask, chunked_attention_mask
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask, chunked_attention_mask
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
