@@ -123,9 +123,27 @@ class SamHQVisionConfig(PretrainedConfig):
         mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     SamHQVisionConfig,
+    ...     SamHQVisionModel,
+    ... )
+
+    >>> # Initializing a SamHQVisionConfig with `"facebook/sam_hq-vit-huge"` style configuration
+    >>> configuration = SamHQVisionConfig()
+
+    >>> # Initializing a SamHQVisionModel (with random weights) from the `"facebook/sam_hq-vit-huge"` style configuration
+    >>> model = SamHQVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     base_config_key = "vision_config"
+    model_type = "sam_hq_vision_model"
 
     def __init__(
         self,

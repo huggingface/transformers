@@ -31,6 +31,7 @@ from ..sam.modeling_sam import (
     SamTwoWayTransformer,
     SamVisionEncoder,
     SamVisionEncoderOutput,
+    SamVisionModel,
 )
 
 
@@ -437,12 +438,22 @@ SAM_HQ_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
+    """The vision model from SAM-HQ without any head or projection on top.""",
+    SAM_HQ_START_DOCSTRING,
+)
+class SamHQVisionModel(SamVisionModel):
+    pass
+
+
+@add_start_docstrings(
     "Segment Anything Model HQ (SAM-HQ) for generating masks,given an input image and",
     " optional 2D location and bounding boxes.",
     SAM_HQ_START_DOCSTRING,
 )
 class SamHQModel(SamModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -718,4 +729,5 @@ __all__ = [
     "SamHQConfig",
     "SamHQModel",
     "SamHQPreTrainedModel",
+    "SamHQVisionModel",
 ]

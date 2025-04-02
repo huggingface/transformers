@@ -3603,6 +3603,7 @@ else:
         [
             "SamHQModel",
             "SamHQPreTrainedModel",
+            "SamHQVisionModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -8458,6 +8459,7 @@ if TYPE_CHECKING:
         from .models.sam_hq import (
             SamHQModel,
             SamHQPreTrainedModel,
+            SamHQVisionModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,

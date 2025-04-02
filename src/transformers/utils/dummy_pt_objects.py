@@ -8857,6 +8857,13 @@ class SamHQPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SamHQVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SeamlessM4TCodeHifiGan(metaclass=DummyObject):
     _backends = ["torch"]
 
