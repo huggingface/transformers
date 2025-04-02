@@ -41,10 +41,7 @@ Consider the quantization methods below for inference.
 *   For loading specific formats (FP8, Sparse) and nice quantized models: **compressed-tensors** 
 
 
-## Production-Ready & Widely Used Inference Methods:
-These methods are generally well-tested, widely adopted, and suitable for many production scenarios.
-
-### 1. bitsandbytes (`load_in_8bit` / `load_in_4bit`)
+### bitsandbytes
 
 *   **Description:** Enables 4-bit and 8-bit inference.
 *   **Pros:**
