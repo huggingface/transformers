@@ -254,9 +254,7 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if module in self.backbone.modules():
-            self.backbone._init_weights(module)
-        elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -1040,17 +1040,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initalize the weights"""
-
-        sub_module = None
-        if hasattr(self, "backbone"):
-            sub_module = self.backbone.model
-        elif hasattr(self, "model"):
-            sub_module = self.model.backbone.model
-
-        if sub_module is not None and module in sub_module.modules():
-            sub_module._init_weights(module)
-
-        elif isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
+        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
