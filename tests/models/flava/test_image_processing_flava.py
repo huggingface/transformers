@@ -15,10 +15,10 @@
 
 import random
 import unittest
-from PIL import Image
-import requests
 
 import numpy as np
+import requests
+from PIL import Image
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
@@ -412,14 +412,21 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True)
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True)
+        encoding_slow = image_processor_slow(
+            dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
+        )
+        encoding_fast = image_processor_fast(
+            dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
+        )
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
         )
 
-        self.assertTrue(torch.allclose(encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values, atol=1e-1))
+        self.assertTrue(
+            torch.allclose(encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values, atol=1e-1)
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.codebook_pixel_values - encoding_fast.codebook_pixel_values)).item(), 1e-3
+            torch.mean(torch.abs(encoding_slow.codebook_pixel_values - encoding_fast.codebook_pixel_values)).item(),
+            1e-3,
         )

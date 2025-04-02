@@ -17,7 +17,7 @@
 import math
 import random
 from functools import lru_cache
-from typing import Any, Dict, Iterable, Optional, Union, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -110,8 +110,8 @@ class FlavaMaskingGenerator:
                 num_masked = mask[top : top + height, left : left + width].sum()
                 # Overlap
                 if 0 < height * width - num_masked <= max_mask_patches:
-                    zeros_pos = mask[top:top+height, left:left+width] == 0
-                    mask[top:top+height, left:left+width][zeros_pos] = 1
+                    zeros_pos = mask[top : top + height, left : left + width] == 0
+                    mask[top : top + height, left : left + width][zeros_pos] = 1
                     delta += zeros_pos.sum()
 
                 if delta > 0:
@@ -403,7 +403,9 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         kwargs["codebook_image_std"] = codebook_image_std
         kwargs["data_format"] = data_format
         kwargs["codebook_interpolation"] = (
-            pil_torch_interpolation_mapping[codebook_resample] if isinstance(codebook_resample, (PILImageResampling, int)) else codebook_resample
+            pil_torch_interpolation_mapping[codebook_resample]
+            if isinstance(codebook_resample, (PILImageResampling, int))
+            else codebook_resample
         )
 
         return kwargs
