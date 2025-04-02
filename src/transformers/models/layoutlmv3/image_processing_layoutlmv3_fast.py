@@ -17,20 +17,14 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
-    BaseImageProcessorFast, 
-    DefaultFastImageProcessorKwargs, 
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
     BatchFeature,
+    DefaultFastImageProcessorKwargs,
 )
-from ...image_transforms import group_images_by_shape, reorder_images, ChannelDimension
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN, 
-    IMAGENET_STANDARD_STD, 
-    PILImageResampling, 
-    ImageInput,
-    SizeDict
-)
+from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -73,7 +67,7 @@ class LayoutLMv3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
             Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
             `preprocess` method.
-    """
+    """,
 )
 class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -90,7 +84,7 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]):
         super().__init__(**kwargs)
-    
+
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
         """
@@ -104,11 +98,11 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
                 Any additional custom configuration flags that are forwarded to the `config` parameter when calling
                 Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
                 `preprocess` method.
-        """
+        """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-    
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -134,7 +128,9 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST)
+                words, boxes = apply_tesseract(
+                    image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST
+                )
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
@@ -170,7 +166,6 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
             data["boxes"] = boxes_batch
 
         return data
-
 
 
 __all__ = ["LayoutLMv3ImageProcessorFast"]
