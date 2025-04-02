@@ -42,31 +42,15 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 # install optimized Mamba implementations
 # !pip install mamba-ssm causal-conv1d>=1.2.0
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import pipeline
 
-model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-Mini-1.6",
-                                             torch_dtype=torch.bfloat16,
-                                             attn_implementation="flash_attention_2",
-                                             device_map="auto")
-
-tokenizer = AutoTokenizer.from_pretrained("ai21labs/AI21-Jamba-Mini-1.6")
-
-messages = [
-   {"role": "system", "content": "You are an ancient oracle who speaks in cryptic but wise phrases, always hinting at deeper meanings."},
-   {"role": "user", "content": "Hello!"},
-]
-
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to("cuda")
-
-outputs = model.generate(input_ids, max_new_tokens=216)
-
-# Decode the output
-conversation = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-# Split the conversation to get only the assistant's response
-assistant_response = conversation.split(messages[-1]['content'])[1].strip()
-print(assistant_response)
-# Output: Seek and you shall find. The path is winding, but the journey is enlightening. What wisdom do you seek from the ancient echoes?
+pipeline = pipeline(
+    task="text-generation",
+    model="ai21labs/AI21-Jamba-Mini-1.6",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
 ```
 
 </hfoption>
