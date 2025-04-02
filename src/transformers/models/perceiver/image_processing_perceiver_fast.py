@@ -80,7 +80,7 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         """
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        height, width = image.shape[-2:]
         min_dim = min(height, width)
         cropped_height = int((size.height / crop_size.height) * min_dim)
         cropped_width = int((size.width / crop_size.width) * min_dim)
