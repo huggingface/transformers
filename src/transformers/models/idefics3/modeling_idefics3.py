@@ -537,7 +537,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            else self.config.get_text_config().initializer_range
         )
         text_model_module = None
         if hasattr(self, "text_model"):

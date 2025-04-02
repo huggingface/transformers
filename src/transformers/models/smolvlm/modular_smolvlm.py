@@ -95,7 +95,11 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
     def _init_weights(self, module):
-        std = self.config.text_config.initializer_range
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.get_text_config().initializer_range
+        )
         text_model_module = self.text_model if hasattr(self, "text_model") else self.model.text_model
         if module in text_model_module.modules():
             text_model_module._init_weights(module)
