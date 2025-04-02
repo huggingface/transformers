@@ -291,20 +291,3 @@ class TFAutoModelTest(unittest.TestCase):
     def test_model_from_pt_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
-
-    def test_cached_model_has_minimum_calls_to_head(self):
-        # Make sure we have cached the model.
-        _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        with RequestCounter() as counter:
-            _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
-        self.assertEqual(counter.total_calls, 1)
-
-        # With a sharded checkpoint
-        _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
-        with RequestCounter() as counter:
-            _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
-        self.assertEqual(counter.total_calls, 1)

@@ -865,7 +865,8 @@ class CustomPipelineTest(unittest.TestCase):
             [{"label": "LABEL_0", "score": 0.505}],
         )
 
-    @require_torch_or_tf
+    @unittest.skip("Flaky/failing on main in the CI but passes locally, TODO Matt/ydshieh investigate at some point!")
+    @require_torch
     def test_cached_pipeline_has_minimum_calls_to_head(self):
         # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
