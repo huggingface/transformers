@@ -57,6 +57,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Unused keys in load hooks (explicitly removed)
     r'layers.(\d+).attention.wqkv._extra_state':             None,
     r'layers.(\d+).attention.wo._extra_state':               None,
+    # Key apparently unused in base models
+    r'layers.(\d+).feed_forward.expert_activation_DE':       None,
 
     # MLP layer variant
     r"layers.(\d+).feed_forward.w1.weight":                  r"language_model.model.layers.\1.feed_forward.gate_proj.weight",               # might need to be fused for efficiency?
