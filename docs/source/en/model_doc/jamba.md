@@ -22,22 +22,25 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-[Jamba](https://huggingface.co/papers/2403.19887) is a family of state-of-the-art, hybrid SSM-Transformer large language models ranging from 51B to 399B parameters. [Jamba-v0.1](https://huggingface.co/ai21labs/Jamba-v0.1) is a pretrained, mixture-of-experts (MoE) generative text model, with 12B active parameters and an overall of 52B parameters across all experts. It supports a 256K context length, and can fit up to 140K tokens on a single 80GB GPU.[Jamba-Mini-1.6](https://huggingface.co/ai21labs/AI21-Jamba-Mini-1.6) comprises 52 billion parameters in total, with 12 billion active during inference and [Jamba-Large-1.6](https://huggingface.co/ai21labs/AI21-Jamba-Large-1.6) has a total of 398 billion parameters, with 94 billion active during inference.
+[Jamba](https://huggingface.co/papers/2403.19887) is a hybrid Transformer-Mamba mixture-of-experts (MoE) language model ranging from 52B to 398B total parameters. This model aims to combine the advantages of both model families, the performance of transformer models and the efficiency and longer context (256K tokens) of state space models (SSMs) like Mamba.
 
-Jamba's architecture features a blocks-and-layers approach that allows Jamba to successfully integrate Transformer and Mamba architectures altogether. Each Jamba block contains either an attention or a Mamba layer, followed by a multi-layer perceptron (MLP), producing an overall ratio of one Transformer layer out of every eight total layers.
+Jamba's architecture features a blocks-and-layers approach that allows Jamba to successfully integrate Transformer and Mamba architectures altogether. Each Jamba block contains either an attention or a Mamba layer, followed by a multi-layer perceptron (MLP), producing an overall ratio of one Transformer layer out of every eight total layers. MoE layers are mixed in to increase model capacity.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/jamba_architecture.png"
+You can find all the original Jamba checkpoints under the [AI21](https://huggingface.co/ai21labs) organization.
 alt="drawing" width="600"/>
 
 > [!TIP]
 > Click on the Jamba models in the right sidebar for more examples of how to apply Jamba to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+# !pip install -U flash-attn --no-build-isolation
+# install optimized Mamba implementations
+# !pip install mamba-ssm causal-conv1d>=1.2.0
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -53,7 +56,7 @@ messages = [
    {"role": "user", "content": "Hello!"},
 ]
 
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to(model.device)
+input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to("cuda")
 
 outputs = model.generate(input_ids, max_new_tokens=216)
 
@@ -71,9 +74,8 @@ print(assistant_response)
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
 
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True,
                                          llm_int8_skip_modules=["mamba"])
 
@@ -92,7 +94,7 @@ messages = [
    {"role": "user", "content": "Hello!"},
 ]
 
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to(model.device)
+input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to("cuda")
 
 outputs = model.generate(input_ids, max_new_tokens=216)
 
@@ -109,7 +111,7 @@ print(assistant_response)
 <hfoption id="transformers-cli">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --torch_dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
