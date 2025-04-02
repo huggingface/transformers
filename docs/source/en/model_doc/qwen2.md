@@ -69,7 +69,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-Instruct")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-1.5B-Instruct")
 
 prompt = "Give me a short introduction to large language models."
 messages = [
