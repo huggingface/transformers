@@ -48,7 +48,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         cls.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
 
-
     def get_processor(self):
         image_processor = FuyuImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("adept/fuyu-8b")
