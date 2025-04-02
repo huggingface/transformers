@@ -276,6 +276,12 @@ class Llama4Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        boi_token_index (`int`, *optional*, defaults to 200080):
+            The begin-of-image token index to wrap the image prompt.
+        eoi_token_index (`int`, *optional*, defaults to 200081):
+            The end-of-image token index to wrap the image prompt.
+        image_token_index (`int`, *optional*, defaults to 200092):
+            The image token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
@@ -323,6 +329,8 @@ class Llama4Config(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        boi_token_index=200080,
+        eoi_token_index=200081,
         image_token_index=200092,
         **kwargs,
     ):
@@ -334,6 +342,8 @@ class Llama4Config(PretrainedConfig):
         elif isinstance(vision_config, Llama4VisionConfig):
             self.vision_config = vision_config
 
+        self.boi_token_index = boi_token_index
+        self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
 
         if text_config is None:
