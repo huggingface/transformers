@@ -16,12 +16,39 @@
 
 from typing import List, Optional, Union
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, ImageInput, SizeDict, is_valid_image, validate_kwargs
-from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_available
-from ...processing_utils import Unpack
 from ...image_processing_utils import BatchFeature
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
 from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    is_valid_image,
+    validate_kwargs,
+)
+from ...processing_utils import Unpack
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
+
 
 if is_torchvision_available():
     from ...image_utils import pil_torch_interpolation_mapping
@@ -51,16 +78,6 @@ def get_num_frames(videos) -> List[List[ImageInput]]:
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
 class VideoMAEImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -89,14 +106,10 @@ class VideoMAEImageProcessorFast(BaseImageProcessorFast):
         # Get number of frames per video
         num_frames = get_num_frames(images)
 
-        print(images[0][0][0][:10])
         # Prepare input images
         images = self._prepare_input_images(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-
-        print(images[0][0][0][:10])
-
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
@@ -158,7 +171,10 @@ class VideoMAEImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack([torch.stack(processed_images[i*num_frames:(i+1)*num_frames]) for i in range(len(processed_images)//num_frames)])
+
+        processed_images = [processed_images[i : i + num_frames] for i in range(0, len(processed_images), num_frames)]
+        processed_images = [torch.stack(batch) for batch in processed_images]
+        processed_images = torch.stack(processed_images)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
