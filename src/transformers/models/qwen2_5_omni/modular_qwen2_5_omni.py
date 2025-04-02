@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import ConvTranspose1d, Parameter
+from torch.nn import Parameter
 
 from transformers.models.llama.modeling_llama import rotate_half
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
@@ -975,7 +975,7 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
 
 class Qwen2_5OmniConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniModel`]. It is used to instantiate a Qwen2.5Omni
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniForConditionalGeneration`]. It is used to instantiate a Qwen2.5Omni
     model according to the specified sub-models configurations, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
@@ -997,7 +997,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
     ...     Qwen2_5OmniThinkerConfig,
     ...     Qwen2_5OmniTalkerConfig,
     ...     Qwen2_5OmniToken2WavConfig,
-    ...     Qwen2_5OmniModel,
+    ...     Qwen2_5OmniForConditionalGeneration,
     ...     Qwen2_5OmniConfig,
     ... )
 
@@ -1013,7 +1013,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
     ... )
 
     >>> # Initializing a model (with random weights)
-    >>> model = Qwen2_5OmniModel(configuration)
+    >>> model = Qwen2_5OmniForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -2852,7 +2852,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 # Using custom RoPE, will use LlamaRotaryEmbedding next version
-class RotaryEmbedding(nn.Module):
+class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
     def __init__(self, dim, base=10000):
         super().__init__()
 
@@ -3168,7 +3168,7 @@ class ECAPA_TimeDelayNet(torch.nn.Module):
             )
 
         # Multi-layer feature aggregation
-        self.mfa = TimeDelayNetBlock(
+        self.feature_aggregation = TimeDelayNetBlock(
             config.enc_channels[-1],
             config.enc_channels[-1],
             config.enc_kernel_sizes[-1],
@@ -3176,7 +3176,7 @@ class ECAPA_TimeDelayNet(torch.nn.Module):
         )
 
         # Attentive Statistical Pooling
-        self.asp = AttentiveStatisticsPooling(
+        self.attention = AttentiveStatisticsPooling(
             config.enc_channels[-1],
             attention_channels=config.enc_attention_channels,
         )
@@ -3201,10 +3201,10 @@ class ECAPA_TimeDelayNet(torch.nn.Module):
 
         # Multi-layer feature aggregation
         hidden_states = torch.cat(hidden_states_list[1:], dim=1)
-        hidden_states = self.mfa(hidden_states)
+        hidden_states = self.feature_aggregation(hidden_states)
 
         # Attentive Statistical Pooling
-        hidden_states = self.asp(hidden_states)
+        hidden_states = self.attention(hidden_states)
 
         # Final linear transformation
         hidden_states = self.fc(hidden_states)
@@ -3213,7 +3213,7 @@ class ECAPA_TimeDelayNet(torch.nn.Module):
         return hidden_states
 
 
-class InputEmbedding(nn.Module):
+class DiTInputEmbedding(nn.Module):
     def __init__(self, config: Qwen2_5OmniDiTConfig):
         super().__init__()
         self.proj = nn.Linear(
@@ -3247,7 +3247,7 @@ class InputEmbedding(nn.Module):
 
 
 # Transformer backbone using DiT blocks
-class CodecEmbedding(nn.Module):
+class DiTCodecEmbedding(nn.Module):
     def __init__(self, codec_num_embeds, codec_dim, repeats):
         super().__init__()
         self.repeats = repeats
@@ -3264,7 +3264,7 @@ class CodecEmbedding(nn.Module):
 
 # AdaLayerNormZero
 # return with modulated x for attn input, and params for later mlp modulation
-class AdaLayerNormZero(nn.Module):
+class Qwen2_5_OmniAdaLayerNormZero(nn.Module):
     def __init__(self, dim):
         super().__init__()
 
@@ -3283,7 +3283,7 @@ class AdaLayerNormZero(nn.Module):
 
 # AdaLayerNormZero for final layer
 # return only with modulated x for attn input, cuz no more mlp modulation
-class AdaLayerNormZero_Final(nn.Module):
+class Qwen2_5_OmniAdaLayerNormZero_Final(nn.Module):
     def __init__(self, dim):
         super().__init__()
 
@@ -3301,7 +3301,7 @@ class AdaLayerNormZero_Final(nn.Module):
 
 
 # FeedForward
-class FeedForward(nn.Module):
+class DiTMLP(nn.Module):
     def __init__(self, dim, mult=4, dropout=0.0):
         super().__init__()
         inner_dim = int(dim * mult)
@@ -3401,7 +3401,7 @@ class SinusPositionEmbedding(nn.Module):
         return emb.type_as(hidden_states)
 
 
-class TimestepEmbedding(nn.Module):
+class DiTTimestepEmbedding(nn.Module):
     def __init__(self, dim, freq_embed_dim=256):
         super().__init__()
         self.time_embed = SinusPositionEmbedding(freq_embed_dim)
@@ -3418,13 +3418,13 @@ class TimestepEmbedding(nn.Module):
 class DiTDecoderLayer(nn.Module):
     def __init__(self, config: Qwen2_5OmniDiTConfig, look_ahead_block=0, look_backward_block=0):
         super().__init__()
-        self.attn_norm = AdaLayerNormZero(config.hidden_size)
+        self.attn_norm = Qwen2_5_OmniAdaLayerNormZero(config.hidden_size)
 
         self.attn = DiTAttention(config)
         self.look_ahead_block = look_ahead_block
         self.look_backward_block = look_backward_block
         self.ff_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
-        self.ff = FeedForward(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
+        self.ff = DiTMLP(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
 
     def forward(
         self, hidden_states, timestep, position_embeddings=None, block_diff=None
@@ -3491,36 +3491,50 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
-def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):  # return filter [1,1,kernel_size]
-    even = kernel_size % 2 == 0
+def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
+    """Generates a 1D Kaiser-windowed sinc filter.
+
+    Args:
+        cutoff (float): Normalized cutoff frequency (0 to 0.5).
+        half_width (float): Transition bandwidth.
+        kernel_size (int): Number of filter taps.
+
+    Returns:
+        torch.Tensor: A tensor of shape (1, 1, kernel_size) representing the filter.
+    """
+    is_even = kernel_size % 2 == 0
     half_size = kernel_size // 2
 
-    # For kaiser window
+    # Compute Kaiser window parameters
     delta_f = 4 * half_width
-    A = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
-    if A > 50.0:
-        beta = 0.1102 * (A - 8.7)
-    elif A >= 21.0:
-        beta = 0.5842 * (A - 21) ** 0.4 + 0.07886 * (A - 21.0)
+    attenuation = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
+
+    if attenuation > 50.0:
+        beta = 0.1102 * (attenuation - 8.7)
+    elif attenuation >= 21.0:
+        beta = 0.5842 * (attenuation - 21) ** 0.4 + 0.07886 * (attenuation - 21.0)
     else:
         beta = 0.0
-    window = torch.kaiser_window(kernel_size, beta=beta, periodic=False, dtype=torch.float32)
 
-    # ratio = 0.5/cutoff -> 2 * cutoff = 1 / ratio
-    if even:
-        time = torch.arange(-half_size, half_size) + 0.5
+    kaiser_window = torch.kaiser_window(kernel_size, beta=beta, periodic=False, dtype=torch.float32)
+
+    # Compute time indices
+    if is_even:
+        time_indices = torch.arange(-half_size, half_size) + 0.5
     else:
-        time = torch.arange(kernel_size) - half_size
+        time_indices = torch.arange(kernel_size) - half_size
+
+    # Compute sinc filter
     if cutoff == 0:
-        filter_ = torch.zeros_like(time)
-    else:
-        filter_ = 2 * cutoff * window * torch.sinc(2 * cutoff * time)
-        # Normalize filter to have sum = 1, otherwise we will have a small leakage
-        # of the constant component in the input signal.
-        filter_ /= filter_.sum()
-        filter = filter_.view(1, 1, kernel_size)
+        return torch.zeros((1, 1, kernel_size), dtype=torch.float32)  # Ensures correct shape
 
-    return filter
+    sinc_filter = torch.sinc(2 * cutoff * time_indices)
+    normalized_filter = 2 * cutoff * kaiser_window * sinc_filter
+
+    # Normalize to ensure sum = 1 (avoid leakage of constant component)
+    normalized_filter /= normalized_filter.sum()
+
+    return normalized_filter.view(1, 1, kernel_size)
 
 
 class UpSample1d(nn.Module):
@@ -3532,10 +3546,10 @@ class UpSample1d(nn.Module):
         self.pad = self.kernel_size // ratio - 1
         self.pad_left = self.pad * self.stride + (self.kernel_size - self.stride) // 2
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
+
         filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
         self.register_buffer("filter", filter, persistent=False)
 
-    # x: [B, C, T]
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
 
@@ -3553,11 +3567,12 @@ class DownSample1d(nn.Module):
         super().__init__()
         cutoff = 0.5 / ratio
         half_width = 0.6 / ratio
-        if cutoff < -0.0:
+
+        if cutoff < 0.0:
             raise ValueError("Minimum cutoff must be larger than zero.")
         if cutoff > 0.5:
             raise ValueError("A cutoff above 0.5 does not make sense.")
-        self.kernel_size = kernel_size
+
         self.even = kernel_size % 2 == 0
         self.pad_left = kernel_size // 2 - int(self.even)
         self.pad_right = kernel_size // 2
@@ -3567,10 +3582,8 @@ class DownSample1d(nn.Module):
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
-
         hidden_states = F.pad(hidden_states, (self.pad_left, self.pad_right), mode="replicate")
         out = F.conv1d(hidden_states, self.filter.expand(channels, -1, -1), stride=self.stride, groups=channels)
-
         return out
 
 
@@ -3584,13 +3597,12 @@ class TorchActivation1d(nn.Module):
         down_kernel_size: int = 12,
     ):
         super().__init__()
-        self.up_ratio = up_ratio
-        self.down_ratio = down_ratio
+        if not callable(activation):
+            raise ValueError("Activation function must be callable")
         self.act = activation
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
 
-    # x: [B,C,T]
     def forward(self, hidden_states):
         hidden_states = self.upsample(hidden_states)
         hidden_states = self.act(hidden_states)
@@ -3697,130 +3709,125 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
         super().__init__(config)
+        self.num_residual_blocks = len(config.resblock_kernel_sizes)
+        self.num_upsample_layers = len(config.upsample_rates)
 
-        self.num_kernels = len(config.resblock_kernel_sizes)
-        self.num_upsamples = len(config.upsample_rates)
-
-        # pre conv
         self.conv_pre = nn.Conv1d(config.mel_dim, config.upsample_initial_channel, 7, 1, padding=3)
 
-        # transposed conv-based upsamplers. does not apply anti-aliasing
-        self.ups = nn.ModuleList()
-        for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
-            self.ups.append(
-                nn.ModuleList(
-                    [
-                        ConvTranspose1d(
-                            config.upsample_initial_channel // (2**i),
-                            config.upsample_initial_channel // (2 ** (i + 1)),
-                            k,
-                            u,
-                            padding=(k - u) // 2,
-                        )
-                    ]
+        self.ups = nn.ModuleList(
+            [
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**layer_idx),
+                    config.upsample_initial_channel // (2 ** (layer_idx + 1)),
+                    kernel_size,
+                    stride,
+                    padding=(kernel_size - stride) // 2,
                 )
-            )
-
-        # residual blocks using anti-aliased multi-periodicity composition modules (AMP)
-        self.resblocks = nn.ModuleList()
-        for i in range(len(self.ups)):
-            ch = config.upsample_initial_channel // (2 ** (i + 1))
-            for j, (k, d) in enumerate(zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)):
-                self.resblocks.append(AMPBlock(ch, k, d))
-
-        # post conv
-        self.activation_post = TorchActivation1d(activation=SnakeBeta(ch))
-
-        self.conv_post = nn.Conv1d(ch, 1, 7, 1, padding=3, bias=False)
-
-    def _normalize(self, S, max_abs_value, min_db):
-        return torch.clamp(
-            (2 * max_abs_value) * ((S - min_db) / (-min_db)) - max_abs_value, -max_abs_value, max_abs_value
+                for layer_idx, (stride, kernel_size) in enumerate(
+                    zip(config.upsample_rates, config.upsample_kernel_sizes)
+                )
+            ]
         )
 
-    def _amp_to_db(self, x, min_level_db):
-        min_level = np.exp(min_level_db / 20 * np.log(10))
-        min_level = torch.ones_like(x) * min_level
-        return 20 * torch.log10(torch.maximum(min_level, x))
+        self.resblocks = nn.ModuleList(
+            [
+                AMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
+                for layer_idx in range(self.num_upsample_layers)
+                for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
+            ]
+        )
 
-    def apm_to_db(self, apm_mel):
-        mel_spec = torch.exp(apm_mel)
+        self.activation_post = TorchActivation1d(
+            activation_function=SnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
+        )
+        self.conv_post = nn.Conv1d(
+            config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
+        )
 
-        mel_spec = self._amp_to_db(mel_spec, -115) - 20
-        mel_spec = self._normalize(mel_spec, 1, -115)
+    def normalize_spectrogram(self, spectrogram, max_value, min_db):
+        return torch.clamp((2 * max_value) * ((spectrogram - min_db) / (-min_db)) - max_value, -max_value, max_value)
 
-        return mel_spec
+    def amplitude_to_db(self, amplitude, min_db_level):
+        min_level = torch.exp(
+            torch.tensor(min_db_level / 20.0 * np.log(10), device=amplitude.device, dtype=amplitude.dtype)
+        )
+        return 20 * torch.log10(torch.clamp(amplitude, min=min_level))
 
-    def forward(self, apm_mel):
-        mel_spec = self.apm_to_db(apm_mel)
-        # pre conv
-        hidden = self.conv_pre(mel_spec)
+    def process_mel_spectrogram(self, mel_spectrogram):
+        amplitude_spectrum = torch.exp(mel_spectrogram)
+        decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
+        return self.normalize_spectrogram(decibel_spectrum, 1, -115)
 
-        for i in range(self.num_upsamples):
-            # upsampling
-            for i_up in range(len(self.ups[i])):
-                hidden = self.ups[i][i_up](hidden)
-            # AMP blocks
-            xs = None
-            for j in range(self.num_kernels):
-                if xs is None:
-                    xs = self.resblocks[i * self.num_kernels + j](hidden)
-                else:
-                    xs += self.resblocks[i * self.num_kernels + j](hidden)
-            hidden = xs / self.num_kernels
+    def forward(self, mel_spectrogram):
+        processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
+        hidden_representation = self.conv_pre(processed_spectrogram)
 
-        # post conv
-        hidden = self.activation_post(hidden)
-        hidden = self.conv_post(hidden)
-        audio = torch.clamp(hidden, min=-1.0, max=1.0)  # bound the output to [-1, 1]
+        for layer_index in range(self.num_upsample_layers):
+            hidden_representation = self.ups[layer_index](hidden_representation)
+            residual_output = sum(
+                self.resblocks[layer_index * self.num_residual_blocks + block_index](hidden_representation)
+                for block_index in range(self.num_residual_blocks)
+            )
+            residual_output = residual_output / self.num_residual_blocks
+            hidden_representation = residual_output
 
-        return audio.squeeze().cpu()
+        hidden_representation = self.activation_post(hidden_representation)
+        output_waveform = self.conv_post(hidden_representation)
+        return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
 
 
-class ODESolverRK4:
-    def __init__(self, func, y0):
-        self.func = func
-        self.y0 = y0
+class RungeKutta4ODESolver:
+    def __init__(self, function, initial_value):
+        self.function = function
+        self.initial_value = initial_value
 
         self._one_third = 1 / 3
         self._two_thirds = 2 / 3
 
-    def _rk4_alt_step_func(self, func, t0, dt, t1, y0, f0=None):
-        k1 = f0
-        if k1 is None:
-            k1 = func(t0, y0)
-        k2 = func(t0 + dt * self._one_third, y0 + dt * k1 * self._one_third)
-        k3 = func(t0 + dt * self._two_thirds, y0 + dt * (k2 - k1 * self._one_third))
-        k4 = func(t1, y0 + dt * (k1 - k2 + k3))
-        return (k1 + 3 * (k2 + k3) + k4) * dt * 0.125
+    def _rk4_step(self, function, time_start, time_step, time_end, value_start, function_value_start=None):
+        k1 = function_value_start if function_value_start is not None else function(time_start, value_start)
+        k2 = function(time_start + time_step * self._one_third, value_start + time_step * k1 * self._one_third)
+        k3 = function(time_start + time_step * self._two_thirds, value_start + time_step * (k2 - k1 * self._one_third))
+        k4 = function(time_end, value_start + time_step * (k1 - k2 + k3))
+        return (k1 + 3 * (k2 + k3) + k4) * time_step / 8
 
-    def _step_func(self, func, t0, dt, t1, y0):
-        f0 = func(t0, y0)
-        return self._rk4_alt_step_func(func, t0, dt, t1, y0, f0=f0), f0
+    def _compute_step(self, function, time_start, time_step, time_end, value_start):
+        function_value_start = function(time_start, value_start)
+        return self._rk4_step(
+            function, time_start, time_step, time_end, value_start, function_value_start=function_value_start
+        ), function_value_start
 
-    def _linear_interp(self, t0, t1, y0, y1, t):
-        if t == t0:
-            return y0
-        if t == t1:
-            return y1
-        slope = (t - t0) / (t1 - t0)
-        return y0 + slope * (y1 - y0)
+    def _linear_interpolation(self, time_start, time_end, value_start, value_end, time_point):
+        if time_point == time_start:
+            return value_start
+        if time_point == time_end:
+            return value_end
+        weight = (time_point - time_start) / (time_end - time_start)
+        return value_start + weight * (value_end - value_start)
 
-    def integrate(self, t):
-        solution = torch.empty(len(t), *self.y0.shape, dtype=self.y0.dtype, device=self.y0.device)
-        solution[0] = self.y0
+    def integrate(self, time_points):
+        solution = torch.empty(
+            len(time_points),
+            *self.initial_value.shape,
+            dtype=self.initial_value.dtype,
+            device=self.initial_value.device,
+        )
+        solution[0] = self.initial_value
 
-        j = 1
-        y0 = self.y0
-        for t0, t1 in zip(t[:-1], t[1:]):
-            dt = t1 - t0
-            dy, f0 = self._step_func(self.func, t0, dt, t1, y0)
-            y1 = y0 + dy
+        current_index = 1
+        current_value = self.initial_value
+        for time_start, time_end in zip(time_points[:-1], time_points[1:]):
+            time_step = time_end - time_start
+            delta_value, _ = self._compute_step(self.function, time_start, time_step, time_end, current_value)
+            next_value = current_value + delta_value
 
-            while j < len(t) and t1 >= t[j]:
-                solution[j] = self._linear_interp(t0, t1, y0, y1, t[j])
-                j += 1
-            y0 = y1
+            while current_index < len(time_points) and time_end >= time_points[current_index]:
+                solution[current_index] = self._linear_interpolation(
+                    time_start, time_end, current_value, next_value, time_points[current_index]
+                )
+                current_index += 1
+
+            current_value = next_value
 
         return solution
 
@@ -3837,13 +3844,12 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         super().__init__(config)
         self.mel_dim = config.mel_dim
         self.repeats = config.repeats
-        self.time_embed = TimestepEmbedding(config.hidden_size)
+        self.time_embed = DiTTimestepEmbedding(config.hidden_size)
 
-        self.text_embed = CodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
-        self.input_embed = InputEmbedding(config)
+        self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
+        self.input_embed = DiTInputEmbedding(config)
 
-        self.rotary_embed = RotaryEmbedding(config.head_dim)
-        # self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config)
+        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config.head_dim)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
@@ -3860,7 +3866,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
                 )
             )
 
-        self.norm_out = AdaLayerNormZero_Final(config.hidden_size)  # final modulation
+        self.norm_out = Qwen2_5_OmniAdaLayerNormZero_Final(config.hidden_size)  # final modulation
         self.proj_out = nn.Linear(config.hidden_size, config.mel_dim)
 
     def _create_block_diff(self, hidden_states):
@@ -3869,7 +3875,6 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         block_i = block_indices.unsqueeze(1)  # [seq_length, 1]
         block_j = block_indices.unsqueeze(0)  # [1, seq_length]
-
         block_diff = block_j - block_i  # (n, n)
 
         return block_diff.expand(batch, self.num_attention_heads, seq_len, seq_len)
@@ -3879,38 +3884,42 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         hidden_states,
         condition_vector,
         speaker_embedding,
-        code,
-        time,
-        drop_audio_cond=False,
+        quantized_code,
+        time_step,
+        drop_audio_conditioning=False,
         drop_code=False,
         apply_cfg=True,
     ):
-        batch = hidden_states.shape[0]
-        if time.ndim == 0:
-            time = time.repeat(batch)
+        batch_size = hidden_states.shape[0]
+        if time_step.ndim == 0:
+            time_step = time_step.repeat(batch_size)
 
-        # t: conditioning time, c: context (code + masked cond audio), x: noised input audio
-        time_embedding = self.time_embed(time)
-        code_embed = self.text_embed(code, drop_code=False if apply_cfg else drop_code)
-        code_embed_uncond = self.text_embed(code, drop_code=True) if apply_cfg else None
+        # Compute embeddings
+        time_embedding = self.time_embed(time_step)
+        text_embedding = self.text_embed(quantized_code, drop_code=False if apply_cfg else drop_code)
+        text_embedding_unconditioned = self.text_embed(quantized_code, drop_code=True) if apply_cfg else None
+
         hidden_states = self.input_embed(
             hidden_states,
             speaker_embedding,
             condition_vector,
-            code_embed,
-            drop_audio_cond=drop_audio_cond,
-            code_embed_uncond=code_embed_uncond,
+            text_embedding,
+            drop_audio_cond=drop_audio_conditioning,
+            code_embed_uncond=text_embedding_unconditioned,
             apply_cfg=apply_cfg,
         )
 
-        # rope = self.rotary_embed(x, torch.arange(seq_len, device=x.device).repeat(batch, 1))
+        # Compute positional encodings
         position_embeddings = self.rotary_embed(hidden_states)
+        blockwise_difference = self._create_block_diff(hidden_states)
 
-        block_diff = self._create_block_diff(hidden_states)
-
-        for block in self.transformer_blocks:
-            hidden_states = block(
-                hidden_states, time_embedding, position_embeddings=position_embeddings, block_diff=block_diff
+        # Transformer blocks
+        for transformer_block in self.transformer_blocks:
+            hidden_states = transformer_block(
+                hidden_states,
+                time_embedding,
+                position_embeddings=position_embeddings,
+                block_diff=blockwise_difference,
             )
 
         hidden_states = self.norm_out(hidden_states, time_embedding)
@@ -3921,57 +3930,60 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     @torch.no_grad()
     def sample(
         self,
-        cond,
-        ref_mel,
-        code,
-        steps=10,
-        guidance_scale=0.5,
-        sway_sampling_coef=-1.0,
+        conditioning_vector,
+        reference_mel_spectrogram,
+        quantized_code,
+        num_steps=10,
+        guidance_strength=0.5,
+        sway_coefficient=-1.0,
     ):
-        y_all = torch.randn([1, 30000, self.mel_dim], dtype=ref_mel.dtype)
-        max_duration = code.shape[1] * self.repeats
-        y0 = y_all[:, :max_duration].to(code.device)
-        batch = ref_mel.shape[0]
-        cond = cond.unsqueeze(1).repeat(1, max_duration, 1)
-        if batch != 1:
-            raise ValueError("only support batch size = 1 currently")
+        noise_initialization = torch.randn([1, 30000, self.mel_dim], dtype=reference_mel_spectrogram.dtype)
+        maximum_duration = quantized_code.shape[1] * self.repeats
+        initial_state = noise_initialization[:, :maximum_duration].to(quantized_code.device)
+        batch_size = reference_mel_spectrogram.shape[0]
+        conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
 
-        def fn(time, hidden_states):
-            if guidance_scale < 1e-5:
-                pred = self(
+        if batch_size != 1:
+            raise ValueError("Only batch size = 1 is currently supported")
+
+        def ode_function(time_step, hidden_states):
+            if guidance_strength < 1e-5:
+                prediction = self(
                     hidden_states=hidden_states,
-                    speaker_embedding=ref_mel,
-                    condition_vector=cond,
-                    code=code,
-                    time=time,
-                    drop_audio_cond=False,
+                    speaker_embedding=reference_mel_spectrogram,
+                    condition_vector=conditioning_vector,
+                    quantized_code=quantized_code,
+                    time_step=time_step,
+                    drop_audio_conditioning=False,
                     drop_code=False,
                 )
-                return pred
+                return prediction
 
-            out_put = self(
+            model_output = self(
                 hidden_states=hidden_states,
-                code=code,
-                speaker_embedding=ref_mel,
-                condition_vector=cond,
-                time=time,
+                quantized_code=quantized_code,
+                speaker_embedding=reference_mel_spectrogram,
+                condition_vector=conditioning_vector,
+                time_step=time_step,
                 apply_cfg=True,
             )
-            pred, null_pred = torch.chunk(out_put, 2, dim=0)
+            guided_prediction, null_prediction = torch.chunk(model_output, 2, dim=0)
+            return guided_prediction + (guided_prediction - null_prediction) * guidance_strength
 
-            return pred + (pred - null_pred) * guidance_scale
+        initial_time = 0
+        time_embedding = torch.linspace(
+            initial_time, 1, num_steps, device=quantized_code.device, dtype=conditioning_vector.dtype
+        )
 
-        t_start = 0
-        time_embed = torch.linspace(t_start, 1, steps, device=code.device, dtype=cond.dtype)
-        if sway_sampling_coef is not None:
-            time_embed = time_embed + sway_sampling_coef * (torch.cos(torch.pi / 2 * time_embed) - 1 + time_embed)
+        if sway_coefficient is not None:
+            time_embedding += sway_coefficient * (torch.cos(torch.pi / 2 * time_embedding) - 1 + time_embedding)
 
-        solver = ODESolverRK4(func=fn, y0=y0)
-        trajectory = solver.integrate(time_embed)
+        ode_solver = RungeKutta4ODESolver(func=ode_function, y0=initial_state)
+        solution_trajectory = ode_solver.integrate(time_embedding)
 
-        generated = trajectory[-1]
-        generated_mel_spec = generated.permute(0, 2, 1)
-        return generated_mel_spec
+        generated_waveform = solution_trajectory[-1]
+        generated_mel_spectrogram = generated_waveform.permute(0, 2, 1)
+        return generated_mel_spectrogram
 
 
 @add_start_docstrings(
@@ -4007,22 +4019,26 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     def forward(
         self,
         code,
-        cond,
-        ref_mel,
+        conditioning,
+        reference_mel,
         steps=10,
         guidance_scale=0.5,
         sway_sampling_coef=-1.0,
         **kwargs,
     ):
-        generated_mel = self.code2wav_dit_model.sample(
-            cond,
-            ref_mel,
+        """Generates a waveform from input code and conditioning parameters."""
+
+        mel_spectrogram = self.code2wav_dit_model.sample(
+            conditioning,
+            reference_mel,
             code,
             steps=steps,
             guidance_scale=guidance_scale,
             sway_sampling_coef=sway_sampling_coef,
         )
-        waveform = self.code2wav_bigvgan_model(generated_mel)
+
+        waveform = self.code2wav_bigvgan_model(mel_spectrogram)
+
         return waveform
 
 
@@ -4043,7 +4059,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """,
     QWEN2_5OMNI_START_DOCSTRING.format(config_class=Qwen2_5OmniConfig),
 )
-class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
+class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config_class = Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
@@ -4127,6 +4143,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
         return model
 
     @torch.no_grad()
+    # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -4176,6 +4193,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
             return_audio = self.has_talker
         if input_ids.shape[0] != 1 and return_audio:
             raise NotImplementedError("Qwen2.5-Omni currently does not support batched inference with audio output")
+
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
             "max_new_tokens": thinker_max_new_tokens,
@@ -4207,6 +4225,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
             # Put other key to shared kwargs
             else:
                 shared_kwargs[key] = value
+
         # Merge kwargs
         for key, value in shared_kwargs.items():
             if key not in thinker_kwargs:
@@ -4218,19 +4237,24 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
         speaker_params = self.speaker_map[speaker]
 
         # 1. Generate from thinker module
-        thinker_result = self.thinker.generate(
-            input_ids=input_ids,
-            return_dict_in_generate=True,
-            output_hidden_states=True,
-            **thinker_kwargs,
-        )
-        if not (return_audio and self.has_talker):
-            return thinker_result.sequences
+        generate_audio = return_audio and self.has_talker
+        if generate_audio:
+            thinker_kwargs["output_hidden_states"] = True
+            thinker_kwargs["return_dict_in_generate"] = True
+
+        thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
+
+        if not generate_audio:
+            return thinker_result
 
         # 2. Generate speech tokens from talker module
         thinker_generate_ids = thinker_result.sequences[:, input_ids.size(1) :].to(self.talker.device)
-        thinker_token_embeds = [x[0].to(self.talker.device) for x in thinker_result.hidden_states]
-        thinker_hidden_states = [x[1][-1].to(self.talker.device) for x in thinker_result.hidden_states]
+        thinker_token_embeds = [
+            token_hidden_states[0].to(self.talker.device) for token_hidden_states in thinker_result.hidden_states
+        ]
+        thinker_hidden_states = [
+            token_hidden_states[-1].to(self.talker.device) for token_hidden_states in thinker_result.hidden_states
+        ]
 
         talker_text_bos_token = speaker_params["bos_token"]
         talker_input_text_ids = torch.cat(
@@ -4251,35 +4275,42 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
             dim=1,
         )
 
+        thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
+        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=self.thinker.device)
+        talker_text_bos_embed = (thinker_embed_tokens(talker_text_bos_token).to(self.talker.device),)
         talker_inputs_embeds = torch.cat(
             [
                 talker_inputs_embeds,
-                self.thinker.get_input_embeddings()(
-                    torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=self.thinker.device)
-                ).to(self.talker.device),
+                talker_text_bos_embed,
                 thinker_reply_part[:, :1, :],
             ],
             dim=1,
         )
 
+        eos_embedding = thinker_embed_tokens(
+            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=self.thinker.device)
+        ).to(self.talker.device)
+
+        pad_embedding = thinker_embed_tokens(
+            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=self.thinker.device)
+        ).to(self.talker.device)
+
         thinker_reply_part = torch.cat(
             [
                 thinker_reply_part[:, 1:, :],
-                self.thinker.get_input_embeddings()(
-                    torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=self.thinker.device)
-                ).to(self.talker.device),
-                self.thinker.get_input_embeddings()(
-                    torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=self.thinker.device)
-                ).to(self.talker.device),
+                eos_embedding,
+                pad_embedding,
             ],
             dim=1,
         )
 
-        talker_attention_mask = torch.cat(
-            [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
-        ).to(self.talker.device)
+        talker_attention_mask = None
+        if "attention_mask" in kwargs:
+            talker_attention_mask = torch.cat(
+                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
+            ).to(self.talker.device)
 
         talker_result = self.talker.generate(
             input_ids=talker_input_ids,
@@ -4295,10 +4326,11 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
         # 3. Generate wavs from code
         if self.token2wav.dtype != torch.float:
             self.token2wav.float()
+
         wav = self.token2wav(
             talker_generate_codes.to(self.token2wav.device),
-            cond=speaker_params["cond"].to(self.token2wav.device).float(),
-            ref_mel=speaker_params["ref_mel"].to(self.token2wav.device).float(),
+            conditioning=speaker_params["cond"].to(self.token2wav.device).float(),
+            reference_mel=speaker_params["ref_mel"].to(self.token2wav.device).float(),
             **token2wav_kwargs,
         )
 
@@ -4310,7 +4342,7 @@ __all__ = [
     "Qwen2_5OmniThinkerConfig",
     "Qwen2_5OmniTalkerConfig",
     "Qwen2_5OmniToken2WavConfig",
-    "Qwen2_5OmniModel",
+    "Qwen2_5OmniForConditionalGeneration",
     "Qwen2_5OmniThinkerTextModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",

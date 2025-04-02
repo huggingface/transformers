@@ -936,7 +936,7 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
 
 class Qwen2_5OmniConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniModel`]. It is used to instantiate a Qwen2.5Omni
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniForConditionalGeneration`]. It is used to instantiate a Qwen2.5Omni
     model according to the specified sub-models configurations, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
@@ -958,7 +958,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
     ...     Qwen2_5OmniThinkerConfig,
     ...     Qwen2_5OmniTalkerConfig,
     ...     Qwen2_5OmniToken2WavConfig,
-    ...     Qwen2_5OmniModel,
+    ...     Qwen2_5OmniForConditionalGeneration,
     ...     Qwen2_5OmniConfig,
     ... )
 
@@ -974,7 +974,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
     ... )
 
     >>> # Initializing a model (with random weights)
-    >>> model = Qwen2_5OmniModel(configuration)
+    >>> model = Qwen2_5OmniForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -3421,7 +3421,7 @@ else:
     )
     _import_structure["models.qwen2_5_omni"].extend(
         [
-            "Qwen2_5OmniModel",
+            "Qwen2_5OmniForConditionalGeneration",
             "Qwen2_5OmniPreTrainedModel",
             "Qwen2_5OmniPreTrainedModelForConditionalGeneration",
             "Qwen2_5OmniTalkerForConditionalGeneration",
@@ -8325,7 +8325,7 @@ if TYPE_CHECKING:
             Qwen2PreTrainedModel,
         )
         from .models.qwen2_5_omni import (
-            Qwen2_5OmniModel,
+            Qwen2_5OmniForConditionalGeneration,
             Qwen2_5OmniPreTrainedModel,
             Qwen2_5OmniPreTrainedModelForConditionalGeneration,
             Qwen2_5OmniTalkerForConditionalGeneration,
