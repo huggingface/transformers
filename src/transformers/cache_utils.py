@@ -1204,7 +1204,7 @@ class StaticCache(Cache):
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
-        )
+        ) // 8
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []

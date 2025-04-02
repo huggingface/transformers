@@ -676,7 +676,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask, chunk_causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -750,19 +749,25 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask, attention_mask  # flash does not support chunked attn
             return None, None
+
+
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
-                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
-                attention_mask = make_flex_block_causal_mask(attention_mask)
+                if using_static_cache:
+                    target_length = past_key_values.get_max_cache_shape()
+                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, target_length)
+                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=target_length)
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
+            
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
@@ -811,7 +816,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 is_training=self.training,
             ):
                 causal_mask = None
-        print(1-chunked_attention_mask.bool().int()) 
         return causal_mask, chunked_attention_mask
 
     def create_chunked_attention_mask(

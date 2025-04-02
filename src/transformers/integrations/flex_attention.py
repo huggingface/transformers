@@ -64,7 +64,7 @@ class WrappedFlexAttention:
         Initialize or update the singleton instance.
         """
         if self._is_flex_compiled is False:
-            self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
+            self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False, mode="reduce-overhead") # dynamic true?
             self._is_flex_compiled = True
 
     def __call__(self):
@@ -72,7 +72,7 @@ class WrappedFlexAttention:
 
 
 def make_flex_block_causal_mask(
-    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, key_length = None
+    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None
 ) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
@@ -96,13 +96,15 @@ def make_flex_block_causal_mask(
     Returns:
         BlockMask
     """
+    batch_size, total_seq_len = attention_mask_2d.shape
+    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
     device = attention_mask_2d.device
-    document_ids = attention_mask_2d
-    batch_size, total_seq_len = document_ids.shape
+    document_ids = attention_mask_2d.clone()
 
     if attention_chunk_size is not None:
-        document_ids = (torch.arange(total_seq_len) // attention_chunk_size) + 1
-        document_ids = document_ids[None, :].expand((batch_size,-1))
+        # we create an arange, then we just // by chunk size to get [000, 111, 222, 333]...
+        document_ids = (document_ids.fill_(1).cumsum(-1) - 1 ) // (attention_chunk_size)
+        assert document_ids.shape == attention_mask_2d.shape
 
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
@@ -119,19 +121,19 @@ def make_flex_block_causal_mask(
         """
         causal_mask = q_idx >= kv_idx
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
-        padding_mask = document_ids[batch_idx, q_idx] > 0
+        padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
         final_mask = causal_mask & padding_mask
         final_mask = final_mask & document_mask
         return final_mask
-
 
     return create_block_causal_mask_flex(
         mask_mod=causal_mask_mod,
         B=batch_size,
         H=None,  # attention head
-        Q_LEN=total_seq_len,
-        KV_LEN=total_seq_len,
+        Q_LEN=query_length,
+        KV_LEN=key_length,
         device=device,
+        _compile=False
     )
 
 
@@ -163,6 +165,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+@torch.compiler.disable(recursive=False)
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -178,8 +181,6 @@ def flex_attention_forward(
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
         block_mask = attention_mask #._adjust(query.shape[2], key.shape[2])
-        if query.shape[2] != key.shape[2]:
-            block_mask = block_mask._adjust(query.shape[2], key.shape[2])
     else:
         causal_mask = attention_mask
 

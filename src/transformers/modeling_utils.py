@@ -5206,6 +5206,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
+            # and False
         ):
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
