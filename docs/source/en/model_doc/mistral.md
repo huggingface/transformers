@@ -26,7 +26,8 @@ rendered properly in your Markdown viewer.
 </div>
 
 
-Mistral is a decoder-only Transformer model that incorporates several architectural choices to enhance its performance. It utilizes Sliding Window Attention, trained with an 8k context length and a fixed cache size, offering a theoretical attention span of up to 128K tokens. Additionally, Mistral-7B employs Grouped Query Attention (GQA), which helps to speed up inference and reduce the cache size. The model also features a Byte-fallback BPE tokenizer, ensuring that characters are never mapped to out-of-vocabulary tokens, thus improving token handling and overall efficiency.
+[Mistral](https://huggingface.co/papers/2310.06825) is a 7B parameter language model, available as a pretrained and instruction-tuned variant, focused on balancing 
+the scaling costs of large models with performance and efficient inference. This model uses sliding window attention (SWA) trained with a 8K context length and a fixed cache size to handle longer sequences more effectively. Grouped-query attention (GQA) speeds up inference and reduces memory requirements. Mistral also features a byte-fallback BPE tokenizer to improve token handling and efficiency by ensuring characters are never mapped to out-of-vocabulary tokens.
 
 Mistral was introduced in [this blogpost](https://mistral.ai/news/announcing-mistral-7b/) 
 
