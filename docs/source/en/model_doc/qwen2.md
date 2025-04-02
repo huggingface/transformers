@@ -119,7 +119,6 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-# Configure quantization
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_compute_dtype=torch.bfloat16, 
