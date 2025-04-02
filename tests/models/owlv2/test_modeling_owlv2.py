@@ -152,9 +152,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model_tester = Owlv2VisionModelTester(cls)
-        cls.config_tester = ConfigTester(
-            cls, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37
-        )
+        cls.config_tester = ConfigTester(cls, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

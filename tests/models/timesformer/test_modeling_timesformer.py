@@ -172,9 +172,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @classmethod
     def setUpClass(cls):
         cls.model_tester = TimesformerModelTester(cls)
-        cls.config_tester = ConfigTester(
-            cls, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
-        )
+        cls.config_tester = ConfigTester(cls, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
