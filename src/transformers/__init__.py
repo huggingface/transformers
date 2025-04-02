@@ -5483,6 +5483,10 @@ if TYPE_CHECKING:
         ConvBertConfig,
         ConvBertTokenizer,
     )
+    from .models.conversational_speech_model import (
+        ConversationalSpeechModelConfig,
+        ConversationalSpeechModelDepthConfig,
+    )
     from .models.convnext import ConvNextConfig
     from .models.convnextv2 import (
         ConvNextV2Config,
@@ -5831,10 +5835,6 @@ if TYPE_CHECKING:
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
-    )
-    from .models.conversational_speech_model import (
-        ConversationalSpeechModelConfig,
-        ConversationalSpeechModelDepthConfig,
     )
     from .models.mpnet import (
         MPNetConfig,
@@ -7044,6 +7044,12 @@ if TYPE_CHECKING:
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
         )
+        from .models.conversational_speech_model import (
+            ConversationalSpeechModelForCausalLM,
+            ConversationalSpeechModelForConditionalGeneration,
+            ConversationalSpeechModelModel,
+            ConversationalSpeechModelPreTrainedModel,
+        )
         from .models.convnext import (
             ConvNextBackbone,
             ConvNextForImageClassification,
@@ -7935,12 +7941,6 @@ if TYPE_CHECKING:
             MoshiForConditionalGeneration,
             MoshiModel,
             MoshiPreTrainedModel,
-        )
-        from .models.conversational_speech_model import (
-            ConversationalSpeechModelForCausalLM,
-            ConversationalSpeechModelForConditionalGeneration,
-            ConversationalSpeechModelModel,
-            ConversationalSpeechModelPreTrainedModel,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,

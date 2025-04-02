@@ -16,7 +16,7 @@
 import argparse
 import os
 import re
-import json
+
 import torch
 
 from transformers import (
@@ -112,7 +112,7 @@ def write_model(
     for key, value in loaded.items():
         new_key = convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)
         current_parameter = value
-        
+
         # Post-process the current_parameter.
         if re.search("(k|q)_proj.weight", new_key):
             params_keys = "backbone" if "backbone" in new_key else "depth_decoder"
@@ -173,7 +173,7 @@ def main():
     write_model(
         args.input_path_or_repo,
         args.model_name,
-        output_dir=args.output_dir, 
+        output_dir=args.output_dir,
         safe_serialization=args.safe_serialization,
     )
 
