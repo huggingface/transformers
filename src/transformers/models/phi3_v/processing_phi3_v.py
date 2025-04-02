@@ -45,6 +45,7 @@ class Phi3VProcessor(ProcessorMixin):
             The tokenizer is a required input.
             chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        chat_template (`str`, *optional*): <fill_docstring>
     """
 
     attributes = ["image_processor", "tokenizer"]
