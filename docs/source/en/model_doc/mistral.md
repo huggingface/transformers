@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 [Mistral](https://huggingface.co/papers/2310.06825) is a 7B parameter language model, available as a pretrained and instruction-tuned variant, focused on balancing 
 the scaling costs of large models with performance and efficient inference. This model uses sliding window attention (SWA) trained with a 8K context length and a fixed cache size to handle longer sequences more effectively. Grouped-query attention (GQA) speeds up inference and reduces memory requirements. Mistral also features a byte-fallback BPE tokenizer to improve token handling and efficiency by ensuring characters are never mapped to out-of-vocabulary tokens.
 
-Mistral was introduced in [this blogpost](https://mistral.ai/news/announcing-mistral-7b/) 
+You can find all the original Mistral checkpoints under the [Mistral AI_](https://huggingface.co/mistralai) organization.
 
 > [!TIP]
 > Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
