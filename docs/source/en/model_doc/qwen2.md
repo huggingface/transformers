@@ -56,6 +56,7 @@ messages = [
 # But the pipeline handles this automatically for chat models
 outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
 print(outputs[0]["generated_text"][-1]['content']) # Print the assistant's response
+```
 
 </hfoption>
 <hfoption id="AutoModel">
