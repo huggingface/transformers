@@ -163,9 +163,9 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
             param = torch.tensor([])
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    print(rank)
-    print(torch.tensor(param).size())
     return param
+
+
 def distribute_module(
     module: nn.Module,
     device_mesh=None,
@@ -319,7 +319,9 @@ class ColwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride())
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter)
 
     @staticmethod
@@ -393,7 +395,9 @@ class RowwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride())
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter)
 
     @staticmethod
