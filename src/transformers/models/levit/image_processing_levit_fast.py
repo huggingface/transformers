@@ -81,10 +81,11 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BICUBIC
         if size.shortest_edge:
             shortest_edge = int((256 / 224) * size["shortest_edge"])
-            output_size = get_resize_output_image_size(
+            new_size = get_resize_output_image_size(
                 image, size=shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
             )
-            new_size = (output_size[0], output_size[1])
+       elif size.height and size.width:
+            new_size = (size.height, size.width)
         else:
             raise ValueError(
                 f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size.keys()} {size.keys()}."
