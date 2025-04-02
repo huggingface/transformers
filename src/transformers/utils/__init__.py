@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
@@ -16,7 +15,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import FrozenSet
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
@@ -300,8 +298,8 @@ def check_min_version(min_version):
         )
 
 
-@lru_cache()
-def get_available_devices() -> FrozenSet[str]:
+@lru_cache
+def get_available_devices() -> frozenset[str]:
     """
     Returns a frozenset of devices available for the current PyTorch installation.
     """
