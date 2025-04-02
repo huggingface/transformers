@@ -8,6 +8,8 @@ if is_torch_available():
 
 from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
 
+def skip(*args, **kwargs):
+        pass
 
 class CompressedExpertsLinear(nn.Module):
     """
@@ -16,6 +18,12 @@ class CompressedExpertsLinear(nn.Module):
     """
 
     def __init__(self, config):
+        # Skip random weight initialization for experts. Otherwise,
+        # the init of this module would take over minutes. For a model
+        # with tens of layers of experts, it would easily take over 20 minutes.
+        nn.init.kaiming_uniform_ = skip
+        nn.init.uniform_ = skip
+        nn.init.normal_ = skip
         super().__init__()
         self.num_experts = config.num_local_experts
         self.expert_modules = nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])

@@ -128,7 +128,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
             # Iterate through all layers to find and replace Llama4TextExperts
             for layer_idx, layer in enumerate(model.language_model.model.layers):
-                print(layer_idx)
                 if hasattr(layer, "feed_forward") and hasattr(layer.feed_forward, "experts"):
                     if isinstance(layer.feed_forward.experts, Llama4TextExperts):
                         config = model.config.text_config
