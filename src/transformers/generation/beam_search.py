@@ -724,7 +724,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             advance_state.reset(pre_seq.tolist())
 
             if not advance_state.completed:
-                advance_tokens = torch.LongTensor(advance_state.advance()).to(device)
+                advance_tokens = torch.tensor(advance_state.advance(), dtype=torch.long, device=device)
                 for advance_token in advance_tokens:
                     # since adding each `advance_token` leads to a different hypothesis, create new state instance.
                     new_state = advance_state.copy(stateful=True)
@@ -775,14 +775,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     track_new["new_states"].append(advance_state)
 
         if len(track_new["new_indices"]) > 0:
-            new_indices = torch.tensor(track_new["new_indices"]).to(device)
+            new_indices = torch.tensor(track_new["new_indices"], device=device)
             new_tokens = torch.stack(track_new["new_tokens"]).to(device)
             new_scores = torch.stack(track_new["new_scores"]).to(device)
 
             all_states = topk_contraint_states + track_new["new_states"]
             all_tokens = torch.cat((sent_beam_tokens, new_tokens), -1)
             all_scores = torch.cat((sent_beam_scores, new_scores), -1)
-            all_banks = torch.tensor([one.get_bank() for one in all_states]).to(device)
+            all_banks = torch.tensor([one.get_bank() for one in all_states], device=device)
 
             zipped = all_banks * 100 + all_scores
             indices = zipped.sort(descending=True).indices

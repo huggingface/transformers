@@ -719,7 +719,9 @@ class AssistantToTargetTranslator:
         """
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, self.FILTER_VALUE).to(self._assistant_model_device)
+        target_logits: torch.FloatTensor = torch.full(
+            target_shape, self.FILTER_VALUE, device=self._assistant_model_device
+        )
         # Mask for valid indices
         assistant_indices_mask = self._assistant_to_target_input_ids != self.SUPPRESS_TOKEN_ID
         # Exclude invalid indices
