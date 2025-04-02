@@ -84,8 +84,7 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 ## Notes
 
-- If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
-- The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- Use [`CLIPImageProcessor`] to resize (or rescale) and normalizes images for the model.
 
 ## CLIPConfig
 
