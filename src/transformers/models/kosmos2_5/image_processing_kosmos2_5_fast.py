@@ -14,10 +14,11 @@
 # limitations under the License.
 """Fast Image processor class for Kosmos2_5."""
 
+import math
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, group_images_by_shape
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import Unpack
 from ...utils import TensorType, add_start_docstrings, is_torch_available
@@ -44,11 +45,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     image_tensor = image_tensor
     patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
     patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
-    patches = patches.permute(0, 4, 2, 3, 1).reshape(
-        image_tensor.size(2) // patch_height,
-        image_tensor.size(3) // patch_width,
-        image_tensor.size(1) * patch_height * patch_width,
-    )
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(image_tensor.size(0), image_tensor.size(2) // patch_height, image_tensor.size(3) // patch_width, image_tensor.size(1) * patch_height * patch_width)
     return patches
 
 
@@ -123,6 +120,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         num_elements = torch.tensor(torch.numel(image[0]))
         adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
 
+        breakpoint()
         return super().normalize(
             image,
             mean=mean,
@@ -155,14 +153,12 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         patch_height, patch_width = patch_size["height"], patch_size["width"]
         image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
-        max_patches = torch.tensor(max_patches)
-
         # maximize scale s.t.
-        scale = torch.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
-        num_feasible_rows = torch.maximum(torch.minimum(torch.floor(scale * image_height / patch_height), max_patches), torch.tensor(1))
-        num_feasible_cols = torch.maximum(torch.minimum(torch.floor(scale * image_width / patch_width), max_patches), torch.tensor(1))
-        resized_height = torch.maximum(num_feasible_rows * patch_height, torch.tensor(1))
-        resized_width = torch.maximum(num_feasible_cols * patch_width, torch.tensor(1))
+        scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
+        num_feasible_rows = max(min(math.floor(scale * image_height / patch_height), max_patches), 1)
+        num_feasible_cols = max(min(math.floor(scale * image_width / patch_width), max_patches), 1)
+        resized_height = max(num_feasible_rows * patch_height, 1)
+        resized_width = max(num_feasible_cols * patch_width, 1)
 
         image = torch.nn.functional.interpolate(
             image,
@@ -172,19 +168,11 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             antialias=True,
         )
 
-        # we need `resized_height` and `resized_width` to be int, we also want it to be int as output values
-        # TODO: avoid unnecessary tensor <-> float/int conversion
-        resized_height = int(resized_height)
-        resized_width = int(resized_width)
-
-        image = torch.nn.functional.interpolate(image,size=(resized_height, resized_width),mode="bilinear",align_corners=False,antialias=True,)
-
         # [batch_size, rows, columns, patch_height * patch_width * image_channels]
-        # RuntimeError: shape '[55, 73, 768]' is invalid for input of size 9250560 ????
         patches = torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
-        batch_size = patch_size[0]
+        batch_size = patches_shape[0]
         rows = patches_shape[1]
         columns = patches_shape[2]
         depth = patches_shape[3]
@@ -208,7 +196,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         # [rows * columns, 2 + patch_height * patch_width * image_channels]
         result = torch.cat([row_ids, col_ids, patches], -1)
 
-        # [max_patches, 2 + patch_height * patch_width * image_channels]
+        # [batch_size, max_patches, 2 + patch_height * patch_width * image_channels]
         result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
 
         return result, resized_width, resized_height, rows, columns
@@ -226,7 +214,10 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         if kwargs.get("data_format", None) is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
+        flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
+
         # Group images by size for batched resizing
+        processed_image_patches_grouped = {}
         grouped_images, grouped_images_index = group_images_by_shape(images)
         for shape, stacked_images in grouped_images.items():
             if do_normalize:
@@ -239,27 +230,19 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
                 max_patches=max_patches,
                 patch_size=patch_size,
             )
-            # breakpoint()
+            n_of_stacked_images = stacked_images.size()[0]
+            flattened_patches.extend([x for x in f])
+            width.extend([w] * n_of_stacked_images)
+            height.extend([h] * n_of_stacked_images)
+            rows.extend([r] * n_of_stacked_images)
+            cols.extend([c] * n_of_stacked_images)
+            # create attention mask in numpy
+            attention_masks.extend([x for x in (f.sum(axis=-1) != 0).to(dtype=torch.float32)])
+            processed_image_patches_grouped[shape] = f
 
-        flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
-        for image in images:
-            # if do_normalize:
-            #     image = self.normalize(image=image, input_data_format=input_data_format)
+        breakpoint()
+        processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_images_index)
 
-                # convert to torch tensor and permute
-                f, w, h, r, c = self.extract_flattened_patches(
-                    image=image,
-                    max_patches=max_patches,
-                    patch_size=patch_size,
-                )
-                # TODO: We need to extend the lists with correct number of elements.
-                # flattened_patches.append(f)
-                # width.append(w)
-                # height.append(h)
-                # rows.append(r)
-                # cols.append(c)
-                # # create attention mask in numpy
-                # attention_masks.append((f.sum(axis=-1) != 0).astype(np.float32))
 
         # encoded_outputs = BatchFeature(
         #     data={
