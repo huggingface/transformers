@@ -310,7 +310,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
         original implementation of this test cover this case. But the resulting tensors may have differences exceeding
         the relative and absolute tolerance.
         Therefore, similarly to SuperGlue integration test, for the key "keypoints" in the model outputs, we check the
-        number of differences in keypoint coordinates being less than a TODO given number
+        number of differences in keypoint coordinates being less than a 3% of the total number of keypoints
         """
 
         def recursive_check(batched_object, single_row_object, model_name, key):
