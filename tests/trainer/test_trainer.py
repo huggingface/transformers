@@ -1329,14 +1329,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset=eval_dataset,
         )
 
-        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method 
+        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method
         trainer.train()
         self.assertEqual(args.max_eval_batches, trainer.observed_num_batches)
 
         # reset number of batches seen
         trainer.observed_num_batches = 0
 
-        # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False 
+        # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False
         trainer.evaluate()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
@@ -1363,14 +1363,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset=eval_dataset,
         )
 
-        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method 
+        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method
         trainer.train()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
         # reset number of batches seen
         trainer.observed_num_batches = 0
 
-         # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False 
+        # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False
         trainer.evaluate()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
@@ -3086,9 +3086,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
-            f"Could not find checkpoint-{trainer.state.max_steps}"
-        )
+        assert os.path.exists(
+            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
+        ), f"Could not find checkpoint-{trainer.state.max_steps}"
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
