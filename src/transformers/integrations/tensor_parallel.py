@@ -500,7 +500,9 @@ class ColwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
@@ -574,7 +576,9 @@ class RowwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
