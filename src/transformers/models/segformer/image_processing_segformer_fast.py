@@ -30,12 +30,14 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
     is_torch_tensor,
     pil_torch_interpolation_mapping,
     validate_kwargs,
+    make_list_of_images,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -74,8 +76,6 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, do_reduce_labels=None, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):
         # Allow explicit setting of do_reduce_labels or use default
         super().__init__(**kwargs)
-        self.do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -87,7 +87,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    def reduce_label(self, labels: list["torch.Tensor"]):
+    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         for idx in range(len(labels)):
             label = labels[idx]
             label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
@@ -95,7 +95,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
             labels[idx] = label
 
-        return label
+        return labels
 
     def _preprocess(
         self,
@@ -106,11 +106,13 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         do_normalize: bool,
         size: SizeDict,
-        rescale_factor: float,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-    ) -> Union[torch.Tensor, List[torch.Tensor]]: # Return type can be list if return_tensors=None
+        resample: PILImageResampling = None,
+        rescale_factor: Optional[float] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
+    ) -> BatchFeature: # Return type can be list if return_tensors=None
         if do_reduce_labels:
             images = self.reduce_label(images) # Apply reduction if needed
 
@@ -146,35 +148,16 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess_segmentation_maps(
         self,
-        segmentation_maps: list["torch.Tensor"], # Expect prepared list of tensors
-        do_reduce_labels: bool,
-        do_resize: bool,
-        size: SizeDict,
-        return_tensors: Optional[Union[str, TensorType]],
-    ) -> Union[torch.Tensor, List[torch.Tensor]]: # Return type can be list if return_tensors=None
-        """Preprocesses a batch of segmentation maps."""
-
-        # Call _preprocess with mask-specific overrides
-        processed_maps = self._preprocess(
-            images=segmentation_maps,
-            do_reduce_labels=do_reduce_labels, # Pass through label reduction flag
-            do_rescale=False, # Override: Don't rescale masks
-            do_normalize=False, # Override: Don't normalize masks
-            # Pass common args
-            do_resize=do_resize,
-            size=size,
-            # Pass dummy values for args not used when do_rescale/do_normalize are False
-            rescale_factor=1.0, # Value doesn't matter here
-            return_tensors=return_tensors,
-        )
-
-        # Ensure final dtype is int64 for labels
-        if isinstance(processed_maps, torch.Tensor):
-            processed_maps = processed_maps.to(torch.int64)
-        elif isinstance(processed_maps, list): # if return_tensors=None
-            processed_maps = [m.to(torch.int64) for m in processed_maps]
-
-        return processed_maps
+        segmentation_maps,
+        **kwargs,
+    ):
+        """Preprocesses a single segmentation map."""
+        # Add an axis to the segmentation maps for transformations.
+        kwargs["do_normalize"] = False
+        kwargs["do_rescale"] = False
+        kwargs["input_data_format"] = ChannelDimension.FIRST
+        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
+        return segmentation_maps
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
@@ -213,11 +196,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
-            # Handle do_reduce_labels potentially being set in __init__
-            if kwarg_name == "do_reduce_labels":
-                 kwargs.setdefault(kwarg_name, self.do_reduce_labels)
-            else:
-                 kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
         do_convert_rgb = kwargs.pop("do_convert_rgb")
@@ -233,11 +212,9 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         prepared_segmentation_maps = None
         if segmentation_maps is not None:
             # Segmentation maps should not be converted to RGB
-            prepared_segmentation_maps = self._prepare_input_images(
-                images=segmentation_maps,
-                do_convert_rgb=False, # Explicitly false for masks
-                input_data_format=input_data_format, # Detect format initially
-                device=device,
+            prepared_segmentation_maps = make_list_of_images(
+                images = prepared_images,
+                expected_ndims = 1
             )
             if len(prepared_images) != len(prepared_segmentation_maps):
                  raise ValueError("Number of images and segmentation maps must match.")
@@ -262,16 +239,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         # Process images using _preprocess
         processed_images = self._preprocess(
             images=prepared_images,
-            do_reduce_labels=False, # Label reduction is only for masks
-            interpolation=kwargs["interpolation"],
-            do_rescale=kwargs.get("do_rescale"),
-            do_normalize=kwargs.get("do_normalize"),
-            do_resize=kwargs.get("do_resize"),
-            size=kwargs.get("size"),
-            rescale_factor=kwargs.get("rescale_factor"),
-            image_mean=kwargs.get("image_mean"),
-            image_std=kwargs.get("image_std"),
-            return_tensors=kwargs.get("return_tensors"),
+            **kwargs,
         )
         data = {"pixel_values": processed_images}
 
@@ -279,16 +247,12 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         if prepared_segmentation_maps is not None:
             processed_segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=prepared_segmentation_maps,
-                do_reduce_labels=kwargs.get("do_reduce_labels"),
-                do_resize=kwargs.get("do_resize"),
-                size=kwargs.get("size"),
-                return_tensors=kwargs.get("return_tensors"),
+                **kwargs,
             )
             data["labels"] = processed_segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=kwargs.get("return_tensors"))
+        return BatchFeature(data=data)
 
-    # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.post_process_semantic_segmentation with Beit->Segformer
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
