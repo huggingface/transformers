@@ -1101,7 +1101,6 @@ class Gemma3MultiModalProjector(nn.Module):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
-
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
