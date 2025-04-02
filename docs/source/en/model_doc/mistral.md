@@ -80,7 +80,7 @@ The instruction tuned model can be used as follows:
 import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.3", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> messages = [
@@ -101,14 +101,15 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 <hfoption id="transformers-cli">
 
 ```python
-echo -e "My favorite condiment is" | transformers-cli run --task text-generation --model mistralai/Mistral-7B-v0.3 
+# pip install -U flash-attn --no-build-isolation
+echo -e "My favorite condiment is" | transformers-cli chat --model mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
 ```
 
 ## Shrinking down Mistral using quantization
 
-As the Mistral model has 7 billion parameters, that would require about 14GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter),that requires only about 3.5GB of RAM.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
 >>> import torch
@@ -121,7 +122,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, torch_dtype=torch.bfloat16, device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> prompt = "My favourite condiment is"
