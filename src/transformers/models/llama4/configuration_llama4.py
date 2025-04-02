@@ -220,7 +220,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
         self.no_rope_layer_interval = no_rope_layer_interval
-        default_no_rope_layers = list(range(num_hidden_layers, no_rope_layer_interval))
+        default_no_rope_layers = list(range(0, num_hidden_layers, no_rope_layer_interval))
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
         self.for_llm_compressor = for_llm_compressor
 
