@@ -326,16 +326,9 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if hasattr(self, "vision_model") and module in self.vision_model.modules():
-            factor = self.config.vision_config.initializer_range
-        elif hasattr(self, "qformer") and module in self.qformer.modules():
-            factor = self.config.qformer_config.initializer_range
-        else:
-            factor = self.config.initializer_range
+        factor = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(self, "language_model") and module in self.language_model.modules():
-            self.language_model._init_weights(module)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=factor)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -345,8 +338,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, InstructBlipVideoVisionEmbeddings):
-            if hasattr(self.config, "vision_config") and not isinstance(self.config, InstructBlipVideoVisionConfig):
-                factor = self.config.vision_config.initializer_range
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, InstructBlipVideoForConditionalGeneration):

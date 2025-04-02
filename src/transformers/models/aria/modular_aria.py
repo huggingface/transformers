@@ -1235,11 +1235,8 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if module in self.vision_tower.modules():
-            self.vision_tower._init_weights(module)
-        elif module in self.language_model.modules():
-            self.language_model._init_weights(module)
-        elif isinstance(module, nn.Linear):
+
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
