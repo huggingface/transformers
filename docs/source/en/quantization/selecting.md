@@ -32,89 +32,53 @@ Consider the quantization methods below for inference.
 | HQQ | fast on the fly quantization without calibration |
 | torchao | flexibility and fast inference with torch.compile |
 
-**TLDR (Inference):**
+### [bitsandbytes](./bitsandbytes.md)
 
-*   For ease of use and QLoRA fine-tuning on NVIDIA GPUs: **bitsandbytes**
-*   For good 4-bit accuracy with upfront calibration: **GPTQModel** or **AWQ**
-*   For speed via `torch.compile` and flexibility: **torchao**
-*   For fast on-the-fly quantization without calibration: **HQQ** is worth considering.
-*   For loading specific formats (FP8, Sparse) and nice quantized models: **compressed-tensors** 
+| Pros                                                         | Cons                                                    |
+|--------------------------------------------------------------|---------------------------------------------------------|
+| Very simple, no calibration dataset required for inference.  | Primarily optimized for NVIDIA GPUs (CUDA).             |
+| Good community support and widely adopted.                   | Inference speedup isn't guaranteed.                     |
 
+### [GPTQ / GPTQModel](./gptq)
 
-### bitsandbytes
+| Pros                                                                 | Cons                                                                 |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
+| Can lead to inference speedups.                                      | Possible to overfit on calibration data.                             |
+| Many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). |                                           |
 
-*   **Description:** Enables 4-bit and 8-bit inference.
-*   **Pros:**
-    *   Very simple, no calibration dataset required for inference
-    *   Good community support and widely adopted.
-*   **Cons:**
-    *   Primarily optimized for NVIDIA GPUs (CUDA).  There is [ongoing work](https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/docs/source/installation.mdx#multi-backend) to support other hardware.
-    *   Inference speedup isn't guaranteed
+### [AWQ (Activation-aware Weight Quantization)](./awq)
 
-See the [bitsandbytes documentation](./bitsandbytes) for more details.
+| Pros                                                                 | Cons                                                |
+|----------------------------------------------------------------------|-----------------------------------------------------|
+| Often achieves high accuracy at 4-bit. (Sometimes surpasses GPTQ on specific tasks.) | Requires calibration if quantizing yourself.        |
+| Can lead to inference speedups.                                      |                                                     |
+| Shorter calibration time than GPTQ.                                  |                                                     |
+| Many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). |                                                     |
 
-### 2. GPTQ / GPTQModel
+### [torchao](./torchao)
 
-*   **Description:** quantizes weights (commonly to 4-bit, but supports others) by processing calibration data. 
-*   **Pros:**
-    *   Often achieves high accuracy
-    *   Can lead to inference speedups
-    *   There are many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). This means you can often skip doing the quantization yourself and directly download a GPTQ-quantized model.
-*   **Cons:**
-    *   Requires a calibration dataset and a separate calibration step before inference. This takes time and compute resources.
-    *   Accuracy depends on the quality and relevance of the calibration data (possible to overfit on calibration data).
+| Pros                                                                 | Cons                                                                 |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| Strong integration with `torch.compile` for potential speedups.     | Newer library, ecosystem still evolving.                             |
+| Offers decent CPU quantization support.                              | Performance depends on `torch.compile` working well.                 |
+| Flexibility in quantization schemes (int8, int4, fp8).           | 4-bit quantization may not match GPTQ/AWQ in accuracy.              |
 
-See the [GPTQ documentation](./gptq) for more details.
+### [HQQ (Half-Quadratic Quantization)](./hqq)
 
-### 3. AWQ (Activation-aware Weight Quantization)
+| Pros                                                                 | Cons                                                                       |
+|----------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Fast quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit depths <4-bit.                     |
+| Multiple backends for fast inference.                                | Inference speed may not match others unless using `torch.compile` or backends. |
+| Compatible with `torch.compile`.                                     |                                                                            |
+| Supports wide range of bit depths (8, 4, 3, 2, 1-bit).              |                                                                            |
 
-*   **Description:** Similar to GPTQ in workflow, that also typically targets 4-bit quantization.
-*   **Pros:**
-    *   Often achieves high accuracy at 4-bit, sometimes surpassing GPTQ for specific tasks.
-    *   Can lead to inference speedups
-    *   Shorter calibration time than GPTQ.
-    *   There are many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). This means you can often skip doing the quantization yourself and directly download a AWQ-quantized model.
-*   **Cons:**
-    *   Requires calibration if quantizing yourself.
+### [compressed-tensors](./compressed_tensors)
 
-See the [AWQ documentation](./awq) for more details.
-
-### 4. torchao
-
-*   **Description:** Library from PyTorch focused on architecture optimization. It's designed for strong integration with `torch.compile`.
-*   **Pros:**
-    *   Strong integration with `torch.compile`, potentially leading to significant inference speedups when compiled.
-    *   Offers decent CPU quantization support.
-    *   Flexibility in quantization schemes (int8, int4, fp8).
-*   **Cons:**
-    *   Newer compared to BnB or GPTQ, so the ecosystem and best practices are still evolving.
-    *   Performance gains often rely heavily on `torch.compile` working effectively for the model and hardware.
-    *   4-bit quantized model via torchao might not reach the same accuracy as GPTQ/AWQ’s 4-bit, because torchao might just do straightforward rounding.
-
-See the [torchao documentation](./torchao) for more details.
-
-### 5. HQQ (Half-Quadratic Quantization)
-
-*   **Description:** A fast, on-the-fly quantization method (like bitsandbytes) that doesn't require calibration data.
-*   **Pros:**
-    *   Fast quantization process and no calibration data required.
-    *   Multiple backends for fast inference.
-    *   Compatible with `torch.compile` for potential inference speedups.
-    *   It supports a wide range of bit depths (8, 4, 3, 2, 1-bit)
-*   **Cons:**
-    *   Accuracy at very low bit depths (<4-bit) can degrade significantly and requires careful evaluation for the specific task.
-    *   While quantization is fast, inference speed might not be faster than other methods unless using specific backends or `torch.compile`.
-See the [HQQ documentation](./hqq) for more details.
-
-### 6. compressed-tensors
-
-*   **Description:** Allows loading models saved in specific compressed formats (like FP8, INT8/4, potentially with sparsity).
-*   **Pros:** 
-    *   Supports flexible formats including FP8 and sparsity.
-*   **Cons:** 
-    *   Primarily for loading pre-quantized models, not performing the quantization within Transformers itself.
-
-See the [compressed-tensors documentation](./compressed_tensors) for more details.
+| Pros                                                         | Cons                                                        |
+|--------------------------------------------------------------|-------------------------------------------------------------|
+| Supports flexible formats including FP8 and sparsity.        | Primarily for loading pre-quantized models.                 |
+|                                                              | Doesn't perform quantization within Transformers directly.  |
 
 ## Fine-tuning
 
