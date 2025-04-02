@@ -241,6 +241,8 @@ def write_model(
     num_experts = params["moe_args"]["num_experts"]
     interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
 
+    no_rope_layer_interval = params["nope_layer_interval"]
+
     bos_token_id = 200000
     eos_token_id = [200001, 200002, 200003, 200008] if instruct else 200001
     pad_token_id = 200008
@@ -263,6 +265,7 @@ def write_model(
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
+        no_rope_layers=no_rope_layer_interval,
         **config_kwargs,
     )
     # default vision config frmo params
