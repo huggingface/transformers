@@ -51,6 +51,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     """
     When you go from the complex ROPE formulation to sin and cos one, you need
@@ -133,7 +134,9 @@ def write_model(
         state_dict[new_key] = current_parameter
 
     # add the depth decoder embed audio tokens weights, latter tied to the backbone embed audio tokens weights
-    state_dict["depth_decoder.model.embed_tokens.embed_audio_tokens.weight"] = state_dict["backbone_model.embed_tokens.embed_audio_tokens.weight"]
+    state_dict["depth_decoder.model.embed_tokens.embed_audio_tokens.weight"] = state_dict[
+        "backbone_model.embed_tokens.embed_audio_tokens.weight"
+    ]
 
     # -------------------------
     # load the weights and save
@@ -179,7 +182,6 @@ def main():
 
 
 if __name__ == "__main__":
-
     write_model(
         "sesame/csm-1b",
         "ckpt.pt",

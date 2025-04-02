@@ -29,7 +29,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerateDecoderOnlyOutput, GenerationConfig, GenerationMixin
+from ...generation import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput, GenerationConfig, GenerationMixin
 from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.utils import GenerateNonBeamOutput
@@ -1614,9 +1614,9 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None  # noqa: F841
             encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None  # noqa: F841
             )
 
         # keep track of which sequences are already finished
@@ -1767,14 +1767,27 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
             streamer.end()
 
         if return_dict_in_generate:
-            return GenerateDecoderOnlyOutput(
-                sequences=input_ids,
-                scores=scores,
-                logits=raw_logits,
-                attentions=decoder_attentions,
-                hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
-            )
+            if self.config.is_encoder_decoder:
+                return GenerateEncoderDecoderOutput(
+                    sequences=input_ids,
+                    scores=scores,
+                    logits=raw_logits,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
+                )
+            else:
+                return GenerateDecoderOnlyOutput(
+                    sequences=input_ids,
+                    scores=scores,
+                    logits=raw_logits,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
+                )
         else:
             return input_ids
 
@@ -1789,11 +1802,10 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
     def _validate_depth_decoder_generate_kwargs(self, depth_decoder_generate_kwargs):
         min_new_tokens = depth_decoder_generate_kwargs.get("min_new_tokens", self.config.num_codebooks - 1)
         max_new_tokens = depth_decoder_generate_kwargs.get("max_new_tokens", self.config.num_codebooks - 1)
-        if set([min_new_tokens, max_new_tokens]) != set([self.config.num_codebooks - 1]):
+        if {min_new_tokens, max_new_tokens} != {self.config.num_codebooks - 1}:
             raise ValueError(
                 f"depth_decoder_generate_kwargs' min_new_tokens ({min_new_tokens}) and max_new_tokens ({max_new_tokens}) must be equal to self.config.num_codebooks - 1 ({self.config.num_codebooks - 1})"
             )
-
         depth_decoder_generate_kwargs["min_new_tokens"] = min_new_tokens
         depth_decoder_generate_kwargs["max_new_tokens"] = max_new_tokens
         depth_decoder_generate_kwargs["return_dict_in_generate"] = False

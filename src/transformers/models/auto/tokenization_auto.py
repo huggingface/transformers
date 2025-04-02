@@ -151,6 +151,7 @@ else:
             ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("conversational_speech_model", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cpm",
                 (
@@ -333,7 +334,6 @@ else:
             ("modernbert", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("moonshine", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("moshi", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-            ("conversational_speech_model", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),

@@ -547,4 +547,8 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["ConversationalSpeechModelDepthDecoderConfig", "ConversationalSpeechModelConfig"]
+__all__ = [
+    "ConversationalSpeechModelDepthDecoderConfig",
+    "ConversationalSpeechModelBackboneConfig",
+    "ConversationalSpeechModelConfig",
+]
