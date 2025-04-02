@@ -14,9 +14,19 @@
 # limitations under the License.
 """Fast Image processor class for Pvt."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, get_size_dict
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    get_size_dict,
+)
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...processing_utils import Unpack
 from ...utils import add_start_docstrings
+
+
+class PvtFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    pass
 
 
 @add_start_docstrings(
@@ -37,7 +47,7 @@ class PvtImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = None
     model_input_names = ["pixel_values"]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Unpack[PvtFastImageProcessorKwargs]) -> None:
         size = kwargs.pop("size", None)
         size = size if size is not None else {"height": 224, "width": 224}
         if isinstance(size, (tuple, list)):
