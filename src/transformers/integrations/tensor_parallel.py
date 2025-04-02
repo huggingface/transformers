@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import math
 import re
 from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
@@ -141,18 +142,30 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if dim == 0:
         size_ = empty_param.shape[0]
-        param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
+        split_size = math.ceil(size_ / device_mesh.size())
+        if (rank * split_size) < size_:
+            param = param[rank * split_size : min((rank + 1) * split_size, size_), ...]
+        else:
+            param = torch.tensor([])
     elif dim == 1 or dim == -2:
         size_ = empty_param.shape[-2]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), :]
+        split_size = math.ceil(size_ / device_mesh.size())
+        if (rank * split_size) < size_:
+            param = param[..., rank * split_size : min((rank + 1) * split_size, size_), :]
+        else:
+            param = torch.tensor([])
     elif dim == 2 or dim == -1:
         size_ = empty_param.shape[-1]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
+        split_size = math.ceil(size_ / device_mesh.size())
+        if (rank * split_size) < size_:
+            param = param[..., rank * split_size : min((rank + 1) * split_size, size_)]
+        else:
+            param = torch.tensor([])
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
+    print(rank)
+    print(torch.tensor(param).size())
     return param
-
-
 def distribute_module(
     module: nn.Module,
     device_mesh=None,
@@ -306,7 +319,7 @@ class ColwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride())
         return nn.Parameter(parameter)
 
     @staticmethod
@@ -380,7 +393,7 @@ class RowwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride())
         return nn.Parameter(parameter)
 
     @staticmethod
