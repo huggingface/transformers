@@ -43,7 +43,7 @@ from transformers import pipeline
 # Use a pipeline as a high-level helper
 pipe = pipeline(
     task="text-generation",
-    model="Qwen/Qwen2-7B-Instruct",
+    model="Qwen/Qwen2-1.5B-Instruct",
     torch_dtype=torch.bfloat16,
     device_map=0
 )
