@@ -866,6 +866,23 @@ def is_torchdynamo_compiling():
             return False
 
 
+def is_torchdynamo_exporting():
+    if not is_torch_available():
+        return False
+
+    try:
+        import torch
+
+        return torch.compiler.is_exporting()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_exporting()
+        except Exception:
+            return False
+
+
 def is_torch_tensorrt_fx_available():
     if importlib.util.find_spec("torch_tensorrt") is None:
         return False
