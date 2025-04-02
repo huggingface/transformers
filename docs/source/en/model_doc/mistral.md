@@ -34,7 +34,7 @@ You can find all the original Mistral checkpoints under the [Mistral AI_](https:
 > [!TIP]
 > Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
