@@ -102,7 +102,7 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 
 - preprocess
 - post_process_keypoint_matching
-- plot_keypoint_matching
+- visualize_output
 
 ## EfficientLoFTRModel
 
