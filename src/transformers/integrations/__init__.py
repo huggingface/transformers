@@ -121,7 +121,6 @@ _import_structure = {
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
     "vptq": ["replace_with_vptq_linear"],
-    "compressed_tensors": ["CompressedExpertsLinear"],
 }
 
 try:
@@ -256,7 +255,6 @@ if TYPE_CHECKING:
     from .quanto import replace_with_quanto_layers
     from .spqr import replace_with_spqr_linear
     from .vptq import replace_with_vptq_linear
-    from .compressed_tensors import CompressedExpertsLinear
 
     try:
         if not is_torch_available():

@@ -115,26 +115,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
 
-        ct_quantization_config = self.compressor.quantization_config
-
-        # Check if the model has Llama4TextExperts in feed_forward and replace with ModuleList of Llama4TextMLP
-        if (
-            hasattr(model, "language_model")
-            and hasattr(model.language_model, "model")
-            and hasattr(model.language_model.model, "layers")
-        ):
-            from ..models.llama4.modeling_llama4 import Llama4TextExperts
-            from ..integrations.compressed_tensors import CompressedExpertsLinear
-
-            # Iterate through all layers to find and replace Llama4TextExperts
-            for layer_idx, layer in enumerate(model.language_model.model.layers):
-                if hasattr(layer, "feed_forward") and hasattr(layer.feed_forward, "experts"):
-                    if isinstance(layer.feed_forward.experts, Llama4TextExperts):
-                        config = model.config.text_config
-                        expert_modules = CompressedExpertsLinear(config)
-
-                        # Replace the experts with the ModuleList
-                        layer.feed_forward.experts = expert_modules
+        ct_quantization_config = self.compressor.quantization_config        
 
         if self.run_compressed:
             if not self.is_quantization_compressed:
