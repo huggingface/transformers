@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Model 
 
 Mistral is a decoder-only Transformer model that incorporates several architectural choices to enhance its performance. It utilizes Sliding Window Attention, trained with an 8k context length and a fixed cache size, offering a theoretical attention span of up to 128K tokens. Additionally, Mistral-7B employs Grouped Query Attention (GQA), which helps to speed up inference and reduce the cache size. The model also features a Byte-fallback BPE tokenizer, ensuring that characters are never mapped to out-of-vocabulary tokens, thus improving token handling and overall efficiency.
 
