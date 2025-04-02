@@ -41,8 +41,6 @@ class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
     if _run_pipeline_tests:
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         example_video_filepath = hf_hub_download(
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )
