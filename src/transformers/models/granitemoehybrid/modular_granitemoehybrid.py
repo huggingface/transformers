@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -20,7 +21,10 @@ from torch import nn
 import torch.nn.functional as F
 from transformers import DynamicCache
 
+from ...cache_utils import Cache
+from ..bamba.modeling_bamba import BambaMixer
 from ..granitemoeshared.modeling_granitemoeshared import (
+    GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedForCausalLM,
@@ -30,7 +34,7 @@ from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 from ...utils import add_start_docstrings
 
 class GraniteMultiHeadLatentAttention(nn.Module):
-    def __init__(self, config: GraniteMoeHybridConfig):
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super(GraniteMultiHeadLatentAttention, self).__init__()
 
         self.causal = True
@@ -44,8 +48,7 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads 
         # self.position_embedding_type = config.position_embedding_type
         self.attention_multiplier = config.attention_multiplier
-        # TODO: where does it come from?
-        self.layer_idx = config.layer_idx
+        self.layer_idx = layer_idx
 
         # will bias be a flag in config?
         self.c_attn_down_projection = nn.Linear(self.hidden_size, self.query_compression_size + 2 * self.key_value_compression_size, bias=False)
@@ -116,6 +119,105 @@ class GraniteMultiHeadLatentAttention(nn.Module):
             softmax_scale = self.attention_multiplier
 
         return softmax_scale   
+    
+class GraniteMoeHybridMambaLayer(BambaMixer):
+     def __init__(self, config: GraniteMoeHybridConfig):
+        # TO DO map variables here
+        super().__init__(
+
+        )
+
+class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
+        self.mla = GraniteMultiHeadLatentAttention(config, layer_idx)
+        self.mamba_layer = GraniteMoeHybridMambaLayer(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        output_router_logits: Optional[bool] = False,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+                should not be returned during inference.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # For Mayank - is this correct? where do I add bamba layer in decoder?
+        # Multi Head Latent Attention
+        hidden_states, self_attn_weights, present_key_value = self.mla(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+
+        if self.shared_mlp is None:
+            hidden_states = moe_hidden_states
+        else:
+            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+
+        del moe_hidden_states
+
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        if output_router_logits:
+            outputs += (router_logits,)
+
+        return outputs
     
 # TO DO update docstring
 GRANITEMOEHYBRID_START_DOCSTRING = r"""
