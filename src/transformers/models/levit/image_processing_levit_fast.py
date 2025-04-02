@@ -84,7 +84,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
             new_size = get_resize_output_image_size(
                 image, size=shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
             )
-       elif size.height and size.width:
+        elif size.height and size.width:
             new_size = (size.height, size.width)
         else:
             raise ValueError(
