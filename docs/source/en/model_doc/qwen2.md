@@ -81,7 +81,7 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to(device)
+model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
 
 generated_ids = model.generate(
     model_inputs.input_ids,
