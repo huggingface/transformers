@@ -690,11 +690,9 @@ class ProcessorTesterMixin:
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer")
+        processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
-
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3)

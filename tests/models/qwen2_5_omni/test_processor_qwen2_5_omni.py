@@ -48,9 +48,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer(max_length=117, padding="max_length")
+            tokenizer = self.get_tokenizer(max_length=800, padding="max_length")
         elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+            tokenizer = self.get_component("tokenizer", max_length=800, padding="max_length")
         else:
             self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
         if not tokenizer.pad_token:
@@ -63,12 +63,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
-        raw_speech = floats_list((3, 1000))
+        raw_speech = self.prepare_audio_inputs()
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
         if "input_ids" in inputs:
-            self.assertEqual(len(inputs["input_ids"][0]), 2)
+            self.assertEqual(len(inputs["input_ids"][0]), 800)
         elif "labels" in inputs:
-            self.assertEqual(len(inputs["labels"][0]), 2)
+            self.assertEqual(len(inputs["labels"][0]), 800)
 
     @require_torch
     @require_vision
@@ -91,12 +91,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer"]
-        raw_speech = floats_list((3, 1000))
+        raw_speech = self.prepare_audio_inputs()
 
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "audio_kwargs": {"max_length": 2},
+            "audio_kwargs": {"max_length": 800},
         }
 
         inputs = processor(text=input_str, audio=raw_speech, **all_kwargs)
@@ -125,19 +125,19 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
-        raw_speech = floats_list((3, 1000))
+        raw_speech = self.prepare_audio_inputs()
         inputs = processor(
             text=input_str,
             audio=raw_speech,
             return_tensors="pt",
             padding="max_length",
-            max_length=76,
+            max_length=800,
         )
 
         if "input_ids" in inputs:
-            self.assertEqual(len(inputs["input_ids"][0]), 76)
+            self.assertEqual(len(inputs["input_ids"][0]), 800)
         elif "labels" in inputs:
-            self.assertEqual(len(inputs["labels"][0]), 76)
+            self.assertEqual(len(inputs["labels"][0]), 800)
 
     @require_torch
     def test_doubly_passed_kwargs_audio(self):
@@ -173,7 +173,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        processor = Qwen2_5OmniProcessor.from_pretrained(
+            "/home/xj_data/lvyuanjun.lyj/res/navit_thinker_talker/revision1"
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):

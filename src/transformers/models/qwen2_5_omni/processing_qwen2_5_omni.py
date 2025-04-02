@@ -144,7 +144,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_inputs["input_features"] = audio_inputs.pop(
                 "input_features"
             )  # rename input_features to prevent conflicts later on
-            input_lengths = (audio_inputs["feature_attention_mask"].sum(-1).numpy() - 1) // 2 + 1
+            input_lengths = (audio_inputs["feature_attention_mask"].sum(-1)) // 2 + 1
             audio_lengths = (input_lengths - 2) // 2 + 1
         else:
             audio_inputs = {}
