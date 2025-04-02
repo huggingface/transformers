@@ -1099,8 +1099,6 @@ class Gemma3MultiModalProjector(nn.Module):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
