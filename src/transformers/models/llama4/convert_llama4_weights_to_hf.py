@@ -403,13 +403,7 @@ def write_model(
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                 elif new_key == up_key:
                     if "experts" not in new_key:
-                        gate_proj = state_dict.pop(gate_key)
-                        up_proj = torch.cat(current_parameter, dim=concat_dim)
-                        state_dict[gate_key] = gate_proj
-                        state_dict[new_key] = up_proj
-                        # TODO that's kinda low hanging fruit, but shard dim for shared should be
-                        # column, then row. TO get hidden // tp * col // tp, gate + up
-                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
+                        state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
