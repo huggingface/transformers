@@ -50,6 +50,9 @@ _CONFIG_FOR_DOC = "DonutSwinConfig"
 _CHECKPOINT_FOR_DOC = "https://huggingface.co/naver-clova-ix/donut-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "eljandoubi/donut-base-encoder"
+
 
 @dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
@@ -1081,12 +1084,10 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        
-        # no loss for ForImageClassification
-        # self.loss_function = ForSequenceClassificationLoss
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=DonutSwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
