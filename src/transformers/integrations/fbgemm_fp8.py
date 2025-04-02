@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
-
+from ..activations import ACT2FN
 
 if is_torch_available():
     import torch
@@ -50,12 +50,13 @@ class FbgemmFp8Linear(torch.nn.Module):
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]), num_tokens, self.input_scale_ub
+            x.view(-1, x.shape[-1]), scale_ub=self.input_scale_ub
         )
         # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
 
         # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
+        self.weight_scale = self.weight_scale.to(torch.float32)
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
             x_quantized, self.weight, x_scale, self.weight_scale, use_fast_accum=True
         )
@@ -67,6 +68,100 @@ class FbgemmFp8Linear(torch.nn.Module):
         return output
 
 
+class FbgemmFp8Llama4TextExperts(nn.Module):
+    def __init__(self, config, dtype=torch.float32):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.intermediate_size = config.intermediate_size
+        self.hidden_size = config.hidden_size
+        self.expert_dim = self.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        # Register FP8 buffers for gate_up_proj
+        self.register_buffer("gate_up_proj", torch.zeros((self.num_experts, 2 * self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
+        self.register_buffer("gate_up_proj_scale", torch.zeros((self.num_experts, self.expert_dim, 2), dtype=dtype))
+        # Register FP8 buffers for down_proj
+        self.register_buffer("down_proj", torch.zeros((self.num_experts, self.hidden_size, self.expert_dim), dtype=torch.float8_e4m3fn))
+        self.register_buffer("down_proj_scale", torch.zeros((self.num_experts, self.hidden_size, 1), dtype=dtype))
+        # Register input scale upper bound
+        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+
+
+    def forward(self, hidden_states):
+        """
+        Args:
+            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
+        Returns:
+            torch.Tensor: (batch_size * token_num, hidden_size)
+        """
+        # Reshape hidden states for expert computation
+        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        num_tokens = None
+
+        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
+            raise RuntimeError("NaN or inf values detected in hidden_states")
+        # Process each expert separately
+        next_states = []
+        for i in range(self.num_experts):
+            # Extract expert's hidden states
+            expert_hidden = hidden_states[i]
+            expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
+            # Quantize for this expert
+            expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+                expert_hidden_reshaped, num_tokens, self.input_scale_ub
+            )    
+            self.gate_up_proj_scale = self.gate_up_proj_scale.to(torch.float32)
+            gate = torch.ops.fbgemm.f8f8bf16_rowwise(
+                expert_quantized,
+                self.gate_up_proj[i][:self.expert_dim], 
+                expert_scale,
+                self.gate_up_proj_scale[i][:, 0:1], 
+                use_fast_accum=True
+            )
+
+            up = torch.ops.fbgemm.f8f8bf16_rowwise(
+                expert_quantized, 
+                self.gate_up_proj[i][self.expert_dim:], 
+                expert_scale, 
+                self.gate_up_proj_scale[i][:, 1:2], 
+                use_fast_accum=True
+            )
+    
+            # Apply activation function
+            activated = up * self.act_fn(gate)
+            # Check for NaN or inf values in activated
+            if torch.isnan(activated).any() or torch.isinf(activated).any():
+                raise RuntimeError("NaN or inf values detected in activated after activation function")
+
+            # Quantize activated output for down projection
+            activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+                activated, num_tokens, self.input_scale_ub
+            )
+            # Check for NaN or inf values after quantization
+            if torch.isnan(activated_scale).any() or torch.isinf(activated_scale).any():
+                raise RuntimeError("NaN or inf values detected in activated_scale after quantization")
+
+            self.down_proj_scale = self.down_proj_scale.to(torch.float32)
+            # Compute down projection using FP8 operations
+            expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
+                activated_quantized, 
+                self.down_proj[i], 
+                activated_scale, 
+                self.down_proj_scale[i], 
+                use_fast_accum=True
+            )
+            # Check for NaN or inf values in expert_output
+            if torch.isnan(expert_output).any() or torch.isinf(expert_output).any():
+                raise RuntimeError("NaN or inf values detected in expert_output after f8f8bf16_rowwise operation")
+
+            next_states.append(expert_output)
+
+        # Combine expert outputs
+        next_states = torch.cat(next_states, dim=0)
+        next_states = next_states.to(hidden_states.dtype)
+        next_states = next_states.to(hidden_states.device)
+        return next_states.view(-1, self.hidden_size)
+
+
 def _replace_with_fbgemm_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -74,12 +169,16 @@ def _replace_with_fbgemm_fp8_linear(
     quantization_config=None,
     has_been_replaced=False,
     pre_quantized=False,
+    config=None
 ):
     """
     Private method that wraps the recursion for module replacement.
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
+
+    from transformers.models.llama4.modeling_llama4 import Llama4TextExperts
+
     if current_key_name is None:
         current_key_name = []
 
@@ -106,8 +205,21 @@ def _replace_with_fbgemm_fp8_linear(
                     model._modules[name].requires_grad_(False)
                 # set non persistant buffer outside of init_empty_weights
                 model._modules[name].input_scale_ub = torch.tensor(
+                    [quantization_config.activation_scale_ub], dtype=torch.float,
+                )
+        if isinstance(module, Llama4TextExperts) and name not in modules_to_not_convert:
+            current_key_name_str = ".".join(current_key_name)
+            if not any(
+                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
+            ):
+                with init_empty_weights(include_buffers=True):
+                    model._modules[name] = FbgemmFp8Llama4TextExperts(
+                        config.text_config,
+                    )
+                model._modules[name].input_scale_ub = torch.tensor(
                     [quantization_config.activation_scale_ub], dtype=torch.float
                 )
+            
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fbgemm_fp8_linear(
                 module,
@@ -116,6 +228,7 @@ def _replace_with_fbgemm_fp8_linear(
                 quantization_config,
                 has_been_replaced=has_been_replaced,
                 pre_quantized=pre_quantized,
+                config=config
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
@@ -123,7 +236,7 @@ def _replace_with_fbgemm_fp8_linear(
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False, config=None
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -151,7 +264,7 @@ def replace_with_fbgemm_fp8_linear(
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_fbgemm_fp8_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
+        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized, config=config
     )
 
     if not has_been_replaced:
