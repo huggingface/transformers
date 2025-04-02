@@ -30,8 +30,8 @@ from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 
 
 class Qwen2_5_VLVideosKwargs(VideosKwargs):
-    fps: Optional[List[int]] = (None,)
-    use_audio_in_video: Optional[bool] = (None,)
+    fps: Optional[List[int]] = None
+    use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
 
@@ -303,7 +303,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         for conversation in conversations:
             if (
                 conversation[0]["role"] != "system"
-                or conversation[0]["content"]
+                or conversation[0]["content"][0]["text"]
                 != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
             ):
                 logging.warning(

@@ -145,7 +145,7 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
@@ -183,7 +183,7 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         activation_function="gelu",
         activation_dropout=0,
         scale_embedding=False,
-        init_std=0.02,
+        initializer_range=0.02,
         max_source_positions=1500,
         n_window=100,
         output_dim=3584,
@@ -201,7 +201,7 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.activation_dropout = activation_dropout
         self.num_hidden_layers = encoder_layers
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.n_window = n_window
@@ -294,7 +294,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
@@ -339,7 +339,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         max_window_layers=28,
         attention_dropout=0.0,
         rope_scaling=None,
-        init_std=0.02,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -365,7 +365,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
-        self.init_std = init_std
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -406,7 +406,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
             The audio end token index to encode the audio prompt.
         user_token_id (`int, *optional*, defaults to 872):
             The user token index to encode the user token.
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
@@ -455,7 +455,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         audio_start_token_id=151647,
         audio_end_token_id=151648,
         user_token_id=872,
-        init_std=0.02,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -467,7 +467,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         self.seconds_per_chunk = seconds_per_chunk
         self.audio_start_token_id = audio_start_token_id
         self.audio_end_token_id = audio_end_token_id
-        self.init_std = init_std
+        self.initializer_range = initializer_range
 
         if isinstance(vision_config, dict):
             vision_config = Qwen2_5OmniVisionEncoderConfig(**vision_config)
@@ -614,7 +614,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             The audio start token index to encode the audio prompt.
         audio_end_token_id (`int`, *optional*, defaults to 151648):
             The audio end token index to encode the audio prompt.
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size used for merging spatial dimensions.
@@ -680,7 +680,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         seconds_per_chunk=2,
         audio_start_token_id=151647,
         audio_end_token_id=151648,
-        init_std=0.02,
+        initializer_range=0.02,
         spatial_merge_size=2,
         **kwargs,
     ):
@@ -728,7 +728,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         self.audio_start_token_id = audio_start_token_id  # zf
         self.audio_end_token_id = audio_end_token_id  # zf
 
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

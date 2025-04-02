@@ -52,6 +52,7 @@ from transformers.utils import (
     is_torch_fp16_available_on_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -75,7 +76,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self,
         parent,
         batch_size=3,
-        feat_seq_length=200,
+        feat_seq_length=30,
         num_channels=3,
         image_size=14,
         seq_length=39,
@@ -104,51 +105,36 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "output_dim": 32,
         },
         text_config={
-            "model_type": "qwen2_5_omni_text",
-            "hidden_act": "silu",
+            "rope_scaling": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
+            "vocab_size": 99,
             "hidden_size": 32,
             "intermediate_size": 37,
-            "vocab_size": 99,
-            "num_attention_heads": 4,
             "num_hidden_layers": 4,
+            "num_attention_heads": 4,
             "num_key_value_heads": 2,
+            "hidden_act": "silu",
             "max_position_embeddings": 1024,
-            "max_window_layers": 3,
-            "rope_scaling": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
+            "rms_norm_eps": 1e-06,
             "use_cache": True,
+            "tie_word_embeddings": False,
             "rope_theta": 1000000.0,
             "use_sliding_window": False,
             "sliding_window": 50,
-            "tie_word_embeddings": False,
+            "max_window_layers": 3,
+            "attention_dropout": 0.0,
+            "initializer_range": 0.02,
         },
-        rope_scaling={"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
         audio_token_index=1,
         image_token_index=2,
         video_token_index=3,
-        vocab_size=99,
-        hidden_size=32,
-        intermediate_size=37,
-        num_hidden_layers=4,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=1024,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=1000000.0,
-        use_sliding_window=False,
-        sliding_window=50,
-        max_window_layers=3,
-        attention_dropout=0.0,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=4,
         audio_end_token_id=5,
+        user_token_id=6,
         vision_start_token_id=7,
         vision_end_token_id=8,
-        user_token_id=9,
-        init_std=0.02,
+        initializer_range=0.02,
     ):
         self.parent = parent
         self.audio_config = audio_config
@@ -157,23 +143,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self.audio_token_index = audio_token_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_theta = rope_theta
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
-        self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
         self.position_id_per_seconds = position_id_per_seconds
         self.seconds_per_chunk = seconds_per_chunk
         self.audio_start_token_id = audio_start_token_id
@@ -181,7 +150,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
         self.user_token_id = user_token_id
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.batch_size = batch_size
         self.feat_seq_length = feat_seq_length
         self.num_channels = num_channels
@@ -198,23 +167,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             audio_token_index=self.audio_token_index,
             image_token_index=self.image_token_index,
             video_token_index=self.video_token_index,
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            rms_norm_eps=self.rms_norm_eps,
-            use_cache=self.use_cache,
-            tie_word_embeddings=self.tie_word_embeddings,
-            rope_theta=self.rope_theta,
-            use_sliding_window=self.use_sliding_window,
-            sliding_window=self.sliding_window,
-            max_window_layers=self.max_window_layers,
-            attention_dropout=self.attention_dropout,
-            rope_scaling=self.rope_scaling,
             position_id_per_seconds=self.position_id_per_seconds,
             seconds_per_chunk=self.seconds_per_chunk,
             audio_start_token_id=self.audio_start_token_id,
@@ -222,7 +174,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             vision_start_token_id=self.vision_start_token_id,
             vision_end_token_id=self.vision_end_token_id,
             user_token_id=self.user_token_id,
-            init_std=self.init_std,
+            initializer_range=self.initializer_range,
         )
 
     def prepare_config_and_inputs(self):
@@ -247,7 +199,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, pixel_grid_thw, input_features_values, feature_attention_mask = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vocab_size - 3) + 3
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.get_text_config().vocab_size - 3) + 3
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
         attention_mask[:, :1] = 0
@@ -268,7 +220,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         model = Qwen2_5OmniThinkerForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+        with torch.autocast(device_type=torch_device, dtype=torch.float16):
             logits = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -279,7 +231,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """

@@ -4235,12 +4235,27 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         if batch != 1:
             raise ValueError("only support batch size = 1 currently")
 
-        def fn(t, x):
+        def fn(time, hidden_states):
             if guidance_scale < 1e-5:
-                pred = self(x, ref_mel, cond, code=code, time=t, drop_audio_cond=False, drop_code=False)
+                pred = self(
+                    hidden_states=hidden_states,
+                    speaker_embedding=ref_mel,
+                    condition_vector=cond,
+                    code=code,
+                    time=time,
+                    drop_audio_cond=False,
+                    drop_code=False,
+                )
                 return pred
 
-            out_put = self(x, ref_mel, cond, code=code, time=t, apply_cfg=True)
+            out_put = self(
+                hidden_states=hidden_states,
+                code=code,
+                speaker_embedding=ref_mel,
+                condition_vector=cond,
+                time=time,
+                apply_cfg=True,
+            )
             pred, null_pred = torch.chunk(out_put, 2, dim=0)
 
             return pred + (pred - null_pred) * guidance_scale
@@ -4474,6 +4489,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
             "repetition_penalty": talker_repetition_penalty,
         }
         token2wav_kwargs = {}
+        print(kwargs.keys())
 
         for key, value in kwargs.items():
             if key.startswith("thinker_"):

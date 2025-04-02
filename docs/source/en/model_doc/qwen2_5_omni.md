@@ -99,18 +99,19 @@ model = Qwen2_5OmniModel.from_pretrained(
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-USE_AUDIO_IN_VIDEO = True
 
 # Conversation with video only
 conversation1 = [
     {
         "role": "system",
-        "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
     },
     {
         "role": "user",
         "content": [
-            {"type": "video", "video": "/path/to/video.mp4"},
+            {"type": "video", "path": "/path/to/video.mp4"},
         ]
     }
 ]
@@ -119,12 +120,14 @@ conversation1 = [
 conversation2 = [
     {
         "role": "system",
-        "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
     },
     {
         "role": "user",
         "content": [
-            {"type": "audio", "audio": "/path/to/audio.wav"},
+            {"type": "audio", "path": "/path/to/audio.wav"},
         ]
     }
 ]
@@ -133,11 +136,13 @@ conversation2 = [
 conversation3 = [
     {
         "role": "system",
-        "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
     },
     {
         "role": "user",
-        "content": "who are you?"
+        "content": [{"type": "text", "text": "who are you?"}],
     }
 ]
 
@@ -146,14 +151,16 @@ conversation3 = [
 conversation4 = [
     {
         "role": "system",
-        "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+        "content": [
+            {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."}
+        ],
     },
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": "/path/to/image.jpg"},
-            {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "audio", "audio": "/path/to/audio.wav"},
+            {"type": "image", "path": "/path/to/image.jpg"},
+            {"type": "video", "path": "/path/to/video.mp4"},
+            {"type": "audio", "path": "/path/to/audio.wav"},
             {"type": "text", "text": "What are the elements can you see and hear in these medias?"},
         ],
     }
@@ -161,13 +168,20 @@ conversation4 = [
 
 conversations = [conversation1, conversation2, conversation3, conversation4]
 
-text = processor.apply_chat_template(conversations, add_generation_prompt=True, tokenize=False)
-audios, images, videos = process_mm_info(conversations, USE_AUDIO_IN_VIDEO)
+inputs = processor.apply_chat_template(
+    conversations,
+    load_audio_from_video=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
 
-inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=USE_AUDIO_IN_VIDEO)
-inputs = inputs.to(model.thinker.device)
+    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    padding=True,
+    use_audio_in_video=True,
+).to(model.thinker.device)
 
-text_ids = model.generate(**inputs, use_audio_in_video=USE_AUDIO_IN_VIDEO, return_audio=False)
+text_ids = model.generate(**inputs, use_audio_in_video=True, return_audio=False)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
 print(text)
