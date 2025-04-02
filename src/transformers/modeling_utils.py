@@ -2217,13 +2217,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 return True
         # Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
         # was how we detected whether a model could generate.
-        if hasattr(cls, "prepare_inputs_for_generation"):
+        if hasattr(cls, "prepare_inputs_for_generation"):  # implicit: doesn't inherit `GenerationMixin`
             logger.warning(
                 f"{cls.__name__} has generative capabilities, as `prepare_inputs_for_generation` is explicitly "
                 "defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, "
                 "`PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability "
                 "to call `generate` and other related functions."
-                "\n  - If you're using `trust_remote_code=True`, you can get rid of this exception by loading the "
+                "\n  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the "
                 "model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes"
                 "\n  - If you are the owner of the model architecture code, please modify your model class such that "
                 "it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception)."

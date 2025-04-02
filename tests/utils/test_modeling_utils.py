@@ -1747,6 +1747,17 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
+        class DummyBertWithPrepareInputs(BertModel):
+            def prepare_inputs_for_generation(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithPrepareInputs.can_generate()
+        self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
+        self.assertFalse(can_generate)
+
     def test_save_and_load_config_with_custom_generation(self):
         """
         Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
