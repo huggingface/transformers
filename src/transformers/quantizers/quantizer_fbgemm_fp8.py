@@ -206,7 +206,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
-
+        tp_plan = model._tp_plan
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
@@ -217,7 +217,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
-            config=config
+            config=config,
+            tp_plan=tp_plan
         )
 
         model.config.quantization_config = self.quantization_config

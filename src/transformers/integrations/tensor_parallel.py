@@ -539,10 +539,16 @@ def shard_and_distribute_module(
         module_to_tp._is_hooked = True
 
     if current_module_plan is not None:
-        tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        param = tp_layer.partition_tensor(
-            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-        )
+        try:
+            tp_layer = translate_to_torch_parallel_style(current_module_plan)
+            param = tp_layer.partition_tensor(
+                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+            )
+        except NotImplementedError as e:
+
+            print(
+                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+            )
     else:
         # TODO log no plan modules in set
         print("No plan for", parameter_name,end ="\r")

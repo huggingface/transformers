@@ -153,7 +153,8 @@ def _replace_with_fbgemm_fp8_linear(
     quantization_config=None,
     has_been_replaced=False,
     pre_quantized=False,
-    config=None
+    config=None,
+    tp_plan=None
 ):
     """
     Private method that wraps the recursion for module replacement.
@@ -162,7 +163,8 @@ def _replace_with_fbgemm_fp8_linear(
     """
 
     from transformers.models.llama4.modeling_llama4 import Llama4TextExperts
-
+    import re
+    
     if current_key_name is None:
         current_key_name = []
 
@@ -197,6 +199,8 @@ def _replace_with_fbgemm_fp8_linear(
                 (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
+                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")]
+                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj")]
                     model._modules[name] = FbgemmFp8Llama4TextExperts(
                         config.text_config,
                     )
@@ -212,7 +216,8 @@ def _replace_with_fbgemm_fp8_linear(
                 quantization_config,
                 has_been_replaced=has_been_replaced,
                 pre_quantized=pre_quantized,
-                config=config
+                config=config,
+                tp_plan=tp_plan
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
@@ -220,7 +225,7 @@ def _replace_with_fbgemm_fp8_linear(
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False, config=None
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False, config=None, tp_plan=None
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -248,7 +253,7 @@ def replace_with_fbgemm_fp8_linear(
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_fbgemm_fp8_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized, config=config
+        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized, config=config, tp_plan=tp_plan
     )
 
     if not has_been_replaced:
