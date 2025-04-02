@@ -18,20 +18,71 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The AIMv2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The AIMv2 model was proposed in [Multimodal Autoregressive Pre-training of Large Vision Encoders](https://arxiv.org/abs/2411.14402) by Enrico Fini, Mustafa Shukor, Xiujun Li, Philipp Dufter, Michal Klein, David Haldimann, Sai Aitharaju, Victor Guilherme Turrisi da Costa, Louis Béthune, Zhe Gan, Alexander T Toshev, Marcin Eichner, Moin Nabi, Yinfei Yang, Joshua M. Susskind, Alaaeldin El-Nouby.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We introduce a novel method for pre-training of large-scale vision encoders. Building on recent advancements in autoregressive pre-training of vision models, we extend this framework to a multimodal setting, i.e., images and text. In this paper, we present AIMV2, a family of generalist vision encoders characterized by a straightforward pre-training process, scalability, and remarkable performance across a range of downstream tasks. This is achieved by pairing the vision encoder with a multimodal decoder that autoregressively generates raw image patches and text tokens. Our encoders excel not only in multimodal evaluations but also in vision benchmarks such as localization, grounding, and classification. Notably, our AIMV2-3B encoder achieves 89.5% accuracy on ImageNet-1k with a frozen trunk. Furthermore, AIMV2 consistently outperforms state-of-the-art contrastive models (e.g., CLIP, SigLIP) in multimodal image understanding across diverse settings.*
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali).
+The original code can be found [here](https://github.com/apple/ml-aim).
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+## Usage Example
 
+Here is an example of Image Feature Extraction using specific checkpoints on resized images and native resolution images:
+
+```python
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModel
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+processor = AutoImageProcessor.from_pretrained(
+    "apple/aimv2-large-patch14-native",
+)
+model = AutoModel.from_pretrained(
+    "apple/aimv2-large-patch14-native",
+    trust_remote_code=True,
+)
+
+inputs = processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+```
+
+Here is an example of checkpoint performing zero shot classification:
+
+```python
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+text = ["Picture of a dog.", "Picture of a cat.", "Picture of a horse."]
+
+processor = AutoProcessor.from_pretrained(
+    "apple/aimv2-large-patch14-224-lit",
+)
+model = AutoModel.from_pretrained(
+    "apple/aimv2-large-patch14-224-lit",
+    trust_remote_code=True,
+)
+
+inputs = processor(
+    images=image,
+    text=text,
+    add_special_tokens=True,
+    truncation=True,
+    padding=True,
+    return_tensors="pt",
+)
+outputs = model(**inputs)
+probs = outputs.logits_per_image.softmax(dim=-1)
+```
 
 ## AIMv2Config
 
