@@ -1214,7 +1214,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         input_features: torch.FloatTensor,
         composer: str,
         generation_config: GenerationConfig,
-        attention_mask: torch.FloatTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
     ):
         """
         This method is used to concatenate mel conditioner tokens at the front of the input_features in order to
