@@ -26,8 +26,6 @@ from ...processing_utils import Unpack
 from ...utils import add_start_docstrings
 
 
-class BitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    pass
 
 
 @add_start_docstrings(
