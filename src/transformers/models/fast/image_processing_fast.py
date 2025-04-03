@@ -240,7 +240,7 @@ class FastImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
         do_convert_rgb: bool = True,
         min_area: int = 250,
-        pooling_size: int = 8,
+        pooling_size: int = 9,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -328,9 +328,7 @@ class FastImageProcessor(BaseImageProcessor):
             height += self.size_divisor - (height % self.size_divisor)
         if width % self.size_divisor != 0:
             width += self.size_divisor - (width % self.size_divisor)
-        # TODO: would be great to find a more efficient way in modular
-        # as we're only adding this line of code
-        self.img_size = (height, width)
+
         return resize(
             image,
             size=(height, width),
@@ -345,10 +343,10 @@ class FastImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        size_divisor: int = None,
+        size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
-        crop_size: int = None,
+        crop_size: Optional[int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
@@ -500,69 +498,60 @@ class FastImageProcessor(BaseImageProcessor):
         pooled_output = pooling(input_tensor)
         return pooled_output
 
-    def post_process_text_detection(self, output, target_sizes, threshold, bounding_box_type="rect", image_size=None):
+    def post_process_text_detection(self, output, target_sizes=None, threshold=0.5, bounding_box_type="rect"):
         """
         Post-processes the raw model output to generate bounding boxes and scores for text detection.
 
         Args:
-            output (dict): Dictionary containing model outputs. Must include key `"last_hidden_state"` (Tensor of shape [B, C, H, W]).
-            target_sizes (List[Tuple[int, int]]): Original image sizes (height, width) for each item in the batch.
-                                                Used to scale detection results back to original image dimensions.
+            output (dict): Dictionary containing model outputs. Must include key `"logits"` (Tensor of shape [B, C, H, W]).
+            target_sizes (List[Tuple[int, int]], optional): Original image sizes (height, width) for each item in the batch.
+                                                            Used to scale detection results back to original image dimensions.
             threshold (float): Confidence threshold for filtering low-score text regions.
-            bounding_box_type (str, optional): Type of bounding box to return. Must be one of:
-                                    - "rect": rotated bounding rectangles
-                                    - "poly": polygon boundaries
-            image_size (Tuple[int, int], optional): Size (height, width) of the image used during inference.
-                                                If not provided, defaults to `self.img_size`.
+            bounding_box_type (str): "rect" (rotated rectangles) or "poly" (polygon).
 
         Returns:
-            List[Dict]: A list of dictionaries, each containing:
-                - "boxes" (np.ndarray): Array of detected bounding boxes in the specified format.
-                - "scores" (np.ndarray): Corresponding confidence scores for each bounding box.
+            List[Dict]: Each dict contains:
+                - "boxes": np.ndarray of shape (N, 5) or (N, 8)
+                - "scores": np.ndarray of shape (N,)
         """
         scale = 2
-        image_size = image_size if image_size is not None else self.img_size
-        out = output["last_hidden_state"]
-        batch_size = out.size(0)
-        final_results = {}
+        out = output["logits"]
+        batch_size, _, H, W = out.shape
 
-        texts = F.interpolate(
-            out[:, 0:1, :, :], size=(image_size[0] // scale, image_size[1] // scale), mode="nearest"
-        )  # B*1*320*320
-        texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
-        score_maps = torch.sigmoid_(texts)  # B*1*320*320
-        score_maps = F.interpolate(score_maps, size=(image_size[0], image_size[1]), mode="nearest")  # B*1*640*640
-        score_maps = score_maps.squeeze(1)  # B*640*640
+        # generate score maps
+        texts = F.interpolate(out[:, 0:1, :, :], size=(H, W), mode="nearest")
+        texts = self._max_pooling(texts, scale=scale)
+        score_maps = torch.sigmoid(texts)
+        score_maps = score_maps.squeeze(1)
 
-        kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
+        # generate label maps
+        kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B x H x W
         labels_ = []
-        for kernel in kernels.numpy():
-            ret, label_ = connected_components(kernel)
+        for kernel in kernels.cpu().numpy():
+            _, label_ = connected_components(kernel)
             labels_.append(label_)
-        labels_ = np.array(labels_)
-        labels_ = torch.from_numpy(labels_)
-        labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
-        labels = F.interpolate(
-            labels, size=(image_size[0] // scale, image_size[1] // scale), mode="nearest"
-        )  # B*1*320*320
-        labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=(image_size[0], image_size[1]), mode="nearest")  # B*1*640*640
-        labels = labels.squeeze(1).to(torch.int32)  # B*640*640
-
-        keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
-
-        final_results.update({"kernels": kernels.data.cpu()})
+        labels_ = torch.from_numpy(np.array(labels_)).unsqueeze(1).float()
+        labels = self._max_pooling(labels_, scale=scale).squeeze(1).to(torch.int32)
 
         results = []
         for i in range(batch_size):
-            org_image_size = target_sizes[i]
-            scales = (float(org_image_size[1]) / float(image_size[1]), float(org_image_size[0]) / float(image_size[0]))
+            if target_sizes is not None:
+                orig_h, orig_w = target_sizes[i]
+                scale_x = orig_w / W
+                scale_y = orig_h / H
+            else:
+                scale_x = scale_y = 1.0
 
-            bounding_boxes, scores = self.generate_bounding_box(
-                keys[i], labels[i], score_maps[i], scales, threshold, bounding_box_type=bounding_box_type
+            keys = torch.unique(labels_[i], sorted=True)
+            bboxes, scores = self.generate_bounding_box(
+                keys,
+                labels[i],
+                score_maps[i],
+                (scale_x, scale_y),
+                threshold=threshold,
+                bounding_box_type=bounding_box_type,
             )
-            results.append({"boxes": bounding_boxes, "scores": scores})
-        final_results.update({"results": results})
+            results.append({"boxes": bboxes, "scores": scores})
 
         return results
 

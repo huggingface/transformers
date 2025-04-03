@@ -182,6 +182,6 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             my_box_sorted = np.array(sorted(my_box, key=lambda x: (x[0], x[1])))
             cv2_box_sorted = np.array(sorted(cv2_box, key=lambda x: (x[0], x[1])))
 
-            assert np.allclose(
-                my_box_sorted, cv2_box_sorted, atol=5
-            ), f"Box points mismatch:\n{my_box_sorted}\nvs\n{cv2_box_sorted}"
+            assert np.allclose(my_box_sorted, cv2_box_sorted, atol=5), (
+                f"Box points mismatch:\n{my_box_sorted}\nvs\n{cv2_box_sorted}"
+            )

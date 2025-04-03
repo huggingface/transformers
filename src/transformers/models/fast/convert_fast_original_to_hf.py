@@ -46,12 +46,10 @@ rename_key_mappings = {
     "neck.reduce_layer4": "neck.reduce_layers.3",
     "final.conv.weight": "final_conv.weight",
     "neck.reduce_layers.1.rbr_identity.weight": "neck.reduce_layers.1.identity.weight",
-    "neck.reduce_layers.1.rbr_identity.bias" : "neck.reduce_layers.1.identity.bias",
+    "neck.reduce_layers.1.rbr_identity.bias": "neck.reduce_layers.1.identity.bias",
     "neck.reduce_layers.1.rbr_identity.running_mean": "neck.reduce_layers.1.identity.running_mean",
     "neck.reduce_layers.1.rbr_identity.running_var": "neck.reduce_layers.1.identity.running_var",
-    "neck.reduce_layers.1.rbr_identity.num_batches_tracked": "neck.reduce_layers.1.identity.num_batches_tracked"
-
-
+    "neck.reduce_layers.1.rbr_identity.num_batches_tracked": "neck.reduce_layers.1.identity.num_batches_tracked",
 }
 
 
@@ -280,7 +278,7 @@ def convert_fast_checkpoint(
             output = model(pixel_values)
 
         # test the logits
-        torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.logits[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
 
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
@@ -289,7 +287,7 @@ def convert_fast_checkpoint(
         )
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
-            
+
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")

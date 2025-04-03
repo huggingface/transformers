@@ -348,4 +348,4 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         expected_values = torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523])
 
-        torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_values, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.logits[0][0][0][:4], expected_values, rtol=1e-4, atol=1e-4)

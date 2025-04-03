@@ -14,13 +14,13 @@
 # limitations under the License.
 """PyTorch FAST model."""
 
-from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...modeling_outputs import SemanticSegmenterOutput
 from ...utils import is_timm_available
 from ...utils.backbone_utils import load_backbone
 
@@ -36,7 +36,7 @@ from transformers import (
     is_timm_available,
     requires_backends,
 )
-from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
+from transformers.utils import add_start_docstrings_to_model_forward
 
 
 _CONFIG_FOR_DOC = "FastConfig"
@@ -63,25 +63,6 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-
-@dataclass
-class FastForSceneTextRecognitionOutput(ModelOutput):
-    """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
-    scores.
-
-    Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
-        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
-            The image hidden states.
-    """
-
-    loss: Optional[torch.Tensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def get_same_padding(kernel_size):
@@ -147,14 +128,13 @@ class FastRepConvLayer(nn.Module):
         else:
             self.horizontal_conv = nn.Identity()
             self.horizontal_batch_norm = nn.Identity()
-            
+
         if out_channels == in_channels and stride == 1:
             self.use_identity = True
             self.identity = nn.BatchNorm2d(out_channels)
         else:
             self.use_identity = False
             self.identity = None
-
 
     def forward(self, hidden_states: torch.Tensor):
         main = self.main_conv(hidden_states)
@@ -167,7 +147,7 @@ class FastRepConvLayer(nn.Module):
         horizontal = self.horizontal_batch_norm(horizontal)
 
         identity = self.identity(hidden_states) if self.use_identity else 0
-            
+
         return self.activation(main + vertical + horizontal + identity)
 
 
@@ -209,7 +189,7 @@ class FastNeck(nn.Module):
             self.reduce_layers.append(layer)
         self.num_layers = len(self.reduce_layers)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor :
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         first_layer_hidden = hidden_states[0]
         first_layer_hidden = self.reduce_layers[0](first_layer_hidden)
         output_stages = [first_layer_hidden]
@@ -305,7 +285,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FastForSceneTextRecognitionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -369,9 +348,9 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             output = (loss, text_detection_output) if loss is not None else (text_detection_output,)
             return output + (all_hidden_states,) if output_hidden_states else output
 
-        return FastForSceneTextRecognitionOutput(
+        return SemanticSegmenterOutput(
             loss=loss,
-            last_hidden_state=text_detection_output,
+            logits=text_detection_output,
             hidden_states=all_hidden_states if output_hidden_states else None,
         )
 
