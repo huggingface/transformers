@@ -206,10 +206,31 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 
 [[autodoc]] LayoutLMv3Config
 
+### LayoutLMv3Tokenizer
+
+[[autodoc]] LayoutLMv3Tokenizer
+    - __call__
+
 ### LayoutLMv3ImageProcessor
 
 [[autodoc]] LayoutLMv3ImageProcessor
     - preprocess
+
+### LayoutLMv3Tokenizer
+
+[[autodoc]] LayoutLMv3Tokenizer
+    - __call__
+    - save_vocabulary
+
+### LayoutLMv3TokenizerFast
+
+[[autodoc]] LayoutLMv3TokenizerFast
+    - __call__
+
+### LayoutLMv3Processor
+
+[[autodoc]] LayoutLMv3Processor
+    - __call__
 
 ### LayoutLMv3Model
 
