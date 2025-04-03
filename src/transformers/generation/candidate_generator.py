@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 from ..utils.deprecation import deprecate_kwarg
 
+
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
@@ -638,7 +639,7 @@ class _PruneReindexingLMHead(nn.Module):
         return pruned_logits
 
 
-class _MapInputEmbeddingg(nn.Module):
+class _MapInputEmbedding(nn.Module):
     def __init__(self, original_embedding: nn.Embedding, assistant_overlap_token_ids):
         """
         Wraps an existing embedding layer and remaps token IDs before lookup.
@@ -729,7 +730,7 @@ class AssistantToTargetTranslator:
                 assistant_model.set_output_embeddings(pruned_lm_head)
 
                 original_input_embeddings = assistant_model.get_input_embeddings()
-                map_input_embeddings = _MapInputEmbeddingg(original_input_embeddings, self.assistant_overlap_token_ids)
+                map_input_embeddings = _MapInputEmbedding(original_input_embeddings, self.assistant_overlap_token_ids)
                 del original_input_embeddings
                 assistant_model.set_input_embeddings(map_input_embeddings)
                 self.map_input_embeddings = map_input_embeddings
@@ -738,7 +739,13 @@ class AssistantToTargetTranslator:
                     [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
                 )
 
-    def set_unmap(self):
+    def unmap_input_ids(self):
+        """
+        Disables the mapping of input ids despite the assistant pruning for the language model head being enabled.
+
+        This method is required for the first forward pass of `_MapInputEmbedding` where input ids are already in the assistant vocabulary space. By disabling the mapping, it ensures that the input ids are processed correctly without remapping.
+
+        """
         if self.assistant_prune_lm_head:
             self.map_input_embeddings.map = False
 
@@ -989,7 +996,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
                 self._prev_assistant_ids = self._prev_assistant_ids[:, :-tokens_to_remove]
             assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
         assistant_input_ids = assistant_input_ids.to(dtype=torch.long)
-        self._atm_translator.set_unmap()
+        self._atm_translator.unmap_input_ids()
         return assistant_input_ids, len(assistant_new_ids[0])
 
 
