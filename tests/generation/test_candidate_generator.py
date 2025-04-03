@@ -199,9 +199,9 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             translator = AssistantVocabTranslatorCache.get_translator(
                 target_tokenizer,
                 assistant_tokenizer,
-                assistant_model=self.assistant_model,
                 target_vocab_size=self.target_vocab_size,
-                assistant_prune_LM_head=False,
+                assistant_model=self.assistant_model,
+                assistant_prune_lm_head=False,
             )
             # Create weak references before returning
             refs = (weakref.ref(translator), weakref.ref(target_tokenizer), weakref.ref(assistant_tokenizer))

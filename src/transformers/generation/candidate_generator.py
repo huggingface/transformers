@@ -38,8 +38,7 @@ if TYPE_CHECKING:
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
 
-from transformers.utils import deprecate_kwarg
-
+from ..utils.deprecation import deprecate_kwarg
 
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
@@ -703,8 +702,7 @@ class AssistantToTargetTranslator:
         target_vocab_size: Optional[
             int
         ],  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        assistant_model_device: str = "cpu",
-        assistant_model: "PreTrainedModel" = None,
+        assistant_model: "PreTrainedModel",
         assistant_prune_lm_head: Optional[bool] = True,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
@@ -842,9 +840,8 @@ class AssistantVocabTranslatorCache:
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        target_vocab_size: Optional[int] = None,
-        assistant_model_device: str = "cpu",
-        assistant_model: "PreTrainedModel" = None,
+        target_vocab_size: Optional[int],
+        assistant_model: "PreTrainedModel",
         assistant_prune_lm_head=True,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
@@ -855,7 +852,7 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size, assistant_prune_lm_head
+                target_tokenizer, assistant_tokenizer, target_vocab_size, assistant_model, assistant_prune_lm_head
             )
             assistant_dict[assistant_tokenizer] = mapping
 

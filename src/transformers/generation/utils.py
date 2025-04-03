@@ -964,8 +964,8 @@ class GenerationMixin:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    assistant_model,
                     self.config.vocab_size,
+                    assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
                 # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
