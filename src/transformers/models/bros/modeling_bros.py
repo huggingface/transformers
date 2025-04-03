@@ -1158,7 +1158,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )
-        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
         )
@@ -1287,13 +1287,13 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
 
             mask = bbox_first_token_mask.view(-1)
             bbox_first_token_mask = torch.cat(
                 [
                     ~bbox_first_token_mask,
-                    torch.zeros([batch_size, 1], dtype=torch.bool).to(device),
+                    torch.zeros([batch_size, 1], dtype=torch.bool, device=device),
                 ],
                 axis=1,
             )

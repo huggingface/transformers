@@ -142,7 +142,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -431,7 +431,7 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
 
     def forward(self, hidden_states):
         seq_len = hidden_states.shape[1]
-        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
+        pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
         pos_seq[pos_seq < -self.max_length] = -self.max_length
