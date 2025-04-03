@@ -27,6 +27,9 @@ from ...image_processing_utils import (
 if is_torch_available():
     import torch
 
+class VivitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    offset: bool = True
+
 @add_start_docstrings(
     "Constructs a fast Vivit image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -53,11 +56,15 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = None
+    rescale_factor: Union[int, float] = 1 / 127.5
+    offset: bool = True
+    valid_kwargs = VivitFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[VivitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        # TODO num_frames
         return super().preprocess(images, **kwargs, num_frames=10)
     
     def _preprocess(
@@ -69,7 +76,7 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
-        rescale_factor: float,
+        rescale_factor: Union[int,float],
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
@@ -110,7 +117,7 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
             self,
         image: "torch.Tensor",
         scale: float,
-        offset: bool = True,
+        offset: bool = None,
         dtype: torch.dtype = torch.float32,
     ) -> "torch.Tensor":
         """Rescale an image by a scale factor.
@@ -124,12 +131,13 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
             Image to rescale.
         scale (`int` or `float`):
             Scale to apply to the image.
-        offset (`bool`, default to True):
+        offset (`bool`, default to self.offset):
             Whether to scale the image in both negative and positive directions.
         dtype (`torch.dtype`, default to `torch.float32`):
             Data type of the rescaled image.
         """
         rescaled = image.to(dtype=torch.float64) * scale
+        offset = offset if offset is not None else self.offset
 
         if offset:
             rescaled = rescaled - 1
