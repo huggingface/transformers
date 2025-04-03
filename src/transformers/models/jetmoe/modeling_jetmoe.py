@@ -35,7 +35,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    auto_class_docstring,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -856,7 +855,7 @@ class JetMoeBlock(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -895,7 +894,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class JetMoeModel(JetMoePreTrainedModel):
     def __init__(self, config: JetMoeConfig):
         super().__init__(config)
@@ -1321,7 +1320,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
     def __init__(self, config):
@@ -1354,10 +1353,11 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: MoeModelOutputWithPast = self.model(

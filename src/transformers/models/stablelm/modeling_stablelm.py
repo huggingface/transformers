@@ -40,7 +40,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    auto_class_docstring,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -666,7 +665,7 @@ STABLELM_START_DOCSTRING = r"""
 """
 
 
-@auto_class_docstring
+@auto_docstring
 class StableLmPreTrainedModel(PreTrainedModel):
     config_class = StableLmConfig
     base_model_prefix = "model"
@@ -766,7 +765,7 @@ STABLELM_INPUTS_DOCSTRING = r"""
 """
 
 
-@auto_class_docstring
+@auto_docstring
 class StableLmModel(StableLmPreTrainedModel):
     def __init__(self, config: StableLmConfig):
         super().__init__(config)
@@ -1172,7 +1171,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
 class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
@@ -1205,10 +1204,11 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -1260,7 +1260,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
 class StableLmForTokenClassification(StableLmPreTrainedModel):
     def __init__(self, config):
@@ -1300,10 +1300,11 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: BaseModelOutputWithPast = self.model(

@@ -143,6 +143,14 @@ class ModelArgs:
     [What are attention masks?](../glossary#attention-mask)
     """
 
+    head_mask = r""" of shape `(num_heads,)` or `(num_layers, num_heads)`:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+    """
+
     token_type_ids = r""" of shape `(batch_size, input_ids_length)`:
     Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
     1]`:
@@ -236,9 +244,17 @@ class ModelArgs:
     are not taken into account for computing the loss.
     """
 
-    output_router_logits = r"""
+    output_router_logits = r""":
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
     should not be returned during inference.
+    """
+
+    logits_to_keep = r""":
+    If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+    `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+    token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+    If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+    This is useful when using packed tensor format (single dimension for batch and sequence length).
     """
 
     pixel_values = r""" of shape `(batch_size, num_channels, image_size, image_size)):

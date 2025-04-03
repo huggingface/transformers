@@ -41,7 +41,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    auto_class_docstring,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -1072,7 +1071,7 @@ class JambaMambaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
     base_model_prefix = "model"
@@ -1100,7 +1099,7 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
 
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
-@auto_class_docstring
+@auto_docstring
 class JambaModel(JambaPreTrainedModel):
     def __init__(self, config: JambaConfig):
         super().__init__(config)
@@ -1503,7 +1502,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@auto_class_docstring
+@auto_docstring
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA, BaseModelOutputWithPast->MoeModelOutputWithPast
 class JambaForSequenceClassification(JambaPreTrainedModel):
     def __init__(self, config):
