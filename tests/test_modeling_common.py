@@ -1978,7 +1978,7 @@ class ModelTesterMixin:
             self.test_resize_tokens_embeddings()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2084,7 +2084,7 @@ class ModelTesterMixin:
             self.test_resize_embeddings_untied()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
