@@ -826,7 +826,8 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
                 # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
-                data_ptrs.add(model.state_dict()[param_name].data_ptr())
+                module, param_type = get_module_from_name(model, param_name)
+                data_ptrs.add(module.state_dict()[param_type].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
