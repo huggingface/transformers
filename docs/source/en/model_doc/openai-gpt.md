@@ -35,7 +35,12 @@ In comparison to previous discriminative models, GPT achieves significant gains 
 
 
 
-Official checkpoints can be found on the [Hugging Face Model Hub](https://huggingface.co/models).
+You can find all the original GPT checkpoints under the [OpenAI community](https://huggingface.co/openai-community/openai-gpt) organization.
+
+> [!TIP]
+> Click on the GPT models in the right sidebar for more examples of how to apply GPT to different language tasks.
+
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 
 ## Usage tips
