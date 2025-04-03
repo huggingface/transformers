@@ -876,7 +876,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     config_class = Llama4TextConfig
 
-    def __init__(self, config: Llama4TextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Llama4TextModel(config)
         self.vocab_size = config.vocab_size
