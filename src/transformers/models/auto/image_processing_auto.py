@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("align", ("EfficientNetImageProcessor",)),
+            ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor",)),
             ("bit", ("BitImageProcessor",)),
@@ -82,7 +82,7 @@ else:
             ("donut-swin", ("DonutImageProcessor",)),
             ("dpt", ("DPTImageProcessor",)),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
-            ("efficientnet", ("EfficientNetImageProcessor",)),
+            ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("flava", ("FlavaImageProcessor",)),
             ("focalnet", ("BitImageProcessor",)),
             ("fuyu", ("FuyuImageProcessor",)),

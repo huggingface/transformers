@@ -43,6 +43,11 @@ The original code can be found [here](https://github.com/tensorflow/tpu/tree/mas
 [[autodoc]] EfficientNetImageProcessor
     - preprocess
 
+## EfficientNetImageProcessorFast
+
+[[autodoc]] EfficientNetImageProcessorFast
+    - preprocess
+
 ## EfficientNetModel
 
 [[autodoc]] EfficientNetModel
