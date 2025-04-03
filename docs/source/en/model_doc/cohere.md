@@ -11,9 +11,6 @@
 
 Cohere Command-R is a 35B parameter multilingual large language model designed for long context tasks like retrieval-augmented generation (RAG) and calling external APIs and tools. The model is specifically trained for grounded generation and supports both single-step and multi-step tool use. It supports a context length of 128K tokens.
 
-Command-R is a **scalable generative model** optimized for long-context tasks such as retrieval-augmented generation (RAG) and external tool/API use. It is designed to work alongside Cohere’s Embed and Rerank models to provide best-in-class performance for RAG pipelines, especially in enterprise use cases.
-
-
 You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
 
 
