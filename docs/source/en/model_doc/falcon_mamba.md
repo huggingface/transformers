@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # FalconMamba
 
-markdownCopiar[FalconMamba](https://huggingface.co/papers/2410.05355) is a family of large language models based on the State Space Model (SSM) architecture, available in 7B parameter size as pretrained and instruction-tuned variants. This model implements a pure Mamba design that focuses on computational efficiency while maintaining strong performance. FalconMamba is significantly faster at inference and requires substantially less memory for long sequence generation. The models are pretrained on a diverse 5.8 trillion token dataset including [RefinedWeb](https://huggingface.co/datasets/tiiuae/falcon-refinedweb), technical content, code, and mathematical data.
+[FalconMamba](https://huggingface.co/papers/2410.05355) is a 7B large language model, available as pretrained and instruction-tuned variants, based on the [Mamba](./mamba). This model implements a pure Mamba design that focuses on computational efficiency while maintaining strong performance. FalconMamba is significantly faster at inference and requires substantially less memory for long sequence generation. The models are pretrained on a diverse 5.8T token dataset including [RefinedWeb](https://huggingface.co/datasets/tiiuae/falcon-refinedweb), technical content, code, and mathematical data.
 
 You can find the official FalconMamba checkpoints in the [TII UAE collection](https://huggingface.co/collections/tiiuae/falconmamba-7b-66b9a580324dd1598b0f6d4a).
 
