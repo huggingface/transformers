@@ -37,12 +37,14 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import (
         BlockMask,
         flex_attention,
+        _mask_mod_signature
     )
     from torch.nn.attention.flex_attention import (
         create_block_mask as create_block_causal_mask_flex,
     )
 
 
+# create_block_causal_mask_flex = torch.compile(create_block_causal_mask_flex)
 class WrappedFlexAttention:
     """
     We are doing a singleton class so that flex attention is compiled once when it's first called.
@@ -124,7 +126,7 @@ def make_flex_block_causal_mask(
     return create_block_causal_mask_flex(
         mask_mod=causal_mask_mod,
         B=1,
-        H=1,  # attention head
+        H=None,  # attention head
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,

@@ -55,7 +55,7 @@ from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    from ...integrations.flex_attention import make_flex_block_causal_mask, _mask_mod_signature
 
 
 logger = logging.get_logger(__name__)
@@ -766,29 +766,25 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 torch._dynamo.config.cache_size_limit = 100000
                 cache_position = cache_position.to(self.device)
                 attention_chunk_size = self.config.attention_chunk_size
-                def get_mask_mod(mask_mod, offset, kv_offset=0):
-                    def _mask_mod(b, h, q, kv):
-                        print(q+offset, kv+kv_offset, end="\r\r")
-                        return mask_mod(b, h, q + offset, kv+kv_offset)
+                def get_mask_mod(mask_mod: _mask_mod_signature, offset:torch.Tensor, kv_offset:torch.Tensor):
+                    def _mask_mod(b, h, q, kv =0) -> torch.Tensor:
+                        print("q", offset, end="\r\r\r\r\r\r\r")
+                        return mask_mod(b, h, q + offset, kv + kv_offset)
                     return _mask_mod
                 if sequence_length != 1: # prefill uses the full context ? not for chunked no
                     # max len las arg
-                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, sequence_length)
-                    # since we always slice the cache, because at no point you need the full mask
-                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, 0,0)
+                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, min(sequence_length, attention_chunk_size))
                 else: # decoding should not use full kv cache
                     cache_position = cache_position[0].item()
 
 
                     chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, attention_chunk_size)
-                    # block_index = cache_position // mask.BLOCK_SIZE[0]
-                    # mask = mask[:,:, block_index]
-                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position,  kv_offset=cache_position-attention_chunk_size)
+                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position, cache_position-attention_chunk_size)
                     chunked_attention_mask.seq_lengths = (1, attention_chunk_size)
 
                 attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=past_key_values.max_cache_len)
                 if sequence_length == 1:
-                    attention_mask.mask_mod = get_mask_mod(attention_mask.mask_mod, cache_position)
+                    attention_mask.mask_mod = get_mask_mod(attention_mask.mask_mod, cache_position, 0)
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
@@ -873,7 +869,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         token_pos = torch.arange(seq_len).unsqueeze(0) - torch.arange(seq_len).unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
-        print(mask.int())
         return mask.to(device)
 
     @staticmethod
