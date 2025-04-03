@@ -33,12 +33,6 @@ GPT can generate high-quality text, making it well-suited for a variety of natur
 
 In comparison to previous discriminative models, GPT achieves significant gains by utilizing a generative pretraining approach on a large, diverse corpus of unlabeled text, followed by fine-tuning for specific tasks. It achieves state-of-the-art results in a variety of benchmarks.
 
-Key Improvements and Features:
-Scalability: The model can scale efficiently with larger training datasets, improving performance on a wide range of NLP tasks.
-
-Generative Pre-training: GPT leverages unsupervised pretraining on large text corpora, making it task-agnostic and highly adaptable.
-
-Fine-Tuning Flexibility: After pretraining, GPT can be fine-tuned for specific tasks with minimal changes to the model architecture.
 
 
 Official checkpoints can be found on the [Hugging Face Model Hub](https://huggingface.co/models).
