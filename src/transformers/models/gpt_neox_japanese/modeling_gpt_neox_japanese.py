@@ -281,7 +281,9 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.to(device=x.device, dtype=torch.float) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -668,7 +670,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():

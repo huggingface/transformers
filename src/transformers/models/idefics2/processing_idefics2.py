@@ -89,7 +89,9 @@ class Idefics2Processor(ProcessorMixin):
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
+    def __init__(
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:

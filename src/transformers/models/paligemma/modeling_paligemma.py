@@ -23,6 +23,7 @@ from torch import nn
 
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -58,7 +59,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     cache_position: torch.Tensor,
     batch_size: int,
     is_training: bool = False,
-    token_type_ids: torch.Tensor = None,
+    token_type_ids: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     """
@@ -148,7 +149,7 @@ class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -335,19 +336,22 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def _update_causal_mask(
         self,
         attention_mask,
-        token_type_ids,
-        past_key_values,
-        cache_position,
-        input_tensor,
-        is_training: bool = False,
+        token_type_ids=None,
+        past_key_values=None,
+        cache_position=None,
+        input_tensor=None,
+        is_training: Optional[bool] = None,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-
+        is_training = is_training if is_training is not None else self.training
         using_static_cache = isinstance(past_key_values, StaticCache)
         min_dtype = torch.finfo(self.dtype).min
+        if input_tensor is None:
+            input_tensor = attention_mask
+
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
@@ -382,6 +386,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
             # First unmask prefix tokens during training
             if is_training:
+                if token_type_ids is None:
+                    raise ValueError("Token type ids must be provided during training")
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
@@ -414,8 +420,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
@@ -451,19 +457,19 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         >>> import requests
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
-        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
+        >>> processor = AutoProcessor.from_pretrained("google/paligemma2-3b-mix-224")
 
-        >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> prompt = "Where is the cat standing?"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs,)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "answer en Where is the cow standing?\nbeach"
+        "Where is the cat standing?\nsnow"
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -530,7 +536,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         causal_mask = self._update_causal_mask(
             attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -538,13 +544,13 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
 
-        logits = outputs.logits
+        logits = outputs[0]
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -566,11 +572,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
             flat_labels = shift_labels.view(-1).to(shift_logits.device)
             loss = loss_fct(flat_logits, flat_labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
-        return PaliGemmaCausalLMOutputWithPast(
+        output = PaliGemmaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -578,6 +581,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
+        return output if return_dict else output.to_tuple()
 
     def prepare_inputs_for_generation(
         self,

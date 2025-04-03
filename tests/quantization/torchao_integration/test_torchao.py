@@ -85,7 +85,7 @@ class TorchAoConfigTest(unittest.TestCase):
         Test kwargs validations in TorchAoConfig
         """
         _ = TorchAoConfig("int4_weight_only")
-        with self.assertRaisesRegex(ValueError, "is not supported yet"):
+        with self.assertRaisesRegex(ValueError, "Unsupported string quantization type"):
             _ = TorchAoConfig("fp6")
 
         with self.assertRaisesRegex(ValueError, "Unexpected keyword arg"):
@@ -202,7 +202,7 @@ class TorchAoGPUTest(TorchAoTest):
 
     def test_int4wo_offload(self):
         """
-        Simple test that checks if the quantized model int4 wieght only is working properly with cpu/disk offload
+        Simple test that checks if the quantized model int4 weight only is working properly with cpu/disk offload
         """
 
         device_map_offload = {
@@ -254,8 +254,8 @@ class TorchAoGPUTest(TorchAoTest):
     @require_torch_multi_gpu
     def test_int4wo_quant_multi_gpu(self):
         """
-        Simple test that checks if the quantized model int4 wieght only is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        Simple test that checks if the quantized model int4 weight only is working properly with multiple GPUs
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
 
         quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
@@ -322,14 +322,16 @@ class TorchAoSerializationTest(unittest.TestCase):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        cls.quant_config = TorchAoConfig(cls.quant_scheme, **cls.quant_scheme_kwargs)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map=cls.device,
-            quantization_config=cls.quant_config,
-        )
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+
+    def setUp(self):
+        self.quant_config = TorchAoConfig(self.quant_scheme, **self.quant_scheme_kwargs)
+        self.quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map=self.device,
+            quantization_config=self.quant_config,
+        )
 
     def tearDown(self):
         gc.collect()
@@ -406,6 +408,42 @@ class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
     ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
     device = "cuda:0"
+
+
+@require_torch_gpu
+@require_torchao_version_greater_or_equal("0.10.0")
+class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
+    ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+    SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
+    device = "cuda:0"
+
+    def setUp(self):
+        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+            raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+
+        from torchao.quantization import Float8WeightOnlyConfig
+
+        self.quant_scheme = Float8WeightOnlyConfig()
+        self.quant_scheme_kwargs = {}
+        super().setUp()
+
+
+@require_torch_gpu
+@require_torchao_version_greater_or_equal("0.10.0")
+class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
+    ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+    SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
+    device = "cuda:0"
+
+    def setUp(self):
+        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+            raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+
+        from torchao.quantization import Int8DynamicActivationInt4WeightConfig
+
+        self.quant_scheme = Int8DynamicActivationInt4WeightConfig()
+        self.quant_scheme_kwargs = {}
+        super().setUp()
 
 
 if __name__ == "__main__":

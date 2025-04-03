@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
@@ -47,6 +48,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     auto_docstring,
+    can_return_tuple,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
@@ -365,7 +367,9 @@ class MoonshineRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.to(device=x.device, dtype=torch.float) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -439,7 +443,7 @@ class MoonshineEncoderLayer(nn.Module):
 
 
 class MoonshineDecoderLayer(nn.Module):
-    def __init__(self, config: MoonshineConfig, layer_idx: int = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -616,15 +620,15 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @can_return_tuple
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         r"""
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
@@ -651,7 +655,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_values is None:
             raise ValueError("You must specify input_values.")
@@ -726,12 +729,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @auto_docstring
@@ -760,10 +762,11 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -771,12 +774,11 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         """
         Args:
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
@@ -793,7 +795,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -861,7 +862,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     encoder_hidden_states,
@@ -901,14 +902,13 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
@@ -916,7 +916,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -1094,7 +1094,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -1323,6 +1323,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
 
         return input_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1338,7 +1339,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
@@ -1366,18 +1366,16 @@ class MoonshineModel(MoonshinePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
+            encoder_outputs: BaseModelOutput = self.encoder(
                 input_values,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1385,23 +1383,19 @@ class MoonshineModel(MoonshinePreTrainedModel):
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_attention_mask=attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1461,6 +1455,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1476,10 +1471,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1509,7 +1503,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> transcription
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1517,7 +1510,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model(
+        outputs: Seq2SeqModelOutput = self.model(
             input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1529,18 +1522,13 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
-        logits = self.proj_out(outputs[0])
+        logits = self.proj_out(outputs.last_hidden_state)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,

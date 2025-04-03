@@ -29,6 +29,8 @@
       title: The Transformer model family
     - local: attention
       title: Attention mechanisms
+    - local: attention_interface
+      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
@@ -187,6 +189,8 @@
     title: Optimum
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/torchao
     title: torchao
   - local: quantization/spqr
@@ -411,6 +415,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
@@ -529,6 +535,8 @@
         title: MegatronGPT2
       - local: model_doc/mistral
         title: Mistral
+      - local: model_doc/mistral3
+        title: Mistral3
       - local: model_doc/mixtral
         title: Mixtral
       - local: model_doc/mluke
@@ -579,6 +587,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
       - local: model_doc/phimoe
         title: PhiMoE
       - local: model_doc/phobert
@@ -593,6 +603,10 @@
         title: Qwen2
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -731,6 +745,8 @@
         title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
+      - local: model_doc/prompt_depth_anything
+        title: Prompt Depth Anything
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2
@@ -979,6 +995,8 @@
         title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
+      - local: model_doc/shieldgemma2
+        title: ShieldGemma2
       - local: model_doc/siglip
         title: SigLIP
       - local: model_doc/siglip2
@@ -1038,6 +1056,8 @@
   - sections:
     - local: internal/modeling_utils
       title: Custom Layers and Utilities
+    - local: internal/model_debugging_utils
+      title: Utilities for Model Debugging
     - local: internal/pipelines_utils
       title: Utilities for pipelines
     - local: internal/tokenization_utils

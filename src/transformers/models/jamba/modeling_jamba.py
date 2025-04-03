@@ -20,7 +20,7 @@
 """PyTorch Jamba model."""
 
 import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -33,25 +33,28 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_class_docstring, auto_docstring
+from ...utils import (
+    auto_class_docstring,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ...utils.import_utils import (
     is_causal_conv1d_available,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
-    is_torchdynamo_compiling,
     logging,
 )
 from .configuration_jamba import JambaConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -387,7 +390,7 @@ class JambaFlashAttention2(JambaAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
@@ -1127,7 +1130,7 @@ class JambaModel(JambaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -1136,9 +1139,8 @@ class JambaModel(JambaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, MoeModelOutputWithPast]:
+    ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
@@ -1147,8 +1149,6 @@ class JambaModel(JambaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1235,12 +1235,6 @@ class JambaModel(JambaPreTrainedModel):
 
         next_cache = None if not use_cache else past_key_values
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
-                if v is not None
-            )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1329,10 +1323,11 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -1342,11 +1337,10 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         <<<<<<< HEAD
         ||||||| 597efd21d2
@@ -1404,10 +1398,9 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1418,10 +1411,9 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             cache_position=cache_position,
-            return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1432,19 +1424,13 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
-                outputs.router_logits if return_dict else outputs[-1],
+                outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            if output_router_logits:
-                output = (aux_loss,) + output
-            return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -1480,7 +1466,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         if not empty_past_kv:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -1535,23 +1521,28 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> SequenceClassifierOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
 
-        transformer_outputs = self.model(
+        transformer_outputs: MoeModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1560,9 +1551,8 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -1577,7 +1567,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -1591,10 +1581,6 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,

@@ -22,6 +22,7 @@
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -35,7 +36,12 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torchdynamo_compiling, logging
+from ...utils import (
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
@@ -76,7 +82,7 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -88,12 +94,12 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.embed_scale = embed_scale
+        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale
+        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 class Gemma3MLP(nn.Module):
@@ -181,7 +187,9 @@ class Gemma3RotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.to(device=x.device, dtype=torch.float) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -353,13 +361,15 @@ class Gemma3Attention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        if attention_mask is not None:
+            # backwards compatibility
+            attention_mask = attention_mask.to(query_states)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask.to(query_states),
+            attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
@@ -508,7 +518,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
+        # Gemma3 downcasts the below to bfloat16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
@@ -535,6 +545,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -546,7 +557,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
@@ -560,7 +570,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -629,7 +638,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings_global,
                     position_embeddings_local,
@@ -666,13 +675,12 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
     @torch.no_grad()
     def _update_causal_mask(
@@ -803,10 +811,11 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -815,11 +824,10 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -864,9 +872,8 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -875,12 +882,11 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **loss_kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -892,10 +898,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1117,11 +1119,12 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
@@ -1132,7 +1135,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
@@ -1157,20 +1159,37 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
-        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/Gemma3-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/Gemma3-test-224px-hf")
+        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
+        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
 
-        >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/Gemma3-test-224px-hf/resolve/main/cow_beach_1.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> messages = [
+        ...     {
+        ...         "role": "system",
+        ...         "content": [
+        ...             {"type": "text", "text": "You are a helpful assistant."}
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user", "content": [
+        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Where is the cat standing?"},
+        ...         ]
+        ...     },
+        ... ]
 
-        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
-
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenizer=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ...     add_generation_prompt=True
+        ... )
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "answer en Where is the cow standing?\nbeach"
-        ```"""
+        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
+        ```
+        """
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1179,7 +1198,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         is_training = token_type_ids is not None and labels is not None
 
@@ -1199,9 +1217,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Gemma3 positions are 1-indexed
 
         # Merge text and images
         if pixel_values is not None:
@@ -1236,7 +1251,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         causal_mask = self._update_causal_mask(
             attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1244,7 +1259,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
@@ -1272,9 +1286,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
             flat_labels = shift_labels.view(-1).to(shift_logits.device)
             loss = loss_fct(flat_logits, flat_labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
@@ -1314,9 +1325,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # position_ids in Gemma3 are 1-indexed
-        if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
