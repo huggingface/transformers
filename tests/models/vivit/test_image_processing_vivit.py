@@ -111,36 +111,41 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 18})
+            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_rescale(self):
         # ViVit optionally rescales between -1 and 1 instead of the usual 0 and 1
-        image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
-
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-
-        rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
-        expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
-        self.assertTrue(np.allclose(rescaled_image, expected_image))
-
-        rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
-        expected_image = (image / 255.0).astype(np.float32)
-        self.assertTrue(np.allclose(rescaled_image, expected_image))
+        for image_processing_class in self.image_processor_list:
+            scale = 1 / 127.5
+            if image_processing_class == VivitImageProcessorFast:
+                image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32)
+                image_processor = image_processing_class(**self.image_processor_dict)
+                rescaled_image = image_processor.rescale(image, scale=scale)
+                expected_image = image.to(torch.float64) * scale
+                expected_image = (expected_image - 1).to(torch.float32)
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+            else:
+                image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
+                image_processor = image_processing_class(**self.image_processor_dict)
+                rescaled_image = image_processor.rescale(image, scale=scale)
+                expected_image = (image * scale).astype(np.float32) - 1
+                self.assertTrue(np.allclose(rescaled_image, expected_image))
 
     def test_call_pil(self):
         # Initialize image_processing

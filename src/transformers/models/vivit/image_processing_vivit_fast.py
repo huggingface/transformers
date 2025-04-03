@@ -14,9 +14,16 @@
 # limitations under the License.
 """Fast Image processor class for Vivit."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...utils import add_start_docstrings
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling
+from ...utils import add_start_docstrings, is_torch_available
+from ...processing_utils import Unpack
+from ...image_processing_utils import (
+    BatchFeature,
+)
+
+if is_torch_available():
+    import torch
 
 
 @add_start_docstrings(
@@ -45,6 +52,42 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = None
+
+    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+    
+    def rescale(
+            self,
+        image: "torch.Tensor",
+        scale: float,
+        offset: bool = True,
+        dtype: torch.dtype = torch.float32,
+    ) -> "torch.Tensor":
+        """Rescale an image by a scale factor.
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+        image = image * scale - 1
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
+        image = image * scale
+        Args:
+        image (`np.ndarray`):
+            Image to rescale.
+        scale (`int` or `float`):
+            Scale to apply to the image.
+        offset (`bool`, default to True):
+            Whether to scale the image in both negative and positive directions.
+        dtype (`torch.dtype`, default to `torch.float32`):
+            Data type of the rescaled image.
+        """
+        rescaled = image.to(dtype=torch.float64) * scale
+
+        if offset:
+            rescaled = rescaled - 1
+
+        return rescaled.to(dtype=dtype)
 
 
 __all__ = ["VivitImageProcessorFast"]
