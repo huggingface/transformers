@@ -316,10 +316,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("GraniteMoeShared buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

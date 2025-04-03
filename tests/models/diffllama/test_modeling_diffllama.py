@@ -25,6 +25,7 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -391,10 +392,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="DiffLlama buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -689,6 +686,10 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        cleanup(torch_device, gc_collect=False)
+
     @slow
     @require_torch_accelerator
     @require_read_token
@@ -888,7 +889,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -936,7 +937,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,

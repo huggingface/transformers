@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
+from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -36,7 +37,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -45,7 +46,7 @@ from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
@@ -1031,6 +1032,7 @@ class PhimoeModel(PhimoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1043,9 +1045,8 @@ class PhimoeModel(PhimoePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, MoeModelOutputWithPast]:
+    ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
@@ -1054,8 +1055,6 @@ class PhimoeModel(PhimoePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1159,12 +1158,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         if return_legacy_cache:
             next_cache = next_cache.to_legacy_cache()
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
-                if v is not None
-            )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1366,6 +1359,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1382,11 +1376,10 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1429,10 +1422,9 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1442,11 +1434,10 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -1458,19 +1449,13 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
-                outputs.router_logits if return_dict else outputs[-1],
+                outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            if output_router_logits:
-                output = (aux_loss,) + output
-            return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -1537,7 +1522,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     PHIMOE_START_DOCSTRING,
 )
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class PhimoeForSequenceClassification(PhimoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1554,6 +1539,7 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1566,17 +1552,15 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.model(
+        transformer_outputs: MoeModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1585,9 +1569,8 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -1616,10 +1599,6 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,

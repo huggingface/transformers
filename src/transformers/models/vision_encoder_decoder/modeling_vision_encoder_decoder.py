@@ -367,14 +367,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
                 return model
 
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod

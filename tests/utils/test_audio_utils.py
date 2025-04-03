@@ -39,6 +39,9 @@ if is_librosa_available():
 
 
 class AudioUtilsFunctionTester(unittest.TestCase):
+    # will be set in `def _load_datasamples`
+    _dataset = None
+
     def test_hertz_to_mel(self):
         self.assertEqual(hertz_to_mel(0.0), 0.0)
         self.assertAlmostEqual(hertz_to_mel(100), 150.48910241)
@@ -274,8 +277,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        if self._dataset is None:
+            self._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        speech_samples = self._dataset.sort("id").select(range(num_samples))[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     def test_spectrogram_impulse(self):

@@ -163,14 +163,6 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip-vqa-base"

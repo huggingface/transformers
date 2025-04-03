@@ -1382,28 +1382,28 @@ class ProcessorMixin(PushToHubMixin):
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
                     else:
                         for fname in video_fnames:
-                            if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
-                                video = [np.array(load_image(image_fname)).T for image_fname in fname]
-                                # create a 4D video because `load_video` always returns a 4D array
-                                video = np.stack(video)
-                                metadata = None
-                                audios = None
-                                logger.warning(
-                                    "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                    "If your model uses this metadata during processing, please load the whole video and let the model sample frames instead."
-                                )
-                            else:
-                                video, metadata = load_video(
-                                    fname,
-                                    num_frames=mm_load_kwargs["num_frames"],
-                                    fps=mm_load_kwargs["video_fps"],
-                                    backend=mm_load_kwargs["video_load_backend"],
-                                    sample_indices_fn=mm_load_kwargs["sample_indices_fn"],
-                                )
-                                audios = load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"])
-                            batch_audios.append(audios)
-                            videos.append(video)
-                            video_metadata.append(metadata)
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+
+                    for fname in video_fnames:
+                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            video = [np.array(load_image(image_fname)).T for image_fname in fname]
+                            # create a 4D video because `load_video` always returns a 4D array
+                            video = np.stack(video)
+                            metadata = None
+                            logger.warning(
+                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
+                                "If your model uses this metadata during processing, please load the whole video and let the model sample frames instead."
+                            )
+                        else:
+                            video, metadata = load_video(
+                                fname,
+                                num_frames=mm_load_kwargs["num_frames"],
+                                fps=mm_load_kwargs["video_fps"],
+                                backend=mm_load_kwargs["video_load_backend"],
+                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"],
+                            )
+                        videos.append(video)
+                        video_metadata.append(metadata)
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it

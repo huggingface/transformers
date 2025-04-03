@@ -2,11 +2,10 @@ from typing import Optional, Tuple
 
 import torch
 
-from ..modeling_flash_attention_utils import _flash_attention_forward
-from ..utils import is_flash_attn_greater_or_equal_2_10
+from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 
 
-_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+_use_top_left_mask = flash_attn_supports_top_left_mask()
 
 
 def flash_attention_forward(

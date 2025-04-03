@@ -408,14 +408,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
 
 @require_torch
 class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
@@ -486,14 +478,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
