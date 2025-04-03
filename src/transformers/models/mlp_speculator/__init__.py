@@ -31,8 +31,8 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mlp_speculator"] = [
-        "MLPSpeculatorPreTrainedModel",
         "MLPSpeculator",
+        "MLPSpeculatorPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -45,8 +45,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_granite import (
-            MLPSpeculatorPreTrainedModel,
             MLPSpeculator,
+            MLPSpeculatorPreTrainedModel,
         )
 
 else:

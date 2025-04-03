@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Tuple, Optional
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -344,5 +344,5 @@ class MLPSpeculatorPreTrainedModel(PreTrainedModel):
         return self.speculator(state, inds)
 
     def reset_parameters(self):
-        self.speculator.reset_parameters()    
+        self.speculator.reset_parameters()
 

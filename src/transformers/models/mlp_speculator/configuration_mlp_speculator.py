@@ -3,7 +3,6 @@ from typing import List
 from ...configuration_utils import PretrainedConfig
 
 
-
 class MLPSpeculatorConfig(PretrainedConfig):
     model_type = "mlp_speculator"
 

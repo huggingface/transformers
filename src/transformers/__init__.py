@@ -3009,8 +3009,8 @@ else:
     )
     _import_structure["models.mlp_speculator"].extend(
         [
-            "MLPSpeculatorPreTrainedModel",
             "MLPSpeculator",
+            "MLPSpeculatorPreTrainedModel",
         ]
     )
     _import_structure["models.mobilebert"].extend(
@@ -7978,8 +7978,8 @@ if TYPE_CHECKING:
             MllamaVisionModel,
         )
         from .models.mlp_speculator import (
-            MLPSpeculatorPreTrainedModel,
             MLPSpeculator,
+            MLPSpeculatorPreTrainedModel,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
