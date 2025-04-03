@@ -451,7 +451,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float32)
         model.to(device)
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
@@ -460,7 +460,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
 
         with torch.no_grad():
-            model.float()
             logits = model(input_ids=input_ids).logits
 
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
@@ -471,8 +470,7 @@ class MambaIntegrationTests(unittest.TestCase):
                 -58.3015, -57.7875, -58.7760, -59.6037, -59.0665, -58.7087, -52.9293,
                 -53.4654, -57.3466, -56.9294, -55.7314, -53.3141, -55.8171, -56.9879,
                 -56.9121, -56.2139, -54.7198, -56.4134, -57.4825
-            ]
-            ,dtype=torch.float32)  # fmt: skip
+            ])  # fmt: skip
 
         torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
