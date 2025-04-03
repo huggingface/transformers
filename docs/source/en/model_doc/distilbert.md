@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DistilBERT
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -24,76 +22,70 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# DistilBERT: The Efficient Alternative to BERT
+# DistilBERT
 
-DistilBERT offers the power of BERT in a more accessible package. First introduced in the blog post [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5) and academic paper [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108), this model delivers impressive performance with fewer resources.
+[DistilBERT](https://huggingface.co/papers/1910.01108) is pretrained by knowledge distillation to create a smaller model with faster inference and requires less compute to train. Through a triple loss objective during pretraining, language modeling loss, distillation loss, cosine-distance loss, DistilBERT demonstrates similar performance to a larger transformer language model.
 
-Why Choose DistilBERT?
-
-* Lightweight Design: Contains 40% fewer parameters than google-bert/bert-base-uncased
-* Speed Advantage: Runs 60% faster than the original BERT
-* Minimal Performance Loss: Maintains over 95% of BERT's performance on the GLUE benchmark
-* Cost-Effective: Requires less computational power for training and inference
-
-DistilBERT achieves this efficiency through knowledge distillation, where a smaller model is trained to reproduce the behavior of a larger one. This makes it ideal for applications with limited computational resources or when deployment speed matters.
-
-This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers-research-projects/tree/main/distillation).
-
-You can find the official checkpoints for this model on the [Hugging Face Hub](https://huggingface.co/models).
+You can find all the original DistilBERT checkpoints under the [DistilBERT](https://huggingface.co/distilbert) organization.
 
 > [!TIP]
-> Click on the right sidebar for more examples of how to use this model for other tasks.
+> Click on the DistilBERT models in the right sidebar for more examples of how to apply DistilBERT to different language tasks.
 
-The examples below demonstrate how to use DistilBERT for text classification with [`Pipeline`] or the [`AutoModel`], and from the command line.
+The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 
 <hfoption id="Pipeline">
-    ```py
-    from transformers import pipeline
 
-    classifier = pipeline(
-        task="text-classification",
-        model="distilbert-base-uncased-finetuned-sst-2-english"
-    )
+```py
+from transformers import pipeline
 
-    result = classifier("I love using Hugging Face Transformers!")
-    print(result)
-    # Output: [{'label': 'POSITIVE', 'score': 0.9998}]
-    ```
+classifier = pipeline(
+    task="text-classification",
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
+
+result = classifier("I love using Hugging Face Transformers!")
+print(result)
+# Output: [{'label': 'POSITIVE', 'score': 0.9998}]
+```
+
 </hfoption>
 
 <hfoption id="AutoModel">
-    ```py
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    import torch.nn.functional as F
 
-    # Load a fine-tuned model for sentiment analysis
-    model_name = "distilbert-base-uncased-finetuned-sst-2-english"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+```py
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch.nn.functional as F
 
-    # Tokenize and run inference
-    inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt")
-    outputs = model(**inputs)
+# Load a fine-tuned model for sentiment analysis
+model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name)
 
-    # Convert logits to probabilities
-    probs = F.softmax(outputs.logits, dim=-1)
+# Tokenize and run inference
+inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt")
+outputs = model(**inputs)
 
-    # Get prediction
-    prediction = model.config.id2label[outputs.logits.argmax(-1).item()]
-    confidence = probs[0][outputs.logits.argmax(-1).item()].item()
+# Convert logits to probabilities
+probs = F.softmax(outputs.logits, dim=-1)
 
-    print(f"Prediction: {prediction}, Confidence: {confidence:.4f}")
-    # Output: Prediction: POSITIVE, Confidence: 0.9998
-    ```
+# Get prediction
+prediction = model.config.id2label[outputs.logits.argmax(-1).item()]
+confidence = probs[0][outputs.logits.argmax(-1).item()].item()
+
+print(f"Prediction: {prediction}, Confidence: {confidence:.4f}")
+# Output: Prediction: POSITIVE, Confidence: 0.9998
+```
+
 </hfoption>
 
 <hfoption id="transformers-cli">
-    ```bash
-    echo -e "I love using Hugging Face Transformers!" | transformers-cli run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
-    ```
+
+```bash
+echo -e "I love using Hugging Face Transformers!" | transformers-cli run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
+```
+
 </hfoption>
 
 </hfoptions>
@@ -104,11 +96,6 @@ The examples below demonstrate how to use DistilBERT for text classification wit
   separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`).
 - DistilBERT doesn't have options to select the input positions (`position_ids` input). This could be added if
   necessary though, just let us know if you need this option.
-- Same as BERT but smaller. Trained by distillation of the pretrained BERT model, meaning it’s been trained to predict the same probabilities as the larger model. The actual objective is a combination of:
-
-    * finding the same probabilities as the teacher model
-    * predicting the masked tokens correctly (but no next-sentence objective)
-    * a cosine similarity between the hidden states of the student and the teacher model
 
 ## DistilBertConfig
 
