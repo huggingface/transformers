@@ -40,11 +40,18 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from ..auto import AutoModel
 from .configuration_cosmos import CosmosConfig, CosmosTextConfig, CosmosVQVAEConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -569,7 +576,7 @@ def eager_attention_forward(
 class CosmosVQVAETemporalAttentionBlock(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: CosmosVQVAEConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -582,12 +589,15 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
-        self.num_key_value_groups = config.num_attention_heads
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+        # for compatibility with the attention interface
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -597,15 +607,15 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, q_len, _ = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -619,24 +629,28 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            queries,
+            keys,
+            values,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            is_causal=self.is_causal,
             scaling=self.scale,
-            is_causal=False,
+            dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
         return attn_output, attn_weights
 
 
 class CosmosVQVAEAttentionBlock(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: CosmosVQVAEConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -649,12 +663,15 @@ class CosmosVQVAEAttentionBlock(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
-        self.num_key_value_groups = config.num_attention_heads
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+        # for compatibility with the attention interface
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -664,15 +681,15 @@ class CosmosVQVAEAttentionBlock(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, q_len, _ = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -686,17 +703,21 @@ class CosmosVQVAEAttentionBlock(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            queries,
+            keys,
+            values,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            is_causal=self.is_causal,
             scaling=self.scale,
-            is_causal=False,
+            dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
         return attn_output, attn_weights
 
 
@@ -980,15 +1001,15 @@ class CosmosVQVAE(PreTrainedModel):
     config_class = CosmosVQVAEConfig
     base_model_prefix = "cosmosvideovq"
     main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _no_split_modules = [
         "CosmosVQVAEAttentionBlock",
         "CosmosVQVAETemporalAttentionBlock",
         "CosmosVQVAEResnetBlock",
         "CosmosVQVAEVectorQuantizer",
     ]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -1572,20 +1593,12 @@ COSMOS_TEXT_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -1664,7 +1677,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1793,12 +1806,17 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1879,7 +1897,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
