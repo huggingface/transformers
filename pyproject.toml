@@ -19,6 +19,7 @@ line-length = 119
 
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
+# dict-index-missing-items (PLC0206)
 ignore = ["C901", "E501", "E741", "F402", "F823", "PLC0206"]
 select = ["C", "E", "F", "I", "W", "PLC"]
 
