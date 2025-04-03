@@ -554,7 +554,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
         # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
         # Investigate the root cause.
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_read_token

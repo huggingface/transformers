@@ -23,6 +23,7 @@ from packaging import version
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
@@ -500,7 +501,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=False)
 
     @require_read_token
     def test_model_2b_fp16(self):

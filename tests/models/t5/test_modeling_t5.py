@@ -24,6 +24,7 @@ from transformers import T5Config, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    cleanup,
     require_accelerate,
     require_sentencepiece,
     require_tokenizers,
@@ -1172,7 +1173,7 @@ class T5ModelFp16Tests(unittest.TestCase):
 class T5ModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=False)
 
     @cached_property
     def model(self):

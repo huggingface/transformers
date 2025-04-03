@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, DeepseekV3Config, is_torch_available, set_seed
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -607,7 +608,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_torch_accelerator
