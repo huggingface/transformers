@@ -528,16 +528,3 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
             num_segments_fused = max([el["id"] for el in el_fused])
             self.assertEqual(num_segments_fused, expected_num_segments)
-
-    def test_removed_deprecated_kwargs(self):
-        image_processor_dict = dict(self.image_processor_dict)
-        image_processor_dict.pop("do_reduce_labels", None)
-        image_processor_dict["reduce_labels"] = True
-
-        # test we are able to create the image processor with the deprecated kwargs
-        image_processor = self.image_processing_class(**image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
-
-        # test we still support reduce_labels with config
-        image_processor = self.image_processing_class.from_dict(image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
