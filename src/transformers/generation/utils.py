@@ -4884,7 +4884,8 @@ class GenerationMixin:
             model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
             model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
-            outputs = model_forward(**model_inputs, return_dict=True)
+            # outputs = model_forward(**model_inputs, return_dict=True)
+            outputs = self(**model_inputs, return_dict=True)
 
             model_kwargs["past_key_values"] = outputs.past_key_values
             past_length = current_length
