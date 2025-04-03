@@ -37,7 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_class_docstring, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from .configuration_gemma2 import Gemma2Config
 
 
@@ -395,7 +395,7 @@ class Gemma2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class Gemma2PreTrainedModel(PreTrainedModel):
     config_class = Gemma2Config
     base_model_prefix = "model"
@@ -422,7 +422,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Gemma2Model(Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
         super().__init__(config)
@@ -462,6 +462,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -674,6 +678,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         return causal_mask
 
 
+@auto_docstring
 class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -724,6 +729,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -739,10 +745,10 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         Returns:
 
         Example:
-        Example
+        Example:
 
 
-            ```python
+        ```python
         >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
 
         >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
@@ -865,7 +871,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@auto_class_docstring
+@auto_docstring
 class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -952,6 +958,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -23,13 +23,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    auto_class_docstring,
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_phi import PhiConfig
 
 
@@ -332,7 +326,7 @@ class PhiRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class PhiPreTrainedModel(PreTrainedModel):
     config_class = PhiConfig
     base_model_prefix = "model"
@@ -359,7 +353,7 @@ class PhiPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class PhiModel(PhiPreTrainedModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
@@ -624,6 +618,7 @@ class PhiModel(PhiPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -716,7 +711,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class PhiForSequenceClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -803,6 +798,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
         )
 
 
+@auto_docstring
 class PhiForTokenClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

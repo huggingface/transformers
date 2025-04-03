@@ -39,9 +39,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
+from ...utils import auto_class_docstring, auto_docstring
 from ...utils.import_utils import (
-    auto_class_docstring,
-    auto_docstring,
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,

@@ -24,7 +24,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, logging
+from ...utils import LossKwargs, auto_docstring, logging
 from .configuration_qwen2 import Qwen2Config
 
 
@@ -334,7 +334,7 @@ class Qwen2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class Qwen2PreTrainedModel(PreTrainedModel):
     config_class = Qwen2Config
     base_model_prefix = "model"
@@ -361,7 +361,7 @@ class Qwen2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Qwen2Model(Qwen2PreTrainedModel):
     def __init__(self, config: Qwen2Config):
         super().__init__(config)
@@ -648,6 +648,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -740,7 +741,7 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -827,6 +828,7 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -897,7 +899,7 @@ class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class Qwen2ForQuestionAnswering(Qwen2PreTrainedModel):
     base_model_prefix = "transformer"
 

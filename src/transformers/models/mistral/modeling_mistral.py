@@ -24,7 +24,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, logging
+from ...utils import LossKwargs, auto_docstring, logging
 from .configuration_mistral import MistralConfig
 
 
@@ -321,7 +321,7 @@ class MistralRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class MistralPreTrainedModel(PreTrainedModel):
     config_class = MistralConfig
     base_model_prefix = "model"
@@ -348,7 +348,7 @@ class MistralPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class MistralModel(MistralPreTrainedModel):
     def __init__(self, config: MistralConfig):
         super().__init__(config)
@@ -635,6 +635,7 @@ class MistralModel(MistralPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -727,6 +728,7 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
         )
 
 
+@auto_docstring
 class MistralForTokenClassification(MistralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -797,7 +799,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class MistralForSequenceClassification(MistralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -884,7 +886,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class MistralForQuestionAnswering(MistralPreTrainedModel):
     base_model_prefix = "model"
 

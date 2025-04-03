@@ -39,7 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, logging
+from ...utils import LossKwargs, auto_docstring, logging
 from .configuration_phi3 import Phi3Config
 
 
@@ -395,7 +395,7 @@ class Phi3RotaryEmbedding(nn.Module):
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
 
 
-@auto_class_docstring
+@auto_docstring
 class Phi3PreTrainedModel(PreTrainedModel):
     config_class = Phi3Config
     base_model_prefix = "model"
@@ -423,7 +423,7 @@ class Phi3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Phi3Model(Phi3PreTrainedModel):
     def __init__(self, config: Phi3Config):
         super().__init__(config)
@@ -710,6 +710,7 @@ class Phi3Model(Phi3PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -841,7 +842,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@auto_class_docstring
+@auto_docstring
 class Phi3ForSequenceClassification(Phi3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -928,6 +929,7 @@ class Phi3ForSequenceClassification(Phi3PreTrainedModel):
         )
 
 
+@auto_docstring
 class Phi3ForTokenClassification(Phi3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

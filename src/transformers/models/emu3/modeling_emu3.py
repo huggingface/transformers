@@ -41,7 +41,6 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    auto_class_docstring,
     auto_docstring,
     is_torch_flex_attn_available,
     logging,
@@ -1339,7 +1338,7 @@ EMU3_TEXT_INPUTS_DOCSTRING = r"""
 """
 
 
-@auto_class_docstring
+@auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
     def __init__(self, config: Emu3Config):
         super().__init__(config)
@@ -1602,6 +1601,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

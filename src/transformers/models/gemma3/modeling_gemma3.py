@@ -35,11 +35,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
@@ -59,7 +55,7 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
             `past_key_values` input) to speed up sequential decoding.
@@ -841,6 +837,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         Returns:
 
         Example:
+        Example:
 
 
         ```python
@@ -1160,37 +1157,20 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
-        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/Gemma3-test-224px-hf")
+        >>> processor = AutoProcessor.from_pretrained("google/Gemma3-test-224px-hf")
 
-        >>> messages = [
-        ...     {
-        ...         "role": "system",
-        ...         "content": [
-        ...             {"type": "text", "text": "You are a helpful assistant."}
-        ...         ]
-        ...     },
-        ...     {
-        ...         "role": "user", "content": [
-        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        ...             {"type": "text", "text": "Where is the cat standing?"},
-        ...         ]
-        ...     },
-        ... ]
+        >>> prompt = "answer en Where is the cow standing?"
+        >>> url = "https://huggingface.co/gv-hf/Gemma3-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor.apply_chat_template(
-        ...     messages,
-        ...     tokenizer=True,
-        ...     return_dict=True,
-        ...     return_tensors="pt",
-        ...     add_generation_prompt=True
-        ... )
+        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
+
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs)
+        >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
-        ```
-        """
+        "answer en Where is the cow standing?\nbeach"
+        ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

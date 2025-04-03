@@ -27,13 +27,11 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_flash_attn_2_available,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_paligemma import PaliGemmaConfig
 
 
@@ -293,10 +291,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    """The PALIGEMMA model which consists of a vision backbone and a language model.""",
-    PALIGEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
@@ -416,9 +411,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -438,6 +431,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         **lm_kwargs,
     ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -449,8 +443,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
 
         Example:
 

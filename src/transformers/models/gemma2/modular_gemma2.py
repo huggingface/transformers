@@ -416,6 +416,10 @@ class Gemma2Model(GemmaModel):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -593,7 +597,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Example
+        Example:
 
         ```python
         >>> from transformers import AutoTokenizer, Gemma2ForCausalLM

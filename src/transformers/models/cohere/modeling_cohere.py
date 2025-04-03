@@ -41,7 +41,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_cohere import CohereConfig
 
 
@@ -386,7 +386,7 @@ class CohereDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
@@ -413,7 +413,7 @@ class CoherePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class CohereModel(CoherePreTrainedModel):
     def __init__(self, config: CohereConfig):
         super().__init__(config)
@@ -676,6 +676,7 @@ class CohereModel(CoherePreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class CohereForCausalLM(CoherePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

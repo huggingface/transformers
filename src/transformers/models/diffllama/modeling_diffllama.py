@@ -44,7 +44,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
-    auto_class_docstring,
     auto_docstring,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_flex_attn_available,
@@ -569,7 +568,7 @@ class DiffLlamaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class DiffLlamaPreTrainedModel(PreTrainedModel):
     config_class = DiffLlamaConfig
     base_model_prefix = "model"
@@ -657,7 +656,7 @@ class DiffLlamaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class DiffLlamaModel(DiffLlamaPreTrainedModel):
     def __init__(self, config: DiffLlamaConfig):
         super().__init__(config)
@@ -920,6 +919,7 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -970,6 +970,7 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1043,7 +1044,7 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class DiffLlamaForSequenceClassification(DiffLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1130,7 +1131,7 @@ class DiffLlamaForSequenceClassification(DiffLlamaPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -1200,6 +1201,7 @@ class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
         )
 
 
+@auto_docstring
 class DiffLlamaForTokenClassification(DiffLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

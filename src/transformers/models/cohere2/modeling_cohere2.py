@@ -32,13 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    auto_class_docstring,
-    auto_docstring,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import LossKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_cohere2 import Cohere2Config
 
 
@@ -401,7 +395,7 @@ class Cohere2DecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class Cohere2PreTrainedModel(PreTrainedModel):
     config_class = Cohere2Config
     base_model_prefix = "model"
@@ -428,7 +422,7 @@ class Cohere2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Cohere2Model(Cohere2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2DecoderLayer`]
@@ -680,6 +674,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

@@ -18,7 +18,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_olmo2 import Olmo2Config
 
 
@@ -335,7 +335,7 @@ class Olmo2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class Olmo2PreTrainedModel(PreTrainedModel):
     config_class = Olmo2Config
     base_model_prefix = "model"
@@ -362,7 +362,7 @@ class Olmo2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Olmo2Model(Olmo2PreTrainedModel):
     def __init__(self, config: Olmo2Config):
         super().__init__(config)
@@ -625,6 +625,7 @@ class Olmo2Model(Olmo2PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Olmo2ForCausalLM(Olmo2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

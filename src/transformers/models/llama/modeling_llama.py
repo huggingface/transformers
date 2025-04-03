@@ -41,7 +41,6 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
-    auto_class_docstring,
     auto_docstring,
     is_torch_flex_attn_available,
     logging,
@@ -58,7 +57,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b-hf"
-_CONFIG_FOR_DOC = "LlamaConfig"
 
 
 class LlamaRMSNorm(nn.Module):
@@ -364,7 +362,7 @@ class LlamaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
@@ -391,7 +389,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class LlamaModel(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
@@ -654,6 +652,7 @@ class LlamaModel(LlamaPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -746,7 +745,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -833,7 +832,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -904,6 +903,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         )
 
 
+@auto_docstring
 class LlamaForTokenClassification(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

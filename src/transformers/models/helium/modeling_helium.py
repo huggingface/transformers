@@ -39,7 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_helium import HeliumConfig
 
 
@@ -353,7 +353,7 @@ class HeliumDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class HeliumPreTrainedModel(PreTrainedModel):
     config_class = HeliumConfig
     base_model_prefix = "model"
@@ -380,7 +380,7 @@ class HeliumPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class HeliumModel(HeliumPreTrainedModel):
     def __init__(self, config: HeliumConfig):
         super().__init__(config)
@@ -643,6 +643,7 @@ class HeliumModel(HeliumPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class HeliumForCausalLM(HeliumPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -693,6 +694,7 @@ class HeliumForCausalLM(HeliumPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -766,7 +768,7 @@ class HeliumForCausalLM(HeliumPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class HeliumForSequenceClassification(HeliumPreTrainedModel):
     def __init__(self, config: HeliumConfig):
         super().__init__(config)
@@ -853,6 +855,7 @@ class HeliumForSequenceClassification(HeliumPreTrainedModel):
         )
 
 
+@auto_docstring
 class HeliumForTokenClassification(HeliumPreTrainedModel):
     def __init__(self, config: HeliumConfig):
         super().__init__(config)

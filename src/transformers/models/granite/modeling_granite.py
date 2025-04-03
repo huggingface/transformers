@@ -33,7 +33,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_granite import GraniteConfig
 
 
@@ -369,7 +369,7 @@ class GraniteRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class GranitePreTrainedModel(PreTrainedModel):
     config_class = GraniteConfig
     base_model_prefix = "model"
@@ -396,7 +396,7 @@ class GranitePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class GraniteModel(GranitePreTrainedModel):
     def __init__(self, config: GraniteConfig):
         super().__init__(config)
@@ -662,6 +662,7 @@ class GraniteModel(GranitePreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class GraniteForCausalLM(GranitePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

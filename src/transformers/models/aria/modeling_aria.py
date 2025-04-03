@@ -34,7 +34,6 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    auto_class_docstring,
     auto_docstring,
     is_torch_flex_attn_available,
     logging,
@@ -685,7 +684,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class AriaPreTrainedModel(PreTrainedModel):
     config_class = AriaTextConfig
     base_model_prefix = "model"
@@ -775,7 +774,7 @@ class AriaTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class AriaTextModel(AriaTextPreTrainedModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1038,6 +1037,7 @@ class AriaTextModel(AriaTextPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.

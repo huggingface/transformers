@@ -46,7 +46,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    auto_class_docstring,
     auto_docstring,
     is_torch_flex_attn_available,
     logging,
@@ -735,7 +734,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
-@auto_class_docstring
+@auto_docstring
 class MoonshineDecoder(MoonshinePreTrainedModel):
     main_input_name = "input_ids"
 

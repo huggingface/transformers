@@ -38,7 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_gemma import GemmaConfig
 
 
@@ -351,7 +351,7 @@ class GemmaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class GemmaPreTrainedModel(PreTrainedModel):
     config_class = GemmaConfig
     base_model_prefix = "model"
@@ -378,7 +378,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class GemmaModel(GemmaPreTrainedModel):
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
@@ -647,6 +647,7 @@ class GemmaModel(GemmaPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -697,6 +698,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -770,7 +772,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class GemmaForSequenceClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -857,6 +859,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         )
 
 
+@auto_docstring
 class GemmaForTokenClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

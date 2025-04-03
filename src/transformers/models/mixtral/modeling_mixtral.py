@@ -47,7 +47,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, logging
+from ...utils import LossKwargs, auto_docstring, logging
 from .configuration_mixtral import MixtralConfig
 
 
@@ -442,7 +442,7 @@ class MixtralRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
@@ -469,7 +469,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class MixtralModel(MixtralPreTrainedModel):
     def __init__(self, config: MixtralConfig):
         super().__init__(config)
@@ -850,6 +850,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@auto_docstring
 class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -998,7 +999,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class MixtralForSequenceClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1085,6 +1086,7 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
         )
 
 
+@auto_docstring
 class MixtralForTokenClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1155,7 +1157,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class MixtralForQuestionAnswering(MixtralPreTrainedModel):
     base_model_prefix = "model"
 

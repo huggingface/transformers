@@ -38,7 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_class_docstring, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_glm import GlmConfig
 
 
@@ -366,7 +366,7 @@ class GlmDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class GlmPreTrainedModel(PreTrainedModel):
     config_class = GlmConfig
     base_model_prefix = "model"
@@ -393,7 +393,7 @@ class GlmPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class GlmModel(GlmPreTrainedModel):
     def __init__(self, config: GlmConfig):
         super().__init__(config)
@@ -656,6 +656,7 @@ class GlmModel(GlmPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -748,7 +749,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class GlmForSequenceClassification(GlmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -835,6 +836,7 @@ class GlmForSequenceClassification(GlmPreTrainedModel):
         )
 
 
+@auto_docstring
 class GlmForTokenClassification(GlmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

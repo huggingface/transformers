@@ -263,6 +263,10 @@ class ClassDocstring:
     The bare {model_name} Model outputting raw hidden-states without any specific head on top.
     """
 
+    Decoder = r"""
+    The bare {model_name} Decoder outputting raw hidden-states without any specific head on top.
+    """
+
     TextModel = r"""
     The bare {model_name} Text Model outputting raw hidden-states without any specific head on to.
     """

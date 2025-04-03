@@ -53,7 +53,6 @@ from ..siglip import SiglipVisionConfig
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma-3-4b"
-_CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
@@ -521,9 +520,6 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-GEMMA3_START_DOCSTRING = None
-
-
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "language_model"
     _no_split_modules = [
@@ -585,6 +581,10 @@ class Gemma3TextModel(Gemma2Model):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

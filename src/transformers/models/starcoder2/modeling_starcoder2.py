@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, add_start_docstrings_to_model_forward, auto_class_docstring, auto_docstring, logging
+from ...utils import LossKwargs, auto_docstring, logging
 from .configuration_starcoder2 import Starcoder2Config
 
 
@@ -326,7 +326,7 @@ class Starcoder2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_class_docstring
+@auto_docstring
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
@@ -353,10 +353,7 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
-
-
-@auto_class_docstring
+@auto_docstring
 class Starcoder2Model(Starcoder2PreTrainedModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
@@ -381,7 +378,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -634,6 +631,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -726,7 +724,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel, GenerationMixin):
         )
 
 
-@auto_class_docstring
+@auto_docstring
 class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -813,6 +811,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

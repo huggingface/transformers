@@ -43,6 +43,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -1443,6 +1444,7 @@ class BambaModel(BambaPreTrainedModel):
         return mamba_mask
 
 
+@auto_docstring
 class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
