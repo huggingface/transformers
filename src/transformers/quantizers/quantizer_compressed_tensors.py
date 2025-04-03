@@ -120,12 +120,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        update_structure_before_weight_load = self.run_compressed or (
-            self.quantization_config.is_quantized and not self.quantization_config.is_quantization_compressed
-        )
-
-        if update_structure_before_weight_load:
-            apply_quantization_config(model, ct_quantization_config, run_compressed=self.run_compressed)
+        if self.run_compressed:
+            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+        elif not self.quantization_config.is_quantization_compressed:
+            apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
