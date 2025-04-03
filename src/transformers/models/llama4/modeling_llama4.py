@@ -320,6 +320,7 @@ class Llama4TextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.attn_temperature_tuning = config.attn_temperature_tuning
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
         self.use_rope = int((layer_idx + 1) % 4 !=0) #rope unused for dense layers
@@ -366,7 +367,7 @@ class Llama4TextAttention(nn.Module):
         if self.attn_temperature_tuning and not self.use_rope:
             attn_scales = torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
             attn_scales = attn_scales.view((*input_shape, 1, 1))
-            query_states = query_states * attn_scales
+            query_states = (query_states * attn_scales).to(query_states.dtype)
             
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)

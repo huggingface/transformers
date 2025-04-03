@@ -183,6 +183,7 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
         for_llm_compressor=False,
+        attn_temperature_tuning=4,
         **kwargs,
     ):
         super().__init__(
@@ -192,6 +193,7 @@ class Llama4TextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.attn_temperature_tuning = attn_temperature_tuning
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
