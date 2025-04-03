@@ -16,14 +16,16 @@
 Feature extractor class for Granite Speech.
 """
 
-from collections.abc import Sequence
 import math
+from collections.abc import Sequence
+from typing import List, Optional
+
 import numpy as np
-from typing import List, Optional, Union, Tuple
 
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from transformers.tokenization_utils_base import AudioInput
 from transformers.utils import is_torch_available, is_torchaudio_available, logging
+
 
 logger = logging.get_logger(__name__)
 
