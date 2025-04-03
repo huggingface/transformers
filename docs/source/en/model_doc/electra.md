@@ -84,6 +84,9 @@ print(f"Predicted label: {predicted_label}")
 echo -e "This restaurant has amazing food." | transformers-cli run --task text-classification --model bhadresh-savani/electra-base-emotion --device 0
 ```
 
+</hfoption>
+</hfoptions>
+
 ## Notes
 
 - ELECTRA consists of two transformer models, a generator (G) and a discriminator (D). For most downstream tasks, use the discriminator model (as indicated by `*-discriminator` in the name) rather than the generator.
