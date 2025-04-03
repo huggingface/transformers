@@ -262,6 +262,20 @@ class ModelArgs:
     [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor_class}`] uses
     [`{image_processor_class}`] for processing images).
     """
+    vision_feature_layer = r""":
+    The index of the layer to select the vision feature. If multiple indices are provided,
+    the vision feature of the corresponding indices will be concatenated to form the
+    vision features.
+    """
+
+    vision_feature_select_strategy = r""":
+    The feature selection strategy used to select the vision feature from the vision backbone.
+    Can be one of `"default"` or `"full"`.
+    """
+
+    image_sizes = r"""of shape `(batch_size, 2)`:
+    The sizes of the images in the batch, being (height, width) for each image.
+    """
 
 
 class ClassDocstring:

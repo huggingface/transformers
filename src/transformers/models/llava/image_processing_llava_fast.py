@@ -20,8 +20,6 @@ from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -39,7 +37,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -61,17 +59,16 @@ if is_torchvision_available():
 
 
 class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        do_pad (`bool`, *optional*):
+            Whether to pad the image to a square based on the longest edge.
+    """
+
     do_pad: Optional[bool]
 
 
-@add_start_docstrings(
-    "Constructs a fast Llava image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-            Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
-    """,
-)
+@auto_docstring
 class LlavaImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -90,13 +87,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
