@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallConfig"),
         ("blip", "BlipConfig"),
         ("blip-2", "Blip2Config"),
+        ("blip_2_qformer", "Blip2QFormerConfig"),
         ("bloom", "BloomConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bros", "BrosConfig"),
@@ -389,6 +390,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("blenderbot-small", "BlenderbotSmall"),
         ("blip", "BLIP"),
         ("blip-2", "BLIP-2"),
+        ("blip_2_qformer", "BLIP-2 QFormer"),
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
@@ -776,6 +778,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
         ("sam_vision_model", "sam"),
+        ("blip_2_qformer", "blip_2"),
     ]
 )
 
