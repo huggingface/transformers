@@ -1037,8 +1037,8 @@ def is_flash_attn_2_available():
     if torch.version.cuda:
         is_compatible = version.parse(flash_attn_version) >= version.parse("2.1.0")
     elif torch.version.hip:
-        is_compatible = version.parse(flash_attn_version) >= version.parse("2.0.4")
         # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.0.4")
     elif is_torch_mlu_available():
         is_compatible = version.parse(flash_attn_version) >= version.parse("2.3.3")
     else:
