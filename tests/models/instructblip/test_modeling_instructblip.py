@@ -216,14 +216,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/instructblip-flan-t5-xl"
@@ -520,14 +512,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="InstructBlipModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="There's no base InstructBlipModel")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base InstructBlipModel")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(
