@@ -33,11 +33,6 @@ Currently being updated!
 [[autodoc]] GraniteSpeechEncoderConfig
 
 
-## GraniteSpeechProjectorConfig
-
-[[autodoc]] GraniteSpeechProjectorConfig
-
-
 ## GraniteSpeechProcessor
 
 [[autodoc]] GraniteSpeechProcessor
@@ -46,12 +41,6 @@ Currently being updated!
 ## GraniteSpeechFeatureExtractor
 
 [[autodoc]] GraniteSpeechFeatureExtractor
-
-
-## GraniteSpeechQFormerModel
-
-[[autodoc]] GraniteSpeechQFormerModel
-    - forward
 
 
 ## GraniteSpeechForConditionalGeneration

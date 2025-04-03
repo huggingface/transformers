@@ -530,51 +530,6 @@ else:
     _import_structure["tf_utils"] = []
 
 
-<<<<<<< HEAD
-=======
-try:
-    if not (
-        is_librosa_available()
-        and is_essentia_available()
-        and is_scipy_available()
-        and is_torch_available()
-        and is_pretty_midi_available()
-    ):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import (
-        dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects,
-    )
-
-    _import_structure["utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects"] = [
-        name
-        for name in dir(dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects)
-        if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
-    _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
-    _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
-
-try:
-    if not is_torchaudio_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import (
-        dummy_torchaudio_objects,
-    )
-
-    _import_structure["utils.dummy_torchaudio_objects"] = [
-        name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.granite_speech"].append("GraniteSpeechFeatureExtractor")
-    _import_structure["models.granite_speech"].append("GraniteSpeechProcessor")
-
-    _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
-    _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
-
->>>>>>> 1a8b4a742 (Import sorting)
 # FLAX-backed objects
 try:
     if not is_flax_available():
