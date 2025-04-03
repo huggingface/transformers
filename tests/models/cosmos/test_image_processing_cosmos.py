@@ -104,10 +104,9 @@ class CosmosVideoProcessingTester:
 class CosmosVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = CosmosVideoProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = LlavaNextImageProcessingTester(self)
+        self.image_processor_tester = CosmosVideoProcessingTester(self)
 
     @property
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict

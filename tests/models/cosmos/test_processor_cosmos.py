@@ -28,7 +28,7 @@ if is_vision_available():
 
 
 @require_vision
-class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+class CosmosProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CosmosProcessor
 
     def setUp(self):

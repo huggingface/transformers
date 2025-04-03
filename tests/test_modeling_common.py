@@ -302,7 +302,8 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -368,7 +369,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config)
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
             if _keys_to_ignore_on_save is None:
                 continue
@@ -539,7 +541,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
+                copy_config = copy.deepcopy(config)  # init changes config in-place
+                model_to_save = model_class(copy_config)
                 model_to_save.save_pretrained(saved_model_path)
 
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
@@ -2261,7 +2264,8 @@ class ModelTesterMixin:
     def test_can_use_safetensors(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model_tied = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model_tied = model_class(copy_config)
             with tempfile.TemporaryDirectory() as d:
                 try:
                     model_tied.save_pretrained(d, safe_serialization=True)
@@ -2298,7 +2302,8 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config)
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
 
@@ -2347,7 +2352,8 @@ class ModelTesterMixin:
     def test_model_weights_reload_no_missing_tied_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
 
@@ -2415,7 +2421,8 @@ class ModelTesterMixin:
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                dict_output = dict_output.to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
@@ -2773,7 +2780,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -2817,7 +2825,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -2855,7 +2864,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
 
             torch.manual_seed(0)

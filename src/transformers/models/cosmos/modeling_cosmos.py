@@ -964,7 +964,6 @@ class CosmosVQVAE(PreTrainedModel):
         "CosmosVQVAEResnetBlock",
         "CosmosVQVAEVectorQuantizer",
     ]
-    _supports_sdpa = True
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -2471,10 +2470,6 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         output = CosmosCausalLMOutputWithPast(
             loss=loss,
