@@ -14,16 +14,12 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Union
+from typing import List, Union
 
-from transformers.models.paligemma.processing_paligemma import (
-    IMAGE_TOKEN,
-    PaliGemmaProcessor,
-    build_string_from_input,
-)
+from transformers.models.colpali.processing_colpali import ColPaliProcessor
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ProcessingKwargs,
     Unpack,
@@ -45,7 +41,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
+class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": "longest",
@@ -58,45 +54,57 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class ColPaliProcessor(PaliGemmaProcessor):
+class ColQwen2Processor(ColPaliProcessor):
     r"""
-    Constructs a ColPali processor which wraps a PaliGemmaProcessor and special methods to process images and queries, as
+    Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
     well as to compute the late-interaction retrieval score.
 
-    [`ColPaliProcessor`] offers all the functionalities of [`PaliGemmaProcessor`]. See the [`~PaliGemmaProcessor.__call__`]
+    [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
     for more information.
 
     Args:
-        image_processor ([`SiglipImageProcessor`], *optional*):
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
         query_prefix (`str`, *optional*): A prefix to be used for the query.
+        max_num_visual_tokens (`int`, *optional*): : The maximum number of visual tokens that can be processed by the model.
     """
+
+    valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
+    image_processor_class = "Qwen2VLImageProcessor"
+    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        visual_prompt_prefix: str = "Describe the image.",
-        query_prefix: str = "Question: ",
+        visual_prompt_prefix: str = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>",
+        query_prefix: str = "Query: ",
+        max_num_visual_tokens: int = 768,
+        **kwargs,
     ):
-        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+        ColPaliProcessor().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+
         self.visual_prompt_prefix = visual_prompt_prefix
         self.query_prefix = query_prefix
 
-    @property
-    def query_augmentation_token(self) -> str:
-        """
-        Return the query augmentation token.
+        self.tokenizer.padding_side = "left"
 
-        Query augmentation buffers are used as reasoning buffers during inference.
-        """
-        return self.tokenizer.pad_token
+        self.max_num_visual_tokens = max_num_visual_tokens
+        self.factor = 28
+        self.min_pixels = 4 * 28 * 28
+        self.max_pixels = self.max_num_visual_tokens * 28 * 28
+
+        # TODO: change in the preprocessor config + change logic when https://github.com/huggingface/transformers/pull/36207 is merged.
+        self.image_processor.min_pixels = self.min_pixels
+        self.image_processor.max_pixels = self.max_pixels
 
     def __call__(
         self,
@@ -104,18 +112,18 @@ class ColPaliProcessor(PaliGemmaProcessor):
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
-        wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
+        wrapper around the Qwen2VLProcessor's [`~Qwen2VLProcessor.__call__`] method adapted for the ColQwen2 model. It cannot process
         both text and images at the same time.
 
-        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
-        [`~LlamaTokenizerFast.__call__`].
-        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
-        [`~SiglipImageProcessor.__call__`].
-        Please refer to the docstring of the above two methods for more information.
+        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
+        [`~Qwen2TokenizerFast.__call__`].
+        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
+        [`~Qwen2VLImageProcessor.__call__`].
+        Please refer to the doctsring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -144,7 +152,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColPaliProcessorKwargs,
+            ColQwen2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -166,38 +174,47 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 raise ValueError("images must be an image, list of images or list of list of images")
 
             texts_doc = [self.visual_prompt_prefix] * len(images)
-            images = [image.convert("RGB") for image in images]
 
-            input_strings = [
-                build_string_from_input(
-                    prompt=prompt,
-                    bos_token=self.tokenizer.bos_token,
-                    image_seq_len=self.image_seq_length,
-                    image_token=IMAGE_TOKEN,
-                    num_images=len(image_list) if isinstance(image_list, list) else 1,
-                )
-                for prompt, image_list in zip(texts_doc, images)
-            ]
-            images = make_flat_list_of_images(images)
-            pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
 
-            # max_length has to account for the image tokens
-            if output_kwargs["text_kwargs"].get("max_length", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
+            if image_grid_thw is not None:
+                merge_length = self.image_processor.merge_size**2
+                index = 0
+                for i in range(len(texts_doc)):
+                    while self.image_token in texts_doc[i]:
+                        texts_doc[i] = texts_doc[i].replace(
+                            self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
+                        )
+                        index += 1
+                    texts_doc[i] = texts_doc[i].replace("<|placeholder|>", self.image_token)
 
-            inputs = self.tokenizer(
-                input_strings,
+            text_inputs = self.tokenizer(
+                texts_doc,
                 return_token_type_ids=False,
                 **output_kwargs["text_kwargs"],
             )
 
-            return_data = {**inputs, "pixel_values": pixel_values}
+            return_data = BatchFeature(data={**text_inputs, **image_inputs})
+
+            # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
+            offsets = return_data["image_grid_thw"][:, 1] * return_data["image_grid_thw"][:, 2]  # (batch_size,)
+
+            # Split the pixel_values tensor into a list of tensors, one per image
+            pixel_values = list(
+                torch.split(return_data["pixel_values"], offsets.tolist())
+            )  # [(num_patches_image_0, pixel_values), ..., (num_patches_image_n, pixel_values)]
+
+            # Pad the list of pixel_value tensors to the same length along the sequence dimension
+            return_data["pixel_values"] = torch.nn.utils.rnn.pad_sequence(
+                pixel_values, batch_first=True
+            )  # (batch_size, max_num_patches, pixel_values)
 
             if return_token_type_ids:
-                labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+                labels = return_data["input_ids"].masked_fill(return_data["token_type_ids"] == 0, -100)
                 return_data.update({"labels": labels})
 
-            return BatchFeature(data=return_data)
+            return return_data
 
         elif text is not None:
             if isinstance(text, str):
@@ -209,11 +226,10 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 suffix = self.query_augmentation_token * 10
 
             texts_query: List[str] = []
-            for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
-                texts_query.append(query)
 
-            output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
+            for query in text:
+                augmented_query = self.query_prefix + query + suffix
+                texts_query.append(augmented_query)
 
             batch_query = self.tokenizer(
                 texts_query,
@@ -226,13 +242,13 @@ class ColPaliProcessor(PaliGemmaProcessor):
     def process_images(
         self,
         images: ImageInput = None,
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
-        [`ColPaliProcessor.__call__`].
+        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColQwen2Processor's
+        [`ColQwen2Processor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`].
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -261,13 +277,13 @@ class ColPaliProcessor(PaliGemmaProcessor):
     def process_queries(
         self,
         text: Union[TextInput, List[TextInput]],
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
-        [`ColPaliProcessor.__call__`].
+        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColQwen2Processor's
+        [`ColQwen2Processor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`].
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -292,71 +308,5 @@ class ColPaliProcessor(PaliGemmaProcessor):
         """
         return self.__call__(text=text, **kwargs)
 
-    def score_retrieval(
-        self,
-        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        batch_size: int = 128,
-        output_dtype: Optional["torch.dtype"] = None,
-        output_device: Union["torch.device", str] = "cpu",
-    ) -> "torch.Tensor":
-        """
-        Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
-        query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the
-        image of a document page.
 
-        Because the embedding tensors are multi-vector and can thus have different shapes, they
-        should be fed as:
-        (1) a list of tensors, where the i-th tensor is of shape (sequence_length_i, embedding_dim)
-        (2) a single tensor of shape (n_passages, max_sequence_length, embedding_dim) -> usually
-            obtained by padding the list of tensors.
-
-        Args:
-            query_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Query embeddings.
-            passage_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Passage embeddings.
-            batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
-            output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
-                If `None`, the dtype of the input embeddings is used.
-            output_device (`torch.device` or `str`, *optional*, defaults to "cpu"): The device of the output tensor.
-
-        Returns:
-            `torch.Tensor`: A tensor of shape `(n_queries, n_passages)` containing the scores. The score
-            tensor is saved on the "cpu" device.
-        """
-
-        if len(query_embeddings) == 0:
-            raise ValueError("No queries provided")
-        if len(passage_embeddings) == 0:
-            raise ValueError("No passages provided")
-
-        if query_embeddings[0].device != passage_embeddings[0].device:
-            raise ValueError("Queries and passages must be on the same device")
-
-        if query_embeddings[0].dtype != passage_embeddings[0].dtype:
-            raise ValueError("Queries and passages must have the same dtype")
-
-        if output_dtype is None:
-            output_dtype = query_embeddings[0].dtype
-
-        scores: List[torch.Tensor] = []
-
-        for i in range(0, len(query_embeddings), batch_size):
-            batch_scores: List[torch.Tensor] = []
-            batch_queries = torch.nn.utils.rnn.pad_sequence(
-                query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
-            )
-            for j in range(0, len(passage_embeddings), batch_size):
-                batch_passages = torch.nn.utils.rnn.pad_sequence(
-                    passage_embeddings[j : j + batch_size], batch_first=True, padding_value=0
-                )
-                batch_scores.append(
-                    torch.einsum("bnd,csd->bcns", batch_queries, batch_passages).max(dim=3)[0].sum(dim=2)
-                )
-            scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
-
-        return torch.cat(scores, dim=0)
-
-
-__all__ = [
-    "ColPaliProcessor",
-]
+__all__ = ["ColQwen2Processor"]
