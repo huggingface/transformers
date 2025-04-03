@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
 
+from transformers.utils import deprecate_kwarg
+
 
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
@@ -614,7 +616,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return new_target_ids
 
 
-class PruneReindexingLMHead(nn.Module):
+class _PruneReindexingLMHead(nn.Module):
     """
     A class to prune and reindex the language model head.
 
@@ -637,7 +639,7 @@ class PruneReindexingLMHead(nn.Module):
         return pruned_logits
 
 
-class MapInputEmbedding(nn.Module):
+class _MapInputEmbeddingg(nn.Module):
     def __init__(self, original_embedding: nn.Embedding, assistant_overlap_token_ids):
         """
         Wraps an existing embedding layer and remaps token IDs before lookup.
@@ -693,13 +695,17 @@ class AssistantToTargetTranslator:
     FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
     SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
 
+    @deprecate_kwarg("assistant_model_device", version="4.53")
     def __init__(
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        assistant_model: "PreTrainedModel",
-        target_vocab_size: Optional[int],
-        assistant_prune_LM_head: Optional[bool] = True,
+        target_vocab_size: Optional[
+            int
+        ],  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
+        assistant_model_device: str = "cpu",
+        assistant_model: "PreTrainedModel" = None,
+        assistant_prune_lm_head: Optional[bool] = True,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -710,22 +716,22 @@ class AssistantToTargetTranslator:
         )
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: Optional[LogitsProcessorList] = None
-        self.assistant_prune_LM_head = assistant_prune_LM_head
+        self.assistant_prune_lm_head = assistant_prune_lm_head
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
-            if self.assistant_prune_LM_head:
+            if self.assistant_prune_lm_head:
                 self.assistant_overlap_token_ids = torch.tensor(
                     list(self.target_to_assistant_input_ids.values()),
                     dtype=torch.long,
                     device=self._assistant_model_device,
                 )
                 original_lm_head = assistant_model.get_output_embeddings()
-                pruned_lm_head = PruneReindexingLMHead(original_lm_head, self.assistant_overlap_token_ids)
+                pruned_lm_head = _PruneReindexingLMHead(original_lm_head, self.assistant_overlap_token_ids)
                 del original_lm_head
                 assistant_model.set_output_embeddings(pruned_lm_head)
 
                 original_input_embeddings = assistant_model.get_input_embeddings()
-                map_input_embeddings = MapInputEmbedding(original_input_embeddings, self.assistant_overlap_token_ids)
+                map_input_embeddings = _MapInputEmbeddingg(original_input_embeddings, self.assistant_overlap_token_ids)
                 del original_input_embeddings
                 assistant_model.set_input_embeddings(map_input_embeddings)
                 self.map_input_embeddings = map_input_embeddings
@@ -735,7 +741,7 @@ class AssistantToTargetTranslator:
                 )
 
     def set_unmap(self):
-        if self.assistant_prune_LM_head:
+        if self.assistant_prune_lm_head:
             self.map_input_embeddings.map = False
 
     def _get_assistant_to_target_input_ids(self):
@@ -794,7 +800,7 @@ class AssistantToTargetTranslator:
         else:
             # Get last `num_new_tokens` candidate IDs
             last_candidate_ids = assistant_candidate_ids[0, -num_new_tokens:]
-            if self.assistant_prune_LM_head:
+            if self.assistant_prune_lm_head:
                 # Map assistant IDs -> target input IDs
                 last_candidate_ids = self.assistant_overlap_token_ids[last_candidate_ids]
             transformed_slice = self._assistant_to_target_input_ids[last_candidate_ids]
@@ -812,7 +818,7 @@ class AssistantToTargetTranslator:
         # Exclude invalid indices
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]
 
-        if self.assistant_prune_LM_head:
+        if self.assistant_prune_lm_head:
             target_logits[..., target_logits_supported_indices] = assistant_logits
         else:
             valid_assistant_logits = assistant_logits[..., : self._assistant_to_target_input_ids.shape[0]]
@@ -829,13 +835,15 @@ class AssistantVocabTranslatorCache:
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
+    @deprecate_kwarg("assistant_model_device", version="4.53")
     def get_translator(
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None,
-        assistant_prune_LM_head=True,
+        assistant_model_device: str = "cpu",
+        assistant_model: "PreTrainedModel" = None,
+        assistant_prune_lm_head=True,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
@@ -845,7 +853,7 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size, assistant_prune_LM_head
+                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size, assistant_prune_lm_head
             )
             assistant_dict[assistant_tokenizer] = mapping
 

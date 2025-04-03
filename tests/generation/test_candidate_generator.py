@@ -36,7 +36,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
             assistant_tokenizer=self.assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
 
     def test_get_assistant_to_target_input_ids(self):
@@ -131,14 +131,14 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             self.assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
         translator2 = AssistantVocabTranslatorCache.get_translator(
             self.target_tokenizer,
             self.assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
         self.assertIs(translator1, translator2, "Translators should be cached and identical")
 
@@ -149,14 +149,14 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             self.assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
         translator2 = AssistantVocabTranslatorCache.get_translator(
             self.other_target_tokenizer,
             self.other_assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
         self.assertIsNot(translator1, translator2, "Translators should differ for different tokenizers")
 
@@ -172,7 +172,7 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_vocab_size,
-            assistant_prune_LM_head=False,
+            assistant_prune_lm_head=False,
         )
         self.assertEqual(len(AssistantVocabTranslatorCache._cache), initial_cache_size + 1)
 
