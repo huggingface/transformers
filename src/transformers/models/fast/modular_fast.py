@@ -149,10 +149,10 @@ def get_box_points(rect):
 
 class FastImageProcessor(TextNetImageProcessor):
     r"""
-    min_area (`int`, *optional*, defaults to `16`):
+    min_area (`int`, *optional*, defaults to 250):
         Minimum area (in pixels) for a region to be considered a valid detection.
         Regions smaller than this threshold will be ignored during post-processing.
-    pooling_size (`int`, *optional*, defaults to `3`):
+    pooling_size (`int`, *optional*, defaults to 9):
         Size of the pooling window used during region proposal aggregation or feature map downsampling.
         This controls the granularity of spatial features extracted from the image.
     """
