@@ -249,7 +249,7 @@ def write_model(
 
     bos_token_id = 200000
     eos_token_id = [200001, 200002, 200003, 200007, 200008] if instruct else 200001
-    pad_token_id = 200008
+    pad_token_id = 200018
 
     text_config = Llama4TextConfig(
         num_attention_heads=num_heads,
