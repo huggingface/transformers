@@ -2285,7 +2285,9 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now
+            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
+            # resulting in a mask with holes (not supported properly by FA2).
             if attn_implementation == "flash_attention_2":
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
