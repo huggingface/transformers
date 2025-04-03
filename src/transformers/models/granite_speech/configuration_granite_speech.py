@@ -34,58 +34,12 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.conv_expansion_factor = conv_expansion_factor
 
 
-## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
-class GraniteSpeechProjectorConfig(PretrainedConfig):
-    model_type = "granite_speech_qformer"
-
-    def __init__(
-        self,
-        llm_dim=4096,
-        downsample_rate=5,
-        window_size=15,
-        hidden_size=1024,
-        num_attention_heads=16,
-        intermediate_size=4096,
-        num_hidden_layers=2,
-        encoder_hidden_size=1024,
-        cross_attention_frequency=1,
-        max_position_embeddings=2048,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        position_embedding_type="absolute",
-        use_qformer_text_input=False,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.cross_attention_frequency = cross_attention_frequency
-        self.encoder_hidden_size = encoder_hidden_size
-        self.use_qformer_text_input = use_qformer_text_input
-        self.downsample_rate = downsample_rate
-        self.window_size = window_size
-        self.llm_dim = llm_dim
-
-
 class GraniteSpeechConfig(PretrainedConfig):
     model_type = "granite_speech"
     sub_configs = {
         "text_config": AutoConfig,
         "encoder_config": GraniteSpeechEncoderConfig,
-        "projector_config": GraniteSpeechProjectorConfig,
+        "projector_config": AutoConfig,
     }
 
     def __init__(
@@ -96,6 +50,9 @@ class GraniteSpeechConfig(PretrainedConfig):
         audio_token_index=49155,
         initializer_range=0.02,
         has_lora_adapter=True,
+        # Extra projector stuff
+        downsample_rate=5,
+        window_size=15,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -105,10 +62,12 @@ class GraniteSpeechConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["granite"]()
 
         if isinstance(projector_config, dict):
-            # TODO - In the future, we should make this generic.
-            projector_config = GraniteSpeechProjectorConfig(**projector_config)
+            projector_config["model_type"] = (
+                projector_config["model_type"] if "model_type" in projector_config else "blip_2_qformer"
+            )
+            projector_config = CONFIG_MAPPING[projector_config["model_type"]](**projector_config)
         elif projector_config is None:
-            projector_config = GraniteSpeechProjectorConfig()
+            projector_config = CONFIG_MAPPING["blip_2_qformer"]()
 
         if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
             encoder_config = {} if encoder_config is None else encoder_config
@@ -120,7 +79,9 @@ class GraniteSpeechConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
         self.initializer_range = initializer_range
         self.has_lora_adapter = has_lora_adapter
+        self.downsample_rate = downsample_rate
+        self.window_size = window_size
         super().__init__(**kwargs)
 
 
-__all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]
+__all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechConfig"]
