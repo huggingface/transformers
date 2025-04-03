@@ -185,6 +185,7 @@ class Llama4TextConfig(PretrainedConfig):
         for_llm_compressor=False,
         attn_temperature_tuning=4,
         floor_scale=8192,
+        attn_scale=0.1,
         **kwargs,
     ):
         super().__init__(
@@ -195,6 +196,7 @@ class Llama4TextConfig(PretrainedConfig):
             **kwargs,
         )
         self.attn_temperature_tuning = attn_temperature_tuning
+        self.attn_scale = attn_scale
         self.floor_scale = floor_scale
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

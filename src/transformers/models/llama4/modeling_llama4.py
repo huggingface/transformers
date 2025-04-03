@@ -311,7 +311,7 @@ def eager_attention_forward(
 class Llama4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx):
+    def __init__(self, config: Llama4TextConfig, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -320,6 +320,7 @@ class Llama4TextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.attn_scale = config.attn_scale
         self.floor_scale = config.floor_scale
         self.attn_temperature_tuning = config.attn_temperature_tuning
         self.attention_dropout = config.attention_dropout
@@ -769,10 +770,12 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     # max len las arg
                     chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
                 else: # decoding should not use full kv cache
-                    print("DECODINNNNNG") # actual kv are much further than we think
+                    print("DECODINNNNNG")
                     def get_mask_mod(mask_mod, offset: int):
+                        
                         def _mask_mod(b, h, q, kv):
-                            return mask_mod(b, h, q + offset.to(q.device), kv + offset.to(q.device))
+                            # print(q, kv)
+                            return mask_mod(b, h, q + offset.to(q.device), kv)
 
                         return _mask_mod
 
