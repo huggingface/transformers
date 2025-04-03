@@ -768,7 +768,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 attention_chunk_size = self.config.attention_chunk_size
                 def get_mask_mod(mask_mod, offset, kv_offset=0):
                     def _mask_mod(b, h, q, kv):
-                        print(q+offset, kv+kv_offset, file=os.devnull)
+                        print(q+offset, kv+kv_offset, end="\r\r")
                         return mask_mod(b, h, q + offset, kv+kv_offset)
                     return _mask_mod
                 if sequence_length != 1: # prefill uses the full context ? not for chunked no

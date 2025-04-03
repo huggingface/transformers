@@ -115,7 +115,7 @@ def make_flex_block_causal_mask(
         See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
         for an illustration.
         """
-        causal_mask = q_idx >= kv_idx # not valid when decoding  
+        causal_mask = q_idx >= kv_idx # not valid when decoding
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
         padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
         final_mask = causal_mask & padding_mask & document_mask
