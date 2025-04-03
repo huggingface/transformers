@@ -14,18 +14,12 @@
 # limitations under the License.
 """Fast Image processor class for BiT."""
 
-from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
 )
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling
-from ...processing_utils import Unpack
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import add_start_docstrings
-
-
 
 
 @add_start_docstrings(
@@ -45,11 +39,6 @@ class BitImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = BitFastImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[BitFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
 
 
 __all__ = ["BitImageProcessorFast"]
