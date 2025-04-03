@@ -52,6 +52,9 @@ if len(result.stderr) > 0:
     elif "ERROR: not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
+    elif "ERROR: not found: " in result.stderr:
+        print("test not found in this commit")
+        exit(0)
     else:
         print(f"pytest failed to run: {{result.stderr}}")
         exit(-1)
