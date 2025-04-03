@@ -153,7 +153,7 @@ def main(args):
         raise FileNotFoundError(f"ERROR! could not find file {checkpoint_path}")
 
     # Load the model.
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
     # Load the config.
     config_megatron = checkpoint["hyper_parameters"]["cfg"]

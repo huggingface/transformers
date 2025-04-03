@@ -130,15 +130,13 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         for possible_name in ["consolidated.pth", "consolidated.00.pth"]:
             possible_path = os.path.join(input_model_path, possible_name)
             if os.path.exists(possible_path):
-                loaded = torch.load(possible_path, map_location="cpu", weights_only=True)
+                loaded = torch.load(possible_path, map_location="cpu")
                 break
         assert loaded is not None
     else:
         # Sharded
         loaded = [
-            torch.load(
-                os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu", weights_only=True
-            )
+            torch.load(os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
             for i in range(num_shards)
         ]
 
@@ -316,7 +314,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Load VQGAN weights
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
-    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu", weights_only=True)["state_dict"]
+    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
         if "decoder" in k:
             continue  # we dont do image generation yet

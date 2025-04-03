@@ -361,7 +361,7 @@ def convert_speecht5_checkpoint(
     processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
     processor.save_pretrained(pytorch_dump_folder_path)
 
-    fairseq_checkpoint = torch.load(checkpoint_path, weights_only=True)
+    fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
 
     model.save_pretrained(pytorch_dump_folder_path)

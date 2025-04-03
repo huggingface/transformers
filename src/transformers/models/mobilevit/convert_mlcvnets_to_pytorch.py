@@ -199,7 +199,7 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     config = get_mobilevit_config(mobilevit_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
 
     # load 🤗 model
     if mobilevit_name.startswith("deeplabv3_"):

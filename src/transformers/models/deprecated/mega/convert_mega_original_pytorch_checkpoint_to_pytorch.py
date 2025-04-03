@@ -132,17 +132,13 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     print(
         "Original Mega encoder:",
         original_mlm.mega.load_state_dict(
-            torch.load(
-                os.path.join(pretrained_checkpoint_path, "encoder_weights.pt"), map_location="cpu", weights_only=True
-            )
+            torch.load(os.path.join(pretrained_checkpoint_path, "encoder_weights.pt"), map_location="cpu")
         ),
     )
     print(
         "Original Mega MLM layer:",
         original_mlm.mlm_head.load_state_dict(
-            torch.load(
-                os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu", weights_only=True
-            )
+            torch.load(os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu")
         ),
     )
 
@@ -238,9 +234,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     print(
         "HF Mega MLM layer:",
         hf_mlm.mlm_head.load_state_dict(
-            torch.load(
-                os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu", weights_only=True
-            )
+            torch.load(os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu")
         ),
     )
 
