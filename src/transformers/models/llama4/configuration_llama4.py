@@ -222,7 +222,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        default_no_rope_layers = list(range(0, num_hidden_layers, no_rope_layer_interval))
+        default_no_rope_layers = list(range(no_rope_layer_interval, num_hidden_layers, no_rope_layer_interval))
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
@@ -337,7 +337,6 @@ class Llama4Config(PretrainedConfig):
         image_token_index=200092,
         **kwargs,
     ):
-        self.max_position_embeddings=4096 * 32,
         if vision_config is None:
             self.vision_config = Llama4VisionConfig()
             logger.info("vision_config is None, using default llama4 vision config")

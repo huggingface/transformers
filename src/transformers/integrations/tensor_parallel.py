@@ -199,7 +199,7 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if isinstance(inputs[0], DTensor):
-            inputs[0] = inputs[0].to_local()
+            inputs = inputs[0].to_local()
         return inputs
 
     @staticmethod
@@ -492,9 +492,9 @@ class SequenceParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         outputs = outputs.redistribute(
-            placements=(Shard(-1),), async_op=True
-        )
-        return outputs.to_local() if use_local_output else outputs
+            placements=(Replicate(),), async_op=True
+        ) # maybe we have to replicate ? because next layer is not sharded
+        return outputs.to_local() # if use_local_output else outputs
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)

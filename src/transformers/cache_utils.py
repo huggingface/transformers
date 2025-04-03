@@ -1688,12 +1688,11 @@ class HybridCache(Cache):
         ) // 8 # TODO support TP properly
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 5  # 2 is for BC
         self.is_sliding = torch.tensor(
-            [k not in config.no_rope_layers for k in range(config.num_hidden_layers)], dtype=torch.bool
+            [int((layer_id + 1) % 4 !=0)for layer_id in range(config.num_hidden_layers)]
         )
-        print(self.is_sliding.int())
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         sliding_cache_shape = (
             self.max_batch_size,
             self.num_key_value_heads,
@@ -1708,7 +1707,7 @@ class HybridCache(Cache):
                 layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
-            cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
+            cache_shape = sliding_cache_shape if self.is_sliding[i] else global_cache_shape
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1717,15 +1716,15 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        if cache_position.shape[0] > max_cache_len:
-            k_out = key_states[:, :, -max_cache_len:, :]
-            v_out = value_states[:, :, -max_cache_len:, :]
+        if key_states.shape[2] > 4096:
+            k_out = key_states[:, :, -4096:, :]
+            v_out = value_states[:, :, -4096:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
             self.key_cache[layer_idx] += k_out
             self.value_cache[layer_idx] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
-            return key_states, value_states
+            return k_out, v_out
 
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
         cache_position = cache_position.clamp(0, max_cache_len - 1)
@@ -1777,10 +1776,8 @@ class HybridCache(Cache):
         value_states = value_states.to(v_out.dtype)
 
         if self.is_sliding[layer_idx]:
-            print("sliding window:", cache_position, key_states.shape, k_out.shape)
             update_fn = self._sliding_update
         else:
-            print("no sliding:", cache_position, key_states.shape, k_out.shape)
             update_fn = self._static_update
 
         return update_fn(

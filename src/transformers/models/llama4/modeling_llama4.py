@@ -322,7 +322,7 @@ class Llama4TextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.use_rope = layer_idx not in config.no_rope_layers
+        self.use_rope = int((layer_idx + 1) % 4 !=0) #rope unused for dense layers
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -363,12 +363,17 @@ class Llama4TextAttention(nn.Module):
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
+        if self.attn_temperature_tuning and not self.use_rope:
+            attn_scales = torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
+            attn_scales = attn_scales.view((*input_shape, 1, 1))
+            query_states = query_states * attn_scales
+            
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position, "sliding_window": self.use_rope}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -394,7 +399,6 @@ class Llama4TextAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        print("out of attn layer")
         return attn_output, attn_weights
 
 
@@ -403,7 +407,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = layer_idx not in config.no_rope_layers
+        self.use_chunked_attention = int((layer_idx + 1) % 4 !=0) #<=> use rope
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -419,7 +423,7 @@ class Llama4TextDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        chunk_attention_mask: Optional[torch.Tensor] = None,
+        chunk_causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -434,9 +438,8 @@ class Llama4TextDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # use local attention mask for ROPE layers
-        if self.use_chunked_attention and chunk_attention_mask is not None:
-            attention_mask = chunk_attention_mask
-
+        if self.use_chunked_attention and chunk_causal_mask is not None:
+            attention_mask = chunk_causal_mask
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -460,7 +463,6 @@ class Llama4TextDecoderLayer(nn.Module):
         else:
             router_logits = None
         hidden_states = residual + hidden_states.view(residual.shape)
-        print(f"Out of layer {self.layer_idx}")
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -757,9 +759,30 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                # TODO I think the attention mask needs to be sliced, to know diff query key or we crop
-                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
-                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=25336)
+                torch._dynamo.config.cache_size_limit = 100000
+                cache_position = cache_position.to(self.device)
+                print("cache_position" ,cache_position)
+                if sequence_length != 1: # prefill uses the full context ? not for chunked no
+                    # max len las arg
+                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
+                else: # decoding should not use full kv cache
+                    print("DECODINNNNNG") # actual kv are much further than we think
+                    def get_mask_mod(mask_mod, offset: int):
+                        def _mask_mod(b, h, q, kv):
+                            return mask_mod(b, h, q + offset.to(q.device), kv + offset.to(q.device))
+
+                        return _mask_mod
+
+                    mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, 4096)
+                    # block_index = cache_position // mask.BLOCK_SIZE[0]
+                    # mask = mask[:,:, block_index]
+                    mask.mask_mod = get_mask_mod(mask.mask_mod, cache_position[0])
+                    mask.seq_lengths = (1, 4096)
+                    chunked_attention_mask = mask
+
+                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=past_key_values.max_cache_len)
+                if sequence_length == 1:
+                    attention_mask.mask_mod = get_mask_mod(mask.mask_mod, cache_position[0])
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
@@ -790,10 +813,12 @@ class Llama4TextModel(Llama4PreTrainedModel):
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        chunked_mask = self.create_chunked_attention_mask(
-            sequence_length, self.config.attention_chunk_size, device=device
-        )
-        chunked_attention_mask = causal_mask.masked_fill(~chunked_mask[None, None, :, :],torch.finfo(dtype).min)
+        # chunked_mask = None TODO more efficient before big xtx
+        if target_length >  self.config.attention_chunk_size:
+            chunked_mask = self.create_chunked_attention_mask(
+                target_length, self.config.attention_chunk_size, device=device
+            )
+            chunked_attention_mask = causal_mask.masked_fill(~chunked_mask[None, None, :, :],torch.finfo(dtype).min)
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
@@ -805,7 +830,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-            chunked_attention_mask = AttentionMaskConverter._unmask_unattended(chunked_attention_mask, min_dtype)
+            # chunked_attention_mask = AttentionMaskConverter._unmask_unattended(chunked_attention_mask, min_dtype)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
@@ -840,6 +865,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         token_pos = torch.arange(seq_len).unsqueeze(0) - torch.arange(seq_len).unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
+        print(mask.int())
         return mask.to(device)
 
     @staticmethod

@@ -103,7 +103,6 @@ def make_flex_block_causal_mask(
     if attention_chunk_size is not None:
         # we create an arange, then we just // by chunk size to get [000, 111, 222, 333]...
         document_ids = (document_ids.fill_(1).cumsum(-1) - 1 ) // (attention_chunk_size)
-        assert document_ids.shape == attention_mask_2d.shape
 
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
@@ -118,17 +117,17 @@ def make_flex_block_causal_mask(
         See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
         for an illustration.
         """
-        causal_mask = q_idx >= kv_idx
+        causal_mask = q_idx >= kv_idx # not valid when decoding  
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
         padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
-        final_mask = causal_mask & padding_mask
-        final_mask = final_mask & document_mask
+        final_mask = causal_mask & padding_mask & document_mask
+        print(causal_mask, final_mask)
         return final_mask
 
     return create_block_causal_mask_flex(
         mask_mod=causal_mask_mod,
-        B=batch_size,
-        H=None,  # attention head
+        B=1,
+        H=1,  # attention head
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
