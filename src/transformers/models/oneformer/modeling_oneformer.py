@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
@@ -326,7 +325,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with autocast(enabled=False):
+            with torch.amp.autocast("cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 

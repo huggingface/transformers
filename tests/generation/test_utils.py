@@ -2718,7 +2718,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 1
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2729,7 +2729,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 2
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2740,7 +2740,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 3
         input_ids = torch.randint(0, 16, (2, 12), dtype=torch.int64)
         inputs_embeds = None
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2751,7 +2751,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 4
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
         inputs_embeds = None
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
