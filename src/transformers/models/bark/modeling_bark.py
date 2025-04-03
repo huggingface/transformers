@@ -897,7 +897,7 @@ class BarkSemanticModel(BarkCausalModel):
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = super().generate(
-            torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
+            torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int, device=self.device),
             input_embeds=input_embeds,
             logits_processor=[suppress_tokens_logits_processor, early_stopping_logits_processor],
             generation_config=semantic_generation_config,
@@ -989,8 +989,8 @@ class BarkCoarseModel(BarkCausalModel):
 
         else:
             # shape: (batch_size, 0)
-            x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
-            x_coarse_history = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
+            x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int, device=self.device)
+            x_coarse_history = torch.tensor([[]] * batch_size, dtype=torch.int, device=self.device)
 
         return x_semantic_history, x_coarse_history
 
@@ -1097,7 +1097,7 @@ class BarkCoarseModel(BarkCausalModel):
             input_coarse = torch.hstack(
                 [
                     input_coarse,
-                    torch.tensor([[coarse_generation_config.coarse_infer_token]] * batch_size).to(self.device),
+                    torch.tensor([[coarse_generation_config.coarse_infer_token]] * batch_size, device=self.device),
                     x_coarse[:, -max_coarse_history:],
                 ]
             )
