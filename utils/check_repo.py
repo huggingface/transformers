@@ -142,7 +142,7 @@ IGNORE_NON_TESTED = (
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
-        "Qwen2_5OmniModel",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
+        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.

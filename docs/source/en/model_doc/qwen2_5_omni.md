@@ -155,9 +155,9 @@ The model can batch inputs composed of mixed samples of various types such as te
 
 ```python
 import soundfile as sf
-from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
+from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     torch_dtype="auto",
     device_map="auto"
@@ -267,7 +267,7 @@ If users need audio output, the system prompt must be set as "You are Qwen, a vi
 
 The model supports both text and audio outputs, if users do not need audio outputs, they can set `enable_audio_output` in the `from_pretrained` function. This option will save about `~2GB` of GPU memory but the `return_audio` option for `generate` function will only allow to be set at `False`.
 ```python
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     torch_dtype="auto",
     device_map="auto",
@@ -278,7 +278,7 @@ model = Qwen2_5OmniModel.from_pretrained(
 In order to obtain a flexible experience, we recommend that users set `enable_audio_output` at `True` when initializing the model through `from_pretrained` function, and then decide whether to return audio when `generate` function is called. When `return_audio` is set to `False`, the model will only return text outputs to get text responses faster.
 
 ```python
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     torch_dtype="auto",
     device_map="auto",
@@ -312,9 +312,9 @@ Also, you should have hardware that is compatible with FlashAttention 2. Read mo
 To load and run a model using FlashAttention-2, add `attn_implementation="flash_attention_2"` when loading the model:
 
 ```python
-from transformers import Qwen2_5OmniModel
+from transformers import Qwen2_5OmniForConditionalGeneration
 
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     device_map="auto",
     torch_dtype=torch.bfloat16,
@@ -332,9 +332,9 @@ model = Qwen2_5OmniModel.from_pretrained(
 
 [[autodoc]] Qwen2_5OmniProcessor
 
-## Qwen2_5OmniModel
+## Qwen2_5OmniForConditionalGeneration
 
-[[autodoc]] Qwen2_5OmniModel
+[[autodoc]] Qwen2_5OmniForConditionalGeneration
     - forward
 
 ## Qwen2_5OmniPreTrainedModelForConditionalGeneration

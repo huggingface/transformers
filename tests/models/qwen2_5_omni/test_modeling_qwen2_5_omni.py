@@ -26,7 +26,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    Qwen2_5OmniModel,
+    Qwen2_5OmniForConditionalGeneration,
     Qwen2_5OmniThinkerConfig,
     Qwen2_5OmniThinkerForConditionalGeneration,
     is_torch_available,
@@ -415,7 +415,9 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen2_5OmniModel.from_pretrained("Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto")
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+        )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
@@ -473,7 +475,9 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen2_5OmniModel.from_pretrained("Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto")
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+        )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text, text],
@@ -497,7 +501,9 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
-        model = Qwen2_5OmniModel.from_pretrained("Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto")
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+        )
 
         messages = [
             self.messages[0],
@@ -534,7 +540,9 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
-        model = Qwen2_5OmniModel.from_pretrained("Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto")
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+        )
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
         messages = [
@@ -566,7 +574,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = Qwen2_5OmniModel.from_pretrained(
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
