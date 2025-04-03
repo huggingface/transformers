@@ -30,15 +30,6 @@ You can find all the original ModernBERT checkpoints under the [ModernBERT](http
 
 > [!TIP]
 > Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
-- [Rotary Positional Embeddings](https://huggingface.co/blog/designing-positional-encoding) to support sequences of up to 8192 tokens.
-- [Unpadding](https://arxiv.org/abs/2208.08124) to ensure no compute is wasted on padding tokens, speeding up processing time for batches with mixed-length sequences.
-- [GeGLU](https://arxiv.org/abs/2002.05202) Replacing the original MLP layers with GeGLU layers, shown to improve performance.
-- [Alternating Attention](https://arxiv.org/abs/2004.05150v2) where most attention layers employ a sliding window of 128 tokens, with Global Attention only used every 3 layers.
-- [Flash Attention](https://github.com/Dao-AILab/flash-attention) to speed up processing.
-- A model designed following recent [The Case for Co-Designing Model Architectures with Hardware](https://arxiv.org/abs/2401.14489), ensuring maximum efficiency across inference GPUs.
-- Modern training data scales (2 trillion tokens) and mixtures (including code ande math data)
-
-The original code can be found [here](https://github.com/answerdotai/modernbert).
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
