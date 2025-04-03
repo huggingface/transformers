@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The OpenAI GPT (Generative Pre-trained Transformer) model was originally proposed in the paper "Improving Language Understanding by Generative Pre-Training" by Alec Radford, Karthik Narasimhan, Tim Salimans, and Ilya Sutskever. GPT is a causal (unidirectional) transformer pre-trained on a large corpus, utilizing the Toronto Book Corpus, and fine-tuned for a variety of NLP tasks.
+[GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
 
 The core innovation of GPT lies in its ability to generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification. The model is based on a transformer architecture and trained using the language modeling objective, followed by task-specific fine-tuning.
 
