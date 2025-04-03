@@ -663,7 +663,7 @@ class RealmEmbedderOutput(ModelOutput):
             heads.
     """
 
-    projected_score: torch.FloatTensor = None
+    projected_score: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -682,9 +682,9 @@ class RealmScorerOutput(ModelOutput):
             Candidate score derived from the embedder.
     """
 
-    relevance_score: torch.FloatTensor = None
-    query_score: torch.FloatTensor = None
-    candidate_score: torch.FloatTensor = None
+    relevance_score: Optional[torch.FloatTensor] = None
+    query_score: Optional[torch.FloatTensor] = None
+    candidate_score: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -724,13 +724,13 @@ class RealmReaderOutput(ModelOutput):
             heads.
     """
 
-    loss: torch.FloatTensor = None
-    retriever_loss: torch.FloatTensor = None
-    reader_loss: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    retriever_loss: Optional[torch.FloatTensor] = None
+    reader_loss: Optional[torch.FloatTensor] = None
     retriever_correct: torch.BoolTensor = None
     reader_correct: torch.BoolTensor = None
-    block_idx: torch.LongTensor = None
-    candidate: torch.LongTensor = None
+    block_idx: Optional[torch.LongTensor] = None
+    candidate: Optional[torch.LongTensor] = None
     start_pos: torch.int32 = None
     end_pos: torch.int32 = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -751,7 +751,7 @@ class RealmForOpenQAOutput(ModelOutput):
     """
 
     reader_output: dict = None
-    predicted_answer_ids: torch.LongTensor = None
+    predicted_answer_ids: Optional[torch.LongTensor] = None
 
 
 class RealmPredictionHeadTransform(nn.Module):

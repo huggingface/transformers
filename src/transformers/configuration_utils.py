@@ -17,7 +17,6 @@
 import copy
 import json
 import os
-import re
 import warnings
 from typing import Any, Optional, Union
 
@@ -43,8 +42,6 @@ from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
-
-_re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -1160,9 +1157,8 @@ def get_configuration_file(configuration_files: list[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
-        search = _re_configuration_file.search(file_name)
-        if search is not None:
-            v = search.groups()[0]
+        if file_name.startswith("config.") and file_name.endswith(".json") and file_name != "config.json":
+            v = file_name.removeprefix("config.").removesuffix(".json")
             configuration_files_map[v] = file_name
     available_versions = sorted(configuration_files_map.keys())
 

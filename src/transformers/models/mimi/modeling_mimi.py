@@ -75,8 +75,8 @@ class MimiOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_codes: torch.LongTensor = None
-    audio_values: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
     encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
@@ -97,7 +97,7 @@ class MimiEncoderOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_codes: torch.LongTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
     encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
@@ -117,7 +117,7 @@ class MimiDecoderOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
@@ -897,7 +897,7 @@ class MimiTransformerModel(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.LongTensor = None,
+        hidden_states: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1599,7 +1599,7 @@ class MimiModel(MimiPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        padding_mask: torch.Tensor = None,
+        padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
         encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
