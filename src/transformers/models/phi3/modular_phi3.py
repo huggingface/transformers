@@ -24,6 +24,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -268,10 +269,9 @@ class Phi3RotaryEmbedding(MistralRotaryEmbedding):
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
 
     @torch.no_grad()
+    @dynamic_rope_update
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-        elif self.rope_type == "longrope":
+        if self.rope_type == "longrope":
             self._longrope_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
