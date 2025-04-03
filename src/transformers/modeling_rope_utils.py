@@ -30,7 +30,14 @@ if is_torch_available():
 def dynamic_rope_update(rope_forward):
     """
     Decorator function to update the RoPE parameters in the forward pass, if the model is using a dynamic RoPE
-    (i.e. a RoPE implementation that may recompute its frequencies at inference time).
+    (i.e. a RoPE implementation that may recompute its frequencies in the forward pass).
+
+    Args:
+        rope_forward (Callable):
+            The forward pass of the RoPE implementation.
+
+    Returns:
+        The decorated forward pass.
     """
 
     def longrope_frequency_update(self, position_ids, device):
