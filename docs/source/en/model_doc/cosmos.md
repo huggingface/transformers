@@ -20,7 +20,6 @@ rendered properly in your Markdown viewer.
 
 The Cosmos model was proposed in [Cosmos World Foundation Model Platform for Physical AI](https://arxiv.org/abs/2501.03575) by Niket Agarwal, Arslan Ali, Maciej Bala, Yogesh Balaji, Erik Barker, Tiffany Cai, Prithvijit Chattopadhyay, Yongxin Chen, Yin Cui, Yifan Ding, Daniel Dworakowski, Jiaojiao Fan, Michele Fenzi, Francesco Ferroni, Sanja Fidler, Dieter Fox, Songwei Ge, Yunhao Ge, Jinwei Gu, Siddharth Gururani, Ethan He, Jiahui Huang, Jacob Huffman, Pooya Jannaty, Jingyi Jin, Seung Wook Kim, Gergely Klár, Grace Lam, Shiyi Lan, Laura Leal-Taixe, Anqi Li, Zhaoshuo Li, Chen-Hsuan Lin, Tsung-Yi Lin, Huan Ling, Ming-Yu Liu, Xian Liu, Alice Luo, Qianli Ma, Hanzi Mao, Kaichun Mo, Arsalan Mousavian, Seungjun Nah, Sriharsha Niverty, David Page, Despoina Paschalidou, Zeeshan Patel, Lindsey Pavao, Morteza Ramezanali, Fitsum Reda, Xiaowei Ren, Vasanth Rao Naik Sabavat, Ed Schmerling, Stella Shi, Bartosz Stefaniak, Shitao Tang, Lyne Tchapmi, Przemek Tredak, Wei-Cheng Tseng, Jibin Varghese, Hao Wang, Haoxiang Wang, Heng Wang, Ting-Chun Wang, Fangyin Wei, Xinyue Wei, Jay Zhangjie Wu, Jiashu Xu, Wei Yang, Lin Yen-Chen, Xiaohui Zeng, Yu Zeng, Jing Zhang, Qinsheng Zhang, Yuxuan Zhang, Qingqing Zhao, Artur Zolkowski.
 
-<INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
@@ -43,7 +42,7 @@ model_id = "NVIDIA/Cosmos-5B-hf"
 proc = CosmosProcessor.from_pretrained(model_id)
 model = CosmosForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype={"text_config": "bfloat16", "vq_config": "bfloat16", "": "bfloat16", "prompt_encoder": "float32"},
+    torch_dtype={"text_config": "bfloat16", "vq_config": "bfloat16", "": "bfloat16", "prompt_encoder_config": "float32"},
     low_cpu_mem_usage=True
 ).to("cuda:0")
 
