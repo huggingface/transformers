@@ -97,7 +97,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
         projector_config={
             "attention_probs_dropout_prob": 0.1,
             "cross_attention_frequency": 1,
-            "downsample_rate": 5,
             "encoder_hidden_size": 32,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
@@ -105,24 +104,23 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "initializer_range": 0.02,
             "intermediate_size": 256,
             "layer_norm_eps": 1e-12,
-            "llm_dim": 32,
             "max_position_embeddings": 2048,
-            "model_type": "granite_speech_qformer",
+            "model_type": "blip_2_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
-            "window_size": 15,
         },
         audio_token_index=0,
         tie_word_embeddings=True,
         initializer_range=0.02,
         has_lora_adapter=True,
+        downsample_rate=5,
+        window_size=15,
         is_training=True,
     ):
         self.parent = parent
-        self.projector_config = None
         self.encoder_config = encoder_config
         self.text_config = text_config
         self.projector_config = projector_config
@@ -130,6 +128,8 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.initializer_range = initializer_range
         self.has_lora_adapater = has_lora_adapter
+        self.downsample_rate = downsample_rate
+        self.window_size = window_size
         self.is_training = is_training
 
         # Dims for audio features
