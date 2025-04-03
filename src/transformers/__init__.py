@@ -3450,6 +3450,8 @@ else:
         [
             "ColQwen2ForRetrieval",
             "ColQwen2PreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen3"].extend(
         [
             "Qwen3ForCausalLM",
