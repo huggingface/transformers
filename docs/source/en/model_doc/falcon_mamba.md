@@ -66,7 +66,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 input_ids = tokenizer("Explain the difference between transformers and SSMs", return_tensors="pt").to("cuda")
 
-output = model.generate(**input_ids, max_new_tokens=100)
+output = model.generate(**input_ids, max_new_tokens=100, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
