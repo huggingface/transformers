@@ -14,7 +14,7 @@
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
 
-from typing import Dict
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -459,8 +459,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
 
     def __init__(
         self,
-        model_config: Dict = None,
-        vocoder_config: Dict = None,
+        model_config: Optional[Dict] = None,
+        vocoder_config: Optional[Dict] = None,
         **kwargs,
     ):
         if model_config is None:

@@ -353,7 +353,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_affine_transform: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -425,7 +425,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         images: ImageInput,
         boxes: Union[List[List[float]], np.ndarray],
         do_affine_transform: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
