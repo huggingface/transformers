@@ -113,7 +113,7 @@ from transformers import AutoModelForCausalLM, CodeLlamaTokenizer, BitsAndBytesC
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
 model = AutoModelForCausalLM.from_pretrained(
-   "meta-llama/CodeLlama-34b-hf,
+   "meta-llama/CodeLlama-34b-hf",
    torch_dtype=torch.bfloat16,
    device_map="auto",
    quantization_config=bnb_config
