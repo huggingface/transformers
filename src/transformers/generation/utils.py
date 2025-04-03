@@ -4875,7 +4875,6 @@ class GenerationMixin:
         attention_mask = model_kwargs.pop("attention_mask", None)
         
         past_length = 0
-        # Only prefill up to the 
         for input_chunk in input_chunks:
             current_length = past_length + input_chunk.shape[-1]
             # Prepare inputs
