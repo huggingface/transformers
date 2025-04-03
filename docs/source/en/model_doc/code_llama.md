@@ -103,23 +103,20 @@ echo -e "# Function to calculate the factorial of a number\ndef factorial(n):" |
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
 # pip install bitsandbytes
 import torch
 from transformers import AutoModelForCausalLM, CodeLlamaTokenizer, BitsAndBytesConfig
 
-bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16,...)
+bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/CodeLlama-34b-hf",
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True
+   "meta-llama/CodeLlama-34b-hf,
+   torch_dtype=torch.bfloat16,
+   device_map="auto",
+   quantization_config=bnb_config
 )
 
 prompt = "# Write a Python function to check if a string is a palindrome\ndef is_palindrome(s):"
@@ -147,8 +144,23 @@ visualizer("""def func(a, b):
 
 - Infilling is only available in the 7B and 13B base models, and not in the Python, Instruct, 34B, or 70B models.
 - Use the `<FILL_ME>` token where you want your input to be filled. The tokenizer splits this token to create a formatted input string that follows the [original training pattern](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402). This is more robust than preparing the pattern yourself.
+```py
+from transformers import LlamaForCausalLM, CodeLlamaTokenizer
+
+tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
+model = LlamaForCausalLM.from_pretrained("meta-llama/CodeLlama-7b-hf")
+PROMPT = '''def remove_non_ascii(s: str) -> str:
+    """ <FILL_ME>
+    return result
+'''
+input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
+generated_ids = model.generate(input_ids, max_new_tokens=128)
+
+filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens = True)[0]
+print(PROMPT.replace("<FILL_ME>", filling))
+```
 - Use `bfloat16` for further training or fine-tuning and `float16` for inference.
-- The BOS character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
+- The `BOS` character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, “Banana”), the tokenizer doesn’t prepend the prefix space to the string.
 
 ## CodeLlamaTokenizer
