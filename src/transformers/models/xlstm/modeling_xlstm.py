@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...generation import GenerationMixin
+from ...generation.configuration_utils import xLSTMCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -728,13 +729,9 @@ else:
         DHHV = v.shape[-1]
 
         c_state = (
-            c_initial
-            if c_initial is not None
-            else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
+            c_initial if c_initial is not None else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
         )
-        n_state = (
-            n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
-        )
+        n_state = n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
         m_state = m_initial if m_initial is not None else torch.zeros(B, NH, 1, device=k.device, dtype=torch.float32)
 
         if S > 1:
@@ -1362,51 +1359,6 @@ else:
 
 _CHECKPOINT_FOR_DOC = "NX-AI/xLSTM-7b"
 _CONFIG_FOR_DOC = "xLSTMConfig"
-
-
-class xLSTMCache:
-    """
-    Cache / RNN State handler for xLSTM.
-
-    Args:
-        config: xLSTMConfig
-        batch_size: int
-        dtype: torch.dtype
-        device: torch.device
-
-    Attributes:
-        seqlen_offset: int
-        dtype: torch.dtype
-    """
-
-    def __init__(
-        self, config: xLSTMConfig, batch_size: int, dtype: torch.dtype = torch.bfloat16, device: Optional[str] = None
-    ):
-        self.seqlen_offset = torch.tensor(0, dtype=torch.int64, device=device)
-        self.dtype = dtype
-        self.config = config
-        self.rnn_state: mLSTMStateType = {
-            layer: (
-                torch.zeros(
-                    [batch_size, config.num_heads, config.qk_head_dim, config.v_head_dim], dtype=dtype, device=device
-                ),
-                torch.zeros([batch_size, config.num_heads, config.qk_head_dim], dtype=dtype, device=device),
-                torch.zeros([batch_size, config.num_heads, 1], dtype=dtype, device=device),
-            )
-            for layer in range(config.num_blocks)
-        }
-        self.rnn_state_initial = True
-
-    def reset(self):
-        self.rnn_state = {
-            layer: (
-                torch.zeros_like(self.rnn_state[layer][0]),
-                torch.zeros_like(self.rnn_state[layer][1]),
-                torch.zeros_like(self.rnn_state[layer][2]),
-            )
-            for layer in self.rnn_state
-        }
-        self.rnn_state_initial = True
 
 
 class xLSTMPreTrainedModel(PreTrainedModel):
