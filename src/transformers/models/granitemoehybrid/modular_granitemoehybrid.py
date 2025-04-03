@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from transformers import DynamicCache
 
 from ...cache_utils import Cache
+from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
@@ -62,10 +63,10 @@ class GraniteMultiHeadLatentAttention(nn.Module):
                 self.key_value_compression_size, self.hidden_size, bias=False
             )
         self.c_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        # TO DO the softmax_dropout
-        self.softmax_dropout_p = config.softmax_dropout
-        self.softmax_dropout = nn.Identity() if config.softmax_dropout == 0 else nn.Dropout(config.softmax_dropout)
-        self.dropout = nn.Identity() if config.dropout == 0 else nn.Dropout(config.dropout)
+        # TO confirm the softmax_dropout and dropout variable names
+        self.softmax_dropout_p = config.mla_softmax_dropout
+        self.softmax_dropout = nn.Identity() if config.mla_softmax_dropout == 0 else nn.Dropout(config.mla_softmax_dropout)
+        self.dropout = nn.Identity() if config.mla_dropout == 0 else nn.Dropout(config.mla_dropout)
     
     def forward(self,  hidden_states: torch.Tensor,
         past_key_values: DynamicCache | None = None,
@@ -124,15 +125,15 @@ class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig):
         # TO DO map variables here
         super().__init__(
-
+            BambaConfig(config)
         )
 
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
-        self.mla = GraniteMultiHeadLatentAttention(config, layer_idx)
-        self.mamba_layer = GraniteMoeHybridMambaLayer(config)
+        # to do later on add error handling for not found here 
+        self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx) if config.layer_types[layer_idx] == "mla" else GraniteMoeHybridMambaLayer(config)
 
     def forward(
         self,
@@ -178,7 +179,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
         # For Mayank - is this correct? where do I add bamba layer in decoder?
         # Multi Head Latent Attention
-        hidden_states, self_attn_weights, present_key_value = self.mla(
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -195,6 +196,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
+        # moe not needed?
         moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
         if self.shared_mlp is None:

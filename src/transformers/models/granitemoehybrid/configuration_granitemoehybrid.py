@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GraniteMoeHybrid model configuration"""
+from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -141,8 +142,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        # didnt find this attention_dropout in dolomite config. Is it needed?
-        attention_dropout=0.0,
         embedding_multiplier=1.0,
         logits_scaling=1.0,
         residual_multiplier=1.0,
@@ -156,6 +155,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         normalization_function=None,
         position_embedding_type="nope",
         init_method="mup",
+        layer_types=List,
         # took defaults from bamba config
         mamba_n_heads=128,
         mamba_n_groups=1,
@@ -166,6 +166,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         # confirm this variable if needed or not
         mamba_proj_bias=False,
         # mla variables
+        mla_dropout = 0,
+        # rename attention_dropout to mla_softmax_dropout
+        mla_softmax_dropout=0.0,
         mla_query_comp_size = 384,
         mla_key_value_comp_size = 96,
         # does mla add_bias need to be considered?
@@ -189,10 +192,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-
         self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
         self.embedding_multiplier = embedding_multiplier
         self.logits_scaling = logits_scaling
         self.residual_multiplier = residual_multiplier
@@ -209,6 +209,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.init_method = init_method
 
+        self.layer_types = layer_types
         #mamba2 variables
         self.mamba_num_heads = mamba_n_heads
         self.mamba_n_groups = mamba_n_groups
@@ -220,6 +221,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         self.mla_query_comp_size = mla_query_comp_size
         self.mla_key_value_comp_size = mla_key_value_comp_size
+        self.mla_dropout = mla_dropout
+        self.mla_softmax_dropout = mla_softmax_dropout
 
         super().__init__(
             pad_token_id=pad_token_id,
