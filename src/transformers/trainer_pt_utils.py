@@ -40,12 +40,16 @@ from torch.utils.data.distributed import DistributedSampler
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
+    is_accelerate_available,
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_xla_available,
     is_training_run_on_sagemaker,
     logging,
 )
+
+if is_accelerate_available():
+    from accelerate.utils import FullyShardedDataParallelPlugin, TorchDynamoPlugin
 
 
 if is_training_run_on_sagemaker():
@@ -1312,6 +1316,27 @@ class AcceleratorConfig:
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
     )
+    mixed_precision: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The mixed precision policy to use. If not set, the policy will be determined by the `ACCELERATE_MIXED_PRECISION` environment variable. "
+            "Should not be passed in through a config file (unless it's the one called during `accelerate launch --config_file`)."
+        },
+    )
+    dynamo_plugin: Optional["TorchDynamoPlugin"] = field(
+        default=None,
+        metadata={
+            "help": "The dynamo config to use. If not set, the config will be determined by the `ACCELERATE_DYNAMO_CONFIG` environment variable. "
+            "Should not be passed in through a config file (unless it's the one called during `accelerate launch --config_file`)."
+        },
+    )
+    fsdp_plugin: Optional["FullyShardedDataParallelPlugin"] = field(
+        default=None,
+        metadata={
+            "help": "The FSDP config to use. If not set, the config will be determined by the `ACCELERATE_FSDP_CONFIG` environment variable. "
+            "Should not be passed in through a config file (unless it's the one called during `accelerate launch --config_file`)."
+        },
+    )
     use_configured_state: bool = field(
         default=False,
         metadata={
@@ -1333,6 +1358,11 @@ class AcceleratorConfig:
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
                 " version or fix (and potentially remove these keys) from your config file."
             )
+        # Check for fields that should not be set in the config file
+        invalid_fields = ["mixed_precision", "dynamo_plugin", "fsdp_plugin"]
+        for field in invalid_fields:
+            if config_dict.get(field) is not None:
+                raise ValueError(f"The field `{field}` should not be set in the config file.")
         return cls(**config_dict)
 
     def to_dict(self):
