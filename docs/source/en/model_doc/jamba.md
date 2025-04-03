@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 Jamba's architecture features a blocks-and-layers approach that allows Jamba to successfully integrate Transformer and Mamba architectures altogether. Each Jamba block contains either an attention or a Mamba layer, followed by a multi-layer perceptron (MLP), producing an overall ratio of one Transformer layer out of every eight total layers. MoE layers are mixed in to increase model capacity.
 
 You can find all the original Jamba checkpoints under the [AI21](https://huggingface.co/ai21labs) organization.
-alt="drawing" width="600"/>
 
 > [!TIP]
 > Click on the Jamba models in the right sidebar for more examples of how to apply Jamba to different language tasks.
@@ -38,7 +37,6 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```py
-# !pip install -U flash-attn --no-build-isolation
 # install optimized Mamba implementations
 # !pip install mamba-ssm causal-conv1d>=1.2.0
 import torch
@@ -57,6 +55,7 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```py
+# !pip install -U flash-attn --no-build-isolation
 import torch
 from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
 
@@ -95,7 +94,7 @@ print(assistant_response)
 <hfoption id="transformers-cli">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --device 0
 ```
 
 </hfoption>
