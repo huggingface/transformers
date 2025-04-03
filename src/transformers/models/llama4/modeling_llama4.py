@@ -372,7 +372,7 @@ class Llama4TextAttention(nn.Module):
             attn_scales = torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
             attn_scales = attn_scales.view((*input_shape, 1, 1))
             query_states = (query_states * attn_scales).to(query_states.dtype)
-            
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
 
@@ -768,33 +768,34 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if isinstance(attention_mask, torch.Tensor):
                 torch._dynamo.config.cache_size_limit = 100000
                 cache_position = cache_position.to(self.device)
+                attention_chunk_size = self.config.attention_chunk_size
+                def get_mask_mod(mask_mod, offset, kv_offset=0):
+                    def _mask_mod(b, h, q, kv):
+                        print(q+offset, kv+kv_offset, end="\r\r")
+                        return mask_mod(b, h, q + offset, kv+kv_offset)
+                    return _mask_mod
                 if sequence_length != 1: # prefill uses the full context ? not for chunked no
                     # max len las arg
-                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, 4096)
+                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, sequence_length)
+                    # since we always slice the cache, because at no point you need the full mask
+                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, 0,0)
                 else: # decoding should not use full kv cache
-                    # print("DECODINNNNNG")
-                    def get_mask_mod(mask_mod, offset: int):
-                        
-                        def _mask_mod(b, h, q, kv):
-                            # print(q, kv)
-                            return mask_mod(b, h, q + offset.to(q.device), kv)
+                    cache_position = cache_position[0].item()
 
-                        return _mask_mod
 
-                    mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, 4096)
+                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, attention_chunk_size)
                     # block_index = cache_position // mask.BLOCK_SIZE[0]
                     # mask = mask[:,:, block_index]
-                    mask.mask_mod = get_mask_mod(mask.mask_mod, cache_position[0])
-                    mask.seq_lengths = (1, 4096)
-                    chunked_attention_mask = mask
+                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position,  kv_offset=cache_position-attention_chunk_size)
+                    chunked_attention_mask.seq_lengths = (1, attention_chunk_size)
 
                 attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=past_key_values.max_cache_len)
                 if sequence_length == 1:
-                    attention_mask.mask_mod = get_mask_mod(mask.mask_mod, cache_position[0])
+                    attention_mask.mask_mod = get_mask_mod(attention_mask.mask_mod, cache_position)
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
-            
+
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
@@ -858,6 +859,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            chunked_attention_mask = chunked_attention_mask.bool()
+            causal_mask = causal_mask.bool()
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,

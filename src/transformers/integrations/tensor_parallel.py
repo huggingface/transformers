@@ -507,7 +507,7 @@ class SequenceParallel(TensorParallelLayer):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
         return nn.Parameter(parameter)
-    
+
 SUPPORTED_TP_STYLES = {
     "colwise",
     "rowwise",

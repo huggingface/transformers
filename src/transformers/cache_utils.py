@@ -1668,6 +1668,7 @@ class HybridCache(Cache):
     ) -> None:
         super().__init__()
         config.sliding_window = 8192 // 2
+        self.attention_chunk_size = 8192
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -1675,7 +1676,6 @@ class HybridCache(Cache):
                 "config and it's not set to None."
             )
         self.max_cache_len = max_cache_len
-        print("MAC CACHE LEN", self.max_cache_len)
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
@@ -1696,7 +1696,7 @@ class HybridCache(Cache):
         sliding_cache_shape = (
             self.max_batch_size,
             self.num_key_value_heads,
-            min(config.sliding_window, max_cache_len),
+            self.attention_chunk_size,
             self.head_dim,
         )
         device = torch.device(device) if device is not None and isinstance(device, str) else None
@@ -1716,15 +1716,15 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        if key_states.shape[2] > 4096:
-            k_out = key_states[:, :, -4096:, :]
-            v_out = value_states[:, :, -4096:, :]
+        if key_states.shape[2] > self.attention_chunk_size:
+            k_out = key_states[:, :, -self.attention_chunk_size:, :]
+            v_out = value_states[:, :, -self.attention_chunk_size:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
             self.key_cache[layer_idx] += k_out
             self.value_cache[layer_idx] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
-            return k_out, v_out
+            return key_states, value_states
 
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
         cache_position = cache_position.clamp(0, max_cache_len - 1)
