@@ -886,6 +886,7 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1070,17 +1071,18 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin
+# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    # Ignore copy
-    def __init__(self, config: DonutSwinConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
         self.donut = DonutSwinModel(config)
 
         # Classifier head
-        self.classifier = nn.Linear(self.donut.num_features, self.num_labels) if self.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(self.donut.num_features, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
