@@ -3406,7 +3406,7 @@ class GenerationMixin:
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:
-            input_ids, model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
+            model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
             is_prefill = False
         else:
             is_prefill = True
@@ -4892,7 +4892,7 @@ class GenerationMixin:
         model_kwargs["attention_mask"] = attention_mask
         model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
 
-        return input_ids[:, -1:], model_kwargs
+        return model_kwargs
 
 
 
