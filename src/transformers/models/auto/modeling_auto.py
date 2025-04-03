@@ -549,6 +549,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("jetmoe", "JetMoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),
         ("llama4", "Llama4ForCausalLM"),
+        ("llama4_text", "Llama4ForCausalLM"),
         ("mamba", "MambaForCausalLM"),
         ("mamba2", "Mamba2ForCausalLM"),
         ("marian", "MarianForCausalLM"),
@@ -1705,7 +1706,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
                 "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",
                 FutureWarning,
             )
-        return config
+        return text_config
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
