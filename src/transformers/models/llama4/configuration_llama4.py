@@ -335,6 +335,7 @@ class Llama4Config(PretrainedConfig):
         boi_token_index=200080,
         eoi_token_index=200081,
         image_token_index=200092,
+        tie_word_embeddings = False,
         **kwargs,
     ):
         if vision_config is None:
@@ -357,7 +358,7 @@ class Llama4Config(PretrainedConfig):
         elif isinstance(text_config, Llama4TextConfig):
             self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]
