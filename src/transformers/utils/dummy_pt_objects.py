@@ -6526,14 +6526,14 @@ class MllamaVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MLPSpeculatorPreTrainedModel(metaclass=DummyObject):
+class MLPSpeculator(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MLPSpeculator(metaclass=DummyObject):
+class MLPSpeculatorPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

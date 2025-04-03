@@ -16,7 +16,7 @@ class MLPSpeculatorConfig(PretrainedConfig):
         n_candidates: int = 5,
         tie_weights: bool = False,
         scale_input: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize an MLPSpeculatorConfig

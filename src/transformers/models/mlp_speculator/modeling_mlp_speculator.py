@@ -48,7 +48,6 @@ class MLPSpeculatorLayerNorm(nn.Module):
         return x
 
 
-
 class MLPSpeculator(nn.Module):
     """
     This is a simple MLP-based speculator that functions similarly to Medusa
@@ -85,15 +84,12 @@ class MLPSpeculator(nn.Module):
         self.config = config
         self.n_predict = config.n_predict
         self.emb_dim = config.emb_dim
-        self.inner_dim = config.inner_dim if config.inner_dim != 0 \
-            else config.emb_dim
+        self.inner_dim = config.inner_dim if config.inner_dim != 0 else config.emb_dim
         self.vocab_size = config.vocab_size
         self.tie_weights = config.tie_weights
         self.scale_input = config.scale_input
 
-        self.emb = nn.ModuleList(
-            [nn.Embedding(self.vocab_size, self.inner_dim) for _ in range(self.n_predict)]
-        )
+        self.emb = nn.ModuleList([nn.Embedding(self.vocab_size, self.inner_dim) for _ in range(self.n_predict)])
         self.proj = nn.ModuleList(
             [
                 nn.Linear((self.emb_dim if i == 0 else self.inner_dim), self.inner_dim, bias=False)
@@ -104,19 +100,10 @@ class MLPSpeculator(nn.Module):
             [nn.Linear(self.inner_dim, self.vocab_size, bias=False) for _ in range(self.n_predict)]
         )
         self.ln = nn.ModuleList(
-            [
-                MLPSpeculatorLayerNorm(
-                    self.inner_dim,
-                    elementwise_scale_and_shift=True
-                )
-                for _ in range(self.n_predict)
-            ]
+            [MLPSpeculatorLayerNorm(self.inner_dim, elementwise_scale_and_shift=True) for _ in range(self.n_predict)]
         )
         if self.scale_input:
-            self.ln0 = MLPSpeculatorLayerNorm(
-                self.emb_dim,
-                elementwise_scale_and_shift=False
-            )
+            self.ln0 = MLPSpeculatorLayerNorm(self.emb_dim, elementwise_scale_and_shift=False)
         # Weights ensure that state_0 accounts for 50% of state magnitude by final head in expectation
         self.state_weight = 0.5 ** (0.5 / self.n_predict)
         self.emb_weight = math.sqrt((1 - self.state_weight**2) * (self.inner_dim / 2))
@@ -124,9 +111,7 @@ class MLPSpeculator(nn.Module):
 
         # Handle weight tying as specified
         if self.tie_weights:
-            assert (
-                self.n_predict > 1
-            ), "You cannot tie weights between stages when only 1 exists"
+            assert self.n_predict > 1, "You cannot tie weights between stages when only 1 exists"
             for emb in self.emb:
                 emb.weight = self.emb[0].weight
 
@@ -141,7 +126,6 @@ class MLPSpeculator(nn.Module):
             for i in range(2, self.n_predict):
                 self.proj[i].weight = self.proj[1].weight
 
-
     def reset_parameters(self):
         for m in self.modules():
             if isinstance(m, nn.Embedding) or isinstance(m, nn.Linear):
@@ -149,7 +133,6 @@ class MLPSpeculator(nn.Module):
             elif isinstance(m, MLPSpeculatorLayerNorm) and hasattr(m, "weight"):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-
 
     def generate_suffixes(
         self,
@@ -184,13 +167,11 @@ class MLPSpeculator(nn.Module):
         # h indicates # of generated tokens
         b = state.size(0)
         k = math.prod(topk)
-        out = torch.empty(
-            b, 1, k, self.n_predict, device=state.device
-        ).int()  # b 1 k h -> b k 1 h
+        out = torch.empty(b, 1, k, self.n_predict, device=state.device).int()  # b 1 k h -> b k 1 h
         log_probs = torch.zeros(b, 1, k, device=state.device)  # b 1 k -> b k 1
-        assert (
-            len(topk) == self.n_predict
-        ), f"You must provide a topk number for each head ({self.n_predict} heads, {len(topk)} provided)"
+        assert len(topk) == self.n_predict, (
+            f"You must provide a topk number for each head ({self.n_predict} heads, {len(topk)} provided)"
+        )
         if self.scale_input:
             state = self.ln0(state) / (2**0.5)
         for i in range(self.n_predict):
@@ -220,9 +201,7 @@ class MLPSpeculator(nn.Module):
         out = out.view(b, k, self.n_predict)
         log_probs = log_probs.view(b, k)
         best_guesses = log_probs.topk(n, dim=1)[1]  # b k
-        return out.gather(
-            1, best_guesses.unsqueeze(2).expand(-1, -1, self.n_predict)
-        )  # b n h
+        return out.gather(1, best_guesses.unsqueeze(2).expand(-1, -1, self.n_predict))  # b n h
 
     def forward(
         self,
@@ -265,7 +244,6 @@ class MLPSpeculator(nn.Module):
         return torch.stack(out, dim=0)  # h b n v
 
 
-
 class MLPSpeculatorPreTrainedModel(PreTrainedModel):
     """
     Huggingface MLPSpeculator which provides loading/saving in huggingface
@@ -274,9 +252,7 @@ class MLPSpeculatorPreTrainedModel(PreTrainedModel):
     config_class = MLPSpeculatorConfig
     _no_split_modules = ["MLPSpeculator"]
 
-    def __init__(
-        self, config: MLPSpeculatorConfig, speculator: Optional[MLPSpeculator] = None
-    ):
+    def __init__(self, config: MLPSpeculatorConfig, speculator: Optional[MLPSpeculator] = None):
         super().__init__(config)
         if speculator is None:
             self.speculator = MLPSpeculator(config)
@@ -345,4 +321,3 @@ class MLPSpeculatorPreTrainedModel(PreTrainedModel):
 
     def reset_parameters(self):
         self.speculator.reset_parameters()
-

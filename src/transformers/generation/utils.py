@@ -960,7 +960,7 @@ class GenerationMixin:
                 max_matching_ngram_size=generation_config.max_matching_ngram_size,
                 max_length=generation_config.max_length,
             )
-        elif 'MLPSpeculatorPreTrainedModel' in assistant_model.config.architectures:
+        elif "MLPSpeculatorPreTrainedModel" in assistant_model.config.architectures:
             candidate_generator = MLPSpeculatorCandidateGenerator(
                 assistant_model=assistant_model,
                 generation_config=generation_config,
@@ -4770,7 +4770,8 @@ class GenerationMixin:
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(
-                    input_ids, new_logits, n_matches, model_outputs=outputs, valid_tokens=valid_tokens)
+                input_ids, new_logits, n_matches, model_outputs=outputs, valid_tokens=valid_tokens
+            )
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
