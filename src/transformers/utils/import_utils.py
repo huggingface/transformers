@@ -1034,12 +1034,17 @@ def is_flash_attn_2_available():
         return False
 
     flash_attn_version = importlib.metadata.version("flash_attn")
-    if torch.version.cuda and not version.parse(flash_attn_version) >= version.parse("2.1.0"):
-        return False
-    elif torch.version.hip and not version.parse(flash_attn_version) >= version.parse("2.0.4"):
+    if torch.version.cuda:
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.1.0")
+    elif torch.version.hip:
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.0.4")
         # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return False
-    elif is_torch_mlu_available() and not version.parse(flash_attn_version) >= version.parse("2.3.3"):
+    elif is_torch_mlu_available():
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.3.3")
+    else:
+        is_compatible = False
+
+    if not is_compatible:
         return False
 
     # finally try import flash_attn
