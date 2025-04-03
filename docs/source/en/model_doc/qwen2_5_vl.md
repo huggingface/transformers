@@ -92,7 +92,6 @@ messages = [
 
 ]
 
-image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw)
 inputs = processor.apply_chat_template(
     messages,
     add_generation_prompt=True,
