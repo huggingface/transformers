@@ -1170,6 +1170,10 @@ class T5ModelFp16Tests(unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class T5ModelIntegrationTests(unittest.TestCase):
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        torch.cuda.empty_cache()
+
     @cached_property
     def model(self):
         return T5ForConditionalGeneration.from_pretrained("google-t5/t5-base").to(torch_device)

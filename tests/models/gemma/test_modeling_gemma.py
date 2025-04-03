@@ -498,6 +498,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        torch.cuda.empty_cache()
+
     @require_read_token
     def test_model_2b_fp16(self):
         model_id = "google/gemma-2b"
