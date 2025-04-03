@@ -16,9 +16,8 @@
 """
 Processor class for Qwen2.5Omni.
 """
-
-import logging
 import re
+import logging
 from typing import List, Optional, Union
 
 import torch
@@ -181,6 +180,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         video_index = 0
 
         for i in range(len(text)):
+            positions = []
             special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
             pattern = "|".join(special_tokens)
             positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, text[i])])
