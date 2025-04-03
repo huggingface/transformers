@@ -146,6 +146,12 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.up_proj": "local_colwise",
         "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward": "gather",
+        "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
+        "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
+        "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
+        "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
+        "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+        # "layers.*.feed_forward.experts.*.down_proj.weight_scale": "local_rowwise",
     }
 
     def __init__(

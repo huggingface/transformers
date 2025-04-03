@@ -56,9 +56,9 @@ class FbgemmFp8Linear(torch.nn.Linear):
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
 
         # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
-        self.weight_scale = self.weight_scale.to(torch.float32)
+        weight_scale_float32 = self.weight_scale.to(torch.float32)
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
-            x_quantized, self.weight, x_scale, self.weight_scale, use_fast_accum=True
+            x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
         )   
         output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
@@ -77,11 +77,11 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.expert_dim = self.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         # Register FP8 buffers for gate_up_proj
-        self.gate_up_proj = torch.nn.Parameter(torch.zeros((self.num_experts, 2 * self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
-        self.gate_up_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.expert_dim, 2), dtype=dtype))
+        self.gate_up_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 2 * self.expert_dim), dtype=torch.float8_e4m3fn))
+        self.gate_up_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, 1, self.expert_dim * 2), dtype=torch.float32))
         # Register FP8 buffers for down_proj
-        self.down_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, self.expert_dim), dtype=torch.float8_e4m3fn))
-        self.down_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 1), dtype=dtype))
+        self.down_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
+        self.down_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32))
         # Register input scale upper bound
         self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
 
@@ -96,7 +96,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         # Reshape hidden states for expert computation
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
-
+        
         next_states = []
         for i in range(self.num_experts):
             # Extract expert's hidden states
@@ -106,35 +106,37 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
                 expert_hidden_reshaped, num_tokens, self.input_scale_ub
             )
-            self.gate_up_proj_scale = self.gate_up_proj_scale.to(torch.float32)
+            sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
+            gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
+       
             gate = torch.ops.fbgemm.f8f8bf16_rowwise(
                 expert_quantized,
-                self.gate_up_proj[i][:self.expert_dim], 
+                self.gate_up_proj[i].transpose(0,1)[:sharded_expert_dim].contiguous(), 
                 expert_scale,
-                self.gate_up_proj_scale[i][:, 0], 
+                gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(), 
                 use_fast_accum=True
             )
 
             up = torch.ops.fbgemm.f8f8bf16_rowwise(
                 expert_quantized, 
-                self.gate_up_proj[i][self.expert_dim:], 
+                self.gate_up_proj[i].transpose(0,1)[sharded_expert_dim:].contiguous(), 
                 expert_scale, 
-                self.gate_up_proj_scale[i][:, 1], 
+                gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(), 
                 use_fast_accum=True
             )
+
             activated = up * self.act_fn(gate)
 
             activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
                 activated, num_tokens, self.input_scale_ub
             )
 
-            self.down_proj_scale = self.down_proj_scale.to(torch.float32)
-            # Compute down projection using FP8 operations
+            down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
             expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
                 activated_quantized, 
-                self.down_proj[i], 
+                self.down_proj[i].transpose(0,1).contiguous(), 
                 activated_scale, 
-                self.down_proj_scale[i], 
+                down_proj_scale_float32[i].view(-1, 1).contiguous(), 
                 use_fast_accum=True
             )
 
@@ -200,7 +202,7 @@ def _replace_with_fbgemm_fp8_linear(
             ):
                 with init_empty_weights(include_buffers=True):
                     tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")]
-                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj")]
+                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                     model._modules[name] = FbgemmFp8Llama4TextExperts(
                         config.text_config,
                     )
@@ -255,7 +257,6 @@ def replace_with_fbgemm_fp8_linear(
     model, has_been_replaced = _replace_with_fbgemm_fp8_linear(
         model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized, config=config, tp_plan=tp_plan
     )
-
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using FP8 quantization but no linear modules were found in your model."

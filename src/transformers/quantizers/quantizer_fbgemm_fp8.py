@@ -168,7 +168,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
-                weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1] // 2, 2 )
+                new_value = new_value.transpose(1, 2)
+                weight_scale = weight_scale_flat.reshape(original_shape[0], 1, original_shape[1])
             elif tensor_name == "down_proj":
                 # Process each expert separately
                 # Transpose the weights for proper quantization
@@ -183,6 +184,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
+                new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
 
             module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.to(target_device))

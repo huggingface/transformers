@@ -111,7 +111,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     elif dim == 1 or dim == -2:
         tensor = slice_[:, tensors_slices, ...]
     elif dim == 2 or dim == -1:
-        tensor = slice_[..., tensors_slices]
+        tensor = slice_[...].to(torch.float16)[..., tensors_slices].to(slice_[...].dtype)
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
     return tensor
