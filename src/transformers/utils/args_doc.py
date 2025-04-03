@@ -1,4 +1,5 @@
 import inspect
+import os
 import textwrap
 from functools import wraps
 from typing import Optional, Tuple, get_args
@@ -9,19 +10,20 @@ from .doc import PT_SAMPLE_DOCSTRINGS, _prepare_output_docstrings
 from .generic import ModelOutput
 
 
-AUTODOC_FILES = {
+AUTODOC_FILES = [
     "configuration_*.py",
     "modeling_*.py",
     "tokenization_*.py",
     "processing_*.py",
-    "image_processing_*_fast*.py",
+    "image_processing_*_fast.py",
     "image_processing_*.py",
     "feature_extractor_*.py",
-}
+]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
-    "processor": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
+    "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
+    "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
 }
 
 UNROLL_KWARGS_METHODS = {
@@ -45,6 +47,10 @@ class ImageProcessorArgs:
 
     size = r""":
     Describes the maximum input dimensions to the model.
+    """
+
+    default_to_square = r""":
+    Whether to default to a square image when resizing, if size is an int.
     """
 
     resample = r""":
@@ -103,48 +109,6 @@ class ImageProcessorArgs:
 
     device = r""":
     The device to process the images on. If unset, the device is inferred from the input images.
-    """
-
-    """
-    images (`ImageInput`):
-            Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-            passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-            Whether to resize the image.
-        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-            Describes the maximum input dimensions to the model.
-        resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `self.resample`):
-            Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-            has an effect if `do_resize` is set to `True`.
-        do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the image.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-            Size of the output image after applying `center_crop`.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the image.
-        rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-            Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-            Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-            Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-            Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-            `True`.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-            Whether to convert the image to RGB.
-        return_tensors (`str` or `TensorType`, *optional*, defaults to `self.return_tensors`):
-            Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.data_format`):
-            Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
-        input_data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.input_data_format`):
-            The channel dimension format for the input image. If unset, the channel dimension format is inferred
-            from the input image. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        device (`torch.device`, *optional*, defaults to `self.device`):
-            The device to process the images on. If unset, the device is inferred from the input images.
     """
 
 
@@ -279,7 +243,7 @@ class ModelArgs:
 
     pixel_values = r""" of shape `(batch_size, num_channels, image_size, image_size)):
     The tensors corresponding to the input images. Pixel values can be obtained using
-    [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor}`] uses
+    [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor_class}`] uses
     [`{image_processor_class}`] for processing images).
     """
 
@@ -423,6 +387,17 @@ def set_min_indent(docstring, indent_level):
 
 
 def parse_docstring(docstring):
+    """
+    Parse the docstring to extract the Args section and return it as a dictionary.
+    The docstring is expected to be in the format:
+    Args:
+        arg1 (type): Description of arg1.
+        arg2 (type): Description of arg2.
+
+    # This function will also return the remaining part of the docstring after the Args section.
+    Returns:/Example:
+    ...
+    """
     args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
@@ -468,7 +443,7 @@ def get_model_name(obj):
     Get the model name from the file path of the object.
     """
     path = inspect.getsourcefile(obj)
-    file_name = path.split("/")[-1]
+    file_name = path.split(os.path.sep)[-1]
     for file_type in AUTODOC_FILES:
         start = file_type.split("*")[0]
         end = file_type.split("*")[-1] if "*" in file_type else ""
@@ -481,14 +456,20 @@ def get_model_name(obj):
 
 
 def format_args_docstring(args, model_name):
+    """
+    Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
+    deducted from the model name and the auto modules.
+    """
+    # import here to avoid circular import
     from transformers.models import auto as auto_module
 
+    # first check if there are any placeholders in the args, if not return them as is
     placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
     if not placeholders:
         return args
 
+    # Infer placeholders from the model name and the auto modules
     placeholders_dict = {}
-    # get placeholder from auto_module
     for placeholder in placeholders:
         if placeholder in PLACEHOLDER_TO_AUTO_MODULE:
             place_holder_value = getattr(
@@ -499,6 +480,7 @@ def format_args_docstring(args, model_name):
                 place_holder_value = place_holder_value[0]
             placeholders_dict[placeholder] = place_holder_value
 
+    # replace the placeholders in the args with the values from the placeholders_dict
     for arg in args:
         new_arg = args[arg]["description"]
         placeholders = re.findall(r"{(.*?)}", new_arg)
@@ -520,6 +502,8 @@ def auto_method_docstring(func, parent_class=None):
     """
     Wrapper that automatically generates docstring using ARG_TO_DOC.
     """
+    # import here to avoid circular import
+    from transformers.models import auto as auto_module
 
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -528,12 +512,19 @@ def auto_method_docstring(func, parent_class=None):
     # Use inspect to retrieve the function's signature
     sig = inspect.signature(func)
     indent_level = get_indent_level(func)
-    model_name_lowercase = get_model_name(func)
-    model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")])
+    if parent_class is not None:
+        model_name_lowercase = get_model_name(parent_class)
+    else:
+        model_name_lowercase = get_model_name(func)
+    class_name = func.__qualname__.split(".")[0]
+    config_class = getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    )[model_name_lowercase]
+
     docstring = ""
     if func.__name__ == "forward":
-        class_name = f"[`{func.__qualname__.split('.')[0]}`]"
-        docstring_forward = rf"""The {class_name} forward method, overrides the `__call__` special method.
+        docstring_forward = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
 
         <Tip>
 
@@ -555,6 +546,9 @@ def auto_method_docstring(func, parent_class=None):
     documented_kwargs = {}
 
     func_documentation = func.__doc__
+
+    # ------ Args section ------
+
     if func_documentation is not None:
         documented_params, func_documentation = parse_docstring(func_documentation)
         documented_params = format_args_docstring(documented_params, model_name_lowercase)
@@ -576,8 +570,8 @@ def auto_method_docstring(func, parent_class=None):
                 param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
         else:
             param_type = ""
+
         # Check if the parameter has a default value (considered optional)
-        # is_optional = param.default != inspect.Parameter.empty
         param_default = ""
         if param.default != inspect._empty and param.default is not None:
             param_default = f", defaults to `{str(param.default)}`"
@@ -603,6 +597,8 @@ def auto_method_docstring(func, parent_class=None):
             undocumented_parameters.append(
                 f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
+
+    # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs:
         # Check if the function has a parent class with unroll kwargs
@@ -612,12 +608,14 @@ def auto_method_docstring(func, parent_class=None):
             )
 
     if unroll_kwargs:
+        # get all unpackable "kwargs" parameters
         kwargs_parameters = [
             kwargs_param
             for _, kwargs_param in sig.parameters.items()
             if kwargs_param.kind == inspect.Parameter.VAR_KEYWORD
         ]
         for kwarg_param in kwargs_parameters:
+            # If kwargs not typed, skip
             if kwarg_param.annotation == inspect.Parameter.empty:
                 continue
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
@@ -655,21 +653,21 @@ def auto_method_docstring(func, parent_class=None):
                         f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
-    model_class = func.__qualname__.split(".")[0]
-    task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
-    model_task = re.search(task, model_class)
-    example_annotation = ""
-    if model_task is not None:
-        task = model_task.group()
-        example_annotation = PT_SAMPLE_DOCSTRINGS[task]
+    # ------ Returns section ------
 
-    config_class = f"{model_name_title}Config"
-    # return_annotation = sig.return_annotation
-    # return_type =  f"{return_annotation.__module__.replace("transformers.","~").replace("builtins","")}.{return_annotation.__name__}"
     if sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
         return_docstring = _prepare_output_docstrings(return_annotation, config_class, add_intro=add_intro)
         docstring += set_min_indent(return_docstring, indent_level + 4)
+
+    # ------ Example section ------
+
+    task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
+    model_task = re.search(task, class_name)
+    example_annotation = ""
+    if model_task is not None:
+        task = model_task.group()
+        example_annotation = PT_SAMPLE_DOCSTRINGS[task]
 
     docstring += example_annotation
 
@@ -677,6 +675,7 @@ def auto_method_docstring(func, parent_class=None):
         print("\n".join(undocumented_parameters))
     if func_documentation is not None:
         docstring += func_documentation
+
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring
     return wrapper
@@ -716,8 +715,9 @@ def auto_class_docstring(cls):
                     attr_type = type(attr_value).__name__
                 if "Config" in name:
                     raise ValueError("Config should have explicit docstring")
-                indented_doc = getattr(ClassAttrs, attr_name, "")
-                attr_docs += set_min_indent(f"{attr_name} (`{attr_type}`): {indented_doc}", 0)
+                indented_doc = getattr(ClassAttrs, attr_name, None)
+                if indented_doc is not None:
+                    attr_docs += set_min_indent(f"{attr_name} (`{attr_type}`): {indented_doc}", 0)
         if len(attr_docs.replace(" ", "")):
             docstring += set_min_indent("\nAttributes:\n", indent_level)
             docstring += set_min_indent(attr_docs, indent_level + 4)
