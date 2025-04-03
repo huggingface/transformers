@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for Speech Granite.
+Processor class for Granite Speech.
 """
 
 from typing import List, Union
@@ -54,20 +54,18 @@ class GraniteSpeechProcessor(ProcessorMixin):
     ) -> BatchFeature:
 
         text = self._get_validated_text(text)
-        expected_num_audios = sum(t.count(self.audio_token) for t in text)
 
         if audios is not None:
+            # NOTE - we intentionally avoid throwing for potentially misaligned
+            # text / audio inputs here because some inference engines will
+            # trigger the conditions due to the way they call multimodal
+            # processors, e.g., vLLM.
             audio_inputs = self.audio_processor(audios, device=device)
             audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
-            if any(text.count(self.audio_token) != 1 for text in text):
-                raise ValueError("Only one audio sample is currently supported per input")
-            if len(audio_embed_sizes) != expected_num_audios:
-                raise ValueError("Text/Audio mismatch. The number of audios and audio tokens do not match")
             # duplicate the audio placeholders to match the feature dims
             processed_text = self._expand_audio_placeholders(text, audio_embed_sizes)
         else:
             audio_inputs = {}
-            assert expected_num_audios == 0, "No audio is provided, expecting no audio tokens"
 
         text_inputs = self.tokenizer(processed_text, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
@@ -93,7 +91,6 @@ class GraniteSpeechProcessor(ProcessorMixin):
         prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
         return prompt_strings
 
-    ##### Validation
     def _get_validated_text(self, text: Union[str, list]) -> List[str]:
         if isinstance(text, str):
             return [text]
