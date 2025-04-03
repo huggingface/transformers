@@ -2530,7 +2530,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: bool = None,
+        use_safetensors: Optional[bool] = None,
         **kwargs,
     ):
         r"""
