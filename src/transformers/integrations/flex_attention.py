@@ -102,8 +102,9 @@ def make_flex_block_causal_mask(
     document_ids = attention_mask_2d.clone()
 
     if attention_chunk_size is not None:
-        # we create an arange, then we just // by chunk size to get [000, 111, 222, 333]...
+        # we create an arange, then we just // by chunk size to get [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
         document_ids = (document_ids.fill_(1).cumsum(-1) - 1 ) // (attention_chunk_size)
+
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
     # computation prior to the softmax. For sample packing, we need both the

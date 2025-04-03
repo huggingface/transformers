@@ -769,20 +769,22 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 torch._dynamo.config.cache_size_limit = 100000
                 cache_position = cache_position.to(self.device)
                 attention_chunk_size = self.config.attention_chunk_size
+
                 def get_mask_mod(mask_mod: _mask_mod_signature, offset:torch.Tensor, kv_offset:torch.Tensor):
                     def _mask_mod(b, h, q, kv =0) -> torch.Tensor:
                         print("q", offset, end="\r\r\r\r\r\r\r")
                         return mask_mod(b, h, q + offset, kv + kv_offset)
                     return _mask_mod
+
                 if sequence_length != 1: # prefill uses the full context ? not for chunked no
                     # max len las arg
-                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, min(sequence_length, attention_chunk_size))
+                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, max(attention_chunk_size,sequence_length))
                 else: # decoding should not use full kv cache
                     cache_position = cache_position[0].item()
 
 
                     chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, attention_chunk_size)
-                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position, cache_position-attention_chunk_size)
+                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position, max(cache_position-attention_chunk_size, 0))
                     chunked_attention_mask.seq_lengths = (1, attention_chunk_size)
 
                 attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=past_key_values.max_cache_len)
@@ -823,7 +825,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             )
         # chunked_mask = None TODO more efficient before big xtx
         if target_length >  self.config.attention_chunk_size:
-            if cache_position[0] == 0:
+            if cache_position.shape[-1] != 1:
                 # prefill mode
                 chunk_target_length = target_length
                 chunked_mask = self.create_chunked_attention_mask(
