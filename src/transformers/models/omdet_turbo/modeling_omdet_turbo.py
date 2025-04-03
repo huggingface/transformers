@@ -68,7 +68,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
             The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     extracted_states: Tuple[torch.FloatTensor] = None
@@ -104,14 +104,14 @@ class OmDetTurboDecoderOutput(ModelOutput):
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_coords: torch.FloatTensor = None
-    decoder_classes: torch.FloatTensor = None
-    encoder_coord_logits: torch.FloatTensor = None
+    decoder_coords: Optional[torch.FloatTensor] = None
+    decoder_classes: Optional[torch.FloatTensor] = None
+    encoder_coord_logits: Optional[torch.FloatTensor] = None
     encoder_class_logits: Tuple[torch.FloatTensor] = None
-    init_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Tuple[Tuple[torch.FloatTensor]] = None
 
 
@@ -157,14 +157,14 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
             The number of queried classes for each image.
     """
 
-    loss: torch.FloatTensor = None
-    decoder_coord_logits: torch.FloatTensor = None
-    decoder_class_logits: torch.FloatTensor = None
-    init_reference_points: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    decoder_coord_logits: Optional[torch.FloatTensor] = None
+    decoder_class_logits: Optional[torch.FloatTensor] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_coord_logits: torch.FloatTensor = None
+    encoder_coord_logits: Optional[torch.FloatTensor] = None
     encoder_class_logits: Tuple[torch.FloatTensor] = None
-    encoder_extracted_states: torch.FloatTensor = None
+    encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -579,7 +579,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         """

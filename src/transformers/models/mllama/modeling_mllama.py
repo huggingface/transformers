@@ -197,7 +197,7 @@ class MllamaVisionAttention(nn.Module):
         self,
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         query = self.q_proj(hidden_state)
         key = self.k_proj(hidden_state)
@@ -237,7 +237,7 @@ class MllamaVisionSdpaAttention(MllamaVisionAttention):
         self,
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: Optional[bool] = None,
     ) -> torch.Tensor:
         # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
         if output_attentions:
@@ -302,7 +302,7 @@ class MllamaVisionEncoderLayer(nn.Module):
         self,
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: Optional[bool] = None,
     ):
         # Self Attention
         residual = hidden_state
@@ -469,7 +469,7 @@ class MllamaTextCrossAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        use_cache: bool = None,
+        use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -537,7 +537,7 @@ class MllamaTextCrossSdpaAttention(MllamaTextCrossAttention):
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        use_cache: bool = None,
+        use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -1894,7 +1894,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaTextConfig")
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cross_attention_states: Optional[torch.LongTensor] = None,

@@ -1803,7 +1803,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
-        skip_unmasked_multimodal_encoder: bool = None,
+        skip_unmasked_multimodal_encoder: Optional[bool] = None,
         mlm_labels: Optional[torch.Tensor] = None,
         mim_labels: Optional[torch.Tensor] = None,
         itm_labels: Optional[torch.Tensor] = None,
