@@ -729,9 +729,13 @@ else:
         DHHV = v.shape[-1]
 
         c_state = (
-            c_initial if c_initial is not None else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
+            c_initial
+            if c_initial is not None
+            else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
         )
-        n_state = n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
+        n_state = (
+            n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
+        )
         m_state = m_initial if m_initial is not None else torch.zeros(B, NH, 1, device=k.device, dtype=torch.float32)
 
         if S > 1:
