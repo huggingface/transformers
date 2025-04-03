@@ -30,65 +30,46 @@ rendered properly in your Markdown viewer.
 </div>
 
 
-# GPT2
+# GPT-2
 
-GPT-2 is a causal transformer language model introduced by OpenAI through the paper [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf). The model represents a significant scaling up from its predecessor **GPT**, with 10× more parameters and training data.
-
-GPT-2 was developed with a straightforward objective to predict the next word in a sequence based on all preceding words. By training on a diverse 40GB corpus of web text, this seemingly simple approach enabled the model to develop sophisticated text generation capabilities across multiple domains and writing styles without task-specific training.
+[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) is a scaled up version of GPT, a causal transformer language model, with 10x more parameters and training data. The model was pretrained on a 40GB dataset to predict the next word in a sequence based on all the previous words. This approach enabled the model to perform many downstream tasks in a zero-shot setting.
 
 The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
 
 
-[Write With Transformer](https://huggingface.co/spaces/merve/write-with-transformer) is a webapp created and hosted by
-Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
-different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
+You can find all the original GPT-2 checkpoints under the [OpenAI community](https://huggingface.co/openai-community) organization.GPT-2 is one of them and is available in five different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
 
 > [!TIP]
-> Click on the GPT models in the right sidebar for more examples of how to apply GPT to different language tasks.
+> Click on the GPT-2 models in the right sidebar for more examples of how to apply GPT-2 to different language tasks.
 
-- GPT-2 has absolute position embeddings, hence advised to pad inputs on the right rather than the left.
-- The model was trained with a causal language modeling (CLM) objective, making it excellent at predicting the next token in a sequence. This enables GPT-2 to generate coherent text, as demonstrated in the `run_generation.py` example script.
-- For efficient text generation, GPT-2 can reuse previously computed key/value attention pairs. Access this feature via the past_key_values parameter in PyTorch (see [GPT2Model.forward] method) or the past parameter in TensorFlow (see [TFGPT2Model.call] method).
-- Enabling the *scale_attn_by_inverse_layer_idx* and *reorder_and_upcast_attn* flags will apply the training stability
-  improvements from [Mistral](https://github.com/stanford-crfm/mistral/) (for PyTorch only).
-
-The example below demonstrates how to generate text with [`Pipeline`] and [`Automodel`] class
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
-from transformers import pipeline, set_seed
+import torch
+from transformers import pipeline
 
-generator = pipeline(task='text-generation', model='gpt2')
-
-set_seed(42)
-
-generator("Hello, I'm a language model,", max_length=30, num_return_sequences=5)
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
+pipeline("Hellow, I'm a language model")
 ```
 </hfoption>
-
 <hfoption id="AutoModel">
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("gpt2")
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="autp", attn_implementation="sdpa")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
-prompt = "GPT2 is a model developed by OpenAI."
+input_ids = tokenzier("GPT2 is a model developed by OpenAI.". return_tensors="pt").to("cuda")
 
-input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-gen_tokens = model.generate(
-    input_ids,
-    do_sample=True,
-    temperature=0.9,
-    max_length=100,
-    )
-gen_text = tokenizer.batch_decode(gen_tokens)[0]
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -188,6 +169,12 @@ The table below shows the inference time and memory usage for GPT2 using Eager a
 
 
 ## Notes
+
+- GPT-2 has absolute position embeddings, hence advised to pad inputs on the right rather than the left.
+- The model was trained with a causal language modeling (CLM) objective, making it excellent at predicting the next token in a sequence. This enables GPT-2 to generate coherent text, as demonstrated in the `run_generation.py` example script.
+- For efficient text generation, GPT-2 can reuse previously computed key/value attention pairs. Access this feature via the past_key_values parameter in PyTorch (see [GPT2Model.forward] method) or the past parameter in TensorFlow (see [TFGPT2Model.call] method).
+- Enabling the *scale_attn_by_inverse_layer_idx* and *reorder_and_upcast_attn* flags will apply the training stability
+  improvements from [Mistral](https://github.com/stanford-crfm/mistral/) (for PyTorch only).
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GPT2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
