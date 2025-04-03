@@ -528,7 +528,7 @@ class TFMistralMainLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -770,7 +770,7 @@ class TFMistralModel(TFMistralPreTrainedModel):
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -837,7 +837,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -962,7 +962,7 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
