@@ -1070,7 +1070,9 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
+# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
+    # Ignore copy
     def __init__(self, config: DonutSwinConfig):
         super().__init__(config)
 
