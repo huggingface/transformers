@@ -19,9 +19,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 import torch.nn.functional as F
-from transformers import DynamicCache
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -177,8 +176,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # For Mayank - is this correct? where do I add bamba layer in decoder?
-        # Multi Head Latent Attention
+        # check implementation of this function
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
