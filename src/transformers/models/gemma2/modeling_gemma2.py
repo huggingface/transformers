@@ -38,11 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_gemma2 import Gemma2Config
 
 
@@ -468,7 +464,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         r"""
         Args:
             last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.

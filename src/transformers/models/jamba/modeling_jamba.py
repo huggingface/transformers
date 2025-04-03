@@ -1504,7 +1504,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 
 
 @auto_class_docstring
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA, BaseModelOutputWithPast->MoeModelOutputWithPast
 class JambaForSequenceClassification(JambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

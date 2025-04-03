@@ -45,8 +45,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     logging,
     replace_return_docstrings,
@@ -1483,6 +1483,7 @@ class Phi4MultimodalDecoderLayer(nn.Module):
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1687,27 +1688,7 @@ class Phi4MultimodalRotaryEmbedding(nn.Module):
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
 
 
-PHI4_MULTIMODAL_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Phi4MultimodalConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Phi4Multimodal Model outputting raw hidden-states without any specific head on top.",
-    PHI4_MULTIMODAL_START_DOCSTRING,
-)
+@auto_docstring
 class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     config_class = Phi4MultimodalConfig
     base_model_prefix = "model"
@@ -1800,10 +1781,7 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare Phi4Multimodal Model outputting raw hidden-states without any specific head on top.",
-    PHI4_MULTIMODAL_START_DOCSTRING,
-)
+@auto_docstring
 class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
@@ -2112,6 +2090,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         return causal_mask
 
 
+@auto_docstring
 class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
