@@ -130,12 +130,12 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     state_dict = checkpoint["model"]
     # fixup checkpoint
     unwanted_prefix = "_orig_mod."
-    for k, v in list(state_dict.items()):
+    for k in state_dict:
         if k.startswith(unwanted_prefix):
             # replace part of the key with corresponding layer name in HF implementation
             new_k = k[len(unwanted_prefix) :]
-            for old_layer_name in new_layer_name_dict:
-                new_k = new_k.replace(old_layer_name, new_layer_name_dict[old_layer_name])
+            for old_layer_name, new_layer_name in new_layer_name_dict.items():
+                new_k = new_k.replace(old_layer_name, new_layer_name)
 
             state_dict[new_k] = state_dict.pop(k)
 
