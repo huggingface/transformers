@@ -41,6 +41,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
+
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -684,6 +685,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask, chunk_causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
+
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -752,6 +754,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         output_attentions: bool = False,
         chunked_attention_mask=None
     ):
+        
         sequence_length = input_tensor.shape[1]
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -806,26 +809,42 @@ class Llama4TextModel(Llama4PreTrainedModel):
             )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
+        if self.config._attn_implementation == 'sdpa':
+            causal_mask = attention_mask == 1
+        else:
+            causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=target_length,
+                dtype=dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=input_tensor.shape[0],
+            )
         # chunked_mask = None TODO more efficient before big xtx
         if target_length >  self.config.attention_chunk_size:
-            chunked_mask = self.create_chunked_attention_mask(
-                target_length, self.config.attention_chunk_size, device=device
-            )
-            chunked_attention_mask = causal_mask.masked_fill(~chunked_mask[None, None, :, :],torch.finfo(dtype).min)
+            if cache_position[0] == 0:
+                # prefill mode
+                chunk_target_length = target_length
+                chunked_mask = self.create_chunked_attention_mask(
+                    chunk_target_length, self.config.attention_chunk_size, device=device
+                )
+                chunked_attention_mask = causal_mask.masked_fill(~chunked_mask[None, None, :, :],torch.finfo(dtype).min) # do not fill in decoding mode
+            else:
+                # decode mode
+                chunk_target_length = 1
+                chunked_mask = self.create_chunked_attention_mask(
+                    chunk_target_length, self.config.attention_chunk_size, device=device
+                )
+                chunked_attention_mask = chunked_mask & attention_mask
+                chunked_attention_mask = chunked_attention_mask[None, None, :, :] == 1 # only in sdpa, bool is better
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
+            and attention_mask.ndim == 4
+            and not output_attentions # Only unmask for 4d masks
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -854,11 +873,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
         Generate the following:
 
         'What'      :  0 ■ ⬚ ⬚ ⬚ ⬚ ⬚    |
-        '▁is'       :  1 ■ ■ ⬚ ⬚ ⬚ ⬚    |
-        '▁ch'       :  2 ■ ■ ■ ⬚ ⬚ ⬚    |
+        '▁is'       :  1 ■ ■ ⬚ ⬚ ⬚ ⬚     |
+        '▁ch'       :  2 ■ ■ ■ ⬚ ⬚ ⬚     |
         'unked'     :  3 ⬚ ⬚ ⬚ ■ ⬚ ⬚    |
         '▁attention':  4 ⬚ ⬚ ⬚ ■ ■ ⬚    |
-        '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■    |
+        '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■     |
 
         If the chunk size is 3.
         This can just be appplied over the already created attention mask
@@ -871,6 +890,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
 
+    
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
