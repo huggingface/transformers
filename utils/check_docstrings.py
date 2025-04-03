@@ -106,7 +106,6 @@ OBJECTS_TO_IGNORE = [
     "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2QFormerConfig",
     "Blip2VisionConfig",
     "BlipTextConfig",
     "BlipVisionConfig",
