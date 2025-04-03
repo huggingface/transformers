@@ -16,8 +16,9 @@
 """
 Processor class for Qwen2.5Omni.
 """
-import re
+
 import logging
+import re
 from typing import List, Optional, Union
 
 import torch
