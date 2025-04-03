@@ -73,7 +73,41 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+transformers-cli chat --model_name_or_path openai-community/gpt2 --torch_dtype auto --device 0
+```
+
+</hfoption>
 </hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,  
+    bnb_4bit_quant_type="nf4",  
+    bnb_4bit_compute_dtype="float16",  
+    bnb_4bit_use_double_quant=True 
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "openai-community/gpt2-xl",
+    quantization_config=quantization_config,
+    device_map="auto"  
+)
+
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2-xl")
+inputs = tokenizer("Once upon a time, there was a magical forest", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
 
 Flash Attention 2 provides significant speedups for transformer models through optimized `CUDA` kernels for attention computation.
 
