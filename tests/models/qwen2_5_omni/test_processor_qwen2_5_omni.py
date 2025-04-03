@@ -320,7 +320,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)
         self.assertEqual(len(out_dict["attention_mask"]), 1)
-        self.assertEqual(len(out_dict[self.images_input_name]), 71280)
+        self.assertEqual(len(out_dict[self.images_input_name]), 5704)
 
     def test_image_chat_template_batched(self):
         processor = self.get_processor()
@@ -352,7 +352,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt_tokenized = processor.apply_chat_template(
             batched_messages, add_generation_prompt=True, tokenize=True, padding=True
         )
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None, padding=True).input_ids
+        expected_output = processor.tokenizer(
+            formatted_prompt, return_tensors=None, padding=True, padding_side="left"
+        ).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(
@@ -375,7 +377,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 2)
         self.assertEqual(len(out_dict["attention_mask"]), 2)
-        self.assertEqual(len(out_dict[self.images_input_name]), 90480)
+        self.assertEqual(len(out_dict[self.images_input_name]), 7268)
 
     @require_av
     def test_chat_template_video(self):
@@ -426,7 +428,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 115200)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 9568)
 
         # Load with `video_fps` arg
         video_fps = 1
@@ -438,7 +440,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 288000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23920)
 
         # Load with `video_fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -459,7 +461,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8640000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 717600)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -522,7 +524,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             sample_indices_fn=dummy_sample_indices_fn,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1196)
 
     @require_av
     def test_chat_template_video_special_processing(self):
@@ -588,7 +590,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
         formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1756800)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 145912)
 
     @require_librosa
     @require_av
