@@ -483,7 +483,7 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         """
         Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
-        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
+        used). This is a convenient method to quickly obtain the scores of the selected tokens at generation time.
 
         Parameters:
             sequences (`tf.Tensor`):
@@ -1077,8 +1077,8 @@ class TFGenerationMixin:
         batch_size: int,
         model_input_name: str,
         model_kwargs: Dict[str, tf.Tensor],
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
     ) -> Tuple[tf.Tensor, Dict[str, tf.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
         # 1. Check whether the user has defined `decoder_input_ids` manually. To facilitate in terms of input naming,
@@ -1111,7 +1111,9 @@ class TFGenerationMixin:
 
         return decoder_input_ids, model_kwargs
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Optional[int] = None, bos_token_id: Optional[int] = None
+    ) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (
@@ -2118,7 +2120,7 @@ class TFGenerationMixin:
         a greedy approach, otherwise does multinomial sampling without replacement.
 
         Parameters:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, num_beams, sequence_length)`):
                 The sequence used as a prompt for the generation.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.

@@ -69,6 +69,7 @@ else:
             ),
             ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
@@ -172,6 +173,13 @@ else:
                 ),
             ),
             (
+                "deepseek_v3",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "diffllama",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -210,6 +218,20 @@ else:
             ),
             (
                 "gemma2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "gemma3",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "gemma3_text",
                 (
                     "GemmaTokenizer" if is_sentencepiece_available() else None,
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
@@ -434,6 +456,20 @@ else:
             ),
             ("qwen2_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             ("colqwen2", ("ColQwen2Tokenizer", "ColQwen2TokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "qwen3",
+                (
+                    "Qwen2Tokenizer",
+                    "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "qwen3_moe",
+                (
+                    "Qwen2Tokenizer",
+                    "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -480,7 +516,21 @@ else:
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "shieldgemma2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("siglip", ("SiglipTokenizer" if is_sentencepiece_available() else None, None)),
+            (
+                "siglip2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -977,6 +1027,7 @@ class AutoTokenizer:
             f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
         )
 
+    @staticmethod
     def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
         """
         Register a new tokenizer in this mapping.

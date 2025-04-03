@@ -185,7 +185,7 @@ def keep_doc_examples_only(content: str) -> str:
 def get_all_tests() -> List[str]:
     """
     Walks the `tests` folder to return a list of files/subfolders. This is used to split the tests to run when using
-    paralellism. The split is:
+    parallelism. The split is:
 
     - folders under `tests`: (`tokenization`, `pipelines`, etc) except the subfolder `models` is excluded.
     - folders under `tests/models`: `bert`, `gpt2`, etc.
@@ -854,7 +854,7 @@ def print_tree_deps_of(module, all_edges=None):
 
 def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
     """
-    The test examples do not import from the examples (which are just scripts, not modules) so we need som extra
+    The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
     example files by linking each example to the example test file for the example framework.
 
@@ -1154,17 +1154,14 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_tokenization": r"tests/models/.*/test_tokenization.*",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",

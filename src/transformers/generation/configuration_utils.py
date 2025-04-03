@@ -73,7 +73,7 @@ if is_torch_available():
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded"]
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
     )
 
 
@@ -175,6 +175,7 @@ class GenerationConfig(PushToHubMixin):
         cache_implementation (`str`, *optional*, default to `None`):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
 
+            - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
@@ -182,9 +183,8 @@ class GenerationConfig(PushToHubMixin):
             - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
 
-            We support other cache types, but they must be manually instantiated and
-            passed to `generate` through the `past_key_values` argument. See our
-            [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
+            If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
+            our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
@@ -379,8 +379,7 @@ class GenerationConfig(PushToHubMixin):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
 
-        disable_compile (`bool`, *optional*): Whether to disable the compilation of the forward pass when using 'statis' cache
-            implementation.
+        disable_compile (`bool`, *optional*): Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when specific criteria are met, including using a compileable cache. Please open an issue if you find the need to use this flag.
 
         > Wild card
 
@@ -483,7 +482,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
-        # Performances
+        # Performance
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
         self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card

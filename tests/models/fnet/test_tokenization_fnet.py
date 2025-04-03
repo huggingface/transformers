@@ -36,12 +36,13 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece_ignore_case = True
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = FNetTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"
@@ -141,13 +142,13 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.sep_token_id
         ]
 
-    # Overriden Tests - loading the fast tokenizer from slow just takes too long
+    # Overridden Tests - loading the fast tokenizer from slow just takes too long
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -175,7 +176,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                 )
                 special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
@@ -190,7 +191,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in p_output)
                 self.assertTrue(special_token_id in cr_output)
 
-    # Overriden Tests
+    # Overridden Tests
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
@@ -198,8 +199,8 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id

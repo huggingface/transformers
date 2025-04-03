@@ -33,7 +33,6 @@ from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
-    AdamW,
     SchedulerType,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
@@ -296,7 +295,7 @@ class DataCollatorForWav2Vec2Pretraining:
             The Wav2Vec2 model used for pretraining. The data collator needs to have access
             to config and ``_get_feat_extract_output_lengths`` function for correct padding.
         feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -445,7 +444,7 @@ def main():
     accelerator.wait_for_everyone()
 
     # 1. Download and create train, validation dataset
-    # We load all dataset configuration and datset split pairs passed in
+    # We load all dataset configuration and dataset split pairs passed in
     # ``args.dataset_config_names`` and ``args.dataset_split_names``
     datasets_splits = []
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
@@ -583,7 +582,7 @@ def main():
     )
 
     # Optimizer
-    optimizer = AdamW(
+    optimizer = torch.optim.AdamW(
         list(model.parameters()),
         lr=args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],

@@ -233,7 +233,7 @@ Here are a few examples using notional tools:
 ---
 {examples}
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. You only have access to those tools:
 <<tool_names>>
 You also can perform computations in the python code you generate.
 

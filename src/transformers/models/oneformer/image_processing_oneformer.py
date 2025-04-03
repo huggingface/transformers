@@ -440,7 +440,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         repo_path: Optional[str] = "shi-labs/oneformer_demo",
-        class_info_file: str = None,
+        class_info_file: Optional[str] = None,
         num_text: Optional[int] = None,
         num_labels: Optional[int] = None,
         **kwargs,

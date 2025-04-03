@@ -247,8 +247,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars=True,
         strip_accents=None,
         cell_trim_length: int = -1,
-        max_column_id: int = None,
-        max_row_id: int = None,
+        max_column_id: Optional[int] = None,
+        max_row_id: Optional[int] = None,
         strip_column_names: bool = False,
         update_answer_coordinates: bool = False,
         min_question_length=None,
@@ -522,7 +522,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -639,7 +639,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -748,7 +748,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = None,
@@ -809,7 +809,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -927,7 +927,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1010,7 +1010,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1070,7 +1070,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1775,7 +1775,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -2242,8 +2242,8 @@ class NumericValue:
 
 @dataclass
 class NumericValueSpan:
-    begin_index: int = None
-    end_index: int = None
+    begin_index: Optional[int] = None
+    end_index: Optional[int] = None
     values: List[NumericValue] = None
 
 

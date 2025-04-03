@@ -599,7 +599,7 @@ class TFModelTesterMixin:
             if model.config.is_encoder_decoder:
                 signature = inspect.signature(model.call)
                 arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                if "decoder_head_mask" in arg_names:  # necessary differentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
                 if "cross_attn_head_mask" in arg_names:
                     inputs["cross_attn_head_mask"] = head_mask

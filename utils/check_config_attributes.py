@@ -33,7 +33,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
-    # periods and offsers are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
+    # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
     "BambaConfig": [
         "attn_layer_indices",
     ],
@@ -226,6 +226,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
     ],
     "GPTNeoXConfig": ["rotary_emb_base"],
+    "Gemma3Config": ["boi_token_index", "eoi_token_index"],
+    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "ShieldGemma2Config": [
+        "boi_token_index",
+        "eoi_token_index",
+        "initializer_range",
+        "mm_tokens_per_image",
+        "text_config",
+        "vision_config",
+    ],
 }
 
 

@@ -17,12 +17,9 @@ rendered properly in your Markdown viewer.
 # ModernBERT
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=modernbert">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-modernbert-blueviolet">
-</a>
-<a href="https://arxiv.org/abs/2412.13663">
-<img alt="Paper page" src="https://img.shields.io/badge/Paper%20page-2412.13663-green">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
@@ -63,6 +60,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
+<PipelineTag pipeline="question-answering"/>
+
+- [`ModernBertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [colab notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 
 ## ModernBertConfig
 
@@ -90,6 +90,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] ModernBertForTokenClassification
     - forward
+
+## ModernBertForQuestionAnswering
+
+[[autodoc]] ModernBertForQuestionAnswering
+    - forward
+
+### Usage tips
+
+The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
+
 
 </pt>
 </frameworkcontent>

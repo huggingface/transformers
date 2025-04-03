@@ -108,6 +108,7 @@ class IJepaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -128,6 +129,8 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
 _EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]

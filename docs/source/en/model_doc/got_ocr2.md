@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # GOT-OCR2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The GOT-OCR2 model was proposed in [General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model](https://arxiv.org/abs/2409.01704) by Haoran Wei, Chenglong Liu, Jinyue Chen, Jia Wang, Lingyu Kong, Yanming Xu, Zheng Ge, Liang Zhao, Jianjian Sun, Yuang Peng, Chunrui Han, Xiangyu Zhang.
@@ -44,13 +48,14 @@ The original code can be found [here](https://github.com/Ucas-HaoranWei/GOT-OCR2
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> inputs = processor(image, return_tensors="pt").to(device)
+>>> inputs = processor(image, return_tensors="pt", device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -68,15 +73,16 @@ The original code can be found [here](https://github.com/Ucas-HaoranWei/GOT-OCR2
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
 >>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
 
->>> inputs = processor([image1, image2], return_tensors="pt").to(device)
+>>> inputs = processor([image1, image2], return_tensors="pt", device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -96,13 +102,14 @@ GOT-OCR2 can also generate formatted text, such as markdown or LaTeX. Here is an
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/latex.png"
->>> inputs = processor(image, return_tensors="pt", format=True).to(device)
+>>> inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -124,14 +131,15 @@ Here is an example of how to process multiple pages at once:
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page1.png"
 >>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page2.png"
->>> inputs = processor([image1, image2], return_tensors="pt", multi_page=True, format=True).to(device)
+>>> inputs = processor([image1, image2], return_tensors="pt", multi_page=True, format=True, device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -153,13 +161,14 @@ Here is an example of how to process cropped patches:
 ```python
 >>> import torch
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", torch_dtype=torch.bfloat16, device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
->>> inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, max_patches=3).to(device)
+>>> inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, max_patches=3, device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -179,13 +188,14 @@ GOT supports interactive OCR, where the user can specify the region to be recogn
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
->>> inputs = processor(image, return_tensors="pt", color="green").to(device) # or box=[x1, y1, x2, y2] for coordinates (image pixels)
+>>> inputs = processor(image, return_tensors="pt", color="green", device=device).to(device) # or box=[x1, y1, x2, y2] for coordinates (image pixels)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -206,14 +216,15 @@ Here is an example of how to process sheet music:
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+>>> import torch
 >>> import verovio
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+>>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/sheet_music.png"
->>> inputs = processor(image, return_tensors="pt", format=True).to(device)
+>>> inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
@@ -257,6 +268,10 @@ alt="drawing" width="600"/>
 ## GotOcr2ImageProcessor
 
 [[autodoc]] GotOcr2ImageProcessor
+
+## GotOcr2ImageProcessorFast
+
+[[autodoc]] GotOcr2ImageProcessorFast
 
 ## GotOcr2Processor
 

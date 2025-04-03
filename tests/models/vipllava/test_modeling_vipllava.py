@@ -231,13 +231,13 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
+        when number of images doesn't match number of image tokens in the text.
         Also we need to test multi-image cases when one prompr has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
@@ -289,19 +289,19 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             model(**input_dict)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

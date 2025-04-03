@@ -238,7 +238,7 @@ And who is that?<|im_end|>
         self.assertEqual(rendered, expected_rendered)
 
     # Override as AriaImageProcessor doesn't accept `do_rescale`
-    def test_chat_template_accepts_processing_kwargs(self):
+    def test_image_chat_template_accepts_processing_kwargs(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")

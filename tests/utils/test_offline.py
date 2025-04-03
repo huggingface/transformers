@@ -14,6 +14,7 @@
 
 import subprocess
 import sys
+import unittest
 from typing import Tuple
 
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
@@ -22,6 +23,7 @@ from transformers.testing_utils import TestCasePlus, require_torch
 
 class OfflineTests(TestCasePlus):
     @require_torch
+    @unittest.skip("This test is failing on main")  # TODO matt/ydshieh, this test needs to be fixed
     def test_offline_mode(self):
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it

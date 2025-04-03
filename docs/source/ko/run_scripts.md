@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers 노트북과 함께 [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), 또는 [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)를 사용해 특정 태스크에 대한 모델을 훈련하는 방법을 보여주는 예제 스크립트도 있습니다.
 
-또한 [연구 프로젝트](https://github.com/huggingface/transformers/tree/main/examples/research_projects) 및 [레거시 예제](https://github.com/huggingface/transformers/tree/main/examples/legacy)에서 대부분 커뮤니티에서 제공한 스크립트를 찾을 수 있습니다. 
+또한 [연구 프로젝트](https://github.com/huggingface/transformers-research-projects/) 및 [레거시 예제](https://github.com/huggingface/transformers/tree/main/examples/legacy)에서 대부분 커뮤니티에서 제공한 스크립트를 찾을 수 있습니다. 
 이러한 스크립트는 적극적으로 유지 관리되지 않으며 최신 버전의 라이브러리와 호환되지 않을 가능성이 높은 특정 버전의 🤗 Transformers를 필요로 합니다.
 
 예제 스크립트가 모든 문제에서 바로 작동하는 것은 아니며, 해결하려는 문제에 맞게 스크립트를 변경해야 할 수도 있습니다.

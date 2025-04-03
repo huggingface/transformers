@@ -326,8 +326,8 @@ class ImageTransformsTester(unittest.TestCase):
 
         # Test float16 image input keeps float16 dtype
         image = np.random.randint(0, 256, (224, 224, 3)).astype(np.float16) / 255
-        mean = (0.5, 0.6, 0.7)
-        std = (0.1, 0.2, 0.3)
+        mean = np.array((0.5, 0.6, 0.7))
+        std = np.array((0.1, 0.2, 0.3))
 
         # The mean and std are cast to match the dtype of the input image
         cast_mean = np.array(mean, dtype=np.float16)

@@ -32,7 +32,7 @@ if is_pandas_available():
 
 class InterpreterError(ValueError):
     """
-    An error raised when the interpretor cannot evaluate a Python expression, due to syntax error or unsupported
+    An error raised when the interpreter cannot evaluate a Python expression, due to syntax error or unsupported
     operations.
     """
 
@@ -713,14 +713,14 @@ def evaluate_ast(
     Evaluate an abstract syntax tree using the content of the variables stored in a state and only evaluating a given
     set of functions.
 
-    This function will recurse trough the nodes of the tree provided.
+    This function will recurse through the nodes of the tree provided.
 
     Args:
         expression (`ast.AST`):
             The code to evaluate, as an abstract syntax tree.
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` is updated if need be when the evaluation
-            encounters assignements.
+            encounters assignments.
         static_tools (`Dict[str, Callable]`):
             Functions that may be called during the evaluation. Trying to change one of these static_tools will raise an error.
         custom_tools (`Dict[str, Callable]`):
@@ -736,7 +736,7 @@ def evaluate_ast(
         )
     OPERATIONS_COUNT += 1
     if isinstance(expression, ast.Assign):
-        # Assignement -> we evaluate the assignment which should update the state
+        # Assignment -> we evaluate the assignment which should update the state
         # We return the variable assigned as it may be used to determine the final result.
         return evaluate_assign(expression, state, static_tools, custom_tools)
     elif isinstance(expression, ast.AugAssign):

@@ -52,7 +52,7 @@ if is_torch_available():
             self.model = model
             self.cache = StaticCache(
                 config=model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 max_cache_len=max_seq_len,
                 device=self.model.device,
                 dtype=self.model.dtype,

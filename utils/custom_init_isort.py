@@ -16,7 +16,7 @@
 Utility that sorts the imports in the custom inits of Transformers. Transformers uses init files that delay the
 import of an object to when it's actually needed. This is to avoid the main init importing all models, which would
 make the line `import transformers` very slow when the user has all optional dependencies installed. The inits with
-delayed imports have two halves: one definining a dictionary `_import_structure` which maps modules to the name of the
+delayed imports have two halves: one defining a dictionary `_import_structure` which maps modules to the name of the
 objects in each module, and one in `TYPE_CHECKING` which looks like a normal init for type-checkers. `isort` or `ruff`
 properly sort the second half which looks like traditionl imports, the goal of this script is to sort the first half.
 

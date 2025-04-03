@@ -26,8 +26,7 @@ from .tools import PipelineTool
 class ImageQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "dandelin/vilt-b32-finetuned-vqa"
     description = (
-        "This is a tool that answers a question about an image. It "
-        "returns a text that is the answer to the question."
+        "This is a tool that answers a question about an image. It returns a text that is the answer to the question."
     )
     name = "image_qa"
     pre_processor_class = AutoProcessor

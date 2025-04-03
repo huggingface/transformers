@@ -287,7 +287,7 @@ class DacResidualVectorQuantize(nn.Module):
         self.quantizers = nn.ModuleList([DacVectorQuantize(config) for i in range(config.n_codebooks)])
         self.quantizer_dropout = quantizer_dropout
 
-    def forward(self, hidden_state, n_quantizers: int = None):
+    def forward(self, hidden_state, n_quantizers: Optional[int] = None):
         """
         Quantizes the input tensor using a fixed set of codebooks and returns corresponding codebook vectors.
         Args:
@@ -608,7 +608,7 @@ class DacModel(DacPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        n_quantizers: int = None,
+        n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
     ):
         """
@@ -681,7 +681,7 @@ class DacModel(DacPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        n_quantizers: int = None,
+        n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
     ):
         """

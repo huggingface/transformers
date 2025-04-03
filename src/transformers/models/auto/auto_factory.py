@@ -445,6 +445,11 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
+        return config
+
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -538,6 +543,10 @@ class _BaseAutoModelClass:
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
+
+        # AutoClass-specific config manipulation
+        config = copy.deepcopy(config)
+        config = cls._prepare_config_for_auto_class(config)
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()

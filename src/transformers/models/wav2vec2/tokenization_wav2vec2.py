@@ -781,7 +781,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
         **kwargs,

@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    import torchvision.transforms as transforms
+    from torchvision import transforms
 
 if is_vision_available():
     from PIL import Image

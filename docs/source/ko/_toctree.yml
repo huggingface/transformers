@@ -332,8 +332,8 @@
         title: (번역중) CamemBERT
       - local: in_translation
         title: (번역중) CANINE
-      - local: in_translation
-        title: (번역중) CodeGen
+      - local: model_doc/codegen
+        title: CodeGen
       - local: model_doc/cohere
         title: Cohere
       - local: model_doc/convbert
@@ -720,6 +720,8 @@
         title: (번역중) Perceiver
       - local: in_translation
         title: (번역중) Pix2Struct
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
       - local: in_translation

@@ -384,10 +384,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="Llama buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -426,7 +422,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -550,6 +548,13 @@ class LlamaIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    def tearDown(self):
+        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
+        # some memory allocated in the cache, which means some object is not being released properly. This causes some
+        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
+        # Investigate the root cause.
+        cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_read_token
@@ -750,14 +755,6 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
                 "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
             ],
-            "meta-llama/Llama-3.2-3B": [
-                "Simply put, the theory of relativity states that 1. the speed of light is constant, and 2. "
-                "the speed of light is the fastest speed possible"
-            ],
-            "meta-llama/Llama-2-7b-hf": [
-                "Simply put, the theory of relativity states that 1) the speed of light is a constant, and 2) "
-                "the laws of physics are the same for all",
-            ],
         }
 
         for llama_model_ckp, EXPECTED_TEXT_COMPLETION in llama_models.items():
@@ -948,7 +945,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -996,7 +993,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,

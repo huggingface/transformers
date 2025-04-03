@@ -303,7 +303,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 

@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import unittest
+from functools import lru_cache
 
 from transformers import PegasusTokenizer, PegasusTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
@@ -33,19 +34,24 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = PegasusTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def _large_tokenizer(self):
         return PegasusTokenizer.from_pretrained("google/pegasus-large")
 
-    def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
-        return PegasusTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return ("This is a test", "This is a test")
@@ -70,8 +76,8 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_103)
 
     def test_mask_tokens_rust_pegasus(self):
-        rust_tokenizer = self.rust_tokenizer_class.from_pretrained(self.tmpdirname)
-        py_tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
+        rust_tokenizer = self.get_rust_tokenizer(self.tmpdirname)
+        py_tokenizer = self.get_tokenizer(self.tmpdirname)
         raw_input_str = (
             "Let's see which <unk> is the better <unk_token_11> one <mask_1> It seems like this <mask_2> was important"
             " </s> <pad> <pad> <pad>"
@@ -138,26 +144,31 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = PegasusTokenizer(SAMPLE_VOCAB, offset=0, mask_token_sent=None, mask_token="[MASK]")
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def _large_tokenizer(self):
         return PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
-    def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
-        return PegasusTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return ("This is a test", "This is a test")
 
     def test_mask_tokens_rust_pegasus(self):
-        rust_tokenizer = self.rust_tokenizer_class.from_pretrained(self.tmpdirname)
-        py_tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
+        rust_tokenizer = self.get_rust_tokenizer(self.tmpdirname)
+        py_tokenizer = self.get_tokenizer(self.tmpdirname)
         raw_input_str = (
             "Let's see which <unk> is the better <unk_token> one [MASK] It seems like this [MASK] was important </s>"
             " <pad> <pad> <pad>"

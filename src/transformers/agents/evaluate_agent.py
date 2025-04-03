@@ -275,7 +275,7 @@ def score_code(agent_answer, theoretical_answer, verbose: bool = False):
         return 1
     elif isinstance(agent_answer, dict) and any(v in theoretical_answer for v in agent_answer.values()):
         if verbose:
-            print("Almsot perfect, result in state!")
+            print("Almost perfect, result in state!")
         return 0.75
     else:
         if verbose:
@@ -345,7 +345,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
         missing_tools = set(TEST_TOOLS) - agent_tools
         unexpected_tools = set(agent_tools) - TEST_TOOLS
         raise ValueError(
-            f"Fix the test tools in the evaluate_agent module. Tools mising: {missing_tools}. Extra tools: {unexpected_tools}."
+            f"Fix the test tools in the evaluate_agent module. Tools missing: {missing_tools}. Extra tools: {unexpected_tools}."
         )
 
     eval_tasks = []

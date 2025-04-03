@@ -20,7 +20,6 @@ import unittest
 from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -125,7 +124,7 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
 

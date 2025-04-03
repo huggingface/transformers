@@ -23,6 +23,7 @@ from packaging import version
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
@@ -353,7 +354,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_Gemma_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -406,10 +406,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
-
-    @unittest.skip(reason="Gemma buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
@@ -502,6 +498,10 @@ class GemmaIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        cleanup(torch_device, gc_collect=False)
 
     @require_read_token
     def test_model_2b_fp16(self):

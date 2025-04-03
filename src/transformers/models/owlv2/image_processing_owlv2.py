@@ -173,7 +173,7 @@ def _preprocess_resize_output_shape(image, output_shape):
         # multichannel case: append shape of last axis
         output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
+        raise ValueError("output_shape length cannot be smaller than the image number of dimensions")
 
     return image, output_shape
 
@@ -345,10 +345,10 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(factors)
                 if np.any(anti_aliasing_sigma < 0):
-                    raise ValueError("Anti-aliasing standard deviation must be " "greater than or equal to zero")
+                    raise ValueError("Anti-aliasing standard deviation must be greater than or equal to zero")
                 elif np.any((anti_aliasing_sigma > 0) & (factors <= 1)):
                     warnings.warn(
-                        "Anti-aliasing standard deviation greater than zero but " "not down-sampling along all axes"
+                        "Anti-aliasing standard deviation greater than zero but not down-sampling along all axes"
                     )
             filtered = ndi.gaussian_filter(image, anti_aliasing_sigma, cval=cval, mode=ndi_mode)
         else:

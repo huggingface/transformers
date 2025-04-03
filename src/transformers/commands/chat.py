@@ -17,20 +17,16 @@ import copy
 import json
 import os
 import platform
-import re
+import string
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
 from typing import Optional
 
-import torch
 import yaml
-from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
+from transformers.utils import is_rich_available, is_torch_available
 
 from . import BaseTransformersCLICommand
 
@@ -38,6 +34,20 @@ from . import BaseTransformersCLICommand
 if platform.system() != "Windows":
     import pwd
 
+if is_rich_available():
+    from rich.console import Console
+    from rich.live import Live
+    from rich.markdown import Markdown
+
+if is_torch_available():
+    import torch
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
+
+ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
+ALLOWED_VALUE_CHARS = set(
+    string.ascii_letters + string.digits + string.whitespace + r".!\"#$%&'()*+,\-/:<=>?@[]^_`{|}~"
+)
 
 HELP_STRING = """\
 
@@ -64,8 +74,6 @@ SUPPORTED_GENERATION_KWARGS = [
     "top_k",
     "repetition_penalty",
 ]
-
-SETTING_RE = r"^set\s+[A-Za-z\s_]+=[A-Za-z\d\s.!\"#$%&'()*+,-/:<=>?@\[\]^_`{|}~]+(?:;\s*[A-Za-z\s_]+=[A-Za-z\d\s.!\"#$%&'()*+,-/:<=>?@\[\]^_`{|}~]+)*$"
 
 DEFAULT_EXAMPLES = {
     "llama": {"text": "There is a Llama in my lawn, how can I get rid of it?"},
@@ -153,7 +161,7 @@ def parse_settings(user_input, current_args, interface):
         return current_args, True
 
 
-def get_quantization_config(model_args) -> Optional[BitsAndBytesConfig]:
+def get_quantization_config(model_args) -> Optional["BitsAndBytesConfig"]:
     if model_args.load_in_4bit:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -432,7 +440,42 @@ class ChatCommand(BaseTransformersCLICommand):
     def __init__(self, args):
         self.args = args
 
+    @staticmethod
+    def is_valid_setting_command(s: str) -> bool:
+        # First check the basic structure
+        if not s.startswith("set ") or "=" not in s:
+            return False
+
+        # Split into individual assignments
+        assignments = [a.strip() for a in s[4:].split(";") if a.strip()]
+
+        for assignment in assignments:
+            # Each assignment should have exactly one '='
+            if assignment.count("=") != 1:
+                return False
+
+            key, value = assignment.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key or not value:
+                return False
+
+            # Keys can only have alphabetic characters, spaces and underscores
+            if not set(key).issubset(ALLOWED_KEY_CHARS):
+                return False
+
+            # Values can have just about anything that isn't a semicolon
+            if not set(value).issubset(ALLOWED_VALUE_CHARS):
+                return False
+
+        return True
+
     def run(self):
+        if not is_rich_available():
+            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+        if not is_torch_available():
+            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
+
         args = self.args
         if args.examples_path is None:
             examples = DEFAULT_EXAMPLES
@@ -488,7 +531,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     interface.print_green(f"Chat saved in {filename}!")
                     continue
 
-                if re.match(SETTING_RE, user_input):
+                if self.is_valid_setting_command(user_input):
                     current_args, success = parse_settings(user_input, current_args, interface)
                     if success:
                         chat = []

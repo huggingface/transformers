@@ -70,12 +70,15 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
         processor.save_pretrained(self.tmpdirname)
 
-    # We override this method to take the fast tokenizer or image processor by default
+    # We override this method to take the fast tokenizer by default
     def get_component(self, attribute, **kwargs):
         assert attribute in self.processor_class.attributes
         component_class_name = getattr(self.processor_class, f"{attribute}_class")
         if isinstance(component_class_name, tuple):
-            component_class_name = component_class_name[-1]
+            if attribute == "image_processor":
+                component_class_name = component_class_name[0]
+            else:
+                component_class_name = component_class_name[-1]
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa

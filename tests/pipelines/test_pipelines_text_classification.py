@@ -109,7 +109,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
         )
 
         # Do not apply any function to output for regression tasks
-        # hack: changing problem_type artifically (so keep this test at last)
+        # hack: changing problem_type artificially (so keep this test at last)
         text_classifier.model.config.problem_type = "regression"
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.01}])

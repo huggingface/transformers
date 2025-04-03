@@ -371,7 +371,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
 
         # use different length sentences to test batching
         sentences = [
-            "This is an extremelly long sentence that only exists to test the ability of the model to cope with "
+            "This is an extremely long sentence that only exists to test the ability of the model to cope with "
             "left-padding, such as in batched generation. The output for the sequence below should be the same "
             "regardless of whether left padding is applied or not. When",
             "Hello, my dog is a little",
@@ -395,7 +395,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "This is an extremelly long sentence that only exists to test the ability of the model to cope with "
+            "This is an extremely long sentence that only exists to test the ability of the model to cope with "
             "left-padding, such as in batched generation. The output for the sequence below should be the same "
             "regardless of whether left padding is applied or not. When left padding is applied, the sequence will be "
             "a single",
@@ -449,6 +449,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
 
+    @slow
     def test_loss_with_padding(self):
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
         model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")

@@ -347,7 +347,7 @@ class QAPipelineTests(unittest.TestCase):
                     " Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was"
                     " not eligible for the same"
                 ),
-                "question": "Is this person invovled in fraud?",
+                "question": "Is this person involved in fraud?",
             }
         )
         self.assertEqual(
