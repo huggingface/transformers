@@ -69,7 +69,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         self.model = model
         self.static_cache = StaticCache(
             config=self.model.config,
-            batch_size=self.model.generation_config.cache_config.batch_size,
+            max_batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
             device=self.model.generation_config.cache_config.device,
             dtype=self.model.dtype,
