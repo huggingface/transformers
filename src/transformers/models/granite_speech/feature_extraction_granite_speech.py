@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Speech Granite
+Feature extractor class for Granite Speech.
 """
 
 from collections.abc import Sequence
@@ -22,8 +22,8 @@ import numpy as np
 from typing import List, Optional, Union, Tuple
 
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from transformers.tokenization_utils_base import AudioInput
 from transformers.utils import is_torch_available, is_torchaudio_available, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -33,10 +33,6 @@ if is_torch_available():
 if is_torchaudio_available():
     import torchaudio
 
-# todo: import from transformers.audio_utils
-AudioInput = Union[
-    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
-]
 
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_features"]
@@ -63,7 +59,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         # HACK - for now, lazily initialize the mel spectrogram transform;
         # the feature extractor mixin explodes otherwise because
         # it tries to log the feature extractor, and the melspectrogram
-        # transform isn't json serializable...
+        # transform isn't json serializable.
         self.melspec = None
         self.projector_window_size = projector_window_size
         self.projector_downsample_rate = projector_downsample_rate
@@ -82,7 +78,9 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         )
         audio_embed_sizes = self._get_num_audio_features(audio_lengths)
         speech_inputs["audio_embed_sizes"] = audio_embed_sizes
-        # todo: input_features_mask is not a great name, because input_features and input_features mask have different shapes (before/after the projector)
+        # TODO: input_features_mask is not a great name, because
+        # input_features and input_features_mask have different shapes
+        # (before/after the projector)
         speech_inputs["input_features_mask"] = torch.arange(max(audio_embed_sizes)).view(1, -1) < torch.tensor(
             audio_embed_sizes
         ).view(-1, 1)
