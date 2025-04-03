@@ -20,7 +20,6 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available, xLSTMConfig
 from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils import is_xlstm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -163,7 +162,6 @@ class xLSTMModelTester:
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_2_2, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
-@unittest.skipIf(not is_xlstm_available(), reason="xlstm needs to be installed for tests to work")
 @require_torch
 class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (xLSTMModel, xLSTMForCausalLM) if is_torch_available() else ()
@@ -280,7 +278,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
 
-@unittest.skipIf(not is_xlstm_available(), reason="xlstm needs to be installed for tests to work")
 @require_torch
 @slow
 @require_read_token
