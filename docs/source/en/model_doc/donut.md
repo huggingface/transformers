@@ -215,3 +215,8 @@ We refer to the [tutorial notebooks](https://github.com/NielsRogge/Transformers-
 
 [[autodoc]] DonutSwinModel
     - forward
+
+## DonutSwinForImageClassification
+
+[[autodoc]] transformers.DonutSwinForImageClassification
+    - forward

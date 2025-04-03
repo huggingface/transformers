@@ -51,6 +51,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "eljandoubi/donut-base-encoder"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -125,6 +126,7 @@ class DonutSwinModelOutput(ModelOutput):
 
 
 @dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
 class DonutSwinImageClassifierOutput(ModelOutput):
     """
     DonutSwin outputs for image classification.
@@ -884,7 +886,6 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
 class DonutSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -892,7 +893,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DonutSwinConfig
-    base_model_prefix = "swin"
+    base_model_prefix = "donut"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DonutSwinStage"]
@@ -1087,6 +1088,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=DonutSwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
