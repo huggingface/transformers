@@ -479,7 +479,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 71280)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5704)
 
     @require_av
     def test_chat_template_video_custom_sampling(self):

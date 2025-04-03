@@ -24,20 +24,34 @@ from typing import List, Optional, Union
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...image_utils import ImageInput, VideoInput, make_batched_videos
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 
 
-class Qwen2_5_VLVideosKwargs(VideosKwargs):
+class Qwen2_5_OmniVideosKwargs(VideosKwargs):
     fps: Optional[List[int]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+
+
+class Qwen2_5_OmniImagesKwargs(ImagesKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
-    videos_kwargs: Qwen2_5_VLVideosKwargs
+    videos_kwargs: Qwen2_5_OmniVideosKwargs
+    images_kwargs: Qwen2_5_OmniImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -158,6 +172,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             image_grid_thw = None
 
         if videos is not None:
+            videos = make_batched_videos(videos)
             videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
             if fps is None:
                 fps = [2.0] * len(videos)
