@@ -66,7 +66,7 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: torch.FloatTensor = None
+    last_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -99,8 +99,8 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
