@@ -268,6 +268,7 @@ class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
@@ -294,7 +295,11 @@ class Gemma2DecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
-            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
+            cumulative_length = past_key_value.cumulative_length[self.layer_idx]
+            if cumulative_length is not None and cumulative_length < self.sliding_window and cumulative_length + cache_position.shape[0] >= self.sliding_window:
+                effective_seq_len = cumulative_length + cache_position.shape[0]
+            else:
+                effective_seq_len = max(cache_position.shape[0], self.sliding_window)
             # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
             # thus we must slice from the right (at most `effective_seq_len` elements)
             if self.config._attn_implementation == "flash_attention_2":
@@ -611,6 +616,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
+
+        # print(attention_mask.shape)
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
