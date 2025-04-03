@@ -48,6 +48,7 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
+    is_torchdynamo_exporting,
     logging,
 )
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -374,6 +375,102 @@ class GenerationMixin:
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    def _cache_dependant_input_preparation(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: Optional[torch.FloatTensor],
+        cache_position: Optional[torch.LongTensor],
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+        """
+        Generic cache-dependent input preparation
+        The code is put in a separate function to allow granular unit testing
+        as it needs a different implementation to be exportable.
+
+        If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        - Exception 1: when passing input_embeds, input_ids may be missing entries
+        - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        - Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+          generate the first token for each sequence. Later use the generated Input ids for continuation.
+
+        The current implementation does not rely on ``self`` and could be
+        a class method. It is left as a standard method to be easily rewritten.
+        """
+        if is_torchdynamo_exporting():
+            return self._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+            inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+        elif (
+            inputs_embeds is not None  # Exception 1
+            or (cache_position[-1] >= input_ids.shape[1])  # Exception 3
+        ):
+            input_ids = input_ids[:, -cache_position.shape[0] :]
+        elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+            input_ids = input_ids[:, cache_position]
+        return inputs_embeds, input_ids
+
+    def _cache_dependant_input_preparation_exporting(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: Optional[torch.FloatTensor],
+        cache_position: Optional[torch.LongTensor],
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+        """
+        This method implements method ``_cache_dependant_input_preparation``
+        with :func:`torch.cond` to make it exportable with :func:`torch.export.export`.
+        The code is put in a separate function to allow granular unit testing.
+        """
+        if inputs_embeds is None:
+            input_ids = input_ids[:, cache_position]
+        else:
+            # This is the code we need to implemented with torch.cond.
+            # if input_ids.shape[1] == 0:
+            #     inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            # else:
+            #     if cache_position[-1] >= input_ids.shape[1]:
+            #         input_ids = input_ids[:, -cache_position.shape[0] :]
+            #     else:
+            #         if input_ids.shape[1] != cache_position.shape[0]:
+            #             input_ids = input_ids[:, cache_position]
+            def branch_1(inputs_embeds, cache_position):
+                return inputs_embeds[:, -cache_position.shape[0] :]
+
+            def branch_2(input_ids, cache_position):
+                return input_ids[:, -cache_position.shape[0] :]
+
+            def branch_3(input_ids, cache_position):
+                return input_ids[:, cache_position]
+
+            inputs_embeds, input_ids = torch.cond(
+                input_ids.shape[1] == 0,
+                (
+                    lambda input_ids, inputs_embeds, cache_position: (
+                        branch_1(inputs_embeds, cache_position),
+                        input_ids,
+                    )
+                ),
+                (
+                    lambda input_ids, inputs_embeds, cache_position: (
+                        inputs_embeds,
+                        torch.cond(
+                            cache_position[-1] >= input_ids.shape[1],
+                            branch_2,
+                            lambda input_ids, cache_position: (
+                                torch.cond(
+                                    input_ids.shape[1] != cache_position.shape[0],
+                                    branch_3,
+                                    (lambda input_ids, cache_position: input_ids),
+                                    [input_ids, cache_position],
+                                )
+                            ),
+                            [input_ids, cache_position],
+                        ),
+                    )
+                ),
+                [input_ids, inputs_embeds, cache_position],
+            )
+        return inputs_embeds, input_ids
+
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
@@ -404,23 +501,11 @@ class GenerationMixin:
             cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
         # 2. Generic cache-dependent input preparation
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
-        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-            elif (
-                inputs_embeds is not None  # Exception 1
-                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
+            inputs_embeds, input_ids = self._cache_dependant_input_preparation(
+                input_ids, inputs_embeds, cache_position
+            )
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
@@ -1590,6 +1675,8 @@ class GenerationMixin:
             generation_config = self.generation_config
             using_model_generation_config = True
 
+        # `torch.export.export` usually raises an exception if it is called
+        # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
         if not using_model_generation_config:
@@ -2512,7 +2599,7 @@ class GenerationMixin:
         if synced_gpus:
             # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
             # The following logic allows an early break if all peers finished generating their sequence
-            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
             dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
             # did all peers finish? the reduced sum will be 0.0 then

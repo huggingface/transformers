@@ -248,6 +248,11 @@ class ModernBertConfig(PretrainedConfig):
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
 
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
+
 
 def _unpad_modernbert_input(
     inputs: torch.Tensor,
@@ -472,7 +477,7 @@ class ModernBertEmbeddings(nn.Module):
         return self.drop(self.norm(self.tok_embeddings(input_ids)))
 
     def forward(
-        self, input_ids: torch.LongTensor = None, inputs_embeds: Optional[torch.Tensor] = None
+        self, input_ids: Optional[torch.LongTensor] = None, inputs_embeds: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         if inputs_embeds is not None:
             hidden_states = self.drop(self.norm(inputs_embeds))
