@@ -700,9 +700,7 @@ class AssistantToTargetTranslator:
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        target_vocab_size: Optional[
-            int
-        ],  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
+        target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
         assistant_model: "PreTrainedModel",
         assistant_prune_lm_head: Optional[bool] = True,
     ):
@@ -847,7 +845,7 @@ class AssistantVocabTranslatorCache:
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        target_vocab_size: Optional[int],
+        target_vocab_size: int,
         assistant_model: "PreTrainedModel",
         assistant_prune_lm_head=True,
     ) -> AssistantToTargetTranslator:
