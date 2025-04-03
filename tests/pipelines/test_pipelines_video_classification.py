@@ -19,6 +19,7 @@ from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -39,6 +40,11 @@ from .test_pipelines_common import ANY
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
+    if _run_pipeline_tests:
+        example_video_filepath = hf_hub_download(
+            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
+        )
+
     def get_test_pipeline(
         self,
         model,
@@ -48,9 +54,6 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        example_video_filepath = hf_hub_download(
-            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
-        )
         video_classifier = VideoClassificationPipeline(
             model=model,
             tokenizer=tokenizer,
@@ -61,8 +64,9 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             top_k=2,
         )
         examples = [
-            example_video_filepath,
-            "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
+            self.example_video_filepath,
+            # TODO: re-enable this once we have a stable hub solution for CI
+            # "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 
