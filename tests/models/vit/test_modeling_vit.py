@@ -213,7 +213,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
 
-    def foo(self):
+    def test_foo(self):
         assert 1 == 2
 
     @unittest.skip(
