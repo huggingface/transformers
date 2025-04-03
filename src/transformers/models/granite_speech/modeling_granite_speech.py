@@ -1165,7 +1165,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
             # Merge the audio features into the LLM embeddings
             inputs_embeds = self.get_merged_audio_embeddings(
-                input_ids=input_ids, audio_features=audio_features, input_features_mask=input_features_mask
+                input_ids=input_ids,
+                audio_features=audio_features,
+                input_features_mask=input_features_mask,
             )
 
         outputs = self.language_model(
@@ -1248,19 +1250,19 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         Adds the audio token to the model's LLM vocabulary so that we can pass it
         through the tokenizer; it's assumed that the embeddings corresponding to the
         <|audio|> token will be clobbered with speech features.
-
-        TODO - This needs to be adapted to handle batches of variable length sequences
-        and potentially labels.
         """
         is_audio_index = input_ids == self.config.audio_token_index
-        assert torch.all(is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)).item(), \
-            "number of features should align"
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
         inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
 
         # Mask the audio features into the text embeddings
         special_audio_mask = is_audio_index.unsqueeze(-1)
-        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)[input_features_mask]
+        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        if input_features_mask is not None:
+            assert torch.all(is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)).item(), \
+                "number of features should align"
+            audio_features = audio_features[input_features_mask]
+
         inputs_embeds = inputs_embeds.masked_scatter(
             special_audio_mask,
             audio_features,
