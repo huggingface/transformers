@@ -50,11 +50,6 @@ class BitImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[BitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[BitFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["BitImageProcessorFast"]
