@@ -62,6 +62,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers-cli">
 
 ```bash
+# pip install -U flash-attn --no-build-isolation
 transformers-cli chat --model_name_or_path CohereForAI/c4ai-command-r-v01 --torch_dtype auto --attn_implementation flash_attention_2
 ```
 
