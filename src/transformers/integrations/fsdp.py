@@ -38,6 +38,7 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
         module, "_is_fsdp_managed_module", False
     )
 
+
 def enable_cpu_ram_efficient_loading():
     """
     Enable CPU RAM efficient loading of model weights by setting `FSDP_CPU_RAM_EFFICIENT_LOADING`.

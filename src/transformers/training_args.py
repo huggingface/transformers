@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import contextlib
+import io
 import json
 import math
-import io
 import os
 import warnings
 from dataclasses import asdict, dataclass, field, fields
@@ -1060,6 +1060,15 @@ class TrainingArguments:
             )
         },
     )
+    tf32: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental"
+                " API and it may change."
+            )
+        },
+    )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     ddp_backend: Optional[str] = field(
         default=None,
@@ -1675,6 +1684,11 @@ class TrainingArguments:
                 self.mixed_precision_config["backend"] = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
+                warnings.warn(
+                    "`bf16` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                    " `mixed_precision_dtype='bf16'` instead",
+                    FutureWarning,
+                )
                 if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
@@ -1685,13 +1699,7 @@ class TrainingArguments:
                             "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
                         )
 
-        if self.fp16 and self.bf16:
-            raise ValueError("At most one of fp16 and bf16 can be True, but not both")
-
-        if self.fp16_full_eval and self.bf16_full_eval:
-            raise ValueError("At most one of fp16 and bf16 can be True for full eval, but not both")
-
-        if self.bf16:
+        if self.mixed_precision_dtype == "bf16":
             if self.half_precision_backend == "apex":
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
 
@@ -1744,18 +1752,22 @@ class TrainingArguments:
         # Process FSDP before we proceed
         fsdp_plugin_args = self._process_fsdp_args()
 
+        # First, set it from the env variable:
+        if self.mixed_precision_dtype is None:
+            self.mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", None)
+
         # if training args is specified, it will override the one specified in the accelerate config
         if self.half_precision_backend != "apex":
             mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             if self.fp16:
-                mixed_precision_dtype = "fp16"
+                self.mixed_precision_dtype = "fp16"
                 warnings.warn(
                     "`fp16` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                     " `mixed_precision='fp16'` instead",
                     FutureWarning,
                 )
             elif self.bf16:
-                mixed_precision_dtype = "bf16"
+                self.mixed_precision_dtype = "bf16"
                 warnings.warn(
                     "`bf16` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                     " `mixed_precision='bf16'` instead",
@@ -1763,8 +1775,8 @@ class TrainingArguments:
                 )
 
             # Keep this here until v5 of transformers
-            self.fp16 = mixed_precision_dtype == "fp16"
-            self.bf16 = mixed_precision_dtype == "bf16"
+            self.fp16 = self.mixed_precision_dtype == "fp16"
+            self.bf16 = self.mixed_precision_dtype == "bf16"
 
         # If training args is specified, it will override the one specified in the accelerate config
         # We need to setup the accelerator config here *before* the first call to `self.device`
@@ -1772,13 +1784,15 @@ class TrainingArguments:
             core_accelerate_config_args = {
                 "dynamo_plugin": dynamo_plugin,
                 "fsdp_plugin": fsdp_plugin_args,
-                "mixed_precision": mixed_precision_dtype
+                "mixed_precision": mixed_precision_dtype,
             }
             if not isinstance(self.accelerator_config, AcceleratorConfig):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig(**core_accelerate_config_args)
                 elif isinstance(self.accelerator_config, dict):
-                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config, **core_accelerate_config_args)
+                    self.accelerator_config = AcceleratorConfig(
+                        **self.accelerator_config, **core_accelerate_config_args
+                    )
                 # Check that a user didn't pass in the class instantiator
                 # such as `accelerator_config = AcceleratorConfig`
                 elif isinstance(self.accelerator_config, type):
@@ -1922,7 +1936,6 @@ class TrainingArguments:
             from accelerate.utils import DeepSpeedPlugin
 
             self.deepspeed_plugin = DeepSpeedPlugin()
-            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             self.deepspeed_plugin.set_mixed_precision(self.mixed_precision_dtype)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
@@ -2968,7 +2981,7 @@ class TrainingArguments:
         self.data_seed = sampler_seed
         return self
 
-    def _process_fsdp_plugin(self):
+    def _process_fsdp_args(self):
         if isinstance(self.fsdp, bool):
             self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
         if isinstance(self.fsdp, str):
