@@ -24,19 +24,25 @@ from dataclasses import dataclass, field
 from threading import Thread
 from typing import Optional
 
-import torch
 import yaml
-from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
+from transformers.utils import is_rich_available, is_torch_available
 
 from . import BaseTransformersCLICommand
 
 
 if platform.system() != "Windows":
     import pwd
+
+if is_rich_available():
+    from rich.console import Console
+    from rich.live import Live
+    from rich.markdown import Markdown
+
+if is_torch_available():
+    import torch
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
 
 
 HELP_STRING = """\
@@ -153,7 +159,7 @@ def parse_settings(user_input, current_args, interface):
         return current_args, True
 
 
-def get_quantization_config(model_args) -> Optional[BitsAndBytesConfig]:
+def get_quantization_config(model_args) -> Optional["BitsAndBytesConfig"]:
     if model_args.load_in_4bit:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -433,6 +439,11 @@ class ChatCommand(BaseTransformersCLICommand):
         self.args = args
 
     def run(self):
+        if not is_rich_available():
+            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+        if not is_torch_available():
+            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
+
         args = self.args
         if args.examples_path is None:
             examples = DEFAULT_EXAMPLES

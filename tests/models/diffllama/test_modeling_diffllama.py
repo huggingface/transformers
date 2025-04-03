@@ -391,10 +391,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="DiffLlama buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -433,7 +429,9 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -553,7 +551,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
@@ -617,7 +615,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
 

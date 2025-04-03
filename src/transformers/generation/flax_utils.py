@@ -171,8 +171,8 @@ class FlaxGenerationMixin:
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ) -> jnp.ndarray:
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
@@ -183,7 +183,9 @@ class FlaxGenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Optional[int] = None, bos_token_id: Optional[int] = None
+    ) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (

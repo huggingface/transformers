@@ -109,6 +109,27 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `unexpected_keys`.
+
+        Args:
+            unexpected_keys (`List[str]`, *optional*):
+                The list of unexpected keys in the checkpoint compared to the state dict of the model
+        """
+        return unexpected_keys
+
+    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys` after loading the model params,
+        but before the model is post-processed.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
+
     def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
@@ -226,9 +247,33 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
+    @staticmethod
+    def get_modules_to_not_convert(
+        model: "PreTrainedModel",
+        skip_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[List[str]] = None,
+    ):
+        from ..integrations import get_keys_to_not_convert
+
+        modules_to_not_convert = []
+        if skip_modules is None:
+            modules_to_not_convert = get_keys_to_not_convert(model)
+        else:
+            modules_to_not_convert = skip_modules
+
+        if keep_in_fp32_modules is not None:
+            modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        return modules_to_not_convert
+
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return False
+
+    @property
+    def is_compileable(self) -> bool:
+        """Flag indicating whether the quantized model can be compiled"""
         return False
 
     @abstractmethod

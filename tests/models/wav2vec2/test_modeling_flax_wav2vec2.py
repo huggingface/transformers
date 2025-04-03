@@ -412,7 +412,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
 
         negative_indices = _sample_negative_indices(features.shape, num_negatives)
@@ -442,7 +442,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
 
         # second half of last input tensor is padded
         attention_mask = np.ones((batch_size, sequence_length), dtype=np.int8)
@@ -616,9 +616,10 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(np.array(logits), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)

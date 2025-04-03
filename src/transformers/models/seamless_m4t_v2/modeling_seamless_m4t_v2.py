@@ -2292,7 +2292,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
 
         # predict duration
         log_dur_pred = self.duration_predictor(char_hidden_states, padding_mask=char_padding_mask)
-        dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
+        dur_out = torch.clamp(torch.round((torch.expm1(log_dur_pred))).long(), min=1)
         dur_out = dur_out.masked_fill(~char_padding_mask.bool(), 0.0)
 
         # upsample char hidden states according to predicted duration
@@ -2854,7 +2854,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
         lang = self.language_embedding(lang_id).transpose(1, 2)
 
         log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
-        dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
+        dur_out = torch.clamp(torch.round((torch.expm1(log_dur_pred))).long(), min=1)
         # B x C x T
         if hidden_states.size(0) == 1:
             hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
@@ -3149,11 +3149,11 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
-                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
+                        {", ".join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
             else:
                 raise ValueError(
                     """This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps
@@ -3430,11 +3430,11 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
-                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
+                        {", ".join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
             else:
                 raise ValueError(
                     """This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps
@@ -3707,7 +3707,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
                     more languages for text translation than for speech synthesis."""
                     )
 
@@ -3720,7 +3720,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
 
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
         text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
 
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
@@ -3810,9 +3810,9 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         )
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
-        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
+        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids), device=self.device)
 
-        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids)).to(self.device)
+        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids), device=self.device)
 
         waveform, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=speaker_id, lang_id=vocoder_tgt_lang_id
@@ -4078,7 +4078,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
                     more languages for text translation than for speech synthesis."""
                     )
 
@@ -4090,7 +4090,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
         text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
 
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
@@ -4190,9 +4190,9 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         )
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
-        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
+        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids), device=self.device)
 
-        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids)).to(self.device)
+        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids), device=self.device)
 
         waveform, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=speaker_id, lang_id=vocoder_tgt_lang_id
@@ -4539,7 +4539,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4Tv2 supports
                     more languages for text translation than for speech synthesis."""
                     )
 
@@ -4559,7 +4559,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         if tgt_lang is not None:
             # tgt_lang gets priority over decoder input ids
             text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-            text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
 
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
@@ -4679,9 +4679,9 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         )
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
-        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
+        vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids), device=self.device)
 
-        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids)).to(self.device)
+        speaker_id = torch.tensor([[speaker_id]] * len(unit_ids), device=self.device)
 
         waveform, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=speaker_id, lang_id=vocoder_tgt_lang_id

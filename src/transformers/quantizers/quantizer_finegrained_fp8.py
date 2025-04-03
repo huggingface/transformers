@@ -52,9 +52,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
-        if major < 9:
+        if (major < 8) or (major == 8 and minor < 9):
             raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                f", actual = `{major}.{minor}`"
             )
 
         device_map = kwargs.get("device_map", None)
@@ -162,16 +163,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        modules_to_not_convert: List[str] = [],
+        keep_in_fp32_modules: Optional[List[str]] = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
-        self.modules_to_not_convert = ["lm_head"] + modules_to_not_convert
-
-        if self.quantization_config.modules_to_not_convert:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model = replace_with_fp8_linear(
             model,

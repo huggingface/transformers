@@ -222,9 +222,9 @@ class GPTNeoXModelTester:
         model.eval()
 
         # We want this for SDPA, eager works with a `None` attention mask
-        assert (
-            model.config._attn_implementation == "sdpa"
-        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
+        assert model.config._attn_implementation == "sdpa", (
+            "This test assumes the model to have the SDPA implementation for its attention calculations."
+        )
 
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
@@ -381,7 +381,9 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)

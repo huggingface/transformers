@@ -33,12 +33,17 @@ from transformers.testing_utils import (
     require_fsdp,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
-from transformers.utils import is_accelerate_available, is_torch_bf16_available_on_device
+from transformers.utils import (
+    is_accelerate_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+)
 
 
 if is_torch_available():
@@ -49,13 +54,18 @@ else:
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
-dtypes = ["fp16"]
+
+dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
     dtypes += ["bf16"]
+if is_torch_fp16_available_on_device(torch_device):
+    dtypes += ["fp16"]
+
 sharding_strategies = ["full_shard", "shard_grad_op"]
 state_dict_types = ["FULL_STATE_DICT", "SHARDED_STATE_DICT"]
-set_seed(42)
 params = list(itertools.product(sharding_strategies, dtypes))
+
+set_seed(42)
 
 
 def get_master_port(real_launcher=False):
@@ -140,13 +150,13 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         }
 
         self.fsdp_config = {
-            "backward_prefetch": "backward_pre",
-            "forward_prefetch": "False",
-            "limit_all_gathers": "False",
-            "use_orig_params": "True",
-            "sync_module_states": "True",
-            "cpu_ram_efficient_loading": "True",
-            "activation_checkpointing": "False",
+            "backward_prefetch": "BACKWARD_PRE",
+            "forward_prefetch": "false",
+            "limit_all_gathers": "false",
+            "use_orig_params": "true",
+            "sync_module_states": "true",
+            "cpu_ram_efficient_loading": "true",
+            "activation_checkpointing": "false",
             "min_num_params": 1,
         }
 
@@ -202,7 +212,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(
                 os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
             )
-            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"].upper())
+            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"])
             self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
             self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
             self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
@@ -213,6 +223,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
@@ -225,6 +236,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_basic_run_with_gradient_accumulation(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
@@ -237,6 +249,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(dtypes)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
@@ -250,6 +263,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(state_dict_types, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
@@ -286,10 +300,13 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
 
     @require_torch_multi_accelerator
+    @run_first
     @slow
-    @require_torch_accelerator
-    @require_fsdp
     def test_fsdp_cpu_offloading(self):
+        # TODO: This file is missing and should be added or the test should be removed
+        if not os.path.exists("utils/testing_scripts/fsdp_cpu_offloading.py"):
+            raise unittest.SkipTest("FSDP CPU offloading script not found!")
+
         try:
             subprocess.run(
                 "accelerate launch utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",

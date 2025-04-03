@@ -14,6 +14,7 @@
 
 import unittest
 
+import datasets
 import numpy as np
 from huggingface_hub import AudioClassificationOutputElement
 
@@ -24,6 +25,7 @@ from transformers import (
 )
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -44,6 +46,9 @@ if is_torch_available():
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+
+    if _run_pipeline_tests:
+        _dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
     def get_test_pipeline(
         self,
@@ -94,11 +99,8 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
-        import datasets
-
         # test with a local file
-        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        audio = dataset[0]["audio"]["array"]
+        audio = self._dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(
             output,
@@ -144,17 +146,20 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         audio = np.ones((8000,))
         output = audio_classifier(audio, top_k=4)
 
+        # Expected outputs are collected running the test on torch 2.6 in few scenarios.
+        # Running on CUDA T4/A100 and on XPU PVC (note: using stock torch xpu, NOT using IPEX):
         EXPECTED_OUTPUT = [
+            {"score": 0.0833, "label": "go"},
+            {"score": 0.0833, "label": "off"},
+            {"score": 0.0833, "label": "stop"},
+            {"score": 0.0833, "label": "on"},
+        ]
+        # Running on CPU:
+        EXPECTED_OUTPUT_PT_2 = [
             {"score": 0.0839, "label": "no"},
             {"score": 0.0837, "label": "go"},
             {"score": 0.0836, "label": "yes"},
             {"score": 0.0835, "label": "right"},
-        ]
-        EXPECTED_OUTPUT_PT_2 = [
-            {"score": 0.0845, "label": "stop"},
-            {"score": 0.0844, "label": "on"},
-            {"score": 0.0841, "label": "right"},
-            {"score": 0.0834, "label": "left"},
         ]
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
@@ -165,8 +170,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_large_model_pt(self):
-        import datasets
-
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)
