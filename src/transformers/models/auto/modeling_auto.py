@@ -559,6 +559,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteForCausalLM"),
         ("granitemoe", "GraniteMoeForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
+        ("granitemoehybrid", "GraniteMoeHybridForCausalLM"),
         ("helium", "HeliumForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
