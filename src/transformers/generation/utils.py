@@ -4891,6 +4891,7 @@ class GenerationMixin:
 
         model_kwargs["attention_mask"] = attention_mask
         model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+        _ = model_kwargs.pop("position_ids", None)
 
         return model_kwargs
 
