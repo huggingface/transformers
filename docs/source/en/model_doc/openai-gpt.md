@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 [GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
 
-The core innovation of GPT lies in its ability to generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification. The model is based on a transformer architecture and trained using the language modeling objective, followed by task-specific fine-tuning.
+GPT can generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification.
 
 In comparison to previous discriminative models, GPT achieves significant gains by utilizing a generative pretraining approach on a large, diverse corpus of unlabeled text, followed by fine-tuning for specific tasks. It achieves state-of-the-art results in a variety of benchmarks.
 
