@@ -117,6 +117,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
+import torch
+from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProcessor
+
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -225,25 +228,6 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     max_pixels = 1024*28*28 
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
-- We can implement flash attention 2 to speed up generation as shown below.
-    ```python
-    from transformers import Qwen2_5_VLForConditionalGeneration
-    
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        "Qwen/Qwen2.5-VL-7B-Instruct", 
-        torch_dtype=torch.bfloat16, 
-        attn_implementation="flash_attention_2",
-    )
-    ```
-    Do ensure that flash attention 2 is installed: 
-    ```bash
-    pip install -U flash-attn --no-build-isolation
-    ```
-    
-    Also, you should have hardware that is compatible with FlashAttention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). FlashAttention-2 can only be used when a model is loaded in `torch.float16` or `torch.bfloat16`.
-
-
-
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig
