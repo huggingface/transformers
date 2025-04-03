@@ -52,7 +52,6 @@ class GraniteSpeechProcessor(ProcessorMixin):
         device: str = "cpu",
         **kwargs,
     ) -> BatchFeature:
-
         text = self._get_validated_text(text)
 
         if audios is not None:
@@ -97,7 +96,6 @@ class GraniteSpeechProcessor(ProcessorMixin):
         elif isinstance(text, list) and isinstance(text[0], str):
             return text
         raise TypeError("Invalid text provided! Text should be a string or list of strings.")
-
 
 
 __all__ = ["GraniteSpeechProcessor"]

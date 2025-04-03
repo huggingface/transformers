@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import einsum, nn
+from torch import nn
 
 from transformers.activations import ACT2FN
 from transformers.generation import GenerationMixin
@@ -777,9 +777,7 @@ class GraniteSpeechCTCModel(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super(GraniteSpeechCTCModel, self).__init__()
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
-        self.layers = nn.ModuleList(
-            [GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)]
-        )
+        self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
 
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
@@ -810,7 +808,6 @@ class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     def forward(self, x):
         x = F.pad(x, self.padding)
         return self.conv(x)
-
 
 
 class GraniteSpeechConformerAttention(nn.Module):
@@ -889,14 +886,14 @@ class GraniteSpeechConformerConvModule(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
         inner_dim = config.hidden_dim * config.conv_expansion_factor
-        padding = self.calc_same_padding(config.conv_kernel_size) 
+        padding = self.calc_same_padding(config.conv_kernel_size)
 
         self.norm = nn.LayerNorm(config.hidden_dim)
         self.up_conv = nn.Conv1d(config.hidden_dim, inner_dim * 2, 1)
         self.glu = nn.GLU(dim=1)
         self.depth_conv = GraniteSpeechConformerDepthWiseConv1d(
-                inner_dim, inner_dim, kernel_size=config.conv_kernel_size, padding=padding
-            )
+            inner_dim, inner_dim, kernel_size=config.conv_kernel_size, padding=padding
+        )
         self.silu = nn.SiLU()
         self.batch_norm = nn.BatchNorm1d(inner_dim)
         self.down_conv = nn.Conv1d(inner_dim, config.hidden_dim, 1)
@@ -1259,8 +1256,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         special_audio_mask = is_audio_index.unsqueeze(-1)
         audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_features_mask is not None:
-            assert torch.all(is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)).item(), \
-                "number of features should align"
+            assert torch.all(
+                is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)
+            ).item(), "number of features should align"
             audio_features = audio_features[input_features_mask]
 
         inputs_embeds = inputs_embeds.masked_scatter(
