@@ -1013,9 +1013,6 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEResnetBlock",
         "Emu3VQVAEVectorQuantizer",
     ]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):

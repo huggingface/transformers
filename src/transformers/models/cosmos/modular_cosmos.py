@@ -658,8 +658,6 @@ class CosmosPatch3D(nn.Module):
         self.register_buffer("_arange", torch.arange(2), persistent=False)
         self.register_buffer("wavelets", wavelets, persistent=False)
         self.register_buffer("patch_size_buffer", patch_size * torch.ones([1], dtype=torch.int32), persistent=False)
-        for param in self.parameters():
-            param.requires_grad = False
 
     def _dwt(self, hidden_states, mode="reflect", rescale=False):
         dtype = hidden_states.dtype
@@ -753,8 +751,6 @@ class CosmosUnpatch3D(nn.Module):
         self.register_buffer("wavelets", wavelets, persistent=False)
         self.range = range(int(torch.log2(torch.tensor(self.patch_size)).item()))
         self.register_buffer("_arange", torch.arange(2), persistent=False)
-        for param in self.parameters():
-            param.requires_grad = False
 
     def _idwt(self, hidden_states, rescale=False):
         dtype = hidden_states.dtype
@@ -800,8 +796,8 @@ class CosmosUnpatch3D(nn.Module):
 
 
 # NOTE: Copy from Emu3 fails for all subsequent modules, because layers init under condition or
-# for loop aren't overwritten/skipped correctly. Modular cannot handle it correctly yet
-# A bigger refactor to make VAE a models of its own, reusable by all VLMs is a better long-term solution (@raushan TODO)
+# for loop aren't overwritten/skipped correctly. Modular cannot handle it yet!
+# A bigger refactor to make VAE a model of its own, reusable by all VLMs is a better long-term solution (@raushan TODO)
 class CosmosVQVAEResnetBlock(nn.Module):
     def __init__(
         self,
@@ -1816,6 +1812,7 @@ class CosmosPreTrainedModel(Emu3PreTrainedModel):
         "CosmosVQVAEVectorQuantizer",
         "CosmosTextDecoderLayer",
     ]
+    _keep_in_fp32_modules = ["prompt_encoder"]
 
 
 class CosmosModel(CosmosPreTrainedModel):
@@ -1853,7 +1850,7 @@ class CosmosModel(CosmosPreTrainedModel):
         num_gen_tokens = int(np.prod([time - latent_context_size, height, width]))
         vq_tokens = vq_tokens[:, :-num_gen_tokens]  # remove repeated pad tokens
 
-        # This is always added by `generate()`. We need to handle it also in `forward()`
+        # Decoder start token is always added by `generate()`. We need to handle it in `forward()` manually though
         if self.config.text_config.is_video_to_world:
             bov_tokens = [[self.config.get_text_config().bos_token_id]] * vq_tokens.shape[0]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
@@ -2138,37 +2135,33 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
-        >>> from PIL import Image
+        >>> import imageio
+        >>> from transformers.image_utils import load_video
+        >>> from transformers import CosmosProcessor, CosmosForConditionalGeneration
 
-        >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16)
-        >>> processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
+        >>> model_id = "NVIDIA/Cosmos-5B-hf"
+        >>> processor = CosmosProcessor.from_pretrained(model_id)
 
-        >>> conversation = [
-        ...     {
-        ...     "role": "system",
-        ...     "content": [
-        ...         {"type": "text", "text": "You are a helpful assistant."},
-        ...         ],
-        ...     },
-        ...     {
-        ...     "role": "user",
-        ...     "content": [
-        ...         {"type": "image"},
-        ...         {"type": "text", "text": "Please describe the image."},
-        ...         ],
-        ...     },
-        ... ]
+        >>> model = CosmosForConditionalGeneration.from_pretrained(
+        ...     model_id,
+        ...     torch_dtype="bfloat16",
+        ...     low_cpu_mem_usage=True,
+        ...     device_map="auto",
+        ... )
 
-        >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-        >>> image = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        >>> # Generate from last 9 frames of the video
+        >>> video, _ = load_video("cosmos1/models/autoregressive/assets/v1p0/input.mp4", backend="decord")[-9:]
+        >>> text = "A video recorded from a moving vehicle's perspective, capturing roads, buildings, landscapes, and changing weather and lighting conditions."
+        >>> inputs = processor(videos=video, text=text, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
-        >>> inputs = processor(images=[image], text=[prompt], return_tensors="pt").to(model.device, torch.bfloat16)
+        >>> out = model.generate(**inputs, max_new_tokens=7680)
 
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
-        >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> # Remove the first token which is `BOS`. Decode the video and save. 
+        >>> video_decoded = model.model.decode_video_tokens(out[:, 1:])
+        >>> video_decoded = video_decoded.permute(0, 2, 1, 3, 4).float()
+        >>> video_processed = proc.postprocess([video_decoded[0]], return_tensors="np")
+        >>> imageio.mimsave("generated_video.mp4", video_processed['pixel_values'].squeeze(0), fps=25)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2235,19 +2228,10 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             input_ids, attention_mask=attention_mask, output_hidden_states=True, output_attentions=True
         )
 
-        # Only static cache support, since video shapes are static as well
-        # self_attn_past_kv = StaticCache(
-        #     config=self.config.get_text_config(),
-        #     max_batch_size=input_ids.shape[0],
-        #     max_cache_len=12864,
-        #     dtype=self.dtype,
-        # )
-        # past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
         output = super().generate(
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
-            # past_key_values=past_key_values if kwargs.get("use_cache", False) else None,
             **kwargs,
         )
         return output

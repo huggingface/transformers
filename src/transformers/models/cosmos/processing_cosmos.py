@@ -110,7 +110,7 @@ class CosmosProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        # `images` are treated as one frame videos when processing and generating
+        # `images` are treated as single frame videos when processing and generating
         if videos is None and images is not None:
             images = make_flat_list_of_images(images)
             videos = [np.array(image)[None, ...] for image in images]

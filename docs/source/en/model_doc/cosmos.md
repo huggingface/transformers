@@ -25,11 +25,15 @@ The abstract from the paper is the following:
 
 *Physical AI needs to be trained digitally first. It needs a digital twin of itself, the policy model, and a digital twin of the world, the world model. In this paper, we present the Cosmos World Foundation Model Platform to help developers build customized world models for their Physical AI setups. We position a world foundation model as a general-purpose world model that can be fine-tuned into customized world models for downstream applications. Our platform covers a video curation pipeline, pre-trained world foundation models, examples of post-training of pre-trained world foundation models, and video tokenizers. To help Physical AI builders solve the most critical problems of our society, we make our platform open-source and our models open-weight with permissive licenses available via this https URL.*
 
-Tips:
-
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/NVIDIA/Cosmos/tree/main).
 
+
+## Usage examples
+
+Cosmos can generate by conditioning either on video/image or text+video/image. The video used to condition has to be exactly 9 frames in length, while the image is treated as a single frame video.
+
+Below is an example of generating by conditioning on video only.
 
 ```python
 import torch
@@ -37,25 +41,56 @@ import imageio
 from transformers.image_utils import load_video
 from transformers import CosmosProcessor, CosmosForConditionalGeneration
 
+model_id = "NVIDIA/Cosmos-4B-hf"
+processor = CosmosProcessor.from_pretrained(model_id)
 
-model_id = "NVIDIA/Cosmos-5B-hf"
-proc = CosmosProcessor.from_pretrained(model_id)
 model = CosmosForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype={"text_config": "bfloat16", "vq_config": "bfloat16", "": "bfloat16", "prompt_encoder_config": "float32"},
-    low_cpu_mem_usage=True
-).to("cuda:0")
+    torch_dtype="bfloat16",
+    low_cpu_mem_usage=True,
+    device_map="auto",
+)
 
-# generate from last 9 frames of the video
-video, _ = load_video("/raid/raushan/Cosmos/cosmos1/models/autoregressive/assets/v1p0/input.mp4", backend="decord")
-video = video[-9:]
-text = "A video recorded from a moving vehicle's perspective, capturing roads, buildings, landscapes, and changing weather and lighting conditions."
-inputs = proc(videos=video, text=text, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
-
+# Generate from last 9 frames of the video
+video, _ = load_video("cosmos1/models/autoregressive/assets/v1p0/input.mp4", backend="decord")[-9:]
+inputs = proc(videos=video, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 out = model.generate(**inputs, max_new_tokens=7680)
 
-# decode the video and save
+# Decode the video and save. 
+video_decoded = model.model.decode_video_tokens(out)
+video_decoded = video_decoded.permute(0, 2, 1, 3, 4).float()
+video_processed = proc.postprocess([video_decoded[0]], return_tensors="np")
+imageio.mimsave("generated_video.mp4", video_processed['pixel_values'].squeeze(0), fps=25)
+
+```
+
+To condition on text input as well, we just pass it along to the processor. The rest is same as in video conditioning.
+
+```python
+import torch
+import imageio
+from transformers.image_utils import load_video
+from transformers import CosmosProcessor, CosmosForConditionalGeneration
+
+model_id = "NVIDIA/Cosmos-5B-hf"
+processor = CosmosProcessor.from_pretrained(model_id)
+
+model = CosmosForConditionalGeneration.from_pretrained(
+    model_id,
+    torch_dtype="bfloat16",
+    low_cpu_mem_usage=True,
+    device_map="auto",
+)
+
+# Generate from last 9 frames of the video
+video, _ = load_video("cosmos1/models/autoregressive/assets/v1p0/input.mp4", backend="decord")[-9:]
+text = "A video recorded from a moving vehicle's perspective, capturing roads, buildings, landscapes, and changing weather and lighting conditions."
+inputs = proc(videos=video, text=text, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+out = model.generate(**inputs, max_new_tokens=7680)
+
+# Remove the first token which is `BOS`. Decode the video and save. 
 video_decoded = model.model.decode_video_tokens(out[:, 1:])
 video_decoded = video_decoded.permute(0, 2, 1, 3, 4).float()
 video_processed = proc.postprocess([video_decoded[0]], return_tensors="np")
