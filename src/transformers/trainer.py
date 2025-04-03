@@ -589,7 +589,7 @@ class Trainer:
         if (
             self.is_model_parallel
             or self.is_deepspeed_enabled
-            or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
+            or (args.mixed_precision_config["full_eval"] and not args.do_train)
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
         ):
@@ -719,18 +719,19 @@ class Trainer:
         # Mixed precision setup for SageMaker Model Parallel
         if is_sagemaker_mp_enabled():
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
-            if args.bf16:
+            if args.mixed_precision_dtype == "bf16":
                 raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
 
             if IS_SAGEMAKER_MP_POST_1_10:
                 # When there's mismatch between SMP config and trainer argument, use SMP config as truth
-                if args.fp16 != smp.state.cfg.fp16:
+                smp_fp16 = smp.state.cfg.fp16
+                if args.mixed_precision_dtype == "fp16" and not smp_fp16:
                     logger.warning(
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                        f"but FP16 provided in trainer argument is {args.fp16}, "
+                        f"but FP16 provided in trainer argument is {args.mixed_precision_dtype}, "
                         f"setting to {smp.state.cfg.fp16}"
                     )
-                    args.fp16 = smp.state.cfg.fp16
+                    args.mixed_precision_dtype = "fp16"
             else:
                 # smp < 1.10 does not support fp16 in trainer.
                 if hasattr(smp.state.cfg, "fp16"):
@@ -738,21 +739,23 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
-        if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
+        if (args.mixed_precision_dtype in ["fp16", "bf16"]) and args.mixed_precision_config["backend"] == "auto":
             if args.device == torch.device("cpu"):
-                if args.fp16:
+                if args.mixed_precision_dtype == "fp16":
                     if not is_torch_greater_or_equal_than_2_3:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                 else:
-                    args.half_precision_backend = "cpu_amp"
-            logger.info(f"Using {args.half_precision_backend} half precision backend")
+                    args.mixed_precision_config["backend"] = "cpu_amp"
+            logger.info(f"Using {args.mixed_precision_config['backend']} half precision backend")
 
-        if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
+        if (args.mixed_precision_dtype in ["fp16", "bf16"]) and not (
+            self.is_deepspeed_enabled or is_sagemaker_mp_enabled()
+        ):
             # deepspeed and SageMaker Model Parallel manage their own half precision
-            if args.half_precision_backend == "cpu_amp":
+            if args.mixed_precision_config["backend"] == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
-            elif args.half_precision_backend == "apex":
+            elif args.mixed_precision_config["backend"] == "apex":
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to"
@@ -1940,7 +1943,7 @@ class Trainer:
 
         if not training:
             model.eval()
-            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
+            dtype = torch.bfloat16 if not self.is_in_train and self.args.mixed_precision_config["full_eval"] else dtype
             # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
             model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
         else:
@@ -1997,7 +2000,9 @@ class Trainer:
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
+            model, self.optimizer = amp.initialize(
+                model, self.optimizer, opt_level=self.args.mixed_precision_config["fp16_opt_level"]
+            )
 
         # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
         if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
@@ -2176,7 +2181,7 @@ class Trainer:
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if (
-            (args.fp16_full_eval or args.bf16_full_eval)
+            args.mixed_precision_config["full_eval"]
             and not args.do_train
             and not self.is_model_parallel
             and self.model_init is None
@@ -2576,7 +2581,7 @@ class Trainer:
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                            if is_sagemaker_mp_enabled() and args.fp16:
+                            if is_sagemaker_mp_enabled() and args.mixed_precision_dtype == "fp16":
                                 _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
                             elif self.use_apex:
                                 # Revert to normal clipping otherwise, handling Apex or full precision
@@ -2829,7 +2834,7 @@ class Trainer:
                 else:
                     # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                     # Checkpoint must have been saved with the old smp api.
-                    if hasattr(self.args, "fp16") and self.args.fp16 is True:
+                    if self.args.mixed_precision_dtype == "fp16":
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not supported."
                         )
@@ -4291,11 +4296,10 @@ class Trainer:
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
-        if not self.is_in_train:
-            if args.fp16_full_eval:
-                model = model.to(dtype=torch.float16, device=args.device)
-            elif args.bf16_full_eval:
-                model = model.to(dtype=torch.bfloat16, device=args.device)
+        if not self.is_in_train and args.mixed_precision_config["full_eval"]:
+            model = model.to(
+                dtype=torch.float16 if args.mixed_precision_dtype == "fp16" else torch.bfloat16, device=args.device
+            )
 
         batch_size = self.args.eval_batch_size
 
@@ -4894,10 +4898,10 @@ class Trainer:
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
-            if args.fp16_full_eval:
-                model = model.to(dtype=torch.float16, device=args.device)
-            elif args.bf16_full_eval:
-                model = model.to(dtype=torch.bfloat16, device=args.device)
+            if args.mixed_precision_config["full_eval"]:
+                model = model.to(
+                    dtype=torch.float16 if args.mixed_precision_dtype == "fp16" else torch.bfloat16, device=args.device
+                )
 
         batch_size = (
             dataloader.total_batch_size
