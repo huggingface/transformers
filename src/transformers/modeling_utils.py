@@ -5788,7 +5788,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
     }
-    if not len(accelerator_device_map):
+    if not accelerator_device_map:
         return
 
     tp_plan_regex = (

@@ -1229,7 +1229,7 @@ class ProcessorMixin(PushToHubMixin):
             ```
             which we could then pass as kwargs to `self._merge_kwargs`
         """
-        if len(args):
+        if args:
             warnings.warn(
                 "Passing positional arguments to the processor call is now deprecated and will be disallowed in v4.47. "
                 "Please pass all arguments as keyword arguments."
