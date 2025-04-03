@@ -1,5 +1,5 @@
 import os
-from typing import List, Union
+from typing import List, Optional, Union
 
 import tensorflow as tf
 from tensorflow_text import BertTokenizer as BertTokenizerLayer
@@ -58,13 +58,13 @@ class TFBertTokenizer(keras.layers.Layer):
         self,
         vocab_list: List,
         do_lower_case: bool,
-        cls_token_id: int = None,
-        sep_token_id: int = None,
-        pad_token_id: int = None,
+        cls_token_id: Optional[int] = None,
+        sep_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
         padding: str = "longest",
         truncation: bool = True,
         max_length: int = 512,
-        pad_to_multiple_of: int = None,
+        pad_to_multiple_of: Optional[int] = None,
         return_token_type_ids: bool = True,
         return_attention_mask: bool = True,
         use_fast_bert_tokenizer: bool = True,
