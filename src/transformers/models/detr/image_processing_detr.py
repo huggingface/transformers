@@ -1568,7 +1568,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -1677,7 +1677,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes

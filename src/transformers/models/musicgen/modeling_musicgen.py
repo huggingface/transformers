@@ -718,6 +718,11 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MusicgenSinusoidalPositionalEmbedding):
+            weights = module.get_embedding(*module.weights.shape)
+            weights = nn.Parameter(weights, requires_grad=False)
+            weights.detach_()
+            module.weights = weights
 
 
 MUSICGEN_START_DOCSTRING = r"""
@@ -1804,27 +1809,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import MusicgenForConditionalGeneration
-
-        >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-        ```"""
-
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for MusicgenForConditionalGeneration. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     def from_sub_models_pretrained(

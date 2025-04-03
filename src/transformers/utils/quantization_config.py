@@ -1528,7 +1528,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         # Handle quant_type based on type and version
         if isinstance(self.quant_type, str):
             self._validate_string_quant_type()
-        elif ao_version >= version.parse("0.10.0"):
+        elif ao_version > version.parse("0.9.0"):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
@@ -1537,8 +1537,8 @@ class TorchAoConfig(QuantizationConfigMixin):
                 )
         else:
             raise ValueError(
-                f"In torchao < 0.10.0, quant_type must be a string. Got {type(self.quant_type)}. "
-                f"Please upgrade to torchao >= 0.10.0 to use AOBaseConfig instances."
+                f"In torchao <= 0.9.0, quant_type must be a string. Got {type(self.quant_type)}. "
+                f"Please upgrade to torchao > 0.9.0 to use AOBaseConfig instances."
             )
 
     def _validate_string_quant_type(self):
@@ -1624,9 +1624,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse("0.10.0"), (
-            "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
-        )
+        assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,7 @@ import os
 import random
 import sys
 import warnings
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 import torch
 import torch.utils._pytree as pytree
@@ -78,9 +77,9 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 def _generate_supported_model_class_names(
-    model_name: Type[PretrainedConfig],
-    supported_tasks: Optional[Union[str, List[str]]] = None,
-) -> List[str]:
+    model_name: type[PretrainedConfig],
+    supported_tasks: Optional[Union[str, list[str]]] = None,
+) -> list[str]:
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
@@ -590,7 +589,7 @@ def operator_getitem(a, b):
     return operator.getitem(a, b)
 
 
-_MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
+_MANUAL_META_OVERRIDES: dict[Callable, Callable] = {
     torch.nn.Embedding: torch_nn_embedding,
     torch.nn.functional.embedding: torch_nn_functional_embedding,
     torch.nn.LayerNorm: torch_nn_layernorm,
@@ -716,7 +715,7 @@ class HFCacheProxy(HFProxy):
     Proxy that represents an instance of `transformers.cache_utils.Cache`.
     """
 
-    def install_orig_cache_cls(self, orig_cache_cls: Type[Cache]):
+    def install_orig_cache_cls(self, orig_cache_cls: type[Cache]):
         self._orig_cache_cls = orig_cache_cls
 
     @property
@@ -770,8 +769,8 @@ class HFProxyableClassMeta(type):
     def __new__(
         cls,
         name: str,
-        bases: Tuple[Type, ...],
-        attrs: Dict[str, Any],
+        bases: tuple[type, ...],
+        attrs: dict[str, Any],
         proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
     ):
         cls = super().__new__(cls, name, bases, attrs)
@@ -794,7 +793,7 @@ class HFProxyableClassMeta(type):
         return cls
 
 
-def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
+def gen_constructor_wrapper(target: Callable) -> tuple[Callable, Callable]:
     """
     Wraps `target` to be proxyable. Used for tensor creators like `torch.ones`, `torch.arange` and so on.
     """
@@ -813,7 +812,7 @@ def _proxies_to_metas(v):
     return v
 
 
-def create_cache_proxy_factory_fn(orig_cache_cls: Type[Cache]) -> Callable[[Node], HFCacheProxy]:
+def create_cache_proxy_factory_fn(orig_cache_cls: type[Cache]) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
         global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
@@ -849,7 +848,7 @@ ProxyableStaticCache = HFProxyableClassMeta(
 )
 
 
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[list[int]] = None):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -899,8 +898,8 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: "PreTrainedModel", input_name: str, shape: List[int], input_names: List[str]
-    ) -> Dict[str, torch.Tensor]:
+        self, model: "PreTrainedModel", input_name: str, shape: list[int], input_names: list[str]
+    ) -> dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
         # from pickle, or from the "__class__" attribute in the general case.
@@ -1181,7 +1180,7 @@ class HFTracer(Tracer):
             return attr_val
 
     # Needed for PyTorch 1.13+
-    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
+    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: dict[str, Any]):
         return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
@@ -1233,8 +1232,8 @@ class HFTracer(Tracer):
     def trace(
         self,
         root: Union[torch.nn.Module, Callable[..., Any]],
-        concrete_args: Optional[Dict[str, Any]] = None,
-        dummy_inputs: Optional[Dict[str, Any]] = None,
+        concrete_args: Optional[dict[str, Any]] = None,
+        dummy_inputs: Optional[dict[str, Any]] = None,
         complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
     ) -> Graph:
         """
@@ -1422,7 +1421,7 @@ class HFTracer(Tracer):
         return attribute
 
 
-def get_concrete_args(model: nn.Module, input_names: List[str]):
+def get_concrete_args(model: nn.Module, input_names: list[str]):
     sig = inspect.signature(model.forward)
 
     if not (set(input_names) <= set(sig.parameters.keys())):
@@ -1450,9 +1449,9 @@ def check_if_model_is_supported(model: "PreTrainedModel"):
 
 def symbolic_trace(
     model: "PreTrainedModel",
-    input_names: Optional[List[str]] = None,
+    input_names: Optional[list[str]] = None,
     disable_check: bool = False,
-    tracer_cls: Type[HFTracer] = HFTracer,
+    tracer_cls: type[HFTracer] = HFTracer,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.

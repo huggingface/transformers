@@ -337,10 +337,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Fast init from base not tested for RecurrentGemma")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @unittest.skip(reason="RecurrentGemma does not return pkv")
     def test_past_key_values_format(self):
         pass

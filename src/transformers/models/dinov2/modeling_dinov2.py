@@ -548,6 +548,11 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
+            if self.config.use_mask_token:
+                module.mask_token.data.zero_()
+        elif isinstance(module, Dinov2LayerScale):
+            module.lambda1.data.fill_(self.config.layerscale_value)
+
 
 DINOV2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
