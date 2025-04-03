@@ -548,22 +548,6 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_torchscript_simple(self):
         pass
 
-    @unittest.skip("Cosmos uses T5 which doesn't support sdpa")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip("Cosmos uses T5 which doesn't support sdpa")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip("Cosmos uses T5 which doesn't support sdpa")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip("Cosmos uses T5 which doesn't support sdpa")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
