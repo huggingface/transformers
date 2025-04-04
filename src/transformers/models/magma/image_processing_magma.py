@@ -18,6 +18,9 @@
 from typing import List, Optional, Union
 import ast
 import numpy as np
+import torch
+import torchvision
+
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
     convert_to_rgb,
@@ -31,16 +34,11 @@ from transformers.image_utils import (
 )
 from transformers.utils import TensorType, is_vision_available, logging
 
-from transformers import AutoImageProcessor
-
 logger = logging.get_logger(__name__)
-
 
 if is_vision_available():
     from PIL import Image
 
-import torch
-import torchvision
 
 def select_best_resolution(original_size, possible_resolutions):
     """
