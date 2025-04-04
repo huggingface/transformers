@@ -58,7 +58,7 @@ print(output[0]["generated_text"])
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt")
-model = AutoModelForCausalLM.from_pretrained("openai-gpt")
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", torch_dtype=torch.float16)
 
 inputs = tokenizer("The future of AI is", return_tensors="pt")
 outputs = model.generate(**inputs, max_length=50)
