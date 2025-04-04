@@ -2594,6 +2594,7 @@ else:
     )
     _import_structure["models.granite_speech"].extend(
         [
+            "GraniteSpeechCTCEncoder",
             "GraniteSpeechForConditionalGeneration",
             "GraniteSpeechPreTrainedModel",
         ]
@@ -7678,6 +7679,7 @@ if TYPE_CHECKING:
             GranitePreTrainedModel,
         )
         from .models.granite_speech import (
+            GraniteSpeechCTCEncoder,
             GraniteSpeechForConditionalGeneration,
             GraniteSpeechPreTrainedModel,
         )
