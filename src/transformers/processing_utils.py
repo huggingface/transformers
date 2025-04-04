@@ -435,7 +435,16 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
 
 class AllKwargsForChatTemplate(
     TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, ProcessorChatTemplateKwargs
-): ...
+):
+    processor_kwargs: ProcessingKwargs = {
+        **ProcessingKwargs.__annotations__,
+    }
+    mm_load_kwargs: ChatTemplateLoadKwargs = {
+        **TextKwargs.__annotations__,
+    }
+    template_kwargs: ProcessorChatTemplateKwargs = {
+        **ProcessorChatTemplateKwargs.__annotations__,
+    }
 
 
 class ProcessorMixin(PushToHubMixin):
@@ -1319,25 +1328,20 @@ class ProcessorMixin(PushToHubMixin):
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
 
-        # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
-        # and for multimodal data loading. Everything else will be used in `__call__`
-        tokenizer_template_kwargs = {}
-        for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
-            default_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
-            value = kwargs.pop(tokenizer_key, default_value)
-            tokenizer_template_kwargs[tokenizer_key] = value
+        # Fill sets of kwargs that should be used by different parts of template
+        processed_kwargs = {
+            "processor_kwargs": {},
+            "mm_load_kwargs": {},
+            "template_kwargs": {},
+        }
 
-        mm_load_kwargs = {}
-        for mm_load_key in ChatTemplateLoadKwargs.__annotations__.keys():
-            default_value = getattr(ChatTemplateLoadKwargs, mm_load_key, None)
-            value = kwargs.pop(mm_load_key, default_value)
-            mm_load_kwargs[mm_load_key] = value
-
-        processor_call_kwargs = {}
-        for key in ProcessingKwargs.__annotations__.keys():
-            value = kwargs.pop(key, None)
-            if value is not None:
-                processor_call_kwargs[key] = value
+        for kwarg_type in processed_kwargs:
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
+                default_value = getattr(kwarg_type_defaults, key, None)
+                value = kwargs.get(key, default_value)
+                if value is not None and not isinstance(value, dict):
+                    processed_kwargs[kwarg_type][key] = value
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1348,8 +1352,9 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        tokenize = kwargs.pop("tokenize", False)
-        return_dict = kwargs.pop("return_dict", False)
+        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
+        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
+        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1426,7 +1431,7 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images=batch_images,
                 batch_videos=batch_videos,
                 batch_video_metadata=batch_video_metadata,
-                **mm_load_kwargs,
+                **processed_kwargs["mm_load_kwargs"],
             )
 
         prompt = self.tokenizer.apply_chat_template(
@@ -1434,7 +1439,7 @@ class ProcessorMixin(PushToHubMixin):
             chat_template=chat_template,
             tokenize=False,
             return_dict=False,
-            **tokenizer_template_kwargs,
+            **processed_kwargs["template_kwargs"],
         )
 
         if not is_batched:
@@ -1449,14 +1454,14 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                processor_call_kwargs["add_special_tokens"] = False
+                processed_kwargs["processor_kwargs"]["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                **processor_call_kwargs,
+                **processed_kwargs["processor_kwargs"],
             )
             if return_dict:
                 return out
