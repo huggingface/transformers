@@ -57,7 +57,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -152,6 +152,10 @@ if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
+
+
+if is_deepspeed_available():
+    import deepspeed
 
 logger = logging.get_logger(__name__)
 
@@ -2021,8 +2025,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
-            import deepspeed
-
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
@@ -2502,9 +2504,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             total_decoder_name="",
             total_encoder_name="",
         ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
-                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
-            )
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(
+                encoder_pointer, nn.Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -2518,9 +2520,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert len(encoder_modules) > 0, (
-                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-                )
+                assert (
+                    len(encoder_modules) > 0
+                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
@@ -2662,8 +2664,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Since we are basically reusing the same old embeddings with new weight values, gathering is required
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
                 vocab_size = model_embeds.weight.shape[0]
         else:
@@ -2694,8 +2694,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
                     new_num_tokens = new_embeddings.weight.shape[0]
             else:
@@ -2784,8 +2782,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
                 old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
         else:
@@ -2830,8 +2826,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                     self._init_added_embeddings_weights_with_mean(
                         old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
@@ -2847,8 +2841,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         n = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
@@ -2859,8 +2851,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # This ensures correct functionality when a Custom Embedding class is passed as input.
         # The input and output embedding types remain consistent. (c.f. https://github.com/huggingface/transformers/pull/31979)
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 old_embeddings.weight = new_embeddings.weight
@@ -2918,8 +2908,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
                 old_num_tokens, old_lm_head_dim = (
                     old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
@@ -2970,8 +2958,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 params = [old_lm_head.weight]
                 if has_new_lm_head_bias:
                     params += [old_lm_head.bias]
@@ -2992,8 +2978,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._copy_lm_head_original_to_resized(
@@ -3738,10 +3722,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls, is_quantized: bool):
-        if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
+    def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [
                 deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
@@ -4346,7 +4328,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model_init_context = cls.get_init_context(is_quantized)
+        model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
@@ -4640,6 +4622,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_deepspeed_zero3 = is_deepspeed_zero3_enabled()
+        is_fsdp = is_fsdp_enabled()
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4817,7 +4801,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
 
             map_location = "cpu"
-            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb:
+            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb and not is_deepspeed_zero3:
                 map_location = "meta"
             elif (
                 device_map is not None
@@ -4839,10 +4823,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3:
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
             # Skip it with fsdp on ranks other than 0
-            elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
+            elif not (is_fsdp and not is_local_dist_rank_0() and not is_quantized):
                 disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
@@ -5263,8 +5247,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             not_initialized_submodules = dict(self.named_modules())
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             not_initialized_parameters = list(
                 set(
                     itertools.chain.from_iterable(
@@ -5385,9 +5367,9 @@ class PoolerEndLogits(nn.Module):
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
         """
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -5453,9 +5435,9 @@ class PoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
