@@ -121,9 +121,6 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 "The expected output"
 ```
 
-</hfoption>
-</hfoptions>
-
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```py
