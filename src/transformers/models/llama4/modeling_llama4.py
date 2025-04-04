@@ -435,10 +435,8 @@ class Llama4TextDecoderLayer(nn.Module):
 
         # use local attention mask for ROPE layers
         if self.use_chunked_attention and chunk_causal_mask is not None:
-            print(" rope")
             attention_mask = chunk_causal_mask
-        else:
-            print("no rope")
+
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
