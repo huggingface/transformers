@@ -41,7 +41,6 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-You can use this model with the `pipeline` API :
 
 ```python
 from transformers import pipeline
