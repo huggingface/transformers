@@ -58,6 +58,7 @@ from . import (
     colpali,
     conditional_detr,
     convbert,
+    conversational_speech_model,
     convnext,
     convnextv2,
     cpm,
