@@ -47,40 +47,46 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         image_processor_map = {
             "do_resize": True,
             "size": 224,
             "apply_ocr": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
-        self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+        cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    @classmethod
+    def get_tokenizers(cls, **kwargs) -> List[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return LayoutLMv2ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()

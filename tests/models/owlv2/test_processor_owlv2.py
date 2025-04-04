@@ -14,13 +14,15 @@ from ...test_processing_common import ProcessorTesterMixin
 class Owlv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Owlv2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        processor = self.processor_class.from_pretrained("google/owlv2-base-patch16-ensemble")
-        processor.save_pretrained(self.tmpdirname)
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        processor = cls.processor_class.from_pretrained("google/owlv2-base-patch16-ensemble")
+        processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_processor_query_images_positional(self):
         processor_components = self.prepare_components()

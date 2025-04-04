@@ -49,17 +49,19 @@ if is_tf_available():
 class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
         processor = SamProcessor(image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,

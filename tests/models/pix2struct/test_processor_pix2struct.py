@@ -40,15 +40,16 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "decoder_input_ids"
     images_input_name = "flattened_patches"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Pix2StructImageProcessor()
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         processor = Pix2StructProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -56,8 +57,9 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
         processor = Pix2StructProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())

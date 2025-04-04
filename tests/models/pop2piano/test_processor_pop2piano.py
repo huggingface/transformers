@@ -62,14 +62,15 @@ if requirements_available:
 @require_essentia
 @require_pretty_midi
 class Pop2PianoProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         processor = Pop2PianoProcessor(feature_extractor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return Pop2PianoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
@@ -77,8 +78,9 @@ class Pop2PianoProcessorTest(unittest.TestCase):
     def get_feature_extractor(self, **kwargs):
         return Pop2PianoFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
         processor = Pop2PianoProcessor(

@@ -44,12 +44,13 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = ["[UNK]","[CLS]","[SEP]","[PAD]","[MASK]","want","##want","##ed","wa","un","runn","##ing",",","low","lowest"]  # fmt: skip
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -62,21 +63,21 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "rescale_factor": 1 / 255,
             "do_pad": True,
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
         image_processor = GroundingDinoImageProcessor()
-        tokenizer = BertTokenizer.from_pretrained(self.from_pretrained_id)
+        tokenizer = BertTokenizer.from_pretrained(cls.from_pretrained_id)
 
         processor = GroundingDinoProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.batch_size = 7
-        self.num_queries = 5
-        self.embed_dim = 5
-        self.seq_length = 5
+        cls.batch_size = 7
+        cls.num_queries = 5
+        cls.embed_dim = 5
+        cls.seq_length = 5
 
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         labels = ["a cat", "remote control"]
@@ -92,21 +93,24 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [labels]
         return [labels, labels_longer] + [labels] * (batch_size - 2)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
-    def get_rust_tokenizer(self, **kwargs):
-        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    def get_rust_tokenizer(cls, **kwargs):
+        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
-    def get_image_processor(self, **kwargs):
-        return GroundingDinoImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(cls, **kwargs):
+        return GroundingDinoImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)

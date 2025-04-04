@@ -58,8 +58,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor(do_center_crop=False)
 
@@ -68,7 +69,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
 
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     # We override this method to take the fast tokenizer by default
     def get_component(self, attribute, **kwargs):
@@ -93,8 +94,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
