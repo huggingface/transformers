@@ -20,8 +20,6 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
     Unpack,
 )
-
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import add_start_docstrings
 
