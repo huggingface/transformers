@@ -195,6 +195,18 @@ def preprocess_keys(state_dict):
     return new_state_dict
 
 
+def max_context_length(model_path, instruct=False):
+    """256K for base, 1M for 128E instruct, 10M for 16E instruct."""
+    if not instruct:
+        return 256 * 1024
+    
+    with open(os.path.join(model_path, "params.json"), "r") as f:
+        params = json.load(f)
+    params = params.get("model", params)
+    num_experts = params["moe_args"]["num_experts"]
+    return 10485760 if num_experts == 16 else 1048576
+
+
 def write_model(
     model_path,
     input_base_path,
@@ -262,6 +274,7 @@ def write_model(
         num_hidden_layers=num_layers,
         intermediate_size=8192,
         intermediate_size_mlp=16384,
+        max_position_embeddings=max_context_length(input_base_path, instruct),
         num_local_experts=num_experts,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
@@ -637,7 +650,8 @@ class Llama4Converter(TikTokenConverter):
 O200K_PATTERN = r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"""  # noqa: E501
 
 
-def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
+def write_tokenizer(args):
+    tokenizer_path=os.path.join(args.input_dir, "tokenizer.model")
     chat_template = '{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now("%d %b %Y") %}\n    {%- else %}\n        {%- set date_string = "26 Jul 2024" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0][\'role\'] == \'system\' %}    \n    {%- if messages[0][\'content\'] is string %}\n        {%- set system_message = messages[0][\'content\']|trim %}\n    {%- else %}\n        {#- FIXME: The processor requires an array, always. #}\n        {%- set system_message = messages[0][\'content\'][0][\'text\']|trim %}\n    {%- endif %}\n    {%- set messages = messages[1:] %}\n    {%- set user_supplied_system_message = true %}\n{%- else %}\n    {%- set system_message = "" %}\n    {%- set user_supplied_system_message = false %}\n{%- endif %}\n\n{#- System message if the user supplied one #}\n{%- if user_supplied_system_message %}\n    {{- "<|header_start|>system<|header_end|>\n\n" }}\n    {%- if tools is not none %}\n        {{- "Environment: ipython\n" }}\n    {%- endif %}\n    {%- if tools is not none and not tools_in_user_message %}\n        {{- "You have access to the following functions. To call a function, please respond with JSON for a function call." }}\n        {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n        {{- "Do not use variables.\n\n" }}\n        {%- for t in tools %}\n            {{- t | tojson(indent=4) }}\n            {{- "\n\n" }}\n        {%- endfor %}\n    {%- endif %}\n    {{- system_message }}\n    {{- "<|eot|>" }}\n{%- endif %}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0][\'content\']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception("Cannot put tools in the first user message when there\'s no first user message!") }}\n{%- endif %}\n    {{- \'<|header_start|>user<|header_end|>\n\n\' -}}\n    {{- "Given the following functions, please respond with a JSON for a function call " }}\n    {{- "with its proper arguments that best answers the given prompt.\n\n" }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\n\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\n\n" }}\n    {%- endfor %}\n    {{- first_user_message + "<|eot|>"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == \'ipython\' or message.role == \'tool\' or \'tool_calls\' in message) %}\n    {{- \'<|header_start|>\' + message[\'role\'] + \'<|header_end|>\n\n\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- elif \'tool_calls\' in message and message.tool_calls|length > 0 %}\n       {{- \'<|header_start|>assistant<|header_end|>\n\n\' -}}\n       {{- \'<|python_start|>\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n       {{- \'<|python_end|>\' }}\n        {%- for tool_call in message.tool_calls %}\n           {{- \'{"name": "\' + tool_call.function.name + \'", \' }}\n           {{- \'"parameters": \' }}\n           {{- tool_call.function.arguments | tojson }}\n           {{- "}" }}\n        {%- endfor %}\n       {{- "<|eot|>" }}\n    {%- elif message.role == "tool" or message.role == "ipython" %}\n        {{- "<|header_start|>ipython<|header_end|>\n\n" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|header_start|>assistant<|header_end|>\n\n\' }}\n{%- endif %}\n'
 
     special_tokens = BASIC_SPECIAL_TOKENS + LLAMA4_SPECIAL_TOKENS
@@ -645,14 +659,13 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         vocab_file=tokenizer_path,
         pattern=O200K_PATTERN,
         special_tokens=special_tokens,
-        chat_template=chat_template if instruct else None,
+        chat_template=chat_template if args.instruct else None,
         bos_token="<|begin_of_text|>",
-        eos_token="<|end_of_text|>" if not instruct else "<|eot|>",
+        eos_token="<|end_of_text|>" if not args.instruct else "<|eot|>",
         pad_token="<|finetune_right_pad_id|>",
-        model_max_length=1048576 if instruct else 262144,
+        model_max_length=max_context_length(args.input_dir, args.instruct),
     )
     tokenizer = converter.converted_tokenizer
-    tokenizer.save_pretrained(save_dir)
 
     image_processor = Llama4ImageProcessorFast()
     processor = Llama4Processor(
@@ -660,7 +673,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         tokenizer=tokenizer,
         chat_template=tokenizer.chat_template,
     )
-    processor.save_pretrained(save_dir)
+    processor.save_pretrained(args.output_dir)
     del processor
 
 
@@ -705,11 +718,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    write_tokenizer(
-        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
-        save_dir=args.output_dir,
-        instruct=args.instruct,
-    )
+    write_tokenizer(args)
 
     write_model(
         model_path=args.output_dir,
