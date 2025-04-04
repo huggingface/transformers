@@ -56,8 +56,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = UdopProcessor
     maxDiff = None
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LayoutLMv3ImageProcessor(
             do_resize=True,
             size=224,
@@ -65,14 +66,14 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
         processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.tokenizer_pretrained_name = "microsoft/udop-large"
+        cls.tokenizer_pretrained_name = "microsoft/udop-large"
 
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizers()[0]
+        image_processor = cls.get_image_processor()
+        tokenizer = cls.get_tokenizers()[0]
         processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)

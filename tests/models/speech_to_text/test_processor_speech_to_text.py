@@ -33,18 +33,19 @@ SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_torchaudio
 @require_sentencepiece
 class Speech2TextProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab = ["<s>", "<pad>", "</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        save_dir = Path(self.tmpdirname)
+        save_dir = Path(cls.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
-        tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = Speech2TextTokenizer.from_pretrained(cls.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
         feature_extractor_map = {
             "feature_size": 24,

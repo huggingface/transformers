@@ -44,15 +44,16 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = OmDetTurboProcessor
     text_input_name = "classes_input_ids"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = DetrImageProcessor()
         tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
 
         processor = OmDetTurboProcessor(image_processor, tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.input_keys = [
+        cls.input_keys = [
             "tasks_input_ids",
             "tasks_attention_mask",
             "classes_input_ids",
@@ -62,9 +63,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pixel_mask",
         ]
 
-        self.batch_size = 5
-        self.num_queries = 5
-        self.embed_dim = 3
+        cls.batch_size = 5
+        cls.num_queries = 5
+        cls.embed_dim = 3
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

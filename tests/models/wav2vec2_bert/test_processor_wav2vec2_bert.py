@@ -32,11 +32,12 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Wav2Vec2BertProcessor
     text_input_name = "labels"
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.add_kwargs_tokens_map = {
+        cls.add_kwargs_tokens_map = {
             "pad_token": "<pad>",
             "unk_token": "<unk>",
             "bos_token": "<s>",
@@ -50,17 +51,17 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "do_normalize": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
-        tokenizer = self.get_tokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = cls.get_tokenizer()
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()

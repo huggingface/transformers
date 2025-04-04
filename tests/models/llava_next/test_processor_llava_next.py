@@ -34,14 +34,15 @@ if is_vision_available():
 class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = LlavaNextImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

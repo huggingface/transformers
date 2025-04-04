@@ -425,9 +425,10 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
 @require_torch
 class MoonshineModelIntegrationTests(unittest.TestCase):
-    def setUp(self):
-        self.processor_tiny = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-        self.processor_base = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor_tiny = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+        cls.processor_base = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

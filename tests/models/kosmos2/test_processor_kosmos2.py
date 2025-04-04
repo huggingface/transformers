@@ -58,8 +58,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor(do_center_crop=False)
 
@@ -68,7 +69,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
 
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     # We override this method to take the fast tokenizer by default
     def get_component(self, attribute, **kwargs):

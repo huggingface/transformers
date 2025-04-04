@@ -43,17 +43,18 @@ if is_vision_available():
 class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = IdeficsProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = IdeficsImageProcessor(return_tensors="pt")
         tokenizer = LlamaTokenizerFast.from_pretrained("HuggingFaceM4/tiny-random-idefics")
 
         processor = IdeficsProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.input_keys = ["pixel_values", "input_ids", "attention_mask", "image_attention_mask"]
+        cls.input_keys = ["pixel_values", "input_ids", "attention_mask", "image_attention_mask"]
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
