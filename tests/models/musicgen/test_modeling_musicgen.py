@@ -32,6 +32,8 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
+    IS_CUDA_SYSTEM,
+    IS_ROCM_SYSTEM,
     is_torch_available,
     require_flash_attn,
     require_torch,
@@ -1095,10 +1097,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.skipTest(reason="Model architecture does not support attentions")
 
         torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
 
-        if not torch.version.cuda or major < 8:
+        valid_compute_capability = False
+        if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+            compute_capability = torch.cuda.get_device_capability()
+            major, _ = compute_capability
+            valid_compute_capability = major < 8
+
+        if not valid_compute_capability:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
