@@ -18,7 +18,6 @@
 from typing import List, Optional, Union
 import ast
 import numpy as np
-import torchvision
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
     convert_to_rgb,

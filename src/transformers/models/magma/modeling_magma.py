@@ -46,7 +46,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MagmaConfig"
     
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Magma
 class MagmaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for Magma causal language model (or autoregressive) outputs.
