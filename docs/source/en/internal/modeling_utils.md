@@ -20,6 +20,10 @@ This page lists all the custom layers used by the library, as well as the utilit
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## Layers
+
+[[autodoc]] GradientCheckpointingLayer
+
 ## Attention Functions
 
 [[autodoc]] AttentionInterface
