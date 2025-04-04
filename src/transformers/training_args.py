@@ -1733,12 +1733,6 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
-        if self.optim == OptimizerNames.ADAMW_TORCH_FUSED and is_torch_available():
-            if version.parse(version.parse(torch.__version__).base_version) < version.parse("2.0.0"):
-                raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
-            # there is a bug in fp16/AMP in pt-2.0.0
-            if version.parse(version.parse(torch.__version__).base_version) == version.parse("2.0.0") and self.fp16:
-                raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():

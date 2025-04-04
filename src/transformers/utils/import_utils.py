@@ -830,7 +830,7 @@ def is_torchdynamo_available():
     if not is_torch_available():
         return False
 
-    return version.parse(_torch_version) >= version.parse("2.0.0")
+    return True
 
 
 def is_torch_compile_available():
