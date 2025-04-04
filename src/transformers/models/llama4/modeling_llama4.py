@@ -184,7 +184,7 @@ class Llama4TextMoe(nn.Module):
             input=hidden_states,
             dim=0,
             index=router_indices,
-        )
+        ).to(hidden_states.device)
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
         expert_routed_out_list = []
