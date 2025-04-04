@@ -39,8 +39,9 @@ if is_vision_available():
 class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InstructBlipVideoProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = InstructBlipVideoImageProcessor()
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
@@ -48,7 +49,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = InstructBlipVideoProcessor(image_processor, tokenizer, qformer_tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

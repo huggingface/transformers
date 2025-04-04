@@ -36,18 +36,19 @@ if is_vision_available():
 class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MllamaProcessor
 
-    def setUp(self):
-        self.checkpoint = "hf-internal-testing/mllama-11b"
-        processor = MllamaProcessor.from_pretrained(self.checkpoint)
-        self.image1 = Image.new("RGB", (224, 220))
-        self.image2 = Image.new("RGB", (512, 128))
-        self.image_token = processor.image_token
-        self.image_token_id = processor.image_token_id
-        self.pad_token_id = processor.tokenizer.pad_token_id
-        self.bos_token = processor.bos_token
-        self.bos_token_id = processor.tokenizer.bos_token_id
-        self.tmpdirname = tempfile.mkdtemp()
-        processor.save_pretrained(self.tmpdirname)
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "hf-internal-testing/mllama-11b"
+        processor = MllamaProcessor.from_pretrained(cls.checkpoint)
+        cls.image1 = Image.new("RGB", (224, 220))
+        cls.image2 = Image.new("RGB", (512, 128))
+        cls.image_token = processor.image_token
+        cls.image_token_id = processor.image_token_id
+        cls.pad_token_id = processor.tokenizer.pad_token_id
+        cls.bos_token = processor.bos_token
+        cls.bos_token_id = processor.tokenizer.bos_token_id
+        cls.tmpdirname = tempfile.mkdtemp()
+        processor.save_pretrained(cls.tmpdirname)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

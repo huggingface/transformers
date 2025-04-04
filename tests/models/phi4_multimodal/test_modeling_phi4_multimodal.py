@@ -282,18 +282,19 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
-        self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
-        self.user_token = "<|user|>"
-        self.assistant_token = "<|assistant|>"
-        self.end_token = "<|end|>"
-        self.image = Image.open(requests.get(self.image_url, stream=True).raw)
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_path)
+        cls.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
+        cls.user_token = "<|user|>"
+        cls.assistant_token = "<|assistant|>"
+        cls.end_token = "<|end|>"
+        cls.image = Image.open(requests.get(cls.image_url, stream=True).raw)
         with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
+            tmp.write(requests.get(cls.audio_url, stream=True).raw.data)
             tmp.flush()
             tmp.seek(0)
-            self.audio, self.sampling_rate = soundfile.read(tmp.name)
+            cls.audio, cls.sampling_rate = soundfile.read(tmp.name)
 
     def tearDown(self):
         gc.collect()

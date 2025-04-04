@@ -546,9 +546,10 @@ class Mask4DTestHard(unittest.TestCase):
             ).to(torch_device)
         return self.__class__._model
 
-    def setUp(self):
-        self.model_dtype = torch.float16
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_dtype = torch.float16
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=False)
 
     def get_test_data(self):
         template = "my favorite {}"

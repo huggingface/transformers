@@ -348,12 +348,13 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
         url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        cls.image = Image.open(requests.get(url, stream=True).raw)
 
-        self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+        cls.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

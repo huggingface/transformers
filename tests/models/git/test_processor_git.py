@@ -31,8 +31,9 @@ if is_vision_available():
 class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GitProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor()
         tokenizer = BertTokenizer.from_pretrained(
@@ -41,7 +42,7 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = GitProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

@@ -46,25 +46,26 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         image_processor_map = {
             "do_resize": True,
             "size": 224,
             "apply_ocr": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
-        self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+        cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)

@@ -698,11 +698,12 @@ class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        self.model_dtype = torch.float32
-        self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
-        self.model = LlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        cls.model_dtype = torch.float32
+        cls.tokenizer = LlamaTokenizer.from_pretrained(model_name)
+        cls.model = LlamaForCausalLM.from_pretrained(model_name, torch_dtype=cls.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"

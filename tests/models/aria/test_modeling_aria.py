@@ -287,8 +287,9 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
     def tearDown(self):
         gc.collect()

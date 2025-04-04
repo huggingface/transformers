@@ -440,9 +440,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
-    def setUp(self):
-        self.model_id = "state-spaces/mamba-2.8b-hf"
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_id = "state-spaces/mamba-2.8b-hf"
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     def test_simple_generate(self, device):

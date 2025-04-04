@@ -322,8 +322,9 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
 @require_torch
 class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

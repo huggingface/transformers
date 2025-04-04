@@ -36,8 +36,9 @@ if is_vision_available():
 class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChineseCLIPProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = [
             "[UNK]",
@@ -59,8 +60,8 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "t",
             "shirt",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -73,14 +74,14 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_std": [0.26862954, 0.26130258, 0.27577711],
             "do_convert_rgb": True,
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)

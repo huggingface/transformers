@@ -395,8 +395,9 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 @require_torch
 @require_read_token
 class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

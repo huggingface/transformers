@@ -32,13 +32,14 @@ if is_torch_available:
 class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2AudioProcessor
 
-    def setUp(self):
-        self.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
+        cls.tmpdirname = tempfile.mkdtemp()
 
-        processor_kwargs = self.prepare_processor_dict()
-        processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint, **processor_kwargs)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

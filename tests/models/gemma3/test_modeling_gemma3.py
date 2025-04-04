@@ -358,11 +358,12 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 @require_torch_gpu
 @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        self.messages = [
+        cls.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
                 "role": "user",

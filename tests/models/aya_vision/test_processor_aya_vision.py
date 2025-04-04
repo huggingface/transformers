@@ -37,8 +37,9 @@ if is_vision_available():
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = GotOcr2ImageProcessor(
             do_resize=True,
@@ -52,14 +53,14 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_convert_rgb=True,
         )
         tokenizer = AutoTokenizer.from_pretrained("CohereForAI/aya-vision-8b", padding_side="left")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = AyaVisionProcessor.from_pretrained(
             "CohereForAI/aya-vision-8b",
             image_processor=image_processor,
             tokenizer=tokenizer,
             **processor_kwargs,
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def prepare_processor_dict(self):
         return {"patch_size": 10, "img_size": 20}
