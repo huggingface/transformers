@@ -199,7 +199,7 @@ def max_context_length(model_path, instruct=False):
     """256K for base, 1M for 128E instruct, 10M for 16E instruct."""
     if not instruct:
         return 256 * 1024
-    
+
     with open(os.path.join(model_path, "params.json"), "r") as f:
         params = json.load(f)
     params = params.get("model", params)
