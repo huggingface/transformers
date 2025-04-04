@@ -118,29 +118,27 @@ class GraniteSpeechEncoderProjectorQFormer(nn.Module):
 
 
 ### Encoder
-class GraniteSpeechCTCModel(nn.Module):
+class GraniteSpeechCTCEncoder(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
-        super(GraniteSpeechCTCModel, self).__init__()
+        super().__init__()
+        self.config = config
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
 
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.context_size = config.context_size
-        self.input_dim = config.input_dim
         self.num_layers = config.num_layers
-        self.hidden_dim = config.hidden_dim
-        self.output_dim = config.output_dim
 
-    def forward(self, x: torch.Tensor):
-        x = self.input_linear(x)
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
-            x = layer(x, self.context_size)
+            hidden_states = layer(hidden_states, self.context_size)
             if idx == self.num_layers // 2:
-                x_mid = x.clone()
-                x_mid = self.out(x_mid)
-                x += self.out_mid(nn.Softmax(dim=-1)(x_mid))
-        return x
+                hidden_states_mid = hidden_states.clone()
+                hidden_states_mid = self.out(hidden_states_mid)
+                hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
+        return hidden_states
 
 
 # NOTE: Conformer adapted from: https://github.com/lucidrains/conformer.git
@@ -406,7 +404,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
-        self.encoder = GraniteSpeechCTCModel(config.encoder_config)
+        self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechEncoderProjectorQFormer(config)
 
         if config.has_lora_adapter and not is_peft_available():
@@ -612,7 +610,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         )
         return inputs_embeds
 
-    def generate(self, *args, **kwargs):
+    def generate(self, *args, **kwargs) -> torch.LongTensor:
         """This model is expected to have a lora adapter, which is only
         enabled when considering audio inputs. As such, we override generate
         to conditionally enable / disable the lora adapter based on whether
@@ -640,6 +638,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
 
 __all__ = [
+    "GraniteSpeechCTCEncoder",
     "GraniteSpeechForConditionalGeneration",
     "GraniteSpeechPreTrainedModel",
 ]
