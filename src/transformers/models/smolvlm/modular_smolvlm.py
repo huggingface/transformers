@@ -190,7 +190,6 @@ class SmolVLMModel(Idefics3Model):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -211,14 +210,8 @@ class SmolVLMModel(Idefics3Model):
             )
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
+        if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         past_seen_tokens = 0
         if use_cache:
             if past_key_values is None:
@@ -235,44 +228,8 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            batch_size, num_images, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values
-            pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-            # Remove padding images - padding images are full 0.
-            nb_values_per_image = pixel_values.shape[1:].numel()
-            real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-            if not any(real_images_inds):
-                # no images, leave one empty image.
-                real_images_inds[0] = True
-
-            pixel_values = pixel_values[real_images_inds].contiguous()
-
-            # Handle the vision attention mask
-            if pixel_attention_mask is None:
-                pixel_attention_mask = torch.ones(
-                    size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                    dtype=torch.bool,
-                    device=pixel_values.device,
-                )
-            else:
-                # Remove padding images from the mask
-                pixel_attention_mask = pixel_attention_mask.view(
-                    batch_size * num_images, *pixel_attention_mask.shape[2:]
-                )
-                pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-
-            patch_size = self.config.vision_config.patch_size
-            patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-            patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(
-                pixel_values=pixel_values,
-                patch_attention_mask=patch_attention_mask,
-            ).last_hidden_state
+            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
 
             # Modality projection & resampling
             image_hidden_states = self.connector(image_hidden_states)

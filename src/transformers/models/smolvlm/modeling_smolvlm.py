@@ -630,8 +630,6 @@ SMOLVLM_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`CLIPImageProcessor`] for processing images).
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         use_cache (`bool`, *optional*):
@@ -750,18 +748,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
         return merged_embeds
 
-    @add_start_docstrings_to_model_forward(
-        """
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """,
-        SMOLVLM_INPUTS_DOCSTRING,
-    )
+    @add_start_docstrings_to_model_forward(SMOLVLM_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -770,7 +757,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -791,14 +777,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             )
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
+        if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         past_seen_tokens = 0
         if use_cache:
             if past_key_values is None:
@@ -815,44 +795,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            batch_size, num_images, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values
-            pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-            # Remove padding images - padding images are full 0.
-            nb_values_per_image = pixel_values.shape[1:].numel()
-            real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-            if not any(real_images_inds):
-                # no images, leave one empty image.
-                real_images_inds[0] = True
-
-            pixel_values = pixel_values[real_images_inds].contiguous()
-
-            # Handle the vision attention mask
-            if pixel_attention_mask is None:
-                pixel_attention_mask = torch.ones(
-                    size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                    dtype=torch.bool,
-                    device=pixel_values.device,
-                )
-            else:
-                # Remove padding images from the mask
-                pixel_attention_mask = pixel_attention_mask.view(
-                    batch_size * num_images, *pixel_attention_mask.shape[2:]
-                )
-                pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-
-            patch_size = self.config.vision_config.patch_size
-            patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-            patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(
-                pixel_values=pixel_values,
-                patch_attention_mask=patch_attention_mask,
-            ).last_hidden_state
+            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
 
             # Modality projection & resampling
             image_hidden_states = self.connector(image_hidden_states)
@@ -993,7 +937,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1064,7 +1007,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1118,7 +1060,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         cache_position=None,
         pixel_values=None,
-        pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
         **kwargs,
@@ -1133,7 +1074,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
             pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
             **kwargs,
@@ -1146,7 +1086,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
 
         if image_hidden_states is not None:
             model_inputs["pixel_values"] = None
-            model_inputs["pixel_attention_mask"] = None
 
         return model_inputs
 
