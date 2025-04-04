@@ -1895,14 +1895,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     def test_batched_inputs_outputs(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 

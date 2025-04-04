@@ -646,7 +646,7 @@ class GPTQConfig(QuantizationConfigMixin):
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
-        meta: Optional[Dict[str, any]] = None,
+        meta: Optional[Dict[str, Any]] = None,
         backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
@@ -682,7 +682,6 @@ class GPTQConfig(QuantizationConfigMixin):
         self.use_exllama = use_exllama
         self.max_input_length = max_input_length
         self.exllama_config = exllama_config
-        self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
@@ -690,7 +689,6 @@ class GPTQConfig(QuantizationConfigMixin):
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
         loading_attibutes = [
-            "disable_exllama",
             "use_exllama",
             "exllama_config",
             "use_cuda_fp16",
@@ -739,20 +737,9 @@ class GPTQConfig(QuantizationConfigMixin):
                 self.use_exllama = False
 
         # auto-gptq specific kernel control logic
-        if self.disable_exllama is None and self.use_exllama is None:
+        if self.use_exllama is None:
             # New default behaviour
             self.use_exllama = True
-        elif self.disable_exllama is not None and self.use_exllama is None:
-            # Follow pattern of old config
-            logger.warning(
-                "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_config`."
-                "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
-            )
-            self.use_exllama = not self.disable_exllama
-            self.disable_exllama = None
-        elif self.disable_exllama is not None and self.use_exllama is not None:
-            # Only happens if user explicitly passes in both arguments
-            raise ValueError("Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`")
 
         if self.exllama_config is None:
             self.exllama_config = {"version": ExllamaVersion.ONE}
@@ -809,7 +796,7 @@ class GPTQConfig(QuantizationConfigMixin):
         if "disable_exllama" in config_dict:
             config_dict["use_exllama"] = not config_dict["disable_exllama"]
             # switch to None to not trigger the warning
-            config_dict["disable_exllama"] = None
+            config_dict.pop("disable_exllama")
 
         config = cls(**config_dict)
         return config
@@ -906,12 +893,13 @@ class AwqConfig(QuantizationConfigMixin):
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
             # Only cuda device can run this function
-            if not torch.cuda.is_available():
-                raise ValueError("LLM-AWQ backend is only supported on CUDA")
-            compute_capability = torch.cuda.get_device_capability()
-            major, minor = compute_capability
-            if major < 8:
-                raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
+            if not (torch.cuda.is_available() or torch.xpu.is_available()):
+                raise ValueError("LLM-AWQ backend is only supported on CUDA and XPU")
+            if torch.cuda.is_available():
+                compute_capability = torch.cuda.get_device_capability()
+                major, minor = compute_capability
+                if major < 8:
+                    raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
 
         if self.do_fuse and self.fuse_max_seq_len is None:
             raise ValueError(
@@ -1360,7 +1348,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if value != default_config_dict[key]:
+            if key not in default_config_dict or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
@@ -1540,7 +1528,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         # Handle quant_type based on type and version
         if isinstance(self.quant_type, str):
             self._validate_string_quant_type()
-        elif ao_version >= version.parse("0.10.0"):
+        elif ao_version > version.parse("0.9.0"):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
@@ -1549,8 +1537,8 @@ class TorchAoConfig(QuantizationConfigMixin):
                 )
         else:
             raise ValueError(
-                f"In torchao < 0.10.0, quant_type must be a string. Got {type(self.quant_type)}. "
-                f"Please upgrade to torchao >= 0.10.0 to use AOBaseConfig instances."
+                f"In torchao <= 0.9.0, quant_type must be a string. Got {type(self.quant_type)}. "
+                f"Please upgrade to torchao > 0.9.0 to use AOBaseConfig instances."
             )
 
     def _validate_string_quant_type(self):
@@ -1636,16 +1624,14 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse(
-            "0.10.0"
-        ), "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"
         # In the future we may update this
-        assert (
-            len(quant_type) == 1 and "default" in quant_type
-        ), "Expected only one key 'default' in quant_type dictionary"
+        assert len(quant_type) == 1 and "default" in quant_type, (
+            "Expected only one key 'default' in quant_type dictionary"
+        )
         quant_type = quant_type["default"]
 
         # Deserialize quant_type if needed

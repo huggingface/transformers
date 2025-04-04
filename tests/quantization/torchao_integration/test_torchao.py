@@ -255,7 +255,7 @@ class TorchAoGPUTest(TorchAoTest):
     def test_int4wo_quant_multi_gpu(self):
         """
         Simple test that checks if the quantized model int4 weight only is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
 
         quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
@@ -322,14 +322,16 @@ class TorchAoSerializationTest(unittest.TestCase):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        cls.quant_config = TorchAoConfig(cls.quant_scheme, **cls.quant_scheme_kwargs)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map=cls.device,
-            quantization_config=cls.quant_config,
-        )
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+
+    def setUp(self):
+        self.quant_config = TorchAoConfig(self.quant_scheme, **self.quant_scheme_kwargs)
+        self.quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map=self.device,
+            quantization_config=self.quant_config,
+        )
 
     def tearDown(self):
         gc.collect()

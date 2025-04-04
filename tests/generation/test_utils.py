@@ -47,7 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available
+from transformers.utils import is_ipex_available, is_torchdynamo_exporting
 
 
 if is_torch_available():
@@ -56,6 +56,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
@@ -86,6 +87,7 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        GenerationMixin,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
         LogitsProcessorList,
@@ -126,6 +128,7 @@ VLM_CLASS_NAMES = [
     "ayavision",
     "gemma3",
     "mistral3",
+    "chameleon",
 ]
 
 
@@ -2593,9 +2596,9 @@ class GenerationTesterMixin:
         # set to same device. we don't care what device.
 
         if not isinstance(tensor_1, list):
-            tensor_1 = tensor_1.cpu().tolist()
+            tensor_1 = tensor_1.tolist()
         if not isinstance(tensor_2, list):
-            tensor_2 = tensor_2.cpu().tolist()
+            tensor_2 = tensor_2.tolist()
 
         in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
@@ -2700,6 +2703,54 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_cache_dependant_input_preparation_exporting(self):
+        self.assertFalse(
+            is_torchdynamo_exporting()
+        )  # otherwise this test does not compare two different implementation
+        # Case 1
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
+        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
+        cache_position = torch.range(0, 7, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 2
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
+        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
+        cache_position = torch.range(0, 7, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 3
+        input_ids = torch.randint(0, 16, (2, 12), dtype=torch.int64)
+        inputs_embeds = None
+        cache_position = torch.range(0, 7, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 4
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
+        inputs_embeds = None
+        cache_position = torch.range(0, 7, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
 
 
 global_rng = random.Random()
@@ -3746,11 +3797,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_assisted_decoding_in_different_gpu(self):
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:0")
+        device_0 = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
+        device_1 = f"{torch_device}:1" if torch_device != "cpu" else "cpu"
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(device_0)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
-            "cuda:1"
+            device_1
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model.config.pad_token_id = tokenizer.eos_token_id
@@ -4718,6 +4771,60 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
+
+    @slow
+    @require_torch_gpu
+    def test_cache_device_map_with_vision_layer_device_map(self):
+        """
+        Test that the cache device map is correctly set when the vision layer has a device map. Regression test for
+        #36942
+        """
+        # gemma 3 uses hybrid cache, which can be compiled -> needs a device map at allocation time
+        model_id = "google/gemma-3-4b-it"
+
+        # important part of this device map: the `.layers.` pattern is NOT present in the decoder
+        device_map = {
+            "vision_tower.vision_model.embeddings": 0,
+            "vision_tower.vision_model.encoder.layers.0": 0,
+            "vision_tower.vision_model.encoder.layers.1": 0,
+            "vision_tower.vision_model.encoder.layers.2": 0,
+            "vision_tower.vision_model.encoder.layers.3": 0,
+            "vision_tower.vision_model.encoder.layers.4": 0,
+            "vision_tower.vision_model.encoder.layers.5": 0,
+            "vision_tower.vision_model.encoder.layers.6": 0,
+            "vision_tower.vision_model.encoder.layers.7": 0,
+            "vision_tower.vision_model.encoder.layers.8": 0,
+            "vision_tower.vision_model.encoder.layers.9": 0,
+            "vision_tower.vision_model.encoder.layers.10": 0,
+            "vision_tower.vision_model.encoder.layers.11": 0,
+            "vision_tower.vision_model.encoder.layers.12": 0,
+            "vision_tower.vision_model.encoder.layers.13": 0,
+            "vision_tower.vision_model.encoder.layers.14": "cpu",
+            "vision_tower.vision_model.encoder.layers.15": "cpu",
+            "vision_tower.vision_model.encoder.layers.16": "cpu",
+            "vision_tower.vision_model.encoder.layers.17": "cpu",
+            "vision_tower.vision_model.encoder.layers.18": "cpu",
+            "vision_tower.vision_model.encoder.layers.19": "cpu",
+            "vision_tower.vision_model.encoder.layers.20": "cpu",
+            "vision_tower.vision_model.encoder.layers.21": "cpu",
+            "vision_tower.vision_model.encoder.layers.22": "cpu",
+            "vision_tower.vision_model.encoder.layers.23": "cpu",
+            "vision_tower.vision_model.encoder.layers.24": "cpu",
+            "vision_tower.vision_model.encoder.layers.25": "cpu",
+            "vision_tower.vision_model.encoder.layers.26": "cpu",
+            "vision_tower.vision_model.post_layernorm": "cpu",
+            "multi_modal_projector": "cpu",
+            "language_model": "cpu",
+        }
+
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id, device_map=device_map, torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
+
+        # If the generate doesn't infer the DECODER device map correctly, this will fail
+        _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
 
 @require_torch
