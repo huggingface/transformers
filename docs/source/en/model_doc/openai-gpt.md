@@ -23,8 +23,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 
-# OpenAI GPT
-## Overview
+# GPT
 
 [GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
 
