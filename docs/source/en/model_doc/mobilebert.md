@@ -24,85 +24,71 @@ rendered properly in your Markdown viewer.
 
 # MobileBERT
 
-[MobileBERT](https://github.com/google-research/google-research/tree/master/mobilebert) is a lightweight and efficient variant of BERT, specifically designed for resource-limited devices such as mobile phones. It retains the bidirectional transformer architecture of BERT but significantly reduces model size and inference latency while maintaining strong performance on NLP tasks.
-The MobileBERT model was proposed in [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984). It's a bidirectional transformer based on the BERT model, which is compressed and accelerated using several
-approaches.
+[MobileBERT](https://huggingface.co/papers/2004.02984) is a lightweight and efficient variant of BERT, specifically designed for resource-limited devices such as mobile phones. It retains BERT's architecture but significantly reduces model size and inference latency while maintaining strong performance on NLP tasks. MobileBERT achieves this through a bottleneck structure and carefully balanced self-attention and feedforward networks. The model is trained by knowledge transfer from a large BERT model with an inverted bottleneck structure.
 
+You can find the original MobileBERT checkpoint under the [Google](https://huggingface.co/google/mobilebert-uncased) organization.
 > [!TIP]
-> Click on the  models in the right sidebar for more examples of how to apply Gemma to different vision and language tasks.
+> Click on the MobileBERT models in the right sidebar for more examples of how to apply MobileBERT to different language tasks.
 
-## Usage tips
-
-- 4.3× smaller and 5.5× faster than BERT_BASE.
-- MobileBERT is a thin version of BERT_LARGE, featuring bottleneck layers that reduce computational complexity while preserving model expressiveness.
-- The model is deeper than BERT_BASE but with narrower layers, making it more parameter-efficient.
-- Achieves competitive performance on standard NLP benchmarks
-    * GLUE score: 77.7 (only 0.6 lower than BERT_BASE).
-    * SQuAD v1.1/v2.0: F1 scores of 90.0/79.2 (outperforming BERT_BASE by 1.5/2.1 points).
-
-
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
-# Load MobileBERT for masked token prediction
-mask_filler = pipeline("fill-mask", model="google/mobilebert-uncased")
-
-# Example: Predict the masked word
-results = mask_filler("The capital of France is [MASK].")
-print(results[0]["sequence"]) # Output: "The capital of France is paris."
+pipeline = pipeline(
+    task="fill-mask",
+    model="google/mobilebert-uncased",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("The capital of France is [MASK].")
 ```
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, AutoModelForMaskedLM
 import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-# Load model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
-model = AutoModelForMaskedLM.from_pretrained("google/mobilebert-uncased")
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/mobilebert-uncased",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "google/mobilebert-uncased",
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to("cuda")
 
-# Example input with a [MASK] token
-text = "I want to [MASK] a coffee."
-inputs = tokenizer(text, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
 
-# Find the position of the [MASK] token
-mask_token_index = torch.where(inputs["input_ids"][0] == tokenizer.mask_token_id)[0]
-
-# Predict the masked token
-outputs = model(**inputs)
-logits = outputs.logits
-mask_logits = logits[0, mask_token_index, :]
-predicted_token_id = torch.argmax(mask_logits, dim=-1)
-
-# Decode the prediction
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
-print(f"Predicted word: {predicted_token}")  # Output: "buy" or "order"
+
+print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
 <hfoption id="transformers-cli">
 
 ```bash
-python -c "from transformers import pipeline; print(pipeline('fill-mask', model='google/mobilebert-uncased')('Artificial intelligence will [MASK] the world.')[0]['sequence'])"
+echo -e "The capital of France is [MASK]." | transformers-cli run --task fill-mask --model google/mobilebert-uncased --device 0
 ```
 
 </hfoption>
 </hfoptions>
 
 
-## Resources
+## Notes
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- Inputs should be padded on the right because BERT uses absolute position embeddings.
 
 ## MobileBertConfig
 
