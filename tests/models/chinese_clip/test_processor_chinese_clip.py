@@ -83,14 +83,17 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs):
+        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_image_processor(self, **kwargs):
-        return ChineseCLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return ChineseCLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):

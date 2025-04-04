@@ -92,7 +92,8 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def prepare_processor_dict(self):
+    @classmethod
+    def prepare_processor_dict(cls):
         return {
             "chat_template": _CHAT_TEMPLATE,
             "policy_definitions": _SHIELDGEMMA2_POLICIES,
