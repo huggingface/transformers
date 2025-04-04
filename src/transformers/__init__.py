@@ -204,6 +204,14 @@ _import_structure = {
         "BarkProcessor",
         "BarkSemanticConfig",
     ],
+    "models.style_text_to_speech_2": [
+        "StyleTextToSpeech2Config",
+        "StyleTextToSpeech2AcousticTextEncoderConfig",
+        "StyleTextToSpeech2PredictorConfig",
+        "StyleTextToSpeech2DecoderConfig",
+        "StyleTextToSpeech2Tokenizer",
+        "StyleTextToSpeech2Processor",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -1644,6 +1652,15 @@ else:
             "BarkModel",
             "BarkPreTrainedModel",
             "BarkSemanticModel",
+        ]
+    )
+    _import_structure["models.style_text_to_speech_2"].extend(
+        [
+            "StyleTextToSpeech2AcousticTextEncoder",
+            "StyleTextToSpeech2Predictor",
+            "StyleTextToSpeech2Decoder",
+            "StyleTextToSpeech2Model",
+            "StyleTextToSpeech2PreTrainedModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -5423,6 +5440,14 @@ if TYPE_CHECKING:
         BarkProcessor,
         BarkSemanticConfig,
     )
+    from .models.style_text_to_speech_2 import (
+        StyleTextToSpeech2Config,
+        StyleTextToSpeech2AcousticTextEncoderConfig,
+        StyleTextToSpeech2PredictorConfig,
+        StyleTextToSpeech2DecoderConfig,
+        StyleTextToSpeech2Tokenizer,
+        StyleTextToSpeech2Processor,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BeitConfig
     from .models.bert import (
@@ -6898,6 +6923,14 @@ if TYPE_CHECKING:
             BarkModel,
             BarkPreTrainedModel,
             BarkSemanticModel,
+        )
+        from .models.style_text_to_speech_2 import (
+            StyleTextToSpeech2Model,
+            StyleTextToSpeech2AcousticTextEncoder,
+            StyleTextToSpeech2Predictor,
+            StyleTextToSpeech2Decoder,
+            StyleTextToSpeech2Tokenizer,
+            StyleTextToSpeech2Processor,
         )
         from .models.bart import (
             BartForCausalLM,
