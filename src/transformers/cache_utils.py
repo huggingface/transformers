@@ -1668,18 +1668,18 @@ class HybridCache(Cache):
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
-            self.sliding_window = getattr(config, "attention_chunk_size", 8192)
-        else: 
+            self.sliding_window = getattr(config.get_text_config(), "attention_chunk_size", 8092)
+        else:
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
 
-        if hasattr(config, "no_rope_layers"):
-            self.is_sliding = torch.tensor([k in config.no_rope_layers for k in range(config.num_hidden_layers)])
-        else: 
-            layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2
+        if hasattr(config.get_text_config(), "no_rope_layers"):
+            self.is_sliding = torch.tensor(config.no_rope_layers)
+        else:
+            layer_switch = getattr(config, "sliding_window_pattern", 2)
             self.is_sliding = torch.tensor(
                 [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
             )
@@ -1715,13 +1715,11 @@ class HybridCache(Cache):
         cumulative_length = self.cumulative_length[layer_idx]
         is_full = cumulative_length >= max_cache_len
         if is_full:
-            full_key_states = torch.cat((self.key_cache[layer_idx][:, :, 1:, :], key_states), dim=-2)
-            full_value_states = torch.cat((self.value_cache[layer_idx][:, :, 1:, :], value_states), dim=-2)
+            full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
+            full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
         elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
-            full_key_states = torch.cat((self.key_cache[layer_idx][:, :, :cumulative_length, :], key_states), dim=-2)
-            full_value_states = torch.cat(
-                (self.value_cache[layer_idx][:, :, :cumulative_length, :], value_states), dim=-2
-            )
+            full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
+            full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
             self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
             self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
