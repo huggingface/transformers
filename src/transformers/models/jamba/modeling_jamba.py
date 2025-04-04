@@ -48,7 +48,6 @@ from ...utils import (
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
-    logging,
 )
 from .configuration_jamba import JambaConfig
 

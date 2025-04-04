@@ -441,12 +441,6 @@ class Cohere2PreTrainedModel(CoherePreTrainedModel):
 
 
 class Cohere2Model(Gemma2Model):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2DecoderLayer`]
-    Args:
-        config: Cohere2Config
-    """
-
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
         self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)

@@ -421,13 +421,6 @@ class PersimmonPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PersimmonModel(PersimmonPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PersimmonDecoderLayer`]
-
-    Args:
-        config: PersimmonConfig
-    """
-
     def __init__(self, config: PersimmonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

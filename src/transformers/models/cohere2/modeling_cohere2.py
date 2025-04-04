@@ -425,12 +425,6 @@ class Cohere2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Cohere2Model(Cohere2PreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2DecoderLayer`]
-    Args:
-        config: Cohere2Config
-    """
-
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

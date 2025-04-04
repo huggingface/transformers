@@ -1520,12 +1520,6 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 class Phi4MultimodalModel(Phi3Model, nn.Module):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
-    Args:
-        config: Phi4MultimodalMMConfig
-    """
-
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
