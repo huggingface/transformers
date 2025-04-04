@@ -92,6 +92,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizers(cls, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
+    @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname)
 

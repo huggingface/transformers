@@ -60,13 +60,15 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
         processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_image_processor(self, **kwargs):
+    @classmethod
+    def get_image_processor(cls, **kwargs):
         if is_torchvision_available():
-            return ViTImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
-        return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+            return ViTImageProcessorFast.from_pretrained(cls.tmpdirname, **kwargs)
+        return ViTImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
