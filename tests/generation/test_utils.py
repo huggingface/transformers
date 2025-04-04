@@ -889,8 +889,7 @@ class GenerationTesterMixin:
                 num_beams=beam_kwargs["num_beams"],
             )
 
-    # TODO: @gante check why it is flaky
-    @is_flaky()
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -947,6 +946,7 @@ class GenerationTesterMixin:
             for generation_output in output_generate:
                 self._check_sequence_inside_sequence(force_tokens, generation_output)
 
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
