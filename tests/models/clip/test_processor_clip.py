@@ -78,7 +78,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return CLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
-    def tearDown(cls):
+    def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_default(self):
