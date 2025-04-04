@@ -83,7 +83,7 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Cache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1020,8 +1020,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
     @replace_return_docstrings(output_type=Qwen2AudioCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         feature_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
