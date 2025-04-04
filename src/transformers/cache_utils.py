@@ -784,7 +784,10 @@ class QuantizedCache(DynamicCache):
 
             keys_to_return = torch.cat(keys_to_return, dim=-2)
             values_to_return = torch.cat(values_to_return, dim=-2)
-            if self.key_cache[layer_idx].dim() == 4 and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length:
+            if (
+                self.key_cache[layer_idx].dim() == 4
+                and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
+            ):
                 self._quantized_key_cache[layer_idx] = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
                 self._quantized_value_cache[layer_idx] = self._quantize(
                     values_to_return.contiguous(), axis=self.axis_value
@@ -995,7 +998,9 @@ class SinkCache(Cache):
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def _apply_key_rotary_pos_emb(self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    def _apply_key_rotary_pos_emb(
+        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> torch.Tensor:
         rotated_key_states = (key_states * cos) + (self._rotate_half(key_states) * sin)
         return rotated_key_states
 
@@ -1548,7 +1553,8 @@ class EncoderDecoderCache(Cache):
 
     def check_dynamic_cache(self, method: str):
         if not (
-            isinstance(self.self_attention_cache, DynamicCache) and isinstance(self.cross_attention_cache, DynamicCache)
+            isinstance(self.self_attention_cache, DynamicCache)
+            and isinstance(self.cross_attention_cache, DynamicCache)
         ):
             raise ValueError(
                 f"`{method}` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
