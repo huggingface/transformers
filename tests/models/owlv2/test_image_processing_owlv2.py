@@ -17,7 +17,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -25,7 +25,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, Owlv2ForObjectDetection, Owlv2ImageProcessor
+    from transformers import AutoProcessor, Owlv2ForObjectDetection, Owlv2ImageProcessor, Owlv2ImageProcessorFast
 
 if is_torch_available():
     import torch
@@ -88,6 +88,7 @@ class Owlv2ImageProcessingTester:
 @require_vision
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Owlv2ImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Owlv2ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
