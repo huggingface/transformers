@@ -213,6 +213,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    phi3_v,
     phi4_multimodal,
     phimoe,
     phobert,
