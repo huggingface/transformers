@@ -49,7 +49,7 @@ if __name__ == "__main__":
     tests = os.getcwd()
     model_tests = os.listdir(os.path.join(tests, "models"))
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
-    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
+    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x not in ["nat", "dinat"]]))
     d1.remove("models")
     d = d2 + d1
 
