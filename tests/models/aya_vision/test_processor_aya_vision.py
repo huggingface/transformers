@@ -76,7 +76,7 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # todo: yoni, fix this test
     @unittest.skip("Chat template has long system prompt")

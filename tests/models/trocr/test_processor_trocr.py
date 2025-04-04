@@ -43,7 +43,7 @@ class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
