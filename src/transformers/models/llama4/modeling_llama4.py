@@ -761,13 +761,20 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                cache_offset = cache_position[0]
                 torch._dynamo.config.cache_size_limit = 100000
                 cache_position = cache_position.to(self.device)
                 attention_chunk_size = self.config.attention_chunk_size
 
-                key_length = attention_chunk_size if sequence_length ==1 else max(attention_chunk_size, sequence_length)
-                offsets = None if sequence_length != 1 else (cache_offset, max(cache_offset - attention_chunk_size, 0))
+                first_cache_position = cache_position[0]
+                last_cache_position = cache_position[-1]
+                if first_cache_position >= attention_chunk_size:
+                    key_length = attention_chunk_size + sequence_length - 1
+                elif first_cache_position < attention_chunk_size and first_cache_position + sequence_length > attention_chunk_size:
+                    key_length = first_cache_position + sequence_length
+                else:
+                    key_length = attention_chunk_size
+
+                offsets = (first_cache_position, max(last_cache_position - key_length, 0))
                 chunked_attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     self.config.attention_chunk_size,
@@ -779,7 +786,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     attention_mask,
                     query_length=sequence_length,
                     key_length=past_key_values.max_cache_len,
-                    offsets=None if sequence_length != 1 else (cache_offset, 0),
+                    offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
