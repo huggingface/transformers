@@ -649,7 +649,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         bos_token="<|begin_of_text|>",
         eos_token="<|end_of_text|>" if not instruct else "<|eot|>",
         pad_token="<|finetune_right_pad_id|>",
-        model_max_length=131072,
+        model_max_length=1048576 if instruct else 262144,
     )
     tokenizer = converter.converted_tokenizer
     tokenizer.save_pretrained(save_dir)
