@@ -79,8 +79,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
         return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return LayoutLMv2ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
