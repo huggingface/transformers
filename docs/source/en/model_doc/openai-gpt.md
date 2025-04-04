@@ -53,7 +53,6 @@ print(output[0]["generated_text"])
 </hfoption>
 <hfoption id="AutoModel">
 
-You can also load the model using `AutoModelForCausalLM` :
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
