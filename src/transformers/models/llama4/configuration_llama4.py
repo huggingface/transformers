@@ -232,7 +232,9 @@ class Llama4TextConfig(PretrainedConfig):
         default_no_rope_layers = [
             int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
         ]
-        self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
+
+        # no_rope_layers == [] is invalid as we cannot have 0 layers
+        self.no_rope_layers = no_rope_layers if no_rope_layers else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
         self.moe_layers = (
