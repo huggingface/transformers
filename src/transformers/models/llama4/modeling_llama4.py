@@ -612,14 +612,9 @@ LLAMA4_INPUTS_DOCSTRING = r"""
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Llama4DecoderLayer`]
+    config_class = Llama4TextConfig
 
-    Args:
-        config: Llama4Config
-    """
-
-    def __init__(self, config: Llama4Config):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -876,7 +871,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     config_class = Llama4TextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
         self.model = Llama4TextModel(config)
         self.vocab_size = config.vocab_size
@@ -1526,23 +1521,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
-
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAVA_START_DOCSTRING,
-)
-class Llama4PreTrainedModel(PreTrainedModel):
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_flex_attn = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {}

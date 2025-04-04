@@ -1706,7 +1706,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
                 "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",
                 FutureWarning,
             )
-        return text_config
+        return config
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
