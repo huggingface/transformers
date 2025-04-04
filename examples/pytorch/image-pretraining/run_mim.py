@@ -359,7 +359,7 @@ def main():
         IMAGE_PROCESSOR_TYPES = {
             conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
-        image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type]()
+        image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type][-1]()
 
     # create model
     if model_args.model_name_or_path:
