@@ -67,14 +67,17 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    @classmethod
+    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
     def get_image_processor(self, **kwargs):
         return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
