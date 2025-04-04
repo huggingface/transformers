@@ -66,12 +66,11 @@ outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-<hfoption id="Command line">
-
-To use this model from the `command line` :
+<hfoption id="transformers-cli">
 
 ```bash
-transformers-cli pipeline --task text-generation --model openai-gpt --text "The future of AI is"
+echo -e "The future of AI is" | transformers-cli run --task text-generation --model openai-gpt --device 0
+
 ```
 </hfoption>
 </hfoptions>
@@ -82,3 +81,55 @@ transformers-cli pipeline --task text-generation --model openai-gpt --text "The 
 - It uses byte-level BPE tokenization.
 - Right-side padding is recommended due to absolute position embeddings.
 - Best suited for text generation and zero-shot transfer learning.
+
+## OpenAIGPTConfig
+
+[[autodoc]] OpenAIGPTConfig
+
+## OpenAIGPTModel
+
+[[autodoc]] OpenAIGPTModel
+- forward
+
+## OpenAIGPTLMHeadModel
+
+[[autodoc]] OpenAIGPTLMHeadModel
+- forward
+
+## OpenAIGPTDoubleHeadsModel
+
+[[autodoc]] OpenAIGPTDoubleHeadsModel
+- forward
+
+## OpenAIGPTForSequenceClassification
+
+[[autodoc]] OpenAIGPTForSequenceClassification
+- forward
+
+## OpenAIGPTTokenizer
+
+[[autodoc]] OpenAIGPTTokenizer
+
+## OpenAIGPTTokenizerFast
+
+[[autodoc]] OpenAIGPTTokenizerFast
+
+## TFOpenAIGPTModel
+
+[[autodoc]] TFOpenAIGPTModel
+- call
+
+## TFOpenAIGPTLMHeadModel
+
+[[autodoc]] TFOpenAIGPTLMHeadModel
+- call
+
+## TFOpenAIGPTDoubleHeadsModel
+
+[[autodoc]] TFOpenAIGPTDoubleHeadsModel
+- call
+
+## TFOpenAIGPTForSequenceClassification
+
+[[autodoc]] TFOpenAIGPTForSequenceClassification
+- call
