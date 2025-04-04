@@ -16,9 +16,8 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Llama4Config, is_torch_available
+from transformers import Llama4Config, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_torch_large_gpu,
     slow,
@@ -28,7 +27,6 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -44,6 +42,7 @@ if is_torch_available():
 from parameterized import parameterized
 
 from ...test_modeling_common import floats_tensor
+
 
 @require_torch
 class Llama4ForVisionText2TextModelTester:
@@ -159,11 +158,13 @@ class Llama4ForVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+
 @require_torch
 class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Llama4ForConditionalGeneration`.
     """
+
     all_model_classes = (Llama4ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-text-to-text": Llama4ForConditionalGeneration, "text-generation": Llama4ForCausalLM}
@@ -190,7 +191,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
         self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
-    
+
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,7 +265,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             # and should be able to run a forward pass without exploding
             assert model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
-    
+
     @unittest.skip(
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -292,6 +293,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
     @unittest.skip(reason="Llama4 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
@@ -313,6 +315,7 @@ class Llama4IntegrationTest(unittest.TestCase):
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "ll-re/Llama-4-17B-Omni-Instruct", device_map="auto", torch_dtype=torch.float32
         )
+
     def setUp(self):
         self.processor = Llama4Processor.from_pretrained("ll-re/Llama-4-17B-Omni-Instruct", padding_side="left")
 
@@ -327,7 +330,6 @@ class Llama4IntegrationTest(unittest.TestCase):
                 ],
             },
         ]
-
 
     def test_model_17b_16e_fp16(self):
         EXPECTED_TEXT = [
@@ -349,7 +351,6 @@ class Llama4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_model_17b_16e_batch(self):
-
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
