@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from huggingface_hub import get_full_repo_name
-from packaging import version
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
