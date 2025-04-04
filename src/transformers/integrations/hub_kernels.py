@@ -26,6 +26,13 @@ try:
     _hub_kernels_available = True
 
     _KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
+        "Llama4TextMoe": {
+            "cuda": LayerRepository(
+                # Move to kernels-community/moe once we release.
+                repo_id="kernels-community/moe-new-models",
+                layer_name="Llama4TextMoe",
+            )
+        },
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
