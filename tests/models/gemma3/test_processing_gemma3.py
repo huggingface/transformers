@@ -59,7 +59,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # TODO: raushan or arthur: add the real chat template
     def prepare_processor_dict(self):

@@ -94,7 +94,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()

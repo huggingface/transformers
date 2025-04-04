@@ -49,7 +49,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_ocr_queries(self):
         processor = self.get_processor()

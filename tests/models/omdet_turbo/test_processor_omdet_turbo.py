@@ -75,7 +75,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_fake_omdet_turbo_output(self):
         classes = self.get_fake_omdet_turbo_classes()
