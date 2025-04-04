@@ -4626,8 +4626,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
         ]
-        is_deepspeed_zero3 = is_deepspeed_zero3_enabled()
-        is_fsdp = is_fsdp_enabled()
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4801,7 +4799,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
 
             map_location = "cpu"
-            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb and not is_deepspeed_zero3:
+            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb and not is_deepspeed_zero3_enabled():
                 map_location = "meta"
             elif (
                 device_map is not None
@@ -4823,10 +4821,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-            if is_deepspeed_zero3:
+            if is_deepspeed_zero3_enabled():
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
             # Skip it with fsdp on ranks other than 0
-            elif not (is_fsdp and not is_local_dist_rank_0() and not is_quantized):
+            elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
                 disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
