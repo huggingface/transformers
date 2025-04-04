@@ -139,6 +139,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteModel"),
         ("granitemoe", "GraniteMoeModel"),
         ("granitemoeshared", "GraniteMoeSharedModel"),
+        ("granitemoehybrid", "GraniteMoeHybridModel"),
         ("graphormer", "GraphormerModel"),
         ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),

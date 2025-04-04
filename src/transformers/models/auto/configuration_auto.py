@@ -147,6 +147,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechConfig"),
         ("granitemoe", "GraniteMoeConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
+        ("granitemoehybrid", "GraniteMoeHybridConfig"),
         ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
