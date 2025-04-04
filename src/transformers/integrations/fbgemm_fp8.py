@@ -97,7 +97,9 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
 
-        next_states = []
+        # Pre-allocate tensor for all expert outputs with same shape as hidden_states
+        next_states = torch.empty_like(hidden_states)
+        
         for i in range(self.num_experts):
             # Extract expert's hidden states
             expert_hidden = hidden_states[i]
@@ -140,10 +142,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
                 use_fast_accum=True
             )
 
-            next_states.append(expert_output)
-
-        # Combine expert outputs
-        next_states = torch.cat(next_states, dim=0)
+            next_states[i] = expert_output
         next_states = next_states.to(hidden_states.device)
         return next_states.view(-1, self.hidden_size)
 
