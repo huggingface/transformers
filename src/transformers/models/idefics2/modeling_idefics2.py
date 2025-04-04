@@ -1148,6 +1148,13 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
+            # Handle the vision attention mask
+            if pixel_attention_mask is None:
+                pixel_attention_mask = torch.ones(
+                    size=(pixel_values.size(0), pixel_values.size(2), pixel_values.size(3)),
+                    dtype=torch.bool,
+                    device=pixel_values.device,
+                )
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
             patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)

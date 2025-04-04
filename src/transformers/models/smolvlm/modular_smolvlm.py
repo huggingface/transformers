@@ -230,7 +230,14 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            # get patch attention mask
+            # Handle the vision attention mask
+            if pixel_attention_mask is None:
+                pixel_attention_mask = torch.ones(
+                    size=[pixel_values.shape[i] for i in (0, 2, 3)],
+                    dtype=torch.bool,
+                    device=pixel_values.device,
+                )
+
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
             patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)

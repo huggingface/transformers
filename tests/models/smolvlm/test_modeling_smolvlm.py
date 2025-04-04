@@ -132,8 +132,7 @@ class SmolVLMVisionText2TextModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [
-                self.batch_size,
-                self.num_images,
+                self.batch_size * self.num_images,
                 3,  # SmolVLMImageProcessor always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
