@@ -519,7 +519,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.text_config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
