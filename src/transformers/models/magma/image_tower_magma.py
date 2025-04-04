@@ -34,7 +34,7 @@ from transformers.image_utils import (
     make_list_of_images,
     valid_images,
 )
-
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import TensorType, is_vision_available, logging
 logger = logging.get_logger(__name__)
 
@@ -272,15 +272,28 @@ def create_model_and_transforms(
 class D2CLIP_HF(nn.Module):
     def __init__(self, config, **kwargs):    
         super().__init__()
-        self.model_name = config['vision_backbone']
+        if isinstance(config, PretrainedConfig):
+            self.model_name = config.vision_backbone
+        else:
+            self.model_name = config['vision_backbone']
         
         require_pretrained = kwargs.get('require_pretrained', False)
         if self.model_name == "convnextxxlarge":
             clip_model = create_model_and_transforms('hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg', require_pretrained=require_pretrained)
+            self.clip_vision_model = clip_model.visual
         elif self.model_name == "convnextlarge":
             clip_model = create_model_and_transforms('hf-hub:laion/CLIP-convnext_large-laion2B-s34B-b82K-augreg', require_pretrained=require_pretrained)
-
-        self.clip_vision_model = clip_model.visual
+            self.clip_vision_model = clip_model.visual
+        elif self.model_name == 'convnexttiny':
+            # NOTE: this is only for testing, not used in Magma
+            import timm
+            # wrap up model.stem and model stages with clip_vision_model
+            class ClipVisionModel(nn.Module):
+                def __init__(self, model_name):
+                    super().__init__()
+                    self.trunk = timm.create_model(model_name, pretrained=False)
+            # Create the model instance
+            self.clip_vision_model = ClipVisionModel("hf_hub:timm/convnext_tiny.in12k_ft_in1k")
 
         model_name = self.model_name.lower()
         assert 'convnext' in model_name, f"Only convnext backbone is supported for Magma model, but got {model_name}"
@@ -291,6 +304,8 @@ class D2CLIP_HF(nn.Module):
             self.output_channels = [192, 192, 384, 768, 1536]    
         elif 'base' in model_name:
             self.output_channels = [128, 128, 256, 512, 1024]
+        elif 'tiny' in model_name:
+            self.output_channels = [96, 96, 192, 384, 768]
 
         self._out_feature_strides = {
             "res2": 4,
@@ -344,6 +359,7 @@ class MagmaImageTower(D2CLIP_HF):
         **kwargs
     ) -> None:
         super().__init__(config, **kwargs)
+        self.config = config
 
     @property
     def hidden_size(self):
@@ -359,3 +375,11 @@ class MagmaImageTower(D2CLIP_HF):
             torch.Tensor: A tensor of shape (N, C, H, W) representing the processed image.
         """
         return super().forward(x)
+    
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return False

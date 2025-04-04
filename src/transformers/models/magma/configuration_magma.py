@@ -119,16 +119,17 @@ class MagmaConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
-        self.vision_config = vision_config      
+        
+        if isinstance(vision_config, dict):
+            vision_config = PretrainedConfig(**vision_config)
+        self.vision_config = vision_config
+        
         self.image_token_index = image_token_index
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            if "model_type" in kwargs:
-                text_config = CONFIG_MAPPING[kwargs["model_type"]](**kwargs)
-
+        
         if text_config is not None:
             # copy all variables in text_config to self
             for key, value in text_config.__dict__.items():

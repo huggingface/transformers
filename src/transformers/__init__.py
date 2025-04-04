@@ -2900,7 +2900,6 @@ else:
     _import_structure["models.magma"].extend(
         [
             "MagmaForCausalLM",
-            "MagmaForConditionalGeneration",
             "MagmaModel",
             "MagmaPreTrainedModel",
         ]
@@ -7903,7 +7902,6 @@ if TYPE_CHECKING:
         )
         from .models.magma import (
             MagmaForCausalLM,
-            MagmaForConditionalGeneration,
             MagmaModel,
             MagmaPreTrainedModel,
         )
