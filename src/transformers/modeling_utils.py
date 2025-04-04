@@ -3743,7 +3743,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_quantized=None,
         _is_ds_init_called=None,
     ):
-        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
