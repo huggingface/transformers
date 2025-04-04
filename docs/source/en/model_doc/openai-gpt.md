@@ -65,6 +65,7 @@ outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
+</hfoption>
 <hfoption id="transformers-cli">
 
 ```bash
