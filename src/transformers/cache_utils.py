@@ -1678,43 +1678,38 @@ class HybridCache(Cache):
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
-
+        self.head_dim = getattr(config, "head_dim",config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
-        self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
-        ) // 8 # TODO support TP properly
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 5  # 2 is for BC
         self.is_sliding = torch.tensor(
             [int((layer_id + 1) % 4 !=0)for layer_id in range(config.num_hidden_layers)]
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
+        self.cumulative_length = [0 for _ in range(config.num_hidden_layers)]
+    
+    def initialise_cache_layer(self, layer_idx, key_states):
+        if len(self.key_cache) > layer_idx:
+            return
+
+        num_key_value_heads = key_states.shape[1]
+        device = key_states.device
+        global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
         sliding_cache_shape = (
             self.max_batch_size,
-            self.num_key_value_heads,
+            num_key_value_heads,
             self.attention_chunk_size,
             self.head_dim,
         )
-        device = torch.device(device) if device is not None and isinstance(device, str) else None
-        self.cumulative_length = [0 for i in range(config.num_hidden_layers)]
-        for i in range(config.num_hidden_layers):
-            if layer_device_map is not None:
-                layer_device = layer_device_map[i]
-            else:
-                layer_device = device
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
-            cache_shape = sliding_cache_shape if self.is_sliding[i] else global_cache_shape
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
+        # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+        # breaks when updating the cache.
+        cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
+        new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device)
+        new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device)
+        torch._dynamo.mark_static_address(new_layer_key_cache)
+        torch._dynamo.mark_static_address(new_layer_value_cache)
+        self.key_cache.append(new_layer_key_cache)
+        self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         cumulative_length = self.cumulative_length[layer_idx]
@@ -1756,7 +1751,7 @@ class HybridCache(Cache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
-        sliding_window = cache_kwargs.get("sliding_window")
+        self.initialise_cache_layer(layer_idx, key_states)
 
         # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)
@@ -1797,6 +1792,8 @@ class HybridCache(Cache):
                 "`get_seq_length` on `HybridCache` may get inconsistent results depending on the layer index. "
                 "Using the `layer_idx` argument is not supported."
             )
+        if len(self.key_cache) == 0:
+            return 0
         return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def reset(self):
