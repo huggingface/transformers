@@ -1699,6 +1699,7 @@ class HybridCache(Cache):
             self.head_dim,
         )
         device = torch.device(device) if device is not None and isinstance(device, str) else None
+        self.cumulative_length = [0 for i in range(config.num_hidden_layers)]
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[i]
@@ -1715,25 +1716,46 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        if cache_position.shape[0] > max_cache_len:
-            k_out = key_states[:, :, -max_cache_len:, :]
-            v_out = value_states[:, :, -max_cache_len:, :]
+        cumulative_length = self.cumulative_length[layer_idx]
+        if cumulative_length is not None and cumulative_length + cache_position.shape[0] > max_cache_len:
+            if cumulative_length != 0:
+                full_key_states = torch.cat((self.key_cache[layer_idx][:, :, :cumulative_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.value_cache[layer_idx][:, :, :cumulative_length, :], value_states), dim=-2)
+            else:
+                full_key_states = key_states
+                full_value_states = value_states
+            k_out = full_key_states[:, :, -max_cache_len:, :]
+            v_out = full_value_states[:, :, -max_cache_len:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
             self.key_cache[layer_idx] += k_out
             self.value_cache[layer_idx] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
-            return key_states, value_states
+            self.cumulative_length[layer_idx] = None
+            return full_key_states, full_value_states
 
-        slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
-        cache_position = cache_position.clamp(0, max_cache_len - 1)
-        to_shift = cache_position >= max_cache_len - 1
-        indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
-        k_out = k_out[:, :, indices]
-        v_out = v_out[:, :, indices]
+        if cumulative_length is not None:
+            self.cumulative_length[layer_idx] += cache_position.shape[0]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        if cumulative_length is None:
+            full_key_states = torch.cat((self.key_cache[layer_idx], key_states), dim=-2)
+            full_value_states = torch.cat((self.value_cache[layer_idx], value_states), dim=-2)
+            k_out = full_key_states[:, :, -max_cache_len:, :]
+            v_out = full_value_states[:, :, -max_cache_len:, :]
+        else:
+            slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+            cache_position = cache_position.clamp(0, max_cache_len - 1)
+            to_shift = cache_position >= max_cache_len - 1
+            indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
+            # print(indices)
+            k_out = k_out[:, :, indices]
+            v_out = v_out[:, :, indices]
+
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
+
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
         self.value_cache[layer_idx].zero_()
