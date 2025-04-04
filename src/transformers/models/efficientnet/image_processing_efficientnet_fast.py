@@ -31,8 +31,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -49,13 +47,9 @@ if is_torch_available():
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import InterpolationMode
         from torchvision.transforms.v2 import functional as F
     else:
-        from torchvision.transforms import InterpolationMode
         from torchvision.transforms import functional as F
-
-pil_torch_interpolation_mapping[PILImageResampling.NEAREST] = InterpolationMode.NEAREST_EXACT
 
 
 class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -164,7 +158,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         # if/elif as we use fused rescale and normalize if both are set to True
         if do_rescale:
             images = self.rescale(images, rescale_factor, rescale_offset)
-        elif do_normalize:
+        if do_normalize:
             images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
 
         return images
@@ -226,38 +220,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        return self._preprocess(images=images, **kwargs)
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["EfficientNetImageProcessorFast"]
