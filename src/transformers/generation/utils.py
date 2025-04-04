@@ -4772,8 +4772,8 @@ class GenerationMixin:
                 )
         else:
             return input_ids
-        
-    
+
+
     def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
 
         chunk_size = generation_config.prefill_chunk_size
@@ -4781,12 +4781,12 @@ class GenerationMixin:
         # (here we simply prefill the cache)
         input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
 
-        if not "past_key_values" in model_kwargs:
+        if "past_key_values" not in model_kwargs:
             raise ValueError("Cannot use prefill chunkink without a cache")
-        
+
         model_forward = self.get_compiled_call(generation_config.compile_config)
         attention_mask = model_kwargs.pop("attention_mask", None)
-        
+
         past_length = 0
         for input_chunk in input_chunks:
             current_length = past_length + input_chunk.shape[-1]
@@ -4797,7 +4797,7 @@ class GenerationMixin:
             model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
             model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
-            # outputs = model_forward(**model_inputs, return_dict=True)
+            # outputs = model_forward(**model_inputs, return_dict=True) TODO REACTIVATE THIS!!!
             outputs = self(**model_inputs, return_dict=True)
 
             model_kwargs["past_key_values"] = outputs.past_key_values
