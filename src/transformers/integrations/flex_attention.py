@@ -44,7 +44,6 @@ if is_torch_flex_attn_available():
     )
 
 
-# create_block_causal_mask_flex = torch.compile(create_block_causal_mask_flex)
 class WrappedFlexAttention:
     """
     We are doing a singleton class so that flex attention is compiled once when it's first called.
@@ -66,14 +65,15 @@ class WrappedFlexAttention:
         Initialize or update the singleton instance.
         """
         if self._is_flex_compiled is False:
-            self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False, mode="reduce-overhead") # dynamic true?
+            self._compiled_flex_attention = torch.compile(flex_attention, backend="inductor", fullgraph=True)
             self._is_flex_compiled = True
 
     def __call__(self):
         return self._compiled_flex_attention
 
+Offset = Union[torch.Tensor, int]
 def make_flex_block_causal_mask(
-    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None
+    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None, offsets: Optional[Tuple[Offset, Offset]] = None
 ) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
@@ -124,14 +124,24 @@ def make_flex_block_causal_mask(
         final_mask = causal_mask & padding_mask & document_mask
         return final_mask
 
+    if offsets is not None:
+        q_offset = offsets[0]
+        kv_offset = offsets[1]
+        def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+            offset_q = q_idx + q_offset
+            offset_kv = kv_idx + kv_offset
+            return causal_mask_mod(batch_idx, head_idx, offset_q, offset_kv)
+    else:
+        mask_mod = causal_mask_mod
+    # print(device)
     return create_block_causal_mask_flex(
-        mask_mod=causal_mask_mod,
+        mask_mod=mask_mod,
         B=1,
         H=None,  # attention head
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        _compile=True
+        _compile=True,
     )
 
 
@@ -201,7 +211,8 @@ def flex_attention_forward(
         key = repeat_kv(key, num_local_query_heads)
         value = repeat_kv(value, num_local_query_heads)
         enable_gqa = False
-
+    
+    kernel_options = kwargs.get("kernel_options", None)
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
@@ -210,6 +221,7 @@ def flex_attention_forward(
         block_mask=block_mask,
         enable_gqa=enable_gqa,
         scale=scaling,
+        kernel_options=kernel_options,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
         return_lse=True,

@@ -390,7 +390,6 @@ class Llama4TextAttention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -681,7 +680,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-
         causal_mask, chunk_causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -754,42 +752,36 @@ class Llama4TextModel(Llama4PreTrainedModel):
         output_attentions: bool = False,
         chunked_attention_mask=None
     ):
-        
         sequence_length = input_tensor.shape[1]
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask, attention_mask  # flash does not support chunked attn
             return None, None
 
-
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
+                cache_offset = cache_position[0]
                 torch._dynamo.config.cache_size_limit = 100000
                 cache_position = cache_position.to(self.device)
                 attention_chunk_size = self.config.attention_chunk_size
 
-                def get_mask_mod(mask_mod: _mask_mod_signature, offset:torch.Tensor, kv_offset:torch.Tensor):
-                    def _mask_mod(b, h, q, kv =0) -> torch.Tensor:
-                        print("q", offset, end="\r\r\r\r\r\r\r")
-                        return mask_mod(b, h, q + offset, kv + kv_offset)
-                    return _mask_mod
-
-                if sequence_length != 1: # prefill uses the full context ? not for chunked no
-                    # max len las arg
-                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, sequence_length, max(attention_chunk_size,sequence_length))
-                else: # decoding should not use full kv cache
-                    cache_position = cache_position[0].item()
-
-
-                    chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size, 1, attention_chunk_size)
-                    chunked_attention_mask.mask_mod = get_mask_mod(chunked_attention_mask.mask_mod, cache_position, max(cache_position-attention_chunk_size, 0))
-                    chunked_attention_mask.seq_lengths = (1, attention_chunk_size)
-
-                attention_mask = make_flex_block_causal_mask(attention_mask, query_length=sequence_length, key_length=past_key_values.max_cache_len)
-                if sequence_length == 1:
-                    attention_mask.mask_mod = get_mask_mod(attention_mask.mask_mod, cache_position, 0)
+                key_length = attention_chunk_size if sequence_length ==1 else max(attention_chunk_size, sequence_length)
+                offsets = None if sequence_length != 1 else (cache_offset, max(cache_offset - attention_chunk_size, 0))
+                chunked_attention_mask = make_flex_block_causal_mask(
+                    attention_mask,
+                    self.config.attention_chunk_size,
+                    sequence_length,
+                    key_length,
+                    offsets=offsets
+                )
+                attention_mask = make_flex_block_causal_mask(
+                    attention_mask,
+                    query_length=sequence_length,
+                    key_length=past_key_values.max_cache_len,
+                    offsets=None if sequence_length != 1 else (cache_offset, 0),
+                )
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
@@ -892,7 +884,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
 
-    
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
