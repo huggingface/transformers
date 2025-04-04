@@ -183,7 +183,7 @@ def safe_load(filename):
 
 # Unpack mlp projections - possibly to be removed when they are fused
 def preprocess_keys(state_dict):
-    new_state_dict = dict()
+    new_state_dict = {}
     for key, value in state_dict.items():
         if "mlp.fc1_weight" in key:
             prefix = key.split("mlp.fc1_weight")[0]
@@ -247,7 +247,7 @@ def write_model(
             "high_freq_factor": 4.0,
             "original_max_position_embeddings": 8192,
         }
-        config_kwargs.update(dict(rope_scaling=rope_scaling))
+        config_kwargs.update({"rope_scaling": rope_scaling})
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
