@@ -198,6 +198,10 @@ class HfQuantizer(ABC):
         """
         return
 
+    def update_tp_plan(self, config):
+        "updates the tp plan for the scales"
+        return config
+
     def preprocess_model(self, model: "PreTrainedModel", **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point

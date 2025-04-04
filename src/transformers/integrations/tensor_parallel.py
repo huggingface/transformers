@@ -60,6 +60,19 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
         single_size = total_size // blocks
         return [single_size] * blocks
 
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn
+}
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     """
@@ -105,16 +118,22 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
         stop = (rank + 1) * shard_block_size
         tensors_slices += range(block_offset + start, block_offset + stop)
         block_offset += block_size
+    
+    slice_dtype = slice_.get_dtype()
+    # Handle F8_E4M3 dtype by converting to float16 before slicing
+    # Without upcasting, the slicing causes : RuntimeError: "index_cpu" not implemented for 'Float8_e4m3fn'
+    if slice_dtype == "F8_E4M3":
+        slice_ = slice_[...].to(torch.float16)
 
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
     elif dim == 1 or dim == -2:
         tensor = slice_[:, tensors_slices, ...]
     elif dim == 2 or dim == -1:
-        tensor = slice_[...].to(torch.float16)[..., tensors_slices].to(slice_[...].dtype)
+        tensor = slice_[..., tensors_slices]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return tensor
+    return tensor.to(str_to_torch_dtype[slice_dtype])
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
