@@ -15,10 +15,11 @@
 
 
 import unittest
+import time
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
@@ -240,3 +241,35 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
             )
+
+    @require_vision
+    @require_torch
+    @is_flaky()
+    def test_fast_is_faster_than_slow(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping speed test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
+
+        def measure_time(image_processor, image):
+            # Warmup
+            for _ in range(5):
+                _ = image_processor(image, return_tensors="pt")
+            all_times = []
+            for _ in range(10):
+                start = time.time()
+                _ = image_processor(image, return_tensors="pt")
+                all_times.append(time.time() - start)
+            # Take the average of the fastest 3 runs
+            avg_time = sum(sorted(all_times[:3])) / 3.0
+            return avg_time
+
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        fast_time = measure_time(image_processor_fast, dummy_images)
+        slow_time = measure_time(image_processor_slow, dummy_images)
+
+        self.assertLessEqual(fast_time, slow_time)

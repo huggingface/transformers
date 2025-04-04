@@ -14,10 +14,10 @@
 # limitations under the License.
 """Fast Image processor class for Vivit."""
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 from transformers.image_transforms import group_images_by_shape, reorder_images
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict, is_valid_image
 from ...utils import TensorType, add_start_docstrings, is_torch_available
 from ...processing_utils import Unpack
 from ...image_processing_utils import (
@@ -27,8 +27,26 @@ from ...image_processing_utils import (
 if is_torch_available():
     import torch
 
+def get_num_frames(videos) -> List[List[ImageInput]]:
+    """
+    Returns the batch size and number of frames per video
+    """
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return len(videos[0])
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        return len(videos)
+
+    elif is_valid_image(videos):
+        return 1
+
+    raise ValueError(f"Could not get the number of frames from {videos}")
+
 class VivitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     offset: bool = True
+    image_mean: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    num_frames: int = 1
 
 @add_start_docstrings(
     "Constructs a fast Vivit image processor.",
@@ -63,9 +81,8 @@ class VivitImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[VivitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        # TODO num_frames
-        return super().preprocess(images, **kwargs, num_frames=10)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[VivitFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs, num_frames=get_num_frames(images))
     
     def _preprocess(
         self,
