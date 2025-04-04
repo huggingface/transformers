@@ -1669,11 +1669,6 @@ class HybridCache(Cache):
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             self.sliding_window = getattr(config, "attention_chunk_size")
-            raise ValueError(
-                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
-                "sliding window attention, please check if there is a `sliding_window` field in the model "
-                "config and it's not set to None."
-            )
         else: 
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
