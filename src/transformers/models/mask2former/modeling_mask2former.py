@@ -36,7 +36,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttenti
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
-from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -2017,7 +2016,6 @@ class Mask2FormerMaskPredictor(nn.Module):
     ):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        is_tracing = torch.jit.is_tracing() or isinstance(outputs, torch.fx.Proxy) or is_torchdynamo_compiling()
         # Sum up over the channels
         outputs_mask = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
