@@ -303,7 +303,7 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
