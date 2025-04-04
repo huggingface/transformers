@@ -321,9 +321,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", padding_side="left"
-        )
+        cls.processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", padding_side="left")
         image_file = hf_hub_download(
             repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
         )
