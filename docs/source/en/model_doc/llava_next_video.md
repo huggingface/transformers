@@ -262,6 +262,10 @@ model = LlavaNextVideoForConditionalGeneration.from_pretrained(
 
 [[autodoc]] LlavaNextVideoImageProcessor
 
+## LlavaNextVideoModel
+
+[[autodoc]] LlavaNextVideoModel
+
 ## LlavaNextVideoForConditionalGeneration
 
 [[autodoc]] LlavaNextVideoForConditionalGeneration

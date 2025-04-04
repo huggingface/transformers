@@ -69,6 +69,10 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipQFormerModel
     - forward
 
+## InstructBlipModel
+
+[[autodoc]] InstructBlipModel
+
 ## InstructBlipForConditionalGeneration
 
 [[autodoc]] InstructBlipForConditionalGeneration

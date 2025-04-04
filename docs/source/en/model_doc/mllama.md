@@ -130,6 +130,10 @@ print(processor.decode(output[0], skip_special_tokens=True))
 [[autodoc]] MllamaTextModel
     - forward
 
+## MllamaModel
+
+[[autodoc]] MllamaModel
+
 ## MllamaForCausalLM
 
 [[autodoc]] MllamaForCausalLM
