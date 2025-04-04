@@ -593,7 +593,6 @@ def load_state_dict(
         if (
             isinstance(checkpoint_file, str)
             and map_location != "meta"
-            and version.parse(torch.__version__) >= version.parse("2.1.0")
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
