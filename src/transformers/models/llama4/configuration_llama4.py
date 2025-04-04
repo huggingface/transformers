@@ -136,6 +136,9 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.input_layernorm.weight": "sequence_parallel",
+        "layers.*.post_attention_layernorm.weight": "sequence_parallel",
+        "norm.weight": "sequence_parallel",
         "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
         "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
         "layers.*.feed_forward.shared_expert.down_proj": "local_rowwise",
@@ -171,6 +174,7 @@ class Llama4TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=1,
         num_local_experts=16,
+        moe_layers=None,
         interleave_moe_layer_step=1,
         use_qk_norm=True,
         output_router_logits=False,
@@ -179,7 +183,10 @@ class Llama4TextConfig(PretrainedConfig):
         rope_scaling=None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
-        for_llm_compressor=False,
+        attention_chunk_size=8192,
+        attn_temperature_tuning=4,
+        floor_scale=8192,
+        attn_scale=0.1,
         **kwargs,
     ):
         super().__init__(
@@ -189,6 +196,9 @@ class Llama4TextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.attn_temperature_tuning = attn_temperature_tuning
+        self.attn_scale = attn_scale
+        self.floor_scale = floor_scale
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -215,16 +225,18 @@ class Llama4TextConfig(PretrainedConfig):
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
-        self.interleave_moe_layer_step = interleave_moe_layer_step
+
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        self.no_rope_layer_interval = no_rope_layer_interval
         default_no_rope_layers = list(range(0, num_hidden_layers, no_rope_layer_interval))
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
-        self.for_llm_compressor = for_llm_compressor
 
-
+        self.interleave_moe_layer_step = interleave_moe_layer_step
+        self.moe_layers = (
+            moe_layers if moe_layers is not None else list(range(0, num_hidden_layers, interleave_moe_layer_step))
+        )
+        self.attention_chunk_size = attention_chunk_size
 
 
 class Llama4Config(PretrainedConfig):
@@ -305,9 +317,6 @@ class Llama4Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        for_llm_compressor: (`bool`, *optional*, defaults to `False`):
-            Whether this config is for a checkpoint that aims to use LLM compressor for fp8 quantization.
-            If `True`, the model MoE part would swap to use Linear instead of FusedMoE.
 
     ```python
     >>> from transformers import Llama4Model, Llama4Config
@@ -335,7 +344,7 @@ class Llama4Config(PretrainedConfig):
         boi_token_index=200080,
         eoi_token_index=200081,
         image_token_index=200092,
-        tie_word_embeddings = False,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if vision_config is None:

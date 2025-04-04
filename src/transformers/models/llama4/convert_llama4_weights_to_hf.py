@@ -183,7 +183,7 @@ def safe_load(filename):
 
 # Unpack mlp projections - possibly to be removed when they are fused
 def preprocess_keys(state_dict):
-    new_state_dict = dict()
+    new_state_dict = {}
     for key, value in state_dict.items():
         if "mlp.fc1_weight" in key:
             prefix = key.split("mlp.fc1_weight")[0]
@@ -223,7 +223,7 @@ def write_model(
     rms_norm_eps = params["norm_eps"]
     rope_theta = params["rope_theta"]
     no_rope_layer_interval = params["nope_layer_interval"]
-    attention_chunk_size = params["attention_chunk_size"]       # to be used when #14 is merged
+    attention_chunk_size = params["attention_chunk_size"]  # to be used when #14 is merged
 
     config_kwargs = {}
     if params["use_scaled_rope"]:
@@ -235,7 +235,7 @@ def write_model(
             "high_freq_factor": 4.0,
             "original_max_position_embeddings": 8192,
         }
-        config_kwargs.update(dict(rope_scaling=rope_scaling))
+        config_kwargs.update({"rope_scaling": rope_scaling})
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
@@ -266,7 +266,7 @@ def write_model(
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
         no_rope_layer_interval=no_rope_layer_interval,
-        # attention_chunk_size=attention_chunk_size,
+        attention_chunk_size=attention_chunk_size,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -393,11 +393,13 @@ def write_model(
                 # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
                 expert_lists = []
                 for k in current_parameter:
-                    expert_lists.append(list(k.reshape(num_experts, -1, k.shape[-1]).unbind(0))) # [#expert * IN, OUT] -> #experts * [IN, OUT]
+                    expert_lists.append(
+                        list(k.reshape(num_experts, -1, k.shape[-1]).unbind(0))
+                    )  # [#expert * IN, OUT] -> #experts * [IN, OUT]
                 for i in range(num_experts):
                     expert = torch.cat([expert_list[i] for expert_list in expert_lists], dim=concat_dim)
                     expert_key = new_key.replace("experts.", f"experts.{i}.")
-                    state_dict[expert_key] = expert.transpose(0,1).contiguous() #[OUT, IN]
+                    state_dict[expert_key] = expert.transpose(0, 1).contiguous()  # [OUT, IN]
                     tqdm.write(f"Processing: {key.ljust(50)}  ->\t {expert_key}, {state_dict[expert_key].shape}")
             elif re.search(r"(gate|up)_proj", new_key):
                 path = new_key.split(".")
@@ -411,11 +413,15 @@ def write_model(
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
-                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
+                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024)
+                            for k in range(8)
                         ]
                         gate_proj = torch.cat(gate_proj, dim=-1)
 
-                        up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
+                        up_proj = [
+                            k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024)
+                            for k in current_parameter
+                        ]
                         up_proj = torch.cat(up_proj, dim=-1)
 
                         gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
@@ -638,7 +644,7 @@ O200K_PATTERN = r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    chat_template = '{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now("%d %b %Y") %}\n    {%- else %}\n        {%- set date_string = "26 Jul 2024" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0][\'role\'] == \'system\' %}    \n    {%- if messages[0][\'content\'] is string %}\n        {%- set system_message = messages[0][\'content\']|trim %}\n    {%- else %}\n        {#- FIXME: The processor requires an array, always. #}\n        {%- set system_message = messages[0][\'content\'][0][\'text\']|trim %}\n    {%- endif %}\n    {%- set messages = messages[1:] %}\n    {%- set user_supplied_system_message = true %}\n{%- else %}\n    {%- set system_message = "" %}\n    {%- set user_supplied_system_message = false %}\n{%- endif %}\n\n{#- System message if the user supplied one #}\n{%- if user_supplied_system_message %}\n    {{- "<|header_start|>system<|header_end|>\n\n" }}\n    {%- if tools is not none %}\n        {{- "Environment: ipython\n" }}\n    {%- endif %}\n    {%- if tools is not none and not tools_in_user_message %}\n        {{- "You have access to the following functions. To call a function, please respond with JSON for a function call." }}\n        {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n        {{- "Do not use variables.\n\n" }}\n        {%- for t in tools %}\n            {{- t | tojson(indent=4) }}\n            {{- "\n\n" }}\n        {%- endfor %}\n    {%- endif %}\n    {{- system_message }}\n    {{- "<|eot|>" }}\n{%- endif %}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0][\'content\']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception("Cannot put tools in the first user message when there\'s no first user message!") }}\n{%- endif %}\n    {{- \'<|header_start|>user<|header_end|>\n\n\' -}}\n    {{- "Given the following functions, please respond with a JSON for a function call " }}\n    {{- "with its proper arguments that best answers the given prompt.\n\n" }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\n\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\n\n" }}\n    {%- endfor %}\n    {{- first_user_message + "<|eot|>"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == \'ipython\' or message.role == \'tool\' or \'tool_calls\' in message) %}\n    {{- \'<|header_start|>\' + message[\'role\'] + \'<|header_end|>\n\n\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- elif \'tool_calls\' in message and message.tool_calls|length > 0 %}\n       {{- \'<|header_start|>assistant<|header_end|>\n\n\' -}}\n       {{- \'<|python_start|>\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n       {{- \'<|python_end|>\' }}\n        {%- for tool_call in message.tool_calls %}\n           {{- \'{"name": "\' + tool_call.function.name + \'", \' }}\n           {{- \'"parameters": \' }}\n           {{- tool_call.function.arguments | tojson }}\n           {{- "}" }}\n        {%- endfor %}\n       {{- "<|eot|>" }}\n    {%- elif message.role == "tool" or message.role == "ipython" %}\n        {{- "<|header_start|>ipython<|header_end|>\n\n" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|header_start|>assistant<|header_end|>\n\n\' }}\n{%- endif %}\n'
+    chat_template = "{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now(\"%d %b %Y\") %}\n    {%- else %}\n        {%- set date_string = \"26 Jul 2024\" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0]['role'] == 'system' %}    \n    {%- if messages[0]['content'] is string %}\n        {%- set system_message = messages[0]['content']|trim %}\n    {%- else %}\n        {#- FIXME: The processor requires an array, always. #}\n        {%- set system_message = messages[0]['content'][0]['text']|trim %}\n    {%- endif %}\n    {%- set messages = messages[1:] %}\n    {%- set user_supplied_system_message = true %}\n{%- else %}\n    {%- set system_message = \"\" %}\n    {%- set user_supplied_system_message = false %}\n{%- endif %}\n\n{#- System message if the user supplied one #}\n{%- if user_supplied_system_message %}\n    {{- \"<|header_start|>system<|header_end|>\n\n\" }}\n    {%- if tools is not none %}\n        {{- \"Environment: ipython\n\" }}\n    {%- endif %}\n    {%- if tools is not none and not tools_in_user_message %}\n        {{- \"You have access to the following functions. To call a function, please respond with JSON for a function call.\" }}\n        {{- 'Respond in the format {\"name\": function name, \"parameters\": dictionary of argument name and its value}.' }}\n        {{- \"Do not use variables.\n\n\" }}\n        {%- for t in tools %}\n            {{- t | tojson(indent=4) }}\n            {{- \"\n\n\" }}\n        {%- endfor %}\n    {%- endif %}\n    {{- system_message }}\n    {{- \"<|eot|>\" }}\n{%- endif %}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0]['content']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception(\"Cannot put tools in the first user message when there's no first user message!\") }}\n{%- endif %}\n    {{- '<|header_start|>user<|header_end|>\n\n' -}}\n    {{- \"Given the following functions, please respond with a JSON for a function call \" }}\n    {{- \"with its proper arguments that best answers the given prompt.\n\n\" }}\n    {{- 'Respond in the format {\"name\": function name, \"parameters\": dictionary of argument name and its value}.' }}\n    {{- \"Do not use variables.\n\n\" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- \"\n\n\" }}\n    {%- endfor %}\n    {{- first_user_message + \"<|eot|>\"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == 'ipython' or message.role == 'tool' or 'tool_calls' in message) %}\n    {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}\n        {%- if message['content'] is string %}\n            {{- message['content'] }}\n        {%- else %}\n            {%- for content in message['content'] %}\n                {%- if content['type'] == 'image' %}\n                    {{- '<|image|>' }}\n                {%- elif content['type'] == 'text' %}\n                    {{- content['text'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n        {{- \"<|eot|>\" }}\n    {%- elif 'tool_calls' in message and message.tool_calls|length > 0 %}\n       {{- '<|header_start|>assistant<|header_end|>\n\n' -}}\n       {{- '<|python_start|>' }}\n        {%- if message['content'] is string %}\n            {{- message['content'] }}\n        {%- else %}\n            {%- for content in message['content'] %}\n                {%- if content['type'] == 'image' %}\n                    {{- '<|image|>' }}\n                {%- elif content['type'] == 'text' %}\n                    {{- content['text'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n       {{- '<|python_end|>' }}\n        {%- for tool_call in message.tool_calls %}\n           {{- '{\"name\": \"' + tool_call.function.name + '\", ' }}\n           {{- '\"parameters\": ' }}\n           {{- tool_call.function.arguments | tojson }}\n           {{- \"}\" }}\n        {%- endfor %}\n       {{- \"<|eot|>\" }}\n    {%- elif message.role == \"tool\" or message.role == \"ipython\" %}\n        {{- \"<|header_start|>ipython<|header_end|>\n\n\" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- \"<|eot|>\" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|header_start|>assistant<|header_end|>\n\n' }}\n{%- endif %}\n"
 
     special_tokens = BASIC_SPECIAL_TOKENS + LLAMA4_SPECIAL_TOKENS
     converter = Llama4Converter(

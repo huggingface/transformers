@@ -1,4 +1,3 @@
-
 from transformers.utils import is_torch_available
 
 
@@ -10,7 +9,8 @@ from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
 
 
 def skip(*args, **kwargs):
-        pass
+    pass
+
 
 class CompressedExpertsLinear(nn.Module):
     """

@@ -199,7 +199,7 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if isinstance(inputs[0], DTensor):
-            inputs[0] = inputs[0].to_local()
+            inputs = inputs[0].to_local()
         return inputs
 
     @staticmethod
@@ -425,6 +425,90 @@ class PackedRowwiseParallel(RowwiseParallel):
         return nn.Parameter(parameter)
 
 
+class SequenceParallel(TensorParallelLayer):
+    """
+    SequenceParallel replicates a compatible ``nn.Module`` parameters and runs the sharded computation with
+    input sharded on the sequence dimension. This currently supports ``nn.LayerNorm``, ``nn.Dropout``, and the
+    `RMSNorm python implementation <https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34>`__
+
+    This style implements the operation that is described in the paper
+    `Reducing Activation Recomputation in Large Transformer Models <https://arxiv.org/abs/2205.05198>`__
+
+    If the input passed in to this ``nn.Module`` is a :class:`torch.Tensor`, it assumes that the input is already sharded
+    on the sequence dimension and converts the input to a :class:`DTensor` sharded on the sequence dimension. If the input
+    passed in to this ``nn.Module`` is already a :class:`DTensor` but is not sharded on the sequence dimension, it would
+    redistribute the input to be sharded on the sequence dimension.
+
+    The output of the ``nn.Module`` will be sharded on the sequence dimension.
+
+    Keyword Args:
+        sequence_dim (int, optional):
+            The sequence dimension of the input tensor for the ``nn.Module``, this is used to annotate the input tensor to
+            become a DTensor that is sharded on the sequence dimension, default: 1.
+        use_local_output (bool, optional):
+            Whether to use local :class:`torch.Tensor` instead of :class:`DTensor` for the module output, default: False.
+    Returns:
+        A :class:`ParallelStyle` object that represents Sequence Parallel of the ``nn.Module``.
+
+    Example::
+        >>> # xdoctest: +SKIP(failing)
+        >>> from torch.distributed.tensor.parallel import parallelize_module, SequenceParallel
+        >>> from torch.distributed.device_mesh import init_device_mesh
+        >>> ...
+        >>> m = Model(...)  # m is a nn.Module that contains a "norm" nn.LayerNorm submodule
+        >>> tp_mesh = init_device_mesh("cuda", (8,))
+        >>>
+        >>> # By default, the input of the "norm" will be converted to DTensor that shards on the sequence dim
+        >>> # and the output of "norm" will return a sharded on sequence dimension :class:`DTensor`.
+        >>>
+        >>> sharded_mod = parallelize_module(m, tp_mesh, {"norm": SequenceParallel()}),
+        >>> ...
+
+    .. note:: SequenceParallel style assumes ones initialization if there are weights in the nn.Module (i.e.
+        ``nn.LayerNorm`` or ``RMSNorm``, and they by default have ones initialization). If you have custom
+        inits for the weights on those modules, you need to broadcast the weights before/after parallelizing
+        to ensure that they are replicated.
+    """
+
+    def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = False, use_dtensor=False):
+        super().__init__()
+        self.input_layouts = (Replicate(),)
+        self.desired_input_layouts = (Shard(1),)
+        self.output_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = True
+        self.sequence_sharding = (Shard(sequence_dim),)
+        self.use_local_output = use_local_output
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        outputs = outputs.redistribute(
+            placements=(Replicate(),), async_op=True
+        )  # maybe we have to replicate ? because next layer is not sharded
+        return outputs.to_local()  # if use_local_output else outputs
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
+        # means Colwise as Linear is input * weight^T + bias, where
+        # weight would become Shard(1)
+        parameter = param[:]
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
+        return nn.Parameter(parameter)
+
+
 SUPPORTED_TP_STYLES = {
     "colwise",
     "rowwise",
@@ -435,6 +519,7 @@ SUPPORTED_TP_STYLES = {
     "local",
     "gather",
     "local_packed_rowwise",
+    "sequence_parallel",
 }
 
 
@@ -466,6 +551,8 @@ def translate_to_torch_parallel_style(style: str):
         return GatherParallel()
     elif style == "local_packed_rowwise":
         return PackedRowwiseParallel(use_dtensor=False)
+    elif style == "sequence_parallel":
+        return SequenceParallel()
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
 
@@ -545,7 +632,7 @@ def shard_and_distribute_module(
         )
     else:
         # TODO log no plan modules in set
-        print("No plan for", parameter_name,end ="\r")
+        # print("No plan for", parameter_name,end ="\n")
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()
