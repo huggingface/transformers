@@ -4774,6 +4774,10 @@ class GenerationMixin:
             return input_ids
 
     def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
+        # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
+        # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
+        torch._dynamo.config.cache_size_limit = 64
+
         chunk_size = generation_config.prefill_chunk_size
         # Only chunk up the token just before last, so that decoding is completely performed outside this function
         # (here we simply prefill the cache)

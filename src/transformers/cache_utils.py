@@ -1668,7 +1668,7 @@ class HybridCache(Cache):
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
-            self.sliding_window = getattr(config.get_text_config(), "attention_chunk_size", 8092)
+            self.sliding_window = getattr(config.get_text_config(), "attention_chunk_size", 8192)
         else:
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
