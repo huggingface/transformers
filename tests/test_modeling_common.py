@@ -374,11 +374,11 @@ class ModelTesterMixin:
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_keep_in_fp32_modules(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if model_class._keep_in_fp32_modules is None:
                 self.skipTest(reason="Model class has no _keep_in_fp32_modules attribute defined")
 
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)

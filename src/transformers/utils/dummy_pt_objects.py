@@ -2469,6 +2469,13 @@ class CosmosTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class CosmosTextPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CosmosVQVAE(metaclass=DummyObject):
     _backends = ["torch"]
 

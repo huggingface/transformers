@@ -1812,7 +1812,6 @@ class CosmosPreTrainedModel(Emu3PreTrainedModel):
         "CosmosVQVAEVectorQuantizer",
         "CosmosTextDecoderLayer",
     ]
-    _keep_in_fp32_modules = ["prompt_encoder"]
 
 
 class CosmosModel(CosmosPreTrainedModel):
@@ -1822,6 +1821,7 @@ class CosmosModel(CosmosPreTrainedModel):
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
         if config.text_config.is_video_to_world:
             self.prompt_encoder = AutoModel.from_config(config.prompt_encoder_config).encoder
+            self._keep_in_fp32_modules = ["prompt_encoder"]
 
         # Initialize weights and apply final processing
         self.post_init()

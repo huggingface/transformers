@@ -1995,7 +1995,6 @@ class CosmosPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True
-    _keep_in_fp32_modules = ["prompt_encoder"]
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -2093,6 +2092,7 @@ class CosmosModel(CosmosPreTrainedModel):
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
         if config.text_config.is_video_to_world:
             self.prompt_encoder = AutoModel.from_config(config.prompt_encoder_config).encoder
+            self._keep_in_fp32_modules = ["prompt_encoder"]
 
         # Initialize weights and apply final processing
         self.post_init()
