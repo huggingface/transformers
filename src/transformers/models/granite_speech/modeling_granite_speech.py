@@ -188,7 +188,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         super().__init__()
 
         inner_dim = config.dim_head * config.num_heads
-        self.max_pos_emb = 512
+        self.max_pos_emb = config.max_pos_emb
         self.context_size = config.context_size
         self.num_heads = config.num_heads
         self.dim_head = config.dim_head
