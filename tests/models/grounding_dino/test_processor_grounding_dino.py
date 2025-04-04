@@ -93,19 +93,21 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [labels]
         return [labels, labels_longer] + [labels] * (batch_size - 2)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
-    def get_rust_tokenizer(self, **kwargs):
-        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    def get_rust_tokenizer(cls, **kwargs):
+        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
-    def get_image_processor(self, **kwargs):
-        return GroundingDinoImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(cls, **kwargs):
+        return GroundingDinoImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname)
