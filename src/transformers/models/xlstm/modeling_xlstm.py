@@ -729,13 +729,9 @@ else:
         DHHV = v.shape[-1]
 
         c_state = (
-            c_initial
-            if c_initial is not None
-            else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
+            c_initial if c_initial is not None else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
         )
-        n_state = (
-            n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
-        )
+        n_state = n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
         m_state = m_initial if m_initial is not None else torch.zeros(B, NH, 1, device=k.device, dtype=torch.float32)
 
         if S > 1:
@@ -1376,11 +1372,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        # TODO: this is a dummy, check with original settings.
-        pass
-
 
 @dataclass
 class xLSTMOutput(ModelOutput):
@@ -1487,6 +1478,31 @@ XLSTM_INPUTS_DOCSTRING = r"""
 """
 
 
+def small_init_method(dim):
+    """
+    Adapted from: https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
+    Fills the input Tensor with values according to the method described in Transformers without Tears: Improving
+    the Normalization of Self-Attention - Nguyen, T. & Salazar, J. (2019), using a normal distribution."""
+    std = (2 / (5 * dim)) ** (1 / 2)
+
+    def init_(tensor):
+        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+
+    return init_
+
+
+def wang_init_method(n_layers, dim):
+    """
+    Adapted from https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
+    """
+    std = 2 / n_layers / dim ** (1 / 2)
+
+    def init_(tensor):
+        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+
+    return init_
+
+
 @add_start_docstrings(
     "The bare xLSTM Model transformer outputting raw hidden-states without any specific head on top.",
     XLSTM_START_DOCSTRING,
@@ -1539,8 +1555,89 @@ class xLSTMModel(xLSTMPreTrainedModel):
         self.post_init()
 
     def _init_weights(self, module):
-        # Not implemented yet - use pretrained model.
-        pass
+        if self is not module:
+            if isinstance(module, torch.nn.Embedding):
+                small_init_method(self.config.embedding_dim)(self.embeddings.weight)
+            return
+
+        small_init_method(self.config.embedding_dim)(self.embeddings.weight)
+        torch.nn.init.ones_(self.out_norm.weight)
+        if self.config.use_bias:
+            torch.nn.init.zeros_(self.out_norm.bias)
+        for block in self.blocks:
+            if self.config.use_bias:
+                torch.nn.init.zeros_(block.norm_mlstm.bias)
+                torch.nn.init.zeros_(block.norm_ffn.bias)
+            torch.nn.init.ones_(block.norm_mlstm.weight)
+            torch.nn.init.zeros_(block.norm_ffn.weight)
+            if self.config.weight_mode == "single":
+                small_init_method(self.config.embedding_dim)(block.ffn.proj_up.weight)
+                small_init_method(self.config.embedding_dim)(block.ffn.proj_up_gate.weight)
+                if self.config.use_bias:
+                    torch.nn.init.zeros_(block.ffn.proj_up.bias)
+                    torch.nn.init.zeros_(block.ffn.proj_up_gate.bias)
+            else:
+                small_init_method(self.config.embedding_dim)(block.ffn.proj_up_gate_z.weight)
+                if self.config.use_bias:
+                    torch.nn.init.zeros_(block.ffn.proj_up_gate_z.bias)
+            wang_init_method(dim=block.ffn.up_proj_dim, n_layers=self.config.num_blocks)(block.ffn.proj_down.weight)
+            if self.config.use_bias:
+                torch.nn.init.zeros_(block.ffn.proj_down.bias)
+            if self.config.weight_mode == "single":
+                small_init_method(self.config.embedding_dim)(block.mlstm_layer.q.weight)
+                small_init_method(self.config.embedding_dim)(block.mlstm_layer.k.weight)
+                small_init_method(self.config.embedding_dim)(block.mlstm_layer.v.weight)
+                torch.nn.init.zeros_(block.mlstm_layer.ogate_preact.weight)
+                torch.nn.init.zeros_(block.mlstm_layer.igate_preact.weight)
+                torch.nn.init.zeros_(block.mlstm_layer.fgate_preact.weight)
+                with torch.no_grad():
+                    block.mlstm_layer.igate_preact.bias.copy_(
+                        -10.0 * torch.ones_like(block.mlstm_layer.igate_preact.bias)
+                    )
+                    block.mlstm_layer.fgate_preact.bias.copy_(
+                        torch.linspace(
+                            3.0,
+                            6.0,
+                            block.mlstm_layer.fgate_preact.bias.shape[-1],
+                        ).to(
+                            device=block.mlstm_layer.fgate_preact.bias.device,
+                            dtype=block.mlstm_layer.fgate_preact.bias.dtype,
+                        )
+                    )
+                if self.config.use_bias:
+                    torch.nn.init.zeros_(block.mlstm_layer.q.bias)
+                    torch.nn.init.zeros_(block.mlstm_layer.k.bias)
+                    torch.nn.init.zeros_(block.mlstm_layer.v.bias)
+                    torch.nn.init.zeros_(block.mlstm_layer.ogate_preact.bias)
+            elif self.config.weight_mode == "fused":
+                small_init_method(self.config.embedding_dim)(block.mlstm_layer.qkv_opreact.weight)
+                torch.nn.init.zeros_(block.mlstm_layer.ifgate_preact.weight)
+                with torch.no_grad():
+                    block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads] += (
+                        -block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads]
+                        - 10.0 * torch.ones_like(block.mlstm_layer.igate_preact.bias)
+                    )
+                    block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads] += (
+                        -block.mlstm_layer.ifgate_preact.bias[self.config.num_heads :]
+                        + torch.linspace(
+                            3.0,
+                            6.0,
+                            block.mlstm_layer.fgate_preact.bias.shape[-1],
+                        ).to(
+                            device=block.mlstm_layer.fgate_preact.bias.device,
+                            dtype=block.mlstm_layer.fgate_preact.bias.dtype,
+                        )
+                    )
+                if self.config.use_bias:
+                    torch.nn.init.zeros_(block.mlstm_layer.qkv_opreact.bias)
+
+            torch.nn.init.ones_(block.mlstm_layer.multihead_norm.weight)
+            wang_init_method(dim=self.config.embedding_dim, n_layers=self.config.num_blocks)(
+                block.mlstm_layer.out_proj.weight
+            )
+            if self.config.use_bias:
+                torch.nn.init.zeros_(block.mlstm_layer.multihead_norm.bias)
+                torch.nn.init.zeros_(block.mlstm_layer.out_proj.bias)
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -1692,6 +1789,10 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
+
+    def _init_weights(self, module):
+        self.backbone.apply(self.backbone._init_weights)
+        small_init_method(self.config.embedding_dim)(self.lm_head.weight)
 
     def prepare_inputs_for_generation(
         self,
