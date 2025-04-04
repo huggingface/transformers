@@ -145,6 +145,8 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
         "layers.*.feed_forward.experts": "local",
+        "layers.*.feed_forward.gate_proj": "local_colwise",
+        "layers.*.feed_forward.up_proj": "local_colwise",
         "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward": "gather",
     }
@@ -228,7 +230,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        default_no_rope_layers = list(range(no_rope_layer_interval, num_hidden_layers, no_rope_layer_interval))
+        default_no_rope_layers = list(range(0, num_hidden_layers, no_rope_layer_interval))
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
@@ -236,8 +238,8 @@ class Llama4TextConfig(PretrainedConfig):
             moe_layers if moe_layers is not None else list(range(0, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
-
         self.for_llm_compressor = for_llm_compressor
+
 
 
 
@@ -293,6 +295,12 @@ class Llama4Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        boi_token_index (`int`, *optional*, defaults to 200080):
+            The begin-of-image token index to wrap the image prompt.
+        eoi_token_index (`int`, *optional*, defaults to 200081):
+            The end-of-image token index to wrap the image prompt.
+        image_token_index (`int`, *optional*, defaults to 200092):
+            The image token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
@@ -340,7 +348,10 @@ class Llama4Config(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        boi_token_index=200080,
+        eoi_token_index=200081,
         image_token_index=200092,
+        tie_word_embeddings = False,
         **kwargs,
     ):
         if vision_config is None:
@@ -351,6 +362,8 @@ class Llama4Config(PretrainedConfig):
         elif isinstance(vision_config, Llama4VisionConfig):
             self.vision_config = vision_config
 
+        self.boi_token_index = boi_token_index
+        self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
 
         if text_config is None:
@@ -361,7 +374,7 @@ class Llama4Config(PretrainedConfig):
         elif isinstance(text_config, Llama4TextConfig):
             self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

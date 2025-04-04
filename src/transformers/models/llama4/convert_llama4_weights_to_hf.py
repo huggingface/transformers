@@ -14,6 +14,8 @@ from transformers import (
     GenerationConfig,
     Llama4Config,
     Llama4ForConditionalGeneration,
+    Llama4ImageProcessorFast,
+    Llama4Processor,
     Llama4TextConfig,
     Llama4VisionConfig,
     PreTrainedTokenizerFast,
@@ -55,6 +57,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Unused keys in load hooks (explicitly removed)
     r'layers.(\d+).attention.wqkv._extra_state':             None,
     r'layers.(\d+).attention.wo._extra_state':               None,
+    # Key apparently unused in base models
+    r'layers.(\d+).feed_forward.expert_activation_DE':       None,
 
     # MLP layer variant
     r"layers.(\d+).feed_forward.w1.weight":                  r"language_model.model.layers.\1.feed_forward.gate_proj.weight",               # might need to be fused for efficiency?
@@ -218,6 +222,8 @@ def write_model(
     num_heads = params["n_heads"]
     rms_norm_eps = params["norm_eps"]
     rope_theta = params["rope_theta"]
+    no_rope_layer_interval = params["nope_layer_interval"]
+    attention_chunk_size = params["attention_chunk_size"]       # to be used when #14 is merged
 
     config_kwargs = {}
     if params["use_scaled_rope"]:
@@ -241,9 +247,11 @@ def write_model(
     num_experts = params["moe_args"]["num_experts"]
     interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
 
+    no_rope_layer_interval = params["nope_layer_interval"]
+
     bos_token_id = 200000
-    eos_token_id = [200001, 200002, 200003, 200008] if instruct else 200001
-    pad_token_id = 200008
+    eos_token_id = [200001, 200002, 200003, 200007, 200008] if instruct else 200001
+    pad_token_id = 200018
 
     text_config = Llama4TextConfig(
         num_attention_heads=num_heads,
@@ -257,12 +265,15 @@ def write_model(
         num_local_experts=num_experts,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
+        no_rope_layer_interval=no_rope_layer_interval,
+        # attention_chunk_size=attention_chunk_size,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
+        no_rope_layers=no_rope_layer_interval,
         **config_kwargs,
     )
     # default vision config frmo params
@@ -331,9 +342,6 @@ def write_model(
         for key in tqdm(all_keys, desc="Renaming and processing all keys", unit="key"):
             new_key = new_keys[key]
             print(key, new_key)
-            # we skip the extra states, which are _io.BytesIO
-            # contiguous + clone is fucking costly
-            # current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded if not isinstance(chunk[key], io.BytesIO)]
             if not is_param_same_across_shards(new_key):
                 current_parameter = [chunk.pop(key) for chunk in loaded if not isinstance(chunk[key], io.BytesIO)]
             else:
@@ -399,13 +407,7 @@ def write_model(
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                 elif new_key == up_key:
                     if "experts" not in new_key:
-                        gate_proj = state_dict.pop(gate_key)
-                        up_proj = torch.cat(current_parameter, dim=concat_dim)
-                        state_dict[gate_key] = gate_proj
-                        state_dict[new_key] = up_proj
-                        # TODO that's kinda low hanging fruit, but shard dim for shared should be
-                        # column, then row. TO get hidden // tp * col // tp, gate + up
-                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
+                        state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
@@ -640,30 +642,8 @@ O200K_PATTERN = r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    # TODO: verify chat template
-    chat_template = (
-        "{% for message in messages %}"
-        "{% if loop.index0 == 0 %}"
-        "{{ bos_token }}"
-        "{% endif %}"
-        "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
-        "{% if message['content'] is string %}"
-        "{{ message['content'] }}"
-        "{% else %}"
-        "{% for content in message['content'] %}"
-        "{% if content['type'] == 'image' %}"
-        "{{ '<|image|>' }}"
-        "{% elif content['type'] == 'text' %}"
-        "{{ content['text'] }}"
-        "{% endif %}"
-        "{% endfor %}"
-        "{% endif %}"
-        "{{ '<|eot|>' }}"
-        "{% endfor %}"
-        "{% if add_generation_prompt %}"
-        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-        "{% endif %}"
-    )
+    chat_template = '{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now("%d %b %Y") %}\n    {%- else %}\n        {%- set date_string = "26 Jul 2024" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0][\'role\'] == \'system\' %}    \n    {%- if messages[0][\'content\'] is string %}\n        {%- set system_message = messages[0][\'content\']|trim %}\n    {%- else %}\n        {#- FIXME: The processor requires an array, always. #}\n        {%- set system_message = messages[0][\'content\'][0][\'text\']|trim %}\n    {%- endif %}\n    {%- set messages = messages[1:] %}\n    {%- set user_supplied_system_message = true %}\n{%- else %}\n    {%- set system_message = "" %}\n    {%- set user_supplied_system_message = false %}\n{%- endif %}\n\n{#- System message if the user supplied one #}\n{%- if user_supplied_system_message %}\n    {{- "<|header_start|>system<|header_end|>\n\n" }}\n    {%- if tools is not none %}\n        {{- "Environment: ipython\n" }}\n    {%- endif %}\n    {%- if tools is not none and not tools_in_user_message %}\n        {{- "You have access to the following functions. To call a function, please respond with JSON for a function call." }}\n        {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n        {{- "Do not use variables.\n\n" }}\n        {%- for t in tools %}\n            {{- t | tojson(indent=4) }}\n            {{- "\n\n" }}\n        {%- endfor %}\n    {%- endif %}\n    {{- system_message }}\n    {{- "<|eot|>" }}\n{%- endif %}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0][\'content\']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception("Cannot put tools in the first user message when there\'s no first user message!") }}\n{%- endif %}\n    {{- \'<|header_start|>user<|header_end|>\n\n\' -}}\n    {{- "Given the following functions, please respond with a JSON for a function call " }}\n    {{- "with its proper arguments that best answers the given prompt.\n\n" }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\n\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\n\n" }}\n    {%- endfor %}\n    {{- first_user_message + "<|eot|>"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == \'ipython\' or message.role == \'tool\' or \'tool_calls\' in message) %}\n    {{- \'<|header_start|>\' + message[\'role\'] + \'<|header_end|>\n\n\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- elif \'tool_calls\' in message and message.tool_calls|length > 0 %}\n       {{- \'<|header_start|>assistant<|header_end|>\n\n\' -}}\n       {{- \'<|python_start|>\' }}\n        {%- if message[\'content\'] is string %}\n            {{- message[\'content\'] }}\n        {%- else %}\n            {%- for content in message[\'content\'] %}\n                {%- if content[\'type\'] == \'image\' %}\n                    {{- \'<|image|>\' }}\n                {%- elif content[\'type\'] == \'text\' %}\n                    {{- content[\'text\'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n       {{- \'<|python_end|>\' }}\n        {%- for tool_call in message.tool_calls %}\n           {{- \'{"name": "\' + tool_call.function.name + \'", \' }}\n           {{- \'"parameters": \' }}\n           {{- tool_call.function.arguments | tojson }}\n           {{- "}" }}\n        {%- endfor %}\n       {{- "<|eot|>" }}\n    {%- elif message.role == "tool" or message.role == "ipython" %}\n        {{- "<|header_start|>ipython<|header_end|>\n\n" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- "<|eot|>" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|header_start|>assistant<|header_end|>\n\n\' }}\n{%- endif %}\n'
+
     special_tokens = BASIC_SPECIAL_TOKENS + LLAMA4_SPECIAL_TOKENS
     converter = Llama4Converter(
         vocab_file=tokenizer_path,
@@ -678,11 +658,14 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     tokenizer = converter.converted_tokenizer
     tokenizer.save_pretrained(save_dir)
 
-    if instruct:
-        print("Saving chat template...")
-        chat_template_path = os.path.join(save_dir, "chat_template.json")
-        with open(chat_template_path, "w") as f:
-            json.dump({"chat_template": chat_template}, f, indent=2)
+    image_processor = Llama4ImageProcessorFast()
+    processor = Llama4Processor(
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+        chat_template=tokenizer.chat_template,
+    )
+    processor.save_pretrained(save_dir)
+    del processor
 
 
 if __name__ == "__main__":
@@ -740,5 +723,3 @@ if __name__ == "__main__":
         instruct=args.instruct,
         convert_checkpoints=args.convert_checkpoints,
     )
-
-# torchrun --nproc-per-node=8   .venv/lib/python3.12/site-packages/llama_models/llama4/scripts/text_completion.py --checkpoint_dir   "llama4" --world_size 8

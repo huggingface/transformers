@@ -1207,14 +1207,6 @@ def vision_apply_rotary_emb(
     return query_out.type_as(query), key_out.type_as(key)  # but this drops to 8e-3
 
 
-class Llama4VisionLayerNorm(nn.LayerNorm):
-    """Subclass torch's Llama4VisionLayerNorm to handle fp16."""
-
-    def forward(self, x: torch.Tensor):
-        x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        return x
-
-
 class Llama4VisionAttention(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
@@ -1222,6 +1214,7 @@ class Llama4VisionAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_key_value_groups = 1
         self.attention_dropout = config.attention_dropout
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
@@ -1300,8 +1293,8 @@ class Llama4VisionEncoderLayer(nn.Module):
         self.self_attn = Llama4VisionAttention(config)
         self.mlp = Llama4VisionMLP(config)
 
-        self.input_layernorm = Llama4VisionLayerNorm(config.hidden_size)
-        self.post_attention_layernorm = Llama4VisionLayerNorm(config.hidden_size)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1456,9 +1449,8 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         frequencies_y = img_idx // idx  # get the coordinates of the 2d matrix along y
         freq_dim = config.hidden_size // config.num_attention_heads // 2
         rope_freq = 1.0 / (config.rope_theta ** (torch.arange(0, freq_dim, 2)[: (freq_dim // 2)].float() / freq_dim))
-        with torch.device("cpu"):
-            freqs_x = ((frequencies_x + 1)[..., None] * rope_freq[None, None, :]).repeat_interleave(2, dim=-1)
-            freqs_y = ((frequencies_y + 1)[..., None] * rope_freq[None, None, :]).repeat_interleave(2, dim=-1)
+        freqs_x = ((frequencies_x + 1)[..., None] * rope_freq[None, None, :]).repeat_interleave(2, dim=-1)
+        freqs_y = ((frequencies_y + 1)[..., None] * rope_freq[None, None, :]).repeat_interleave(2, dim=-1)
         freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
         freqs = freqs.masked_fill(img_idx.reshape(-1, 1, 1) < 0, 0)
         freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
@@ -1490,8 +1482,8 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         self.rotary_embedding = Llama4VisionRotaryEmbedding(config)
 
         # layer norms
-        self.layernorm_pre = Llama4VisionLayerNorm(self.hidden_size)
-        self.layernorm_post = Llama4VisionLayerNorm(self.hidden_size)
+        self.layernorm_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_post = nn.LayerNorm(self.hidden_size)
 
         # encoders
         self.model = Llama4VisionEncoder(config)

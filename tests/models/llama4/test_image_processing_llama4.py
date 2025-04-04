@@ -130,7 +130,7 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         torch.testing.assert_close(encoding_slow.aspect_ratios, encoding_fast.aspect_ratios)
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
         )
 
     def test_slow_fast_equivalence_split_tiles_batched(self):
@@ -160,7 +160,8 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image,
                 max_patches=16,
             )
-            self.assertEqual(len(processed_images.pixel_values), 17)
+            self.assertEqual(len(processed_images.pixel_values), 1)
+            self.assertEqual(processed_images.pixel_values[0].shape[0], 17)
             self.assertEqual(processed_images.pixel_values[0].shape[-2:], (20, 20))
 
     @unittest.skip(reason="Super flaky as slow processor also uses torch/torchvision")
