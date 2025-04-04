@@ -1263,7 +1263,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
-            self.quantization_config = QuantizationConfig.parse_obj(
+            self.quantization_config = QuantizationConfig.model_validate(
                 {
                     "config_groups": config_groups,
                     "quant_method": quant_method,
@@ -1282,7 +1282,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 sparsity_config.get("format"), **sparsity_config
             )
 
-        super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
+        self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
+
+    def post_init(self):
+        if self.run_compressed:
+            if self.is_sparsification_compressed:
+                logger.warn(
+                    "`run_compressed` is only supported for quantized_compressed models"
+                    " and not for sparsified models. Setting `run_compressed=False`"
+                )
+                self.run_compressed = False
+            elif not self.is_quantization_compressed:
+                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                self.run_compressed = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1355,6 +1367,28 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         return {"run_compressed": self.run_compressed}
+
+    @property
+    def is_quantized(self):
+        return bool(self.quantization_config) and bool(self.quantization_config.config_groups)
+
+    @property
+    def is_quantization_compressed(self):
+        from compressed_tensors.quantization import QuantizationStatus
+
+        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+
+    @property
+    def is_sparsification_compressed(self):
+        from compressed_tensors.config import (
+            CompressionFormat,
+            SparsityCompressionConfig,
+        )
+
+        return (
+            isinstance(self.sparsity_config, SparsityCompressionConfig)
+            and self.sparsity_config.format != CompressionFormat.dense.value
+        )
 
 
 @dataclass
