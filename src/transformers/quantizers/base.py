@@ -271,6 +271,11 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can carry out quantization aware training"""
         return False
 
+    @property
+    def is_compileable(self) -> bool:
+        """Flag indicating whether the quantized model can be compiled"""
+        return False
+
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...
 

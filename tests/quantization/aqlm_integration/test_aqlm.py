@@ -226,7 +226,7 @@ class AqlmTest(unittest.TestCase):
         # Setup static KV cache for generation
         past_key_values = StaticCache(
             config=self.quantized_model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=seq_length + self.max_new_tokens + 1,
             device=torch_device,
             dtype=self.quantized_model.config._pre_quantization_dtype,

@@ -29,6 +29,7 @@ from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
+    is_flaky,
     require_torch,
     require_torch_gpu,
     require_vision,
@@ -212,6 +213,7 @@ class ImageProcessingTestMixin:
 
     @require_vision
     @require_torch
+    @is_flaky()
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
