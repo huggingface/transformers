@@ -154,7 +154,7 @@ class ClapTextModelOutput(ModelOutput):
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -183,7 +183,7 @@ class ClapAudioModelOutput(ModelOutput):
     """
 
     audio_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -212,10 +212,10 @@ class ClapOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_audio: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    audio_embeds: torch.FloatTensor = None
+    logits_per_audio: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    audio_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     audio_model_output: BaseModelOutputWithPooling = None
 

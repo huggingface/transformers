@@ -106,10 +106,10 @@ class Blip2ImageTextMatchingModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -145,7 +145,7 @@ class Blip2TextModelOutput(ModelOutput):
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -175,7 +175,7 @@ class Blip2VisionModelOutput(ModelOutput):
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -2463,7 +2463,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         if use_image_text_matching_head:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(query_tokens.device)
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device)
             attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
 
             query_embeds = self.embeddings(

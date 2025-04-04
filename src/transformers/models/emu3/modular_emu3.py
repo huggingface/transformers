@@ -394,7 +394,11 @@ class Emu3VQVAEResnetBlock(nn.Module):
 
 
 class Emu3VQVAEAttentionBlock(SiglipAttention):
-    pass
+    def __init__(self, config: Emu3VQVAEConfig):
+        super().__init__(config)
+
+        # for compatibility with the attention interface
+        self.num_key_value_groups = 1
 
 
 class Emu3VQVAEGroupNorm(nn.GroupNorm):
@@ -432,7 +436,7 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             quant_channels=quant_channels,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: Optional[torch.FloatTensor] = None):
         hidden_states = self.block_1(hidden_states, quant_states)
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states, quant_states)
@@ -730,6 +734,9 @@ class Emu3VQVAE(PreTrainedModel):
     config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _no_split_modules = [
         "Emu3VQVAETemporalResnetBlock",
         "Emu3VQVAEAttentionBlock",
@@ -1281,9 +1288,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

@@ -61,8 +61,8 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -93,7 +93,7 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
