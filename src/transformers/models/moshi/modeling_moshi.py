@@ -100,7 +100,7 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     """
 
     audio_sequences: Optional[torch.Tensor] = None
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
@@ -143,8 +143,8 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -193,13 +193,13 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     depth_loss: Optional[torch.FloatTensor] = None
-    audio_logits: torch.FloatTensor = None
+    audio_logits: Optional[torch.FloatTensor] = None
     depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -220,10 +220,10 @@ class MoshiUnconditionalInput(ModelOutput):
             1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
     """
 
-    input_ids: torch.LongTensor = None
-    user_audio_codes: torch.Tensor = None
-    moshi_audio_codes: torch.Tensor = None
-    attention_mask: torch.LongTensor = None
+    input_ids: Optional[torch.LongTensor] = None
+    user_audio_codes: Optional[torch.Tensor] = None
+    moshi_audio_codes: Optional[torch.Tensor] = None
+    attention_mask: Optional[torch.LongTensor] = None
 
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->Moshi
@@ -1091,7 +1091,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        last_hidden_state: torch.LongTensor = None,
+        last_hidden_state: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
         past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1484,7 +1484,7 @@ class MoshiModel(MoshiPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOSHI_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1799,7 +1799,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=MoshiCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

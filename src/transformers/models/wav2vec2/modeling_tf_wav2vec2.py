@@ -78,8 +78,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    extract_features: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    extract_features: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
