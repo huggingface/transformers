@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -128,7 +143,7 @@ class GraniteSpeechCTCModel(nn.Module):
         return x
 
 
-# NOTE: Conformer adapated from: https://github.com/lucidrains/conformer.git
+# NOTE: Conformer adapted from: https://github.com/lucidrains/conformer.git
 class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     def __init__(self, chan_in, chan_out, kernel_size, padding):
         super().__init__()
@@ -598,7 +613,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         return inputs_embeds
 
     def generate(self, *args, **kwargs):
-        """This model is expected to have a lora adapater, which is only
+        """This model is expected to have a lora adapter, which is only
         enabled when considering audio inputs. As such, we override generate
         to conditionally enable / disable the lora adapter based on whether
         or not any input features were provided.
