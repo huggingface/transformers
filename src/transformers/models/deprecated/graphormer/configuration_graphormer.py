@@ -155,7 +155,7 @@ class GraphormerConfig(PretrainedConfig):
         pre_layernorm: bool = False,
         apply_graphormer_init: bool = False,
         activation_fn: str = "gelu",
-        embed_scale: float = None,
+        embed_scale: Optional[float] = None,
         freeze_embeddings: bool = False,
         num_trans_layers_to_freeze: int = 0,
         traceable: bool = False,

@@ -841,7 +841,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     @add_start_docstrings_to_model_forward(MOONSHINE_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -853,7 +853,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         """
         Args:
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
@@ -1415,7 +1415,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> Seq2SeqModelOutput:
         r"""
         Returns:
 
