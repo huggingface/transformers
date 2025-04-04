@@ -84,8 +84,9 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         tokenizer = self.get_tokenizer()

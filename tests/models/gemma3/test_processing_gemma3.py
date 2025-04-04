@@ -57,8 +57,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Gemma3Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     # TODO: raushan or arthur: add the real chat template
     def prepare_processor_dict(self):

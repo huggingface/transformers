@@ -74,8 +74,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     # todo: yoni, fix this test
     @unittest.skip("Chat template has long system prompt")

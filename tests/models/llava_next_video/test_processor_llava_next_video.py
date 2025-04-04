@@ -86,8 +86,9 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")

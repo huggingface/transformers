@@ -70,8 +70,9 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_feature_extractor(self, **kwargs):
         return Wav2Vec2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()

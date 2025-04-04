@@ -106,8 +106,9 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return GroundingDinoImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)

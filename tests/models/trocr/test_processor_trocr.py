@@ -41,8 +41,9 @@ class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
