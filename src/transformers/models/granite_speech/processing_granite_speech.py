@@ -51,6 +51,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         text = self._get_validated_text(text)
+        prompt_strings = text
 
         if audios is not None:
             # NOTE - we intentionally avoid throwing for potentially misaligned
@@ -59,34 +60,27 @@ class GraniteSpeechProcessor(ProcessorMixin):
             # processors, e.g., vLLM.
             audio_inputs = self.audio_processor(audios, device=device)
             audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
-            # duplicate the audio placeholders to match the feature dims
-            processed_text = self._expand_audio_placeholders(text, audio_embed_sizes)
+
+            # Expand the audio placeholders to match the feature dims; this
+            # is similar to how many VLMs handle image tokens, e.g., llava next
+            prompt_strings = []
+            num_replaced = 0
+            for sample in text:
+                while self.audio_token in sample:
+                    sample = sample.replace(
+                        self.audio_token,
+                        "<placeholder>" * audio_embed_sizes[num_replaced],
+                        1,
+                    )
+                    num_replaced += 1
+                prompt_strings.append(sample)
+
+            prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
         else:
             audio_inputs = {}
 
-        text_inputs = self.tokenizer(processed_text, padding=True, **kwargs)
+        text_inputs = self.tokenizer(prompt_strings, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
-
-    def _expand_audio_placeholders(self, text: list[str], num_audio_features: List[int]):
-        """
-        Expands audio placeholders in the formatted text to match the number of
-        features of the corresponding embeddings; we can use the resulting text
-        to conveniently mask the audio features into the text embeddings.
-        """
-        prompt_strings = []
-        num_replaced = 0
-        for sample in text:
-            while self.audio_token in sample:
-                sample = sample.replace(
-                    self.audio_token,
-                    "<placeholder>" * num_audio_features[num_replaced],
-                    1,
-                )
-                num_replaced += 1
-            prompt_strings.append(sample)
-
-        prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
-        return prompt_strings
 
     def _get_validated_text(self, text: Union[str, list]) -> List[str]:
         if isinstance(text, str):
