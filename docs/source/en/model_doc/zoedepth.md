@@ -118,6 +118,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] ZoeDepthImageProcessor
     - preprocess
 
+## ZoeDepthImageProcessorFast
+
+[[autodoc]] ZoeDepthImageProcessorFast
+    - preprocess
+
 ## ZoeDepthForDepthEstimation
 
 [[autodoc]] ZoeDepthForDepthEstimation
