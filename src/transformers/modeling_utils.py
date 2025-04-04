@@ -4622,6 +4622,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+            QuantizationMethod.HQQ,
+            QuantizationMethod.BITS_AND_BYTES,
+        ]
         is_deepspeed_zero3 = is_deepspeed_zero3_enabled()
         is_fsdp = is_fsdp_enabled()
 
@@ -4790,10 +4794,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
-        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
-            QuantizationMethod.HQQ,
-            QuantizationMethod.BITS_AND_BYTES,
-        ]
         # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights
