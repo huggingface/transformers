@@ -644,7 +644,11 @@ class Llama4ImageProcessor(BaseImageProcessor):
         else:
             images = processed_images
             images = [
-                [to_channel_dimension_format(chunk, data_format, input_channel_dim=input_data_format) for chunk in image] for image in images
+                [
+                    to_channel_dimension_format(chunk, data_format, input_channel_dim=input_data_format)
+                    for chunk in image
+                ]
+                for image in images
             ]
 
         if return_tensors is not None:

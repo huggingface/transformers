@@ -237,6 +237,7 @@ def write_model(
     no_rope_layer_interval = params["nope_layer_interval"]
     attention_chunk_size = params["attention_chunk_size"]
 
+
     config_kwargs = {}
     if params["use_scaled_rope"]:
         # some constans from original code
@@ -406,11 +407,13 @@ def write_model(
                 # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
                 expert_lists = []
                 for k in current_parameter:
-                    expert_lists.append(list(k.reshape(num_experts, -1, k.shape[-1]).unbind(0))) # [#expert * IN, OUT] -> #experts * [IN, OUT]
+                    expert_lists.append(
+                        list(k.reshape(num_experts, -1, k.shape[-1]).unbind(0))
+                    )  # [#expert * IN, OUT] -> #experts * [IN, OUT]
                 for i in range(num_experts):
                     expert = torch.cat([expert_list[i] for expert_list in expert_lists], dim=concat_dim)
                     expert_key = new_key.replace("experts.", f"experts.{i}.")
-                    state_dict[expert_key] = expert.transpose(0,1).contiguous() #[OUT, IN]
+                    state_dict[expert_key] = expert.transpose(0, 1).contiguous()  # [OUT, IN]
                     tqdm.write(f"Processing: {key.ljust(50)}  ->\t {expert_key}, {state_dict[expert_key].shape}")
             elif re.search(r"(gate|up)_proj", new_key):
                 path = new_key.split(".")
@@ -424,11 +427,15 @@ def write_model(
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
-                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
+                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024)
+                            for k in range(8)
                         ]
                         gate_proj = torch.cat(gate_proj, dim=-1)
 
-                        up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
+                        up_proj = [
+                            k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024)
+                            for k in current_parameter
+                        ]
                         up_proj = torch.cat(up_proj, dim=-1)
 
                         gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)

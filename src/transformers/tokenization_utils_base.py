@@ -3950,7 +3950,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             verbose (`bool`): Whether or not to print more information and warnings.
 
         """
-        if max_length is None and len(ids) > self.model_max_length and verbose:
+        if max_length is None and len(ids) > self.model_max_length and verbose and self.model_max_length != 0:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
