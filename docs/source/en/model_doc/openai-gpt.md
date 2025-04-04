@@ -37,7 +37,6 @@ You can find all the original GPT checkpoints under the [OpenAI community](https
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 
-## Usage tips
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
