@@ -102,6 +102,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GroundingDinoImageProcessor
     - preprocess
+
+## GroundingDinoImageProcessorFast
+
+[[autodoc]] GroundingDinoImageProcessorFast
+    - preprocess
     - post_process_object_detection
 
 ## GroundingDinoProcessor
