@@ -98,6 +98,14 @@ imageio.mimsave("generated_video.mp4", video_processed['pixel_values'].squeeze(0
 
 ```
 
+## CosmosVideoProcessor
+
+[[autodoc]] CosmosVideoProcessor
+
+## CosmosProcessor
+
+[[autodoc]] CosmosProcessor
+
 ## CosmosConfig
 
 [[autodoc]] CosmosConfig
@@ -118,6 +126,16 @@ imageio.mimsave("generated_video.mp4", video_processed['pixel_values'].squeeze(0
 ## CosmosTextModel
 
 [[autodoc]] CosmosTextModel
+    - forward
+
+## CosmosTextPreTrainedModel
+
+[[autodoc]] CosmosTextPreTrainedModel
+    - forward
+
+## CosmosPreTrainedModel
+
+[[autodoc]] CosmosPreTrainedModel
     - forward
 
 ## CosmosModel

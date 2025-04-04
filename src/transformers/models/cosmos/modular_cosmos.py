@@ -2157,7 +2157,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
 
         >>> out = model.generate(**inputs, max_new_tokens=7680)
 
-        >>> # Remove the first token which is `BOS`. Decode the video and save. 
+        >>> # Remove the first token which is `BOS`. Decode the video and save.
         >>> video_decoded = model.model.decode_video_tokens(out[:, 1:])
         >>> video_decoded = video_decoded.permute(0, 2, 1, 3, 4).float()
         >>> video_processed = proc.postprocess([video_decoded[0]], return_tensors="np")
@@ -2293,4 +2293,6 @@ __all__ = [
     "CosmosConfig",
     "CosmosVQVAEConfig",
     "CosmosTextConfig",
+    "CosmosTextPreTrainedModel",  # noqa: F822
+    "CosmosPreTrainedModel",
 ]

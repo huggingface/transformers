@@ -2552,4 +2552,11 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["CosmosForConditionalGeneration", "CosmosTextModel", "CosmosModel", "CosmosVQVAE"]
+__all__ = [
+    "CosmosForConditionalGeneration",
+    "CosmosTextModel",
+    "CosmosModel",
+    "CosmosVQVAE",
+    "CosmosTextPreTrainedModel",
+    "CosmosPreTrainedModel",
+]

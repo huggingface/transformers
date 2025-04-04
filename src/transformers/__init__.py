@@ -1944,6 +1944,7 @@ else:
             "CosmosForConditionalGeneration",
             "CosmosModel",
             "CosmosPreTrainedModel",
+            "CosmosTextPreTrainedModel",
             "CosmosTextModel",
             "CosmosVQVAE",
         ]
@@ -7163,6 +7164,7 @@ if TYPE_CHECKING:
             CosmosModel,
             CosmosPreTrainedModel,
             CosmosTextModel,
+            CosmosTextPreTrainedModel,
             CosmosVQVAE,
         )
         from .models.cpmant import (
