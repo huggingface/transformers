@@ -58,6 +58,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
+        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
         image_processor = LayoutLMv3ImageProcessor(
             do_resize=True,
             size=224,
@@ -74,20 +75,23 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
     def get_image_processor(self, **kwargs):
         return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    @classmethod
+    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()
