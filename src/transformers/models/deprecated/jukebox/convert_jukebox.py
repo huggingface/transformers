@@ -228,7 +228,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     weight_dict = []
     mapping = {}
     for i, dict_name in enumerate(model_to_convert):
-        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}")["model"]
+        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}", weights_only=True)["model"]
 
         new_dic = {}
         for k in old_dic.keys():

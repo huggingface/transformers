@@ -72,7 +72,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
     head_dim = config.head_dim
 
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
-    model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+    model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)["model_state_dict"]
     model_state_dict.pop("freqs_cis")
 
     state_dict = {}

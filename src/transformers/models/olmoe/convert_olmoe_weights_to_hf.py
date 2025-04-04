@@ -119,7 +119,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
 
     # Not sharded
-    loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu")
+    loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu", weights_only=True)
 
     param_count = 0
     index_dict = {"weight_map": {}}

@@ -125,7 +125,7 @@ def convert_deformable_detr_checkpoint(
     logger.info("Converting model...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
