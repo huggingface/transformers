@@ -34,11 +34,7 @@ from ..utils import is_torch_flex_attn_available
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import (
-        BlockMask,
-        flex_attention,
-        _mask_mod_signature
-    )
+    from torch.nn.attention.flex_attention import BlockMask, flex_attention
     from torch.nn.attention.flex_attention import (
         create_block_mask as create_block_causal_mask_flex,
     )
@@ -211,7 +207,7 @@ def flex_attention_forward(
         key = repeat_kv(key, num_local_query_heads)
         value = repeat_kv(value, num_local_query_heads)
         enable_gqa = False
-    
+
     kernel_options = kwargs.get("kernel_options", None)
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
