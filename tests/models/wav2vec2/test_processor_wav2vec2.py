@@ -62,10 +62,11 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = cls.get_tokenizer()
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs_init):
-        kwargs = self.add_kwargs_tokens_map.copy()
+    @classmethod
+    def get_tokenizer(cls, **kwargs_init):
+        kwargs = cls.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
-        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Wav2Vec2CTCTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return Wav2Vec2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
