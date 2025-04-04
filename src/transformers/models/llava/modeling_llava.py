@@ -81,7 +81,7 @@ class LlavaModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class LlavaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Llava causal language model (or autoregressive) outputs.
+    Base class for Llavaccausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

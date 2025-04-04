@@ -32,12 +32,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -90,7 +89,7 @@ class Gemma3ModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Gemma3CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Gemma3causal language model (or autoregressive) outputs.
+    Base class for Gemma3 causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

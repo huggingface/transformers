@@ -78,7 +78,7 @@ class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for VipLlava causal language model (or autoregressive) outputs.
+    Base class for VipLlavaccausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

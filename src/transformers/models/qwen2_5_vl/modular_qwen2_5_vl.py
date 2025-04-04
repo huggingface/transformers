@@ -52,7 +52,6 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
-    is_flash_attn_2_available,
     logging,
 )
 

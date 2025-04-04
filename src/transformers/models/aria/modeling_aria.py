@@ -1182,8 +1182,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_TEXT_DOC)
     def forward(
@@ -1272,7 +1270,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Aria causal language model (or autoregressive) outputs.
+    Base class for Ariaccausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

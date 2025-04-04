@@ -148,7 +148,7 @@ class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for PaliGemmacausal language model (or autoregressive) outputs.
+    Base class for PaliGemma causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
