@@ -62,7 +62,8 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         processor.save_pretrained(cls.tmpdirname)
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {"patch_size": 10, "img_size": 20}
 
     def get_tokenizer(self, **kwargs):
