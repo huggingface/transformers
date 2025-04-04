@@ -651,7 +651,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-    ) -> Union[Tuple, GotOcr2CausalLMOutputWithPast]:
+    ) -> GotOcr2CausalLMOutputWithPast:
         r"""
         Example:
         Example:
