@@ -1392,7 +1392,7 @@ class ProcessorMixin(PushToHubMixin):
 
                     for fname in video_fnames:
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
-                            video = [np.array(load_image(image_fname)).T for image_fname in fname]
+                            video = [np.array(load_image(image_fname)) for image_fname in fname]
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                             metadata = None

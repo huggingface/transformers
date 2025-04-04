@@ -23,6 +23,7 @@ from typing import Optional
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.processing_utils import Unpack
@@ -43,6 +44,22 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+
+
+MODALITY_INPUT_DATA = {
+    "images": [
+        "http://images.cocodataset.org/val2017/000000039769.jpg",
+        "http://images.cocodataset.org/val2017/000000039769.jpg",
+    ],
+    "videos": [
+        "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+        ["https://www.ilankelman.org/stopsigns/australia.jpg", "https://www.ilankelman.org/stopsigns/australia.jpg"],
+    ],
+    "audio": [
+        "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+        "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+    ],
+}
 
 
 def prepare_image_inputs():
@@ -773,213 +790,127 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
-    def test_image_chat_template_single(self):
+    @require_torch
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list[str],
+    ):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if processor_name not in self.processor_class.attributes:
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
-        messages = [
+        batch_messages = [
             [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is shown in this image?"},
-                    ],
+                    "content": [{"type": "text", "text": "Describe this."}],
                 },
             ]
-        ]
+        ] * batch_size
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
+        # Test that jinja can be applied
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), batch_size)
 
+        # Test that tokenizing with template and directly with `self.tokenizer` gives same output
         formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors="np"
+            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
         )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
-        expected_output = processor.tokenizer(
-            formatted_prompt, return_tensors="np", add_special_tokens=add_special_tokens
-        ).input_ids
+        tok_output = processor.tokenizer(
+            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+        )
+        expected_output = tok_output.input_ids
         self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
 
-        out_dict = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="np"
-        )
-        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
-
-        # Now test the ability to return dict
-        messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-        )
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertTrue(self.images_input_name in out_dict)
-
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)
-        self.assertEqual(len(out_dict["attention_mask"]), 1)
-        self.assertEqual(len(out_dict[self.images_input_name]), 1)
-
-    def test_image_chat_template_batched(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        batched_messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is shown in this image?"},
-                    ],
-                },
-            ],
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What do you see?"},
-                    ],
-                },
-            ],
-        ]
-
-        formatted_prompt = processor.apply_chat_template(batched_messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 2)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, padding=True, return_tensors=None
-        )
-        add_special_tokens = True
-        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
-            add_special_tokens = False
-        expected_output = processor.tokenizer(
-            formatted_prompt,
-            padding=True,
-            return_tensors="np",
-            add_special_tokens=add_special_tokens,
-        ).input_ids
-        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
-
-        out_dict = processor.apply_chat_template(
-            batched_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="np",
-            padding=True,
-        )
-        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
-
-        # Now test the ability to return dict
-        batched_messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-        )
-        batched_messages[1][0]["content"].append(
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"}
-        )
-        out_dict = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
-        )
-        self.assertTrue(self.images_input_name in out_dict)
-
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 2)
-        self.assertEqual(len(out_dict["attention_mask"]), 2)
-        self.assertEqual(len(out_dict[self.images_input_name]), 2)
-
-    def test_image_chat_template_accepts_processing_kwargs(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is shown in this image?"},
-                    ],
-                },
-            ]
-        ]
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages,
+        # Test that kwargs passed to processor's `__call__` are actually used
+        tokenized_prompt_100 = processor.apply_chat_template(
+            batch_messages,
             add_generation_prompt=True,
             tokenize=True,
             padding="max_length",
             truncation=True,
-            max_length=50,
+            return_tensors=return_tensors,
+            max_length=100,
         )
-        self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
+        self.assertEqual(len(tokenized_prompt_100[0]), 100)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages,
+        # Test that `return_dict=True` returns text related inputs in the dict
+        out_dict_text = processor.apply_chat_template(
+            batch_messages,
             add_generation_prompt=True,
             tokenize=True,
-            truncation=True,
-            return_tensors="np",
-            max_length=5,
+            return_dict=True,
+            return_tensors=return_tensors,
         )
-        self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
 
-        # Now test the ability to return dict
-        messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-        )
+        # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
+
         out_dict = processor.apply_chat_template(
-            messages,
+            batch_messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_rescale=True,
-            rescale_factor=-1,
-            return_tensors="np",
+            return_tensors=return_tensors,
+            num_frames=4,  # by default no more than 4 frames, otherwise too slow
         )
-        self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
+        input_name = getattr(self, input_name)
+        self.assertTrue(input_name in out_dict)
+        self.assertEqual(len(out_dict["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+        self.assertEqual(len(out_dict[input_name]), batch_size)
 
-    @require_torch
-    def test_image_chat_template_dict_torch(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
+        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
+        for k in out_dict:
+            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        out_dict_tensors = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.images_input_name in out_dict_tensors)
-        for k in out_dict_tensors:
-            self.assertIsInstance(out_dict_tensors[k], torch.Tensor)
+        # Test continue from final message
+        assistant_message = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "It is the sound of "}],
+        }
+        for message in batch_messages:
+            message.append(assistant_message)
+        continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
+        for prompt in continue_prompt:
+            self.assertTrue(prompt.endswith("It is the sound of "))  # no `eos` token at the end
 
     @require_av
-    def test_chat_template_video(self):
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
+        self._test_apply_chat_template(
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extracttor", MODALITY_INPUT_DATA["audio"]
+        )
+
+    @require_librosa
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
+        self._test_apply_chat_template(
+            "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
+        )
+
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
+        self._test_apply_chat_template(
+            "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
+        )
+
+    def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor_slow_vision()
 
         if processor.chat_template is None:
@@ -997,46 +928,16 @@ class ProcessorTesterMixin:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "video"},
+                        {
+                            "type": "video",
+                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                        },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
                 },
             ]
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_tensors="np",
-        )
-        add_special_tokens = True
-        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
-            add_special_tokens = False
-        expected_output = processor.tokenizer(
-            formatted_prompt,
-            return_tensors="np",
-            add_special_tokens=add_special_tokens,
-        ).input_ids
-        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
-
-        out_dict = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="np",
-        )
-        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
-
-        # Add video URL for return dict and load with `num_frames` arg
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
-        }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
             messages,
@@ -1106,7 +1007,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
 
     @require_av
-    def test_chat_template_video_special_processing(self):
+    def test_apply_chat_template_video_special_processing(self):
         """
         Tests that models can use their own preprocessing to preprocess conversations.
         """
@@ -1175,7 +1076,7 @@ class ProcessorTesterMixin:
 
     @require_librosa
     @require_av
-    def test_audio_chat_template_from_video(self):
+    def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
@@ -1229,124 +1130,10 @@ class ProcessorTesterMixin:
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.video_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 2)  # 2 audios in the conversation
-        self.assertEqual(len(out_dict[self.video_input_name]), 1)  # 1 video in the conversation
-
-    @require_librosa
-    def test_audio_chat_template_single(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        if "feature_extractor" not in self.processor_class.attributes:
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are a helpful assistant."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                    },
-                    {"type": "text", "text": "What's that sound?"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                    },
-                    {"type": "text", "text": "How about this one?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
-        )
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        messages[1]["content"][0]["audio"] = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        )
-        messages[3]["content"][0]["audio"] = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        )
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertTrue(self.audio_input_name in out_dict)
-
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 2)  # 2 audios in the conversation
-
-    @require_torch
-    @require_librosa
-    def test_audio_chat_template_dict_torch(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        if "feature_extractor" not in self.processor_class.attributes:
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are a helpful assistant."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-                    },
-                    {"type": "text", "text": "What's that sound?"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
-                    },
-                    {"type": "text", "text": "How about this one?"},
-                ],
-            },
-        ]
-
-        out_dict_tensors = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-
-        self.assertTrue(self.audio_input_name in out_dict_tensors)
-        for k in out_dict_tensors:
-            self.assertIsInstance(out_dict_tensors[k], torch.Tensor)
+        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
