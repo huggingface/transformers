@@ -3738,11 +3738,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def get_init_context(
-        cls: Type[SpecificPreTrainedModelType],
-        is_quantized=None,
-        _is_ds_init_called=None,
-    ):
+    def get_init_context(cls, is_quantized: bool):
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
@@ -4350,7 +4346,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
+        model_init_context = cls.get_init_context(is_quantized)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
