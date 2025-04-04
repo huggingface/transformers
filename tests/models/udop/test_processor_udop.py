@@ -79,8 +79,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
         return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return LayoutLMv3ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
     def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
