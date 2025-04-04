@@ -75,10 +75,7 @@ echo -e "The future of AI is" | transformers-cli run --task text-generation --mo
 
 ## Notes
 
-- This model was trained using a causal language modeling (CLM) objective.
-- It uses byte-level BPE tokenization.
-- Right-side padding is recommended due to absolute position embeddings.
-- Best suited for text generation and zero-shot transfer learning.
+- Inputs should be padded on the right because GPT uses absolute position embeddings.
 
 ## OpenAIGPTConfig
 
