@@ -47,6 +47,8 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
             to be added to every other encoder block's output.
         context_size (`int`, *optional*, defaults to 200):
             Context size to be used in conformer attention.
+        max_pos_emb (`int`, *optional*, defaults to 512):
+            Max pos embeds to be used in attention (shaw's relative positional encoding).
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for fully connected layers in the encoder.
         conv_kernel_size (`int`, *optional*, defaults to 15):
@@ -81,6 +83,7 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         dim_head=128,
         output_dim=42,
         context_size=200,
+        max_pos_emb=512,
         dropout=0.1,
         conv_kernel_size=15,
         conv_expansion_factor=2,
@@ -98,6 +101,7 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.conv_kernel_size = conv_kernel_size
         self.conv_expansion_factor = conv_expansion_factor
+        self.max_pos_emb = max_pos_emb
 
 
 class GraniteSpeechConfig(PretrainedConfig):
