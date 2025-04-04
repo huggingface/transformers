@@ -31,7 +31,7 @@ import torch.utils.checkpoint
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -436,6 +436,7 @@ class Llama4TextDecoderLayer(nn.Module):
         # use local attention mask for ROPE layers
         if self.use_chunked_attention and chunk_causal_mask is not None:
             attention_mask = chunk_causal_mask
+
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -765,7 +766,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             key_length = attention_chunk_size
 
-        if isinstance(past_key_values, (StaticCache, HybridCache)):
+        if past_key_values.is_compileable:
             target_length = past_key_values.max_cache_len
         else:
             target_length = attention_mask.shape[-1]
