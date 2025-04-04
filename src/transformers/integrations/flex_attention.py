@@ -67,9 +67,16 @@ class WrappedFlexAttention:
     def __call__(self):
         return self._compiled_flex_attention
 
+
 Offset = Union[torch.Tensor, int]
+
+
 def make_flex_block_causal_mask(
-    attention_mask_2d: torch.Tensor, attention_chunk_size: Optional[int] = None, query_length = None, key_length=None, offsets: Optional[Tuple[Offset, Offset]] = None
+    attention_mask_2d: torch.Tensor,
+    attention_chunk_size: Optional[int] = None,
+    query_length=None,
+    key_length=None,
+    offsets: Optional[Tuple[Offset, Offset]] = None,
 ) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
@@ -99,7 +106,7 @@ def make_flex_block_causal_mask(
 
     if attention_chunk_size is not None:
         # we create an arange, then we just // by chunk size to get [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
-        document_ids = (document_ids.fill_(1).cumsum(-1) - 1 ) // (attention_chunk_size)
+        document_ids = (document_ids.fill_(1).cumsum(-1) - 1) // (attention_chunk_size)
 
     # Instead of passing a tensor mask, flex attention requires a mask_mod function
     # that determines which elements of QK^T should be included in the attention
@@ -114,7 +121,7 @@ def make_flex_block_causal_mask(
         See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
         for an illustration.
         """
-        causal_mask = q_idx >= kv_idx # not valid when decoding
+        causal_mask = q_idx >= kv_idx  # not valid when decoding
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
         padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
         final_mask = causal_mask & padding_mask & document_mask
@@ -123,6 +130,7 @@ def make_flex_block_causal_mask(
     if offsets is not None:
         q_offset = offsets[0]
         kv_offset = offsets[1]
+
         def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
             offset_q = q_idx + q_offset
             offset_kv = kv_idx + kv_offset
@@ -169,6 +177,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -183,7 +192,7 @@ def flex_attention_forward(
     block_mask = None
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
-        block_mask = attention_mask #._adjust(query.shape[2], key.shape[2])
+        block_mask = attention_mask  # ._adjust(query.shape[2], key.shape[2])
     else:
         causal_mask = attention_mask
 
@@ -203,7 +212,7 @@ def flex_attention_forward(
     num_local_query_heads = query.shape[1]
 
     # When running TP this helps:
-    if not((num_local_query_heads & (num_local_query_heads - 1)) == 0):
+    if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
         key = repeat_kv(key, num_local_query_heads)
         value = repeat_kv(value, num_local_query_heads)
         enable_gqa = False

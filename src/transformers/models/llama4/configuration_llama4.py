@@ -184,7 +184,6 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
-        for_llm_compressor=False,
         attn_temperature_tuning=4,
         floor_scale=8192,
         attn_scale=0.1,
@@ -238,9 +237,6 @@ class Llama4TextConfig(PretrainedConfig):
             moe_layers if moe_layers is not None else list(range(0, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
-        self.for_llm_compressor = for_llm_compressor
-
-
 
 
 class Llama4Config(PretrainedConfig):
@@ -321,9 +317,6 @@ class Llama4Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        for_llm_compressor: (`bool`, *optional*, defaults to `False`):
-            Whether this config is for a checkpoint that aims to use LLM compressor for fp8 quantization.
-            If `True`, the model MoE part would swap to use Linear instead of FusedMoE.
 
     ```python
     >>> from transformers import Llama4Model, Llama4Config
@@ -351,7 +344,7 @@ class Llama4Config(PretrainedConfig):
         boi_token_index=200080,
         eoi_token_index=200081,
         image_token_index=200092,
-        tie_word_embeddings = False,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if vision_config is None:

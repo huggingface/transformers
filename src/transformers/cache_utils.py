@@ -1204,7 +1204,7 @@ class StaticCache(Cache):
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
-        ) // 8 # TODO use TP!
+        ) // 8  # TODO use TP!
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1667,27 +1667,32 @@ class HybridCache(Cache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
-        config.sliding_window = 8192 // 2
-        self.attention_chunk_size = 8192
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
+            self.sliding_window = getattr(config, "attention_chunk_size")
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
                 "sliding window attention, please check if there is a `sliding_window` field in the model "
                 "config and it's not set to None."
             )
+        else: 
+            self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim",config.hidden_size // config.num_attention_heads)
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
-        layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 5  # 2 is for BC
-        self.is_sliding = torch.tensor(
-            [int((layer_id + 1) % 4 !=0)for layer_id in range(config.num_hidden_layers)]
-        )
+
+        if hasattr(config, "no_rope_layers"):
+            self.is_sliding = torch.tensor([k in config.no_rope_layers for k in range(config.num_hidden_layers)])
+        else: 
+            layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2
+            self.is_sliding = torch.tensor(
+                [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
+            )
+
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self.cumulative_length = [0 for _ in range(config.num_hidden_layers)]
-    
+
     def initialise_cache_layer(self, layer_idx, key_states):
         if len(self.key_cache) > layer_idx:
             return
@@ -1698,7 +1703,7 @@ class HybridCache(Cache):
         sliding_cache_shape = (
             self.max_batch_size,
             num_key_value_heads,
-            self.attention_chunk_size,
+            self.sliding_window,
             self.head_dim,
         )
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -1719,7 +1724,9 @@ class HybridCache(Cache):
             full_value_states = torch.cat((self.value_cache[layer_idx][:, :, 1:, :], value_states), dim=-2)
         elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
             full_key_states = torch.cat((self.key_cache[layer_idx][:, :, :cumulative_length, :], key_states), dim=-2)
-            full_value_states = torch.cat((self.value_cache[layer_idx][:, :, :cumulative_length, :], value_states), dim=-2)
+            full_value_states = torch.cat(
+                (self.value_cache[layer_idx][:, :, :cumulative_length, :], value_states), dim=-2
+            )
         else:
             self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
             self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)

@@ -55,12 +55,14 @@ from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    from torch.nn.attention.flex_attention import BlockMask
 
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "meta-ai/Llama-4-17B"
 _CONFIG_FOR_DOC = "Llama4Config"
+
 
 class Llama4TextExperts(nn.Module):
     def __init__(self, config: Llama4Config):
@@ -154,11 +156,7 @@ class Llama4TextMoe(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts
-        self.for_llm_compressor = config.for_llm_compressor
-        if self.for_llm_compressor:
-            self.experts = nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
-        else:
-            self.experts = Llama4TextExperts(config)
+        self.experts = Llama4TextExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.shared_expert = Llama4TextMLP(config)
 
@@ -190,13 +188,7 @@ class Llama4TextMoe(nn.Module):
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
         expert_routed_out_list = []
-        if self.for_llm_compressor:
-            routed_in = routed_in.reshape(self.num_experts, -1, routed_in.shape[-1])
-            for expert_idx in range(self.num_experts):
-                expert_routed_out_list.append(self.experts[expert_idx](routed_in[expert_idx]))
-            routed_out = torch.cat(expert_routed_out_list, dim=0)
-        else:
-            routed_out = self.experts(routed_in)
+        routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
         # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
@@ -325,7 +317,7 @@ class Llama4TextAttention(nn.Module):
         self.attn_temperature_tuning = config.attn_temperature_tuning
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.use_rope = int((layer_idx + 1) % 4 !=0) #rope unused for dense layers
+        self.use_rope = int((layer_idx + 1) % 4 != 0)  # rope unused for dense layers
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -368,7 +360,9 @@ class Llama4TextAttention(nn.Module):
 
         # Use temperature tuning from https://arxiv.org/abs/2501.19399) to NoROPE layers
         if self.attn_temperature_tuning and not self.use_rope:
-            attn_scales = torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
+            attn_scales = (
+                torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
+            )
             attn_scales = attn_scales.view((*input_shape, 1, 1))
             query_states = (query_states * attn_scales).to(query_states.dtype)
 
@@ -410,7 +404,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = int((layer_idx + 1) % 4 !=0) #<=> use rope
+        self.use_chunked_attention = int((layer_idx + 1) % 4 != 0)  # <=> use rope
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -749,7 +743,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         cache_position: torch.Tensor,
         past_key_values: Cache,
         output_attentions: bool = False,
-        chunked_attention_mask=None
+        chunked_attention_mask=None,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -766,7 +760,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
         last_cache_position = cache_position[-1]
         if first_cache_position >= attention_chunk_size:
             key_length = attention_chunk_size + sequence_length - 1
-        elif first_cache_position < attention_chunk_size and first_cache_position + sequence_length > attention_chunk_size:
+        elif (
+            first_cache_position < attention_chunk_size
+            and first_cache_position + sequence_length > attention_chunk_size
+        ):
             key_length = first_cache_position + sequence_length
         else:
             key_length = attention_chunk_size
@@ -780,11 +777,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if isinstance(attention_mask, torch.Tensor):
                 offsets = (first_cache_position, max(last_cache_position - key_length, 0))
                 chunked_attention_mask = make_flex_block_causal_mask(
-                    attention_mask,
-                    self.config.attention_chunk_size,
-                    sequence_length,
-                    key_length,
-                    offsets=offsets
+                    attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
                 )
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
@@ -795,7 +788,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask
-
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -809,19 +801,22 @@ class Llama4TextModel(Llama4PreTrainedModel):
             batch_size=input_tensor.shape[0],
         )
         if target_length > self.config.attention_chunk_size:
-                chunked_attention_mask = self.create_chunked_attention_mask(
-                     self.config.attention_chunk_size, start=first_cache_position, end=first_cache_position+key_length, device=device
-                )
-                chunked_attention_mask = chunked_attention_mask & attention_mask
-                if sequence_length == 1:
-                    chunked_attention_mask = chunked_attention_mask[-1:]
+            chunked_attention_mask = self.create_chunked_attention_mask(
+                self.config.attention_chunk_size,
+                start=first_cache_position,
+                end=first_cache_position + key_length,
+                device=device,
+            )
+            chunked_attention_mask = chunked_attention_mask & attention_mask
+            if sequence_length == 1:
+                chunked_attention_mask = chunked_attention_mask[-1:]
 
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu"]
             and attention_mask.ndim == 4
-            and not output_attentions # Only unmask for 4d masks
+            and not output_attentions  # Only unmask for 4d masks
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -844,7 +839,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         return causal_mask, chunked_attention_mask
 
     def create_chunked_attention_mask(
-        self,  attention_chunk_size: int, start: int, end:int, device: torch.device
+        self, attention_chunk_size: int, start: int, end: int, device: torch.device
     ) -> torch.Tensor:
         """
         Generate the following:

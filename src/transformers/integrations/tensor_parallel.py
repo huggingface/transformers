@@ -472,7 +472,7 @@ class SequenceParallel(TensorParallelLayer):
 
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = False, use_dtensor=False):
         super().__init__()
-        self.input_layouts =  (Replicate(),)
+        self.input_layouts = (Replicate(),)
         self.desired_input_layouts = (Shard(1),)
         self.output_layouts = (Replicate(),)
         self.use_local_output = use_local_output
@@ -493,8 +493,8 @@ class SequenceParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         outputs = outputs.redistribute(
             placements=(Replicate(),), async_op=True
-        ) # maybe we have to replicate ? because next layer is not sharded
-        return outputs.to_local() # if use_local_output else outputs
+        )  # maybe we have to replicate ? because next layer is not sharded
+        return outputs.to_local()  # if use_local_output else outputs
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
@@ -508,6 +508,7 @@ class SequenceParallel(TensorParallelLayer):
             parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
         return nn.Parameter(parameter)
 
+
 SUPPORTED_TP_STYLES = {
     "colwise",
     "rowwise",
@@ -518,7 +519,7 @@ SUPPORTED_TP_STYLES = {
     "local",
     "gather",
     "local_packed_rowwise",
-    "sequence_parallel"
+    "sequence_parallel",
 }
 
 

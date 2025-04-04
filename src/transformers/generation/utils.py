@@ -4773,9 +4773,7 @@ class GenerationMixin:
         else:
             return input_ids
 
-
     def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
-
         chunk_size = generation_config.prefill_chunk_size
         # Only chunk up the token just before last, so that decoding is completely performed outside this function
         # (here we simply prefill the cache)
@@ -4793,7 +4791,9 @@ class GenerationMixin:
             # Prepare inputs
             if attention_mask is not None:
                 model_kwargs["attention_mask"] = attention_mask[:, :current_length]
-            model_kwargs["cache_position"] = torch.arange(past_length, current_length, dtype=torch.long, device=input_chunk.device)
+            model_kwargs["cache_position"] = torch.arange(
+                past_length, current_length, dtype=torch.long, device=input_chunk.device
+            )
             model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
             model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
@@ -4808,8 +4808,6 @@ class GenerationMixin:
         _ = model_kwargs.pop("position_ids", None)
 
         return model_kwargs
-
-
 
 
 def _speculative_sampling(
