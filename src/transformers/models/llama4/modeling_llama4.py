@@ -798,7 +798,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        if target_length > self.config.attention_chunk_size or self.config._attn_implementation == "eager":
+        if target_length > self.config.attention_chunk_size:
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
                 start=first_cache_position,
