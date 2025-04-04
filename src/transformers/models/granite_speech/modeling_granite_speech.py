@@ -128,13 +128,12 @@ class GraniteSpeechCTCEncoder(nn.Module):
 
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
-        self.context_size = config.context_size
         self.num_layers = config.num_layers
 
     def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
-            hidden_states = layer(hidden_states, self.context_size)
+            hidden_states = layer(hidden_states)
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
@@ -153,9 +152,9 @@ class GraniteSpeechConformerBlock(nn.Module):
         self.ff2 = GraniteSpeechConformerFeedForward(config)
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
-    def forward(self, hidden_states: torch.Tensor, context_size: int) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
-        hidden_states = self.attn(hidden_states, context_size) + hidden_states
+        hidden_states = self.attn(hidden_states) + hidden_states
         hidden_states = self.conv(hidden_states) + hidden_states
         hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
         hidden_states = self.post_norm(hidden_states)
@@ -190,6 +189,7 @@ class GraniteSpeechConformerAttention(nn.Module):
 
         inner_dim = config.dim_head * config.num_heads
         self.max_pos_emb = 512
+        self.context_size = config.context_size
         self.num_heads = config.num_heads
         self.dim_head = config.dim_head
         self.scale = self.dim_head**-0.5
@@ -200,37 +200,37 @@ class GraniteSpeechConformerAttention(nn.Module):
         self.rel_pos_emb = nn.Embedding(2 * self.max_pos_emb + 1, self.dim_head)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, hidden_states: torch.Tensor, context_size: int) -> torch.Tensor:
-        if context_size <= 0 or context_size > self.max_pos_emb:
+        if self.context_size <= 0 or self.context_size > self.max_pos_emb:
             raise ValueError("Context size is either less than 0 or exceeds the max_pos_emb")
 
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.pre_norm(hidden_states)
         bsz, num_features, _ = hidden_states.shape
 
-        num_blocks = math.ceil(num_features / context_size)
-        remainder = num_features % context_size
+        num_blocks = math.ceil(num_features / self.context_size)
+        remainder = num_features % self.context_size
         if remainder > 0:
             # right padding to reach block size
-            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, context_size - remainder))
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, self.context_size - remainder))
 
         query_states = self.to_q(hidden_states)
         key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
         query_states, key_states, value_states = [
-            t.reshape(bsz, num_blocks, context_size, self.num_heads, -1).transpose(2, 3)
+            t.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
             for t in (query_states, key_states, value_states)
         ]
 
         # shaw's relative positional embedding
-        seq = torch.arange(context_size, device=hidden_states.device)
+        seq = torch.arange(self.context_size, device=hidden_states.device)
         dist = seq.view(-1, 1) - seq.view(1, -1)
-        dist = torch.clamp(dist, -context_size, context_size) + self.max_pos_emb
+        dist = torch.clamp(dist, -self.context_size, self.context_size) + self.max_pos_emb
         rel_pos_emb = self.rel_pos_emb(dist).to(query_states)
         rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
         pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
 
         if remainder > 0:
             # masked attention in the extended block
-            mask = torch.ones(context_size, context_size, dtype=bool, device=hidden_states.device)
+            mask = torch.ones(self.context_size, self.context_size, dtype=bool, device=hidden_states.device)
             mask[:remainder, :remainder] = 0
             mask_value = -torch.finfo(pos_attn.dtype).max
             pos_attn[:, -1, :].masked_fill_(mask, mask_value)
