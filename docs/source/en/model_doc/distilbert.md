@@ -44,7 +44,9 @@ from transformers import pipeline
 
 classifier = pipeline(
     task="text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+    torch_dtype=torch.float16,
+    device=0
 )
 
 result = classifier("I love using Hugging Face Transformers!")
