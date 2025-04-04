@@ -14,13 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Jamba
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
+
+# Jamba
 
 [Jamba](https://huggingface.co/papers/2403.19887) is a hybrid Transformer-Mamba mixture-of-experts (MoE) language model ranging from 52B to 398B total parameters. This model aims to combine the advantages of both model families, the performance of transformer models and the efficiency and longer context (256K tokens) of state space models (SSMs) like Mamba.
 
@@ -55,10 +57,32 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```py
-# !pip install -U flash-attn --no-build-isolation
 import torch
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
+tokenizer = AutoTokenizer.from_pretrained(
+    "ai21labs/AI21-Jamba-Large-1.6",
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "ai21labs/AI21-Jamba-Large-1.6",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+</hfoption>
+
+We can generate text with the model in quantized form as follows: 
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True,
                                          llm_int8_skip_modules=["mamba"])
 
@@ -77,7 +101,7 @@ messages = [
    {"role": "user", "content": "Hello!"},
 ]
 
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors='pt').to(model.device)
 
 outputs = model.generate(input_ids, max_new_tokens=216)
 
@@ -89,7 +113,6 @@ assistant_response = conversation.split(messages[-1]['content'])[1].strip()
 print(assistant_response)
 # Output: Seek and you shall find. The path is winding, but the journey is enlightening. What wisdom do you seek from the ancient echoes?
 ```
-
 </hfoption>
 <hfoption id="transformers-cli">
 
@@ -102,12 +125,15 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 
 ## Notes
 
-```
-
-- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`].
 - Don't quantize the Mamba blocks to prevent model performance degradation.
-for big models.
+- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`] as follows:
 
+```py
+import torch
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
+                                             use_mamba_kernels=False)
+```
 
 ## JambaConfig
 
