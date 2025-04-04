@@ -68,8 +68,9 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
             return ViTImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
         return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()

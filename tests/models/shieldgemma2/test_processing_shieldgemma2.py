@@ -88,8 +88,9 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = ShieldGemma2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def prepare_processor_dict(self):
         return {

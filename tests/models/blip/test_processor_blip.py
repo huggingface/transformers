@@ -48,8 +48,9 @@ class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_additional_features(self):
         processor = BlipProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())

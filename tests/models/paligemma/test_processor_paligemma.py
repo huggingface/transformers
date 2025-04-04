@@ -42,8 +42,9 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     @require_torch
     @require_vision

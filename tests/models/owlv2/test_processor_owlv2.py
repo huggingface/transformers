@@ -20,8 +20,9 @@ class Owlv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = cls.processor_class.from_pretrained("google/owlv2-base-patch16-ensemble")
         processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_processor_query_images_positional(self):
         processor_components = self.prepare_components()
