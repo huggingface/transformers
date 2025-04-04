@@ -42,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
-from .configuration_granitemoehybrid import GraniteMoeHybridConfig, GranitemoehybridConfig
+from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
 if is_mamba_2_ssm_available():
@@ -66,7 +66,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-_CONFIG_FOR_DOC = "GranitemoehybridConfig"
+_CONFIG_FOR_DOC = "GraniteMoeHybridConfig"
 
 
 class GraniteMultiHeadLatentAttention(nn.Module):
@@ -170,7 +170,7 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    def __init__(self, config: GranitemoehybridConfig, batch_size, dtype=torch.float16, device=None):
+    def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
         super().__init__(config, batch_size, dtype, device)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
@@ -210,7 +210,7 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
 
-class GranitemoehybridRMSNormGated(torch.nn.Module):
+class GraniteMoeHybridRMSNormGated(torch.nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -363,7 +363,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = GranitemoehybridRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = GraniteMoeHybridRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -376,7 +376,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
         else:
-            logger.warning_once("The fast path for Granitemoehybrid will be used when running the model on a GPU")
+            logger.warning_once("The fast path for GraniteMoeHybrid will be used when running the model on a GPU")
 
     def cuda_kernels_forward(
         self,
@@ -770,10 +770,10 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
-class GranitemoehybridRMSNorm(nn.Module):
+class GraniteMoeHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        GranitemoehybridRMSNorm is equivalent to T5LayerNorm
+        GraniteMoeHybridRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -790,10 +790,10 @@ class GranitemoehybridRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class GranitemoehybridParallelExperts(nn.Module):
+class GraniteMoeHybridParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
         """
-        Initialize the GranitemoehybridParallelExperts module.
+        Initialize the GraniteMoeHybridParallelExperts module.
         The experts weights are stored in [num_experts, output_size, input_size] format. Such that it's comptible with
         many MoE libraries, such as [Megablock](https://github.com/databricks/megablocks) and
         [ScatterMoE](https://github.com/shawntan/scattermoe), as well as the
@@ -815,7 +815,7 @@ class GranitemoehybridParallelExperts(nn.Module):
 
     def forward(self, inputs, expert_size):
         """
-        Forward pass of the GranitemoehybridParallelExperts module.
+        Forward pass of the GraniteMoeHybridParallelExperts module.
         Args:
             inputs (Tensor):
                 Input tensor.
@@ -832,7 +832,7 @@ class GranitemoehybridParallelExperts(nn.Module):
         return results
 
 
-class GranitemoehybridTopKGating(nn.Module):
+class GraniteMoeHybridTopKGating(nn.Module):
     def __init__(self, input_size: int, num_experts: int, top_k: int):
         """
         Initialize the top-k gating mechanism.
@@ -880,7 +880,7 @@ class GranitemoehybridTopKGating(nn.Module):
         return index_sorted_experts, batch_index, batch_gates, expert_size, logits
 
 
-class GranitemoehybridMoE(nn.Module):
+class GraniteMoeHybridMoE(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
@@ -889,20 +889,20 @@ class GranitemoehybridMoE(nn.Module):
             Configuration object with model hyperparameters.
     """
 
-    def __init__(self, config: GranitemoehybridConfig):
-        super(GranitemoehybridMoE, self).__init__()
+    def __init__(self, config: GraniteMoeHybridConfig):
+        super(GraniteMoeHybridMoE, self).__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
         self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = GranitemoehybridParallelExperts(
+        self.input_linear = GraniteMoeHybridParallelExperts(
             config.num_local_experts, self.input_size, self.hidden_size * 2
         )
-        self.output_linear = GranitemoehybridParallelExperts(
+        self.output_linear = GraniteMoeHybridParallelExperts(
             config.num_local_experts, self.hidden_size, self.input_size
         )
 
-        self.router = GranitemoehybridTopKGating(
+        self.router = GraniteMoeHybridTopKGating(
             input_size=self.input_size,
             num_experts=config.num_local_experts,
             top_k=config.num_experts_per_tok,
@@ -951,9 +951,9 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
             else GraniteMoeHybridMambaLayer(config)
         )
 
-        self.block_sparse_moe = GranitemoehybridMoE(config)
-        self.input_layernorm = GranitemoehybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GranitemoehybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config)
+        self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.residual_multiplier = config.residual_multiplier
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
@@ -1089,45 +1089,12 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, GranitemoehybridParallelExperts):
+        elif isinstance(module, GraniteMoeHybridParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
-@add_start_docstrings(
-    "The bare Granitemoehybrid Model outputting raw hidden-states without any specific head on top.",
-    GRANITEMOEHYBRID_START_DOCSTRING,
-)
-class GranitemoehybridPreTrainedModel(PreTrainedModel):
-    config_class = GranitemoehybridConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GranitemoehybridDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GranitemoehybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
-
-class GranitemoehybridRotaryEmbedding(nn.Module):
-    def __init__(self, config: GranitemoehybridConfig, device=None):
+class GraniteMoeHybridRotaryEmbedding(nn.Module):
+    def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -1265,7 +1232,7 @@ GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
     "The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.",
     GRANITEMOEHYBRID_START_DOCSTRING,
 )
-class GraniteMoeHybridModel(GranitemoehybridPreTrainedModel):
+class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteMoeDecoderLayer`]
 
@@ -1282,7 +1249,7 @@ class GraniteMoeHybridModel(GranitemoehybridPreTrainedModel):
         self.layers = nn.ModuleList(
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = GranitemoehybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         self.embedding_multiplier = config.embedding_multiplier
@@ -1293,7 +1260,7 @@ class GraniteMoeHybridModel(GranitemoehybridPreTrainedModel):
         self.rope_theta = config.rope_theta
 
         # rope
-        self.rotary_emb = GranitemoehybridRotaryEmbedding(config)
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1645,7 +1612,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class GraniteMoeHybridForCausalLM(GranitemoehybridPreTrainedModel, GenerationMixin):
+class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: GraniteMoeHybridConfig):
