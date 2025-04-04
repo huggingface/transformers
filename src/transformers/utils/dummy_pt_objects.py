@@ -549,6 +549,10 @@ def model_addition_debugger_context(*args, **kwargs):
 ROPE_INIT_FUNCTIONS = None
 
 
+def dynamic_rope_update(*args, **kwargs):
+    requires_backends(dynamic_rope_update, ["torch"])
+
+
 class AttentionInterface(metaclass=DummyObject):
     _backends = ["torch"]
 
