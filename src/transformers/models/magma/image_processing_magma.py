@@ -242,7 +242,6 @@ class MagmaImageProcessor(BaseImageProcessor):
         # crop images to the same size
         image_patches = [process_anyres_image(image, self.num_crops if num_crops is None else num_crops, base_width=self.base_img_size, base_height=self.base_img_size) for image in images]
         pixel_values = torch.cat([image[0] for image in image_patches], dim=0)
-        # pixel_values = [image[0] for image in image_patches]
         image_sizes = [image_patch[1] for image_patch in image_patches]     
 
         if image_data_type == 'half':

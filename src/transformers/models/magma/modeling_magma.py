@@ -123,7 +123,7 @@ MAGMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`MagmaConfig`] or [`MagmaVisionConfig`]):
+        config ([`MagmaConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -180,12 +180,12 @@ MAGMA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_crops, num_channels, image_size, image_size)`, *optional*):
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`MagmaImageProcessor.__call__`] for details. [`MagmaProcessor`] uses
             [`MagmaImageProcessor`] for processing images.
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
-            The sizes of the images in the batch, being (height, width) for each image.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, num_crops, 2)`, *optional*):
+            The crop sizes of the images in the batch, being (num_crops_height, num_crops_width) for each image.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -224,12 +224,8 @@ MAGMA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
+        vision_feature_layer (`str`, *optional*, defaults to `"clip_vis_dense"`):
+            The key of the layer to select the vision feature.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -292,7 +288,6 @@ class MagmaModel(MagmaPreTrainedModel):
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -669,7 +664,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -693,19 +687,25 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, MagmaForCausalLM
 
-        >>> model = MagmaForCausalLM.from_pretrained("microsoft/magma-8b-hf")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/magma-8b-hf")
+        >>> model = MagmaForCausalLM.from_pretrained("microsoft/magma-8b")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/magma-8b")
 
-        >>> prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> convs = [
+        >>>     {"role": "system", "content": "You are agent that can see, talk and act."},            
+        >>>     {"role": "user", "content": "<image_start><image><image_end>\nWhat is the letter on the robot?"},
+        >>> ]
+        >>> url = "https://microsoft.github.io/Magma/static/images/logo.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> prompt = processor.tokenizer.apply_chat_template(convs, tokenize=False, add_generation_prompt=True)
+        >>> inputs = processor(images=[image], texts=prompt, return_tensors="pt")
+        >>> inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(0)
+        >>> inputs['image_sizes'] = inputs['image_sizes'].unsqueeze(0)     
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
+        "The letter on the robot is \"M\"."
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

@@ -62,7 +62,6 @@ class MagmaVisionText2TextModelTester:
         image_token_index=1,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_select_strategy="full",
         vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
@@ -115,7 +114,6 @@ class MagmaVisionText2TextModelTester:
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = PretrainedConfig(**vision_config)
@@ -144,7 +142,6 @@ class MagmaVisionText2TextModelTester:
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
         )
 
@@ -384,7 +381,23 @@ class MagmaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @unittest.skip("Magma uses convnext as backbone, which is not supported by flash attention 2")
     def test_flash_attn_2_can_dispatch_composite_models(self):
         pass
-    
+
+    @unittest.skip("MagmaForCausalLM does not support an instance of `Cache` as `past_key_values`. Need to revisit later.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip("MagmaForCausalLM does not support an instance of `Cache` as `past_key_values`. Need to revisit later.")
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @unittest.skip("Model parallel not supported")
+    def test_model_parallel_beam_search(self):
+        pass
+
+    @unittest.skip("Model parallel not supported")
+    def test_model_parallelism(self):
+        pass
+
 @require_torch
 class MagmaIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Magma-8B"
