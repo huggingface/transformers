@@ -5892,19 +5892,3 @@ class AttentionInterface(MutableMapping):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
-
-
-class GradientCheckpointingLayer(nn.Module):
-    # `gradient_checkpointing = False` by default, but when model.set_gradient_checkpointing() is called
-    # `gradient_checkpointing` is set to True and `_gradient_checkpointing_func` assigned to the layer
-    gradient_checkpointing = False
-
-    def __call__(self, *args, **kwargs):
-        # NOTE: inputs, with gradient enabled (e.g. hidden_states) should be passed to the layer
-        # as positional arguments (`args`) to propagate gradient for "use_reentrant=True"
-        # For example:
-        #   ✅  out = self.layer(hidden_states, attention_mask=attention_mask)
-        #   ❌  out = self.layer(hidden_states=hidden_states, attention_mask=attention_mask)
-        if self.gradient_checkpointing and self.training:
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
-        return super().__call__(*args, **kwargs)
