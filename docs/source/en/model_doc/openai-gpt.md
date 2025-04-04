@@ -43,6 +43,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 
 
 ```python
+import torch
 from transformers import pipeline
 
 generator = pipeline(task="text-generation", model="openai-community/gpt", torch_dtype=torch.float16, device=0)
