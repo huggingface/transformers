@@ -279,7 +279,7 @@ def convert_fast_checkpoint(
 
         # test the logits
         torch.testing.assert_close(output.logits[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
-
+        breakpoint()
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         text_locations = fast_image_processor.post_process_text_detection(
@@ -318,7 +318,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="./output",
+        default="/home/user/app/transformers/src/transformers/models/fast/output",
         type=str,
         help="Path to the folder to output PyTorch model.",
     )

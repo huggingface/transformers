@@ -217,7 +217,7 @@ class FastModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values=input["pixel_values"])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 5, 125, 125))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 5, 125, 125))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -332,9 +332,9 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 class FastModelIntegrationTest(unittest.TestCase):
     # @slow
     def test_inference(self):
-        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/FAST-tiny-model")
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast_tiny_ckpt")
 
-        image_processor = FastImageProcessor.from_pretrained("jadechoghari/FAST-tiny-model")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast_tiny_ckpt")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
@@ -343,9 +343,8 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         image = prepare_image()
         input = image_processor(image, return_tensors="pt")
-
-        output = model(pixel_values=torch.tensor(input["pixel_values"]))
-
+        with torch.no_grad():
+            output = model(pixel_values=input["pixel_values"])
         expected_values = torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523])
 
         torch.testing.assert_close(output.logits[0][0][0][:4], expected_values, rtol=1e-4, atol=1e-4)

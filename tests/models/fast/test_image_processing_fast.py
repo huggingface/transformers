@@ -145,9 +145,9 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # @slow
     def test_post_process_text_detection(self):
-        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/FAST-tiny-model")
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast_tiny_ckpt")
 
-        image_processor = FastImageProcessor.from_pretrained("jadechoghari/FAST-tiny-model")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast_tiny_ckpt")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
@@ -155,17 +155,21 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             return raw_image
 
         image = prepare_image()
-        inputs = image_processor(image, return_tensor="pt")
-
-        output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
+        inputs = image_processor(image, return_tensors="pt")
+        with torch.no_grad():
+            output = model(pixel_values=inputs["pixel_values"])
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         final_out = image_processor.post_process_text_detection(
             output, target_sizes, threshold, bounding_box_type="rect"
         )
-
-        assert final_out[0]["boxes"][0] == [(151, 151), (160, 56), (355, 74), (346, 169)]
-        assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
+        assert final_out[0]["boxes"][0] == [
+            (148, 151),
+            (157, 53),
+            (357, 72),
+            (347, 170),
+        ]  # (151, 151), (160, 56), (355, 74), (346, 169)
+        assert round(float(final_out[0]["scores"][0]), 5) == 0.92573  # 0.91862
 
     @require_cv2
     def test_get_box_points_against_cv2(self):

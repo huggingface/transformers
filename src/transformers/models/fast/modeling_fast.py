@@ -335,10 +335,9 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             upsampled_output = F.interpolate(
                 text_detection_output, size=(pixel_values.size(2), pixel_values.size(3)), mode="bilinear"
             )
-            loss = self.loss_function()
             kernels = upsampled_output[:, 0, :, :]  # 4*640*640
             texts = self.pooling_1s(kernels)  # 4*640*640
-            loss = loss(upsampled_output, labels, texts)
+            loss = self.loss_function(upsampled_output, labels, texts)
 
         text_detection_output = F.interpolate(
             text_detection_output, size=(pixel_values.size(2) // 4, pixel_values.size(3) // 4), mode="bilinear"
