@@ -157,7 +157,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
 4. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
-   pip install num2words
+   pip install -e ".[dev]"
    ```
 
    If 🤗 Transformers was already installed in the virtual environment, remove
