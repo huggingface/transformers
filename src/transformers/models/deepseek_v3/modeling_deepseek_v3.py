@@ -556,9 +556,9 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, DeepseekV3RMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, DeepseekV3TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Parameter):
             module.weight.data.normal_(mean=0.0, std=std)
 
 

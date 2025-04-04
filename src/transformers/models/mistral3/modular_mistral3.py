@@ -20,7 +20,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...utils import is_torchdynamo_compiling, logging
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
+from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaPreTrainedModel
 from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
@@ -98,6 +98,18 @@ class Mistral3MultiModalProjector(nn.Module):
 
 class Mistral3CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
+
+
+class Mistral3PreTrainedModel(LlavaPreTrainedModel):
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, Mistral3RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
