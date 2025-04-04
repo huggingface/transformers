@@ -166,6 +166,24 @@ def get_max_height_width(
     return (max_height, max_width)
 
 
+# Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
+def make_pixel_mask(
+    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> np.ndarray:
+    """
+    Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+    Args:
+        image (`np.ndarray`):
+            Image to make the pixel mask for.
+        output_size (`Tuple[int, int]`):
+            Output size of the mask.
+    """
+    input_height, input_width = get_image_size(image, channel_dim=input_data_format)
+    mask = np.zeros(output_size, dtype=np.int64)
+    mask[:input_height, :input_width] = 1
+    return mask
+
+
 def convert_to_rgb(
     image: np.ndarray,
     palette: Optional[PIL.ImagePalette.ImagePalette] = None,
@@ -508,6 +526,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self,
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
+        return_pixel_mask: bool = True,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
@@ -519,6 +538,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -533,6 +554,11 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         )
         data_format = input_data_format if data_format is None else data_format
 
+        padded_masks = (
+            [make_pixel_mask(image, output_size=pad_size, input_data_format=input_data_format) for image in images]
+            if return_pixel_mask
+            else None
+        )
         images = [
             self._pad_image(
                 image,
@@ -544,7 +570,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             for image in images
         ]
 
-        return images
+        return images, padded_masks
 
     def preprocess(
         self,
@@ -734,7 +760,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             ]
 
         if do_pad:
-            images = self.pad(images, input_data_format=input_data_format)
+            images, pixel_attention_mask = self.pad(
+                images, return_pixel_mask=True, input_data_format=input_data_format
+            )
 
         if data_format is not None:
             images = [
@@ -744,7 +772,10 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         # Faster tensor conversion
         data = {"pixel_values": np.array(images) if do_pad and return_tensors is not None else images}
-
+        if pixel_attention_mask is not None:
+            data["pixel_attention_mask"] = (
+                np.array(pixel_attention_mask) if do_pad and return_tensors is not None else pixel_attention_mask
+            )
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
         # This is needed for generating correct text inputs in the processor - we don't pad to the max number of images

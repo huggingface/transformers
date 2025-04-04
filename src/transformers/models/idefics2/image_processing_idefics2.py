@@ -282,6 +282,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self,
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
+        return_pixel_mask: bool = True,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
@@ -294,6 +295,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -306,13 +309,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         )
         data_format = input_data_format if data_format is None else data_format
 
-        def empty_image(size, input_data_format):
-            if input_data_format == ChannelDimension.FIRST:
-                return np.zeros((3, *size), dtype=np.uint8)
-            elif input_data_format == ChannelDimension.LAST:
-                return np.zeros((*size, 3), dtype=np.uint8)
-            raise ValueError("Invalid channel dimension format.")
-
+        padded_masks = (
+            [make_pixel_mask(image, output_size=pad_size, input_data_format=input_data_format) for image in images]
+            if return_pixel_mask
+            else None
+        )
         images = [
             self._pad_image(
                 image,
@@ -324,7 +325,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             for image in images
         ]
 
-        return images
+        return images, padded_masks
 
     def _crop(
         self,
@@ -509,7 +510,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             ]
 
         if do_pad:
-            images = self.pad(images, input_data_format=input_data_format)
+            images, pixel_attention_mask = self.pad(
+                images, return_pixel_mask=True, input_data_format=input_data_format
+            )
 
         if data_format is not None:
             images = [
@@ -518,6 +521,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             ]
 
         data = {"pixel_values": np.array(images) if do_pad else images}  # Faster tensor conversion
+        if pixel_attention_mask is not None:
+            data["pixel_attention_mask"] = np.array(pixel_attention_mask) if do_pad else pixel_attention_mask
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 

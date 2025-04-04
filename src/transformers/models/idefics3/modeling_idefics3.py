@@ -709,6 +709,8 @@ IDEFICS3_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`CLIPImageProcessor`] for processing images).
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         use_cache (`bool`, *optional*):
@@ -826,6 +828,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -867,8 +870,16 @@ class Idefics3Model(Idefics3PreTrainedModel):
         elif pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
+            patch_size = self.config.vision_config.patch_size
+            patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+            patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values,
+                patch_attention_mask=patch_attention_mask,
+            ).last_hidden_state
 
             # Modality projection & resampling
             image_hidden_states = self.connector(image_hidden_states)
@@ -974,6 +985,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1065,6 +1077,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1119,6 +1132,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         cache_position=None,
         pixel_values=None,
+        pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
         **kwargs,
@@ -1133,6 +1147,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
             pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
             **kwargs,
@@ -1145,6 +1160,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
 
         if image_hidden_states is not None:
             model_inputs["pixel_values"] = None
+            model_inputs["pixel_attention_mask"] = None
 
         return model_inputs
 

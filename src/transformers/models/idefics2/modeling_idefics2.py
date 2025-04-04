@@ -542,6 +542,8 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`CLIPImageProcessor`] for processing images).
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -880,21 +882,20 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     def forward(
         self,
         context: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))
 
-        if attention_mask is not None:
-            latent_attention_mask = torch.ones(
-                (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
-            )
-            attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
-            attention_mask = (
-                _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-                if not self._use_flash_attention_2
-                else attention_mask
-            )
+        latent_attention_mask = torch.ones(
+            (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
+        attention_mask = (
+            _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
+            if not self._use_flash_attention_2
+            else attention_mask
+        )
 
         compressed_context = latents
         for perceiver_layer in self.layers:
@@ -926,7 +927,7 @@ class Idefics2Connector(nn.Module):
         )
         self.perceiver_resampler = Idefics2PerceiverResampler._from_config(config.perceiver_config)
 
-    def forward(self, image_hidden_states, attention_mask=None):
+    def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
         image_hidden_states = self.perceiver_resampler(context=image_hidden_states, attention_mask=attention_mask)
         return image_hidden_states
@@ -984,6 +985,8 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`CLIPImageProcessor`] for processing images).
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection and perceiver resampling.
         use_cache (`bool`, *optional*):
@@ -1092,6 +1095,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1144,11 +1148,21 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
+            patch_size = self.config.vision_config.patch_size
+            patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+            patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
+
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values,
+                patch_attention_mask=patch_attention_mask,
+            ).last_hidden_state
 
             # Modality projection & resampling
-            image_hidden_states = self.connector(image_hidden_states)
+            image_hidden_states = self.connector(
+                image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
+            )
 
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
@@ -1248,6 +1262,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1325,6 +1340,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1378,6 +1394,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         cache_position=None,
         pixel_values=None,
+        pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
         **kwargs,
@@ -1392,6 +1409,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
             pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
             **kwargs,
@@ -1404,6 +1422,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
 
         if image_hidden_states is not None:
             model_inputs["pixel_values"] = None
+            model_inputs["pixel_attention_mask"] = None
 
         return model_inputs
 

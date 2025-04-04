@@ -190,6 +190,7 @@ class SmolVLMModel(Idefics3Model):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -212,6 +213,7 @@ class SmolVLMModel(Idefics3Model):
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         past_seen_tokens = 0
         if use_cache:
             if past_key_values is None:
@@ -228,8 +230,17 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
+            # get patch attention mask
+            patch_size = self.config.vision_config.patch_size
+            patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+            patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values,
+                patch_attention_mask=patch_attention_mask,
+            ).last_hidden_state
 
             # Modality projection & resampling
             image_hidden_states = self.connector(image_hidden_states)
