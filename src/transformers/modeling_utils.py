@@ -279,6 +279,16 @@ def restore_default_torch_dtype(func):
     return _wrapper
 
 
+def get_torch_device_context_manager():
+    """
+    Test if a device context manager is currently in use.
+    """
+    test = torch.zeros(1)
+    if test.device == torch.get_default_device():
+        return None
+    return test.device
+
+
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     try:
         return next(parameter.parameters()).device
@@ -4137,6 +4147,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
         else:
             _adapter_model_path = None
+
+        # Potentially detect device context manager and use it
+        if device_map is None:
+            device_in_context = get_torch_device_context_manager()
+            device_map = device_in_context
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
