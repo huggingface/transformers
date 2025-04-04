@@ -17,7 +17,6 @@
 import warnings
 from collections import OrderedDict
 
-from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
