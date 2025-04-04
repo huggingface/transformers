@@ -39,8 +39,6 @@ if is_torch_available() and is_vision_available():
 
 
 if is_torch_available():
-    import torch
-
     from transformers import FuyuForCausalLM, FuyuModel
 
 

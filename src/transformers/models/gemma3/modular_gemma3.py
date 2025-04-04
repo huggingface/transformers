@@ -310,12 +310,9 @@ class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+@dataclass
+class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
+    pass
 
 
 class Gemma3TextScaledWordEmbedding(nn.Embedding):
