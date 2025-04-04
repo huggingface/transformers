@@ -50,7 +50,8 @@ output = generator("The future of AI is", max_length=50, do_sample=True)
 print(output[0]["generated_text"])
 ```
 
-</hfoption> <hfoption id="AutoModel">
+</hfoption>
+<hfoption id="AutoModel">
 
 You can also load the model using `AutoModelForCausalLM` :
 ```python
