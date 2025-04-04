@@ -323,7 +323,7 @@ class EsmFoldLayerNorm(nn.Module):
     def forward(self, x):
         d = x.dtype
         if d is torch.bfloat16 and not is_deepspeed_initialized():
-            with torch.amp.autocast("cuda", enabled=False):
+            with torch.cuda.amp.autocast(enabled=False):
                 out = nn.functional.layer_norm(x, self.c_in, self.weight.to(dtype=d), self.bias.to(dtype=d), self.eps)
         else:
             out = nn.functional.layer_norm(x, self.c_in, self.weight, self.bias, self.eps)
@@ -338,7 +338,7 @@ def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """
     d = t.dtype
     if d is torch.bfloat16 and not is_deepspeed_initialized():
-        with torch.amp.autocast("cuda", enabled=False):
+        with torch.cuda.amp.autocast(enabled=False):
             s = torch.nn.functional.softmax(t, dim=dim)
     else:
         s = torch.nn.functional.softmax(t, dim=dim)
@@ -923,7 +923,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.linear_b_p(z)
 
         if is_fp16_enabled():
-            with torch.amp.autocast("cuda", enabled=False):
+            with torch.cuda.amp.autocast(enabled=False):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)
@@ -1537,7 +1537,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
 
         # [*, H, N_res, N_res]
         if is_fp16_enabled():
-            with torch.amp.autocast("cuda", enabled=False):
+            with torch.cuda.amp.autocast(enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
                     permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]
