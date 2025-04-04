@@ -229,7 +229,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        default_no_rope_layers = list(range(0, num_hidden_layers, no_rope_layer_interval))
+        default_no_rope_layers =  [int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(47)]
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step

@@ -187,7 +187,6 @@ class Llama4TextMoe(nn.Module):
         )
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
-        expert_routed_out_list = []
         routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
@@ -436,7 +435,10 @@ class Llama4TextDecoderLayer(nn.Module):
 
         # use local attention mask for ROPE layers
         if self.use_chunked_attention and chunk_causal_mask is not None:
+            print(" rope")
             attention_mask = chunk_causal_mask
+        else:
+            print("no rope")
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -751,8 +753,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             return None, None
 
         sequence_length = input_tensor.shape[1]
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
         cache_position = cache_position.to(self.device)
         attention_chunk_size = self.config.attention_chunk_size
 
@@ -768,7 +768,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             key_length = attention_chunk_size
 
-        if using_static_cache:
+        if past_key_values.is_compileable:
             target_length = past_key_values.max_cache_len
         else:
             target_length = attention_mask.shape[-1]
@@ -782,7 +782,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
-                    key_length=target_length,
+                    key_length=past_key_values.max_cache_len-sequence_length,
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask

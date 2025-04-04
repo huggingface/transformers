@@ -137,7 +137,6 @@ def make_flex_block_causal_mask(
             return causal_mask_mod(batch_idx, head_idx, offset_q, offset_kv)
     else:
         mask_mod = causal_mask_mod
-    # print(device)
     return create_block_causal_mask_flex(
         mask_mod=mask_mod,
         B=1,

@@ -1668,7 +1668,7 @@ class HybridCache(Cache):
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
-            self.sliding_window = getattr(config, "attention_chunk_size")
+            self.sliding_window = getattr(config.get_text_config(), "attention_chunk_size", 8092)
         else: 
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
@@ -1676,8 +1676,8 @@ class HybridCache(Cache):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
 
-        if hasattr(config, "no_rope_layers"):
-            self.is_sliding = torch.tensor([k in config.no_rope_layers for k in range(config.num_hidden_layers)])
+        if hasattr(config.get_text_config(), "no_rope_layers"):
+            self.is_sliding = torch.tensor(config.no_rope_layers)
         else: 
             layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2
             self.is_sliding = torch.tensor(
