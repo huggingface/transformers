@@ -7,8 +7,6 @@
 import pathlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
-
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -266,7 +264,6 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-# Copied from transformers.models.yolos.image_processing_yolos.get_size_with_aspect_ratio
 def get_size_with_aspect_ratio(
     image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
 ) -> Tuple[int, int]:
@@ -308,8 +305,8 @@ def get_size_with_aspect_ratio(
             ow = int(size * width / height)
 
     if mod_size is not None:
-        ow_mod = np.mod(ow, mod_size)
-        oh_mod = np.mod(oh, mod_size)
+        ow_mod = torch.remainder(torch.tensor(ow), mod_size).item()
+        oh_mod = torch.remainder(torch.tensor(oh), mod_size).item()
         ow = ow - ow_mod
         oh = oh - oh_mod
 

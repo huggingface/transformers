@@ -1,7 +1,5 @@
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
-
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_transforms import center_to_corners_format
@@ -19,7 +17,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.yolos.image_processing_yolos.get_size_with_aspect_ratio
 def get_size_with_aspect_ratio(
     image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
 ) -> Tuple[int, int]:
@@ -61,8 +58,8 @@ def get_size_with_aspect_ratio(
             ow = int(size * width / height)
 
     if mod_size is not None:
-        ow_mod = np.mod(ow, mod_size)
-        oh_mod = np.mod(oh, mod_size)
+        ow_mod = torch.remainder(torch.tensor(ow), mod_size).item()
+        oh_mod = torch.remainder(torch.tensor(oh), mod_size).item()
         ow = ow - ow_mod
         oh = oh - oh_mod
 
