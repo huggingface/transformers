@@ -11,6 +11,7 @@ Citation:
   year = {2024}
 }
 """
+
 # coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
@@ -31,6 +32,7 @@ from typing import Optional, Tuple, Union
 import torch
 
 from ..utils import is_torch_flex_attn_available
+from ..utils.import_utils import _torch_version
 
 
 if is_torch_flex_attn_available():
@@ -64,7 +66,12 @@ class WrappedFlexAttention:
         Initialize or update the singleton instance.
         """
         if self._is_flex_compiled is False:
-            self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
+            if _torch_version == "2.6.0":
+                self._compiled_flex_attention = torch.compile(
+                    flex_attention, dynamic=True, mode="max-autotune-no-cudagraphs"
+                )
+            else:
+                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=True)
             self._is_flex_compiled = True
 
     def __call__(self):
