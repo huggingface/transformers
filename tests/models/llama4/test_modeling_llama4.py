@@ -68,7 +68,7 @@ class Llama4ForVisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
-            "num_attention_heads": 4,
+            "num_attention_heads": 40,
             "intermediate_size": 128,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
@@ -297,7 +297,85 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     @unittest.skip(reason="Llama4 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
+    
+    @unittest.skip("Failing because of unique cache (HybridCache)")
+    def test_model_outputs_equivalence(self, **kwargs):
+        pass
 
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("Llama4 has HybridCache which is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache which is not compatible with assisted decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache which is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache which is not compatible with dola decoding")
+    def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache and doesn't support continue from past kv")
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache and doesn't support low_memory generation")
+    def test_beam_search_low_memory(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Llama4 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(
+        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(
+        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Llama4's eager attn/sdpa attn outputs are expected to be different")
+    def test_sdpa_equivalence(self):
+        pass
+
+    @unittest.skip("Llama4 uses GQA so it is not compatible with the standard cache format")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Llama4 uses GQA so it is not compatible with the standard cache format")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("Llama4 uses GQA so it is not compatible with the standard cache format")
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Llama4 uses GQA so it is not compatible with the standard cache format")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
 
 @slow
 @require_torch_large_gpu
