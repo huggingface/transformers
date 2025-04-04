@@ -47,12 +47,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Llama4ForCausalLM
     - forward
 
-## Llama4ForSequenceClassification
-
-[[autodoc]] Llama4ForSequenceClassification
-    - forward
-
-## Llama4ForTokenClassification
-
-[[autodoc]] Llama4ForTokenClassification
-    - forward
