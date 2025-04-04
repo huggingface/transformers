@@ -1679,7 +1679,7 @@ class HybridCache(Cache):
         if hasattr(config.get_text_config(), "no_rope_layers"):
             self.is_sliding = torch.tensor(config.no_rope_layers)
         else: 
-            layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2
+            layer_switch = getattr(config, "sliding_window_pattern", 2)
             self.is_sliding = torch.tensor(
                 [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
             )
@@ -1715,13 +1715,11 @@ class HybridCache(Cache):
         cumulative_length = self.cumulative_length[layer_idx]
         is_full = cumulative_length >= max_cache_len
         if is_full:
-            full_key_states = torch.cat((self.key_cache[layer_idx][:, :, 1:, :], key_states), dim=-2)
-            full_value_states = torch.cat((self.value_cache[layer_idx][:, :, 1:, :], value_states), dim=-2)
+            full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
+            full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
         elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
-            full_key_states = torch.cat((self.key_cache[layer_idx][:, :, :cumulative_length, :], key_states), dim=-2)
-            full_value_states = torch.cat(
-                (self.value_cache[layer_idx][:, :, :cumulative_length, :], value_states), dim=-2
-            )
+            full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
+            full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
             self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
             self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
