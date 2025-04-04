@@ -23,7 +23,7 @@ import sys
 import typing
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
@@ -415,7 +415,6 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
     sampling_rate: Optional[int] = 16_000
-    sample_indices_fn: Optional[Callable] = None
     load_audio_from_video: Optional[bool] = False
 
 
@@ -1339,7 +1338,7 @@ class ProcessorMixin(PushToHubMixin):
             for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.get(key, default_value)
+                value = kwargs.pop(key, default_value)
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
 
@@ -1409,8 +1408,8 @@ class ProcessorMixin(PushToHubMixin):
                             # TODO: raushan, should be `self.video_processor.load_video_for_model` when API is added
                             video, metadata = self._load_video_for_model(
                                 fname,
-                                num_frames=mm_load_kwargs["num_frames"],
-                                fps=mm_load_kwargs["video_fps"],
+                                num_frames=mm_load_kwargs.get("num_frames", None),
+                                fps=mm_load_kwargs.get("video_fps", None),
                                 backend=mm_load_kwargs["video_load_backend"],
                                 **kwargs,
                             )
