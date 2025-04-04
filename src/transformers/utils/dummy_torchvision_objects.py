@@ -93,14 +93,14 @@ class LlavaOnevisionImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
+class Ovis2ImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
 
-class Ovis2ImageProcessorFast(metaclass=DummyObject):
+class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
