@@ -36,19 +36,20 @@ if is_vision_available():
 class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CLIPProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
         image_processor_map = {
@@ -60,21 +61,25 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
-    def get_tokenizer(self, **kwargs):
-        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs):
+        return CLIPTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs):
+        return CLIPTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_image_processor(self, **kwargs):
-        return CLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return CLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDown(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
