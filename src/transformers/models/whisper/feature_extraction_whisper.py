@@ -16,6 +16,7 @@
 Feature extractor class for Whisper
 """
 
+import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -252,6 +253,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
             return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
+
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
         """
@@ -327,6 +330,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
         if return_token_timestamps is not None:
+            warnings.warn(
+                f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
+            )
             padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
