@@ -779,7 +779,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
-        ("qwen2_5_vl_text", "qwen_2_5_vl"),
+        ("qwen2_5_vl_text", "qwen2_5_vl"),
         ("qwen2_vl_text", "qwen2_vl"),
         ("sam_vision_model", "sam"),
     ]
