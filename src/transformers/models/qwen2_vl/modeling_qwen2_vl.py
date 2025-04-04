@@ -1278,7 +1278,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
-        config: Qwen2VLTextConfig,
+        config: Qwen2VLConfig,
         past_key_values: Cache,
     ):
         """
@@ -1300,7 +1300,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen2VLTextConfig`):
+            config (`Qwen2VLConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate
