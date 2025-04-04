@@ -83,7 +83,8 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class GraniteSpeechEncoderProjectorQFormer(nn.Module):
+### Projector
+class GraniteSpeechEncoderProjector(nn.Module):
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__()
         self.hidden_size = config.projector_config.hidden_size
@@ -93,22 +94,22 @@ class GraniteSpeechEncoderProjectorQFormer(nn.Module):
 
         self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.projector_config.hidden_size))
         self.query.data.normal_(mean=0.0, std=1.0)
-        # Generally, this will be create the model for blip_2_qformer,
-        # but we write it flexibly to allowed other projectors here as needed.
+
+        # By default, this will be a blip_2_qformer config
         self.qformer = AutoModel.from_config(config.projector_config)
         self.linear = nn.Linear(config.projector_config.hidden_size, config.text_config.hidden_size)
 
-    def forward(self, x, atts):
-        batch_size, seq_len, dim = x.size()
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, dim = hidden_states.size()
         nblocks = math.ceil(seq_len / self.window_size)
         pad = nblocks * self.window_size - seq_len
-        x = nn.functional.pad(x, (0, 0, 0, pad), "constant", 0)
-        x = x.view(batch_size * nblocks, self.window_size, dim)
+        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, pad), "constant", 0)
+        hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, dim)
 
         query_output = self.qformer(
             query_embeds=self.query.data,
-            encoder_hidden_states=x,
-            encoder_attention_mask=atts,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=None,
             return_dict=True,
         )
         query_proj = self.linear(
@@ -117,7 +118,7 @@ class GraniteSpeechEncoderProjectorQFormer(nn.Module):
         return query_proj
 
 
-### Encoder
+### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
 class GraniteSpeechCTCEncoder(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
@@ -141,91 +142,111 @@ class GraniteSpeechCTCEncoder(nn.Module):
         return hidden_states
 
 
-# NOTE: Conformer adapted from: https://github.com/lucidrains/conformer.git
-class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
-    def __init__(self, chan_in, chan_out, kernel_size, padding):
-        super().__init__()
-        self.padding = padding
-        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
+class GraniteSpeechConformerBlock(nn.Module):
+    """Conformer block, consisting largely of linear layers, attention, and convolutional layers."""
 
-    def forward(self, x):
-        x = F.pad(x, self.padding)
-        return self.conv(x)
+    def __init__(self, config: GraniteSpeechEncoderConfig):
+        super().__init__()
+        self.ff1 = GraniteSpeechConformerFeedForward(config)
+        self.attn = GraniteSpeechConformerAttention(config)
+        self.conv = GraniteSpeechConformerConvModule(config)
+        self.ff2 = GraniteSpeechConformerFeedForward(config)
+        self.post_norm = nn.LayerNorm(config.hidden_dim)
+
+    def forward(self, hidden_states: torch.Tensor, context_size: int) -> torch.Tensor:
+        hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
+        hidden_states = self.attn(hidden_states, context_size) + hidden_states
+        hidden_states = self.conv(hidden_states) + hidden_states
+        hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
+        hidden_states = self.post_norm(hidden_states)
+        return hidden_states
+
+
+class GraniteSpeechConformerFeedForward(nn.Module):
+    """Feedforward module for conformer encoder blocks."""
+
+    def __init__(self, config: GraniteSpeechEncoderConfig):
+        super().__init__()
+        self.pre_norm = nn.LayerNorm(config.hidden_dim)
+        self.up_proj = nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult)
+        self.silu = nn.SiLU()
+        self.dropout = nn.Dropout(config.dropout)
+        self.down_proj = nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.pre_norm(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.dropout(self.silu(hidden_states))
+        hidden_states = self.down_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class GraniteSpeechConformerAttention(nn.Module):
+    """Attention for conformer blocks with shaw's relpos embeddings."""
+
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
+
+        inner_dim = config.dim_head * config.num_heads
+        self.max_pos_emb = 512
         self.num_heads = config.num_heads
-        inner_dim = config.dim_head * self.num_heads
         self.dim_head = config.dim_head
         self.scale = self.dim_head**-0.5
         self.pre_norm = nn.LayerNorm(config.hidden_dim)
         self.to_q = nn.Linear(config.hidden_dim, inner_dim, bias=False)
         self.to_kv = nn.Linear(config.hidden_dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, config.hidden_dim)
-
-        self.max_pos_emb = 512
         self.rel_pos_emb = nn.Embedding(2 * self.max_pos_emb + 1, self.dim_head)
-
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x, context_size):
-        x = self.pre_norm(x)
-        device, h, max_pos_emb = x.device, self.num_heads, self.max_pos_emb
-        bs, n, d = x.shape
-        assert context_size > 0 and context_size <= max_pos_emb
+    def forward(self, hidden_states: torch.Tensor, context_size: int) -> torch.Tensor:
+        if context_size <= 0 or context_size > self.max_pos_emb:
+            raise ValueError("Context size is either less than 0 or exceeds the max_pos_emb")
 
-        nb = math.ceil(n / context_size)
-        nr = n % context_size
-        if nr > 0:
+        hidden_states = self.pre_norm(hidden_states)
+        bsz, num_features, _ = hidden_states.shape
+
+        num_blocks = math.ceil(num_features / context_size)
+        remainder = num_features % context_size
+        if remainder > 0:
             # right padding to reach block size
-            x = torch.nn.functional.pad(x, (0, 0, 0, context_size - nr))
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, context_size - remainder))
 
-        q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim=-1))
-        q, k, v = [t.reshape(bs, nb, context_size, h, -1).transpose(2, 3) for t in (q, k, v)]
+        query_states = self.to_q(hidden_states)
+        key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
+        query_states, key_states, value_states = [
+            t.reshape(bsz, num_blocks, context_size, self.num_heads, -1).transpose(2, 3)
+            for t in (query_states, key_states, value_states)
+        ]
 
         # shaw's relative positional embedding
-        seq = torch.arange(context_size, device=device)
+        seq = torch.arange(context_size, device=hidden_states.device)
         dist = seq.view(-1, 1) - seq.view(1, -1)
-        dist = torch.clamp(dist, -context_size, context_size) + max_pos_emb
-        rel_pos_emb = self.rel_pos_emb(dist).to(q)
+        dist = torch.clamp(dist, -context_size, context_size) + self.max_pos_emb
+        rel_pos_emb = self.rel_pos_emb(dist).to(query_states)
         rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
-        pos_attn = torch.sum(q.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
+        pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
 
-        if nr > 0:
+        if remainder > 0:
             # masked attention in the extended block
-            mask = torch.ones(context_size, context_size, dtype=bool, device=device)
-            mask[:nr, :nr] = 0
+            mask = torch.ones(context_size, context_size, dtype=bool, device=hidden_states.device)
+            mask[:remainder, :remainder] = 0
             mask_value = -torch.finfo(pos_attn.dtype).max
             pos_attn[:, -1, :].masked_fill_(mask, mask_value)
 
         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-            out = F.scaled_dot_product_attention(q, k, v, attn_mask=pos_attn, scale=self.scale)
-        out = out.transpose(2, 3).reshape(bs, x.shape[1], -1)
-        out = self.to_out(out[:, :n, :])
+            out = F.scaled_dot_product_attention(
+                query_states, key_states, value_states, attn_mask=pos_attn, scale=self.scale
+            )
+        out = out.transpose(2, 3).reshape(bsz, hidden_states.shape[1], -1)
+        out = self.to_out(out[:, :num_features, :])
         return self.dropout(out)
 
 
-class GraniteSpeechConformerFeedForward(nn.Module):
-    def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.pre_norm = nn.LayerNorm(config.hidden_dim)
-        self.up_proj = nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult)
-        self.act_fn = nn.SiLU()
-        self.dropout = nn.Dropout(config.dropout)
-        self.down_proj = nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim)
-
-    def forward(self, x):
-        x = self.pre_norm(x)
-        x = self.up_proj(x)
-        x = self.dropout(self.act_fn(x))
-        x = self.down_proj(x)
-        x = self.dropout(x)
-        return x
-
-
 class GraniteSpeechConformerConvModule(nn.Module):
+    """Conformer conv module consisting of several 1D/depthwise 1D convolutional layers."""
+
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
         inner_dim = config.hidden_dim * config.conv_expansion_factor
@@ -242,38 +263,34 @@ class GraniteSpeechConformerConvModule(nn.Module):
         self.down_conv = nn.Conv1d(inner_dim, config.hidden_dim, 1)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x):
-        x = self.norm(x)
-        x = self.up_conv(x.permute(0, 2, 1))
-        x = self.glu(x)
-        x = self.depth_conv(x)
-        x = self.silu(self.batch_norm(x))
-        x = self.down_conv(x).permute(0, 2, 1)
-        x = self.dropout(x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.up_conv(hidden_states.permute(0, 2, 1))
+        hidden_states = self.glu(hidden_states)
+        hidden_states = self.depth_conv(hidden_states)
+        hidden_states = self.silu(self.batch_norm(hidden_states))
+        hidden_states = self.down_conv(hidden_states).permute(0, 2, 1)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
     @staticmethod
-    def calc_same_padding(kernel_size: int):
+    def calc_same_padding(kernel_size: int) -> Tuple[int, int]:
+        """Calculates symmetric padding for the depthwise 1D convolution."""
         pad = kernel_size // 2
         return (pad, pad - (kernel_size + 1) % 2)
 
 
-class GraniteSpeechConformerBlock(nn.Module):
-    def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.ff1 = GraniteSpeechConformerFeedForward(config)
-        self.attn = GraniteSpeechConformerAttention(config)
-        self.conv = GraniteSpeechConformerConvModule(config)
-        self.ff2 = GraniteSpeechConformerFeedForward(config)
-        self.post_norm = nn.LayerNorm(config.hidden_dim)
+class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
+    """Wrapper for padded 1D pointwise convolution."""
 
-    def forward(self, hidden_states, context_size):
-        hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
-        hidden_states = self.attn(hidden_states, context_size) + hidden_states
-        hidden_states = self.conv(hidden_states) + hidden_states
-        hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
-        hidden_states = self.post_norm(hidden_states)
-        return hidden_states
+    def __init__(self, chan_in: int, chan_out: int, kernel_size: int, padding: Tuple[int, int]):
+        super().__init__()
+        self.padding = padding
+        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, self.padding)
+        return self.conv(hidden_states)
 
 
 GRANITE_SPEECH_START_DOCSTRING = r"""
@@ -303,12 +320,15 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights."""
         std = self.config.initializer_range
+
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -405,7 +425,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
-        self.projector = GraniteSpeechEncoderProjectorQFormer(config)
+        self.projector = GraniteSpeechEncoderProjector(config)
 
         if config.has_lora_adapter and not is_peft_available():
             logger.warning(
@@ -429,9 +449,10 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    def get_audio_features(self, input_features):
+    def get_audio_features(self, input_features: torch.Tensor) -> torch.Tensor:
+        """Get the audio features to merged into the multimodal embeddings."""
         encoder_embeds = self.encoder(input_features)
-        projected_embeds = self.projector(encoder_embeds, None)
+        projected_embeds = self.projector(encoder_embeds)
         return projected_embeds
 
     @add_start_docstrings_to_model_forward(GRANITE_SPEECH_INPUTS_DOCSTRING)
@@ -468,11 +489,8 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
-
-        Example:
-
-        TODO - add example for usage.
         """
+        # TODO (@alex-jw-brooks) add an example to this docstring once models are released
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -498,7 +516,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
         if input_features is not None:
             if input_features.dtype != self.dtype:
-                logger.warning(f"input features are casted to {self.dtype}")
                 input_features = input_features.to(self.dtype)
             # Get the audio features from the encoder / projector
             audio_features = self.get_audio_features(input_features)
@@ -585,11 +602,21 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             model_inputs["input_features"] = input_features
         return model_inputs
 
-    def get_merged_audio_embeddings(self, input_ids, audio_features, input_features_mask):
+    def get_merged_audio_embeddings(
+        self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Adds the audio token to the model's LLM vocabulary so that we can pass it
         through the tokenizer; it's assumed that the embeddings corresponding to the
         <|audio|> token will be clobbered with speech features.
+
+        Args:
+            input_ids (`torch.Tensor`):
+                Input IDs containing one or more audio tokens.
+            audio_features (`torch.Tensor`):
+                Audio features to be masked into the language embeddings to form multimodal embeddings.
+            input_features_mask (`torch.Tensor`, *optional*, defaults to `None`)
+                Mask to be applied to audio features prior to scattering into the language embeddings.
         """
         is_audio_index = input_ids == self.config.audio_token_index
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
@@ -600,7 +627,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_features_mask is not None:
             assert torch.all(is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)).item(), (
-                "number of features should align"
+                "Number of audio tokens does not match number of audio features"
             )
             audio_features = audio_features[input_features_mask]
 
@@ -611,11 +638,11 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         return inputs_embeds
 
     def generate(self, *args, **kwargs) -> torch.LongTensor:
-        """This model is expected to have a lora adapter, which is only
-        enabled when considering audio inputs. As such, we override generate
-        to conditionally enable / disable the lora adapter based on whether
-        or not any input features were provided.
-        """
+        # This model is expected to have a lora adapter, which is only
+        # enabled when considering audio inputs. As such, we override generate
+        # to conditionally enable / disable the lora adapter based on whether
+        # or not any input features were provided.
+
         input_features = kwargs.pop("input_features", None)
         if is_peft_available and self._hf_peft_config_loaded:
             if input_features is not None:
