@@ -72,7 +72,6 @@ from .pytorch_utils import (  # noqa: F401
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
-from .trainer_utils import set_seed
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
@@ -4093,6 +4092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
             # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
         if use_auth_token is not None:

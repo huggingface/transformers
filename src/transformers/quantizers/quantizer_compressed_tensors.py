@@ -24,7 +24,6 @@ from .base import HfQuantizer
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -116,6 +115,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.quantization import apply_quantization_config
 
         ct_quantization_config = self.compressor.quantization_config
+
         if self.run_compressed:
             if not self.is_quantization_compressed:
                 raise ValueError("`run_compressed` is only supported for quantized_compressed models")
