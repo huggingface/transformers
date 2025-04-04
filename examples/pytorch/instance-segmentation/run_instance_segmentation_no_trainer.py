@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,9 +20,10 @@ import logging
 import math
 import os
 import sys
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import albumentations as A
 import datasets

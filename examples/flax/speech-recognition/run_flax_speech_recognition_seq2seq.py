@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import time
 from dataclasses import field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import datasets
 import evaluate
@@ -303,7 +302,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     pad_input_to_multiple_of: Optional[int] = None
     pad_target_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+    def __call__(self, features: list[dict[str, Union[list[int], np.ndarray]]]) -> dict[str, np.ndarray]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
