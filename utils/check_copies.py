@@ -715,7 +715,10 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
             line_index -= 1
 
         # Split the observed code into blocks
-        observed_code_splits = split_code_into_blocks(lines, start_index, line_index, len(indent), backtrace=True)
+        try:
+            observed_code_splits = split_code_into_blocks(lines, start_index, line_index, len(indent), backtrace=True)
+        except Exception as e:
+            raise ValueError(f"Split failed in {filename}") from e
 
         is_class = lines[start_index].startswith(f"{' ' * (len(indent) - 4)}class ")
         # sanity check
