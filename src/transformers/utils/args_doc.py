@@ -2,7 +2,7 @@ import inspect
 import os
 import textwrap
 from functools import wraps
-from typing import Optional, Tuple, get_args
+from typing import List, Optional, Tuple, Union, get_args
 
 import regex as re
 
@@ -532,6 +532,15 @@ def auto_docstring(obj):
         return auto_class_docstring(obj)
 
 
+def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
+    if isinstance(args_classes, (list, tuple)):
+        args_classes_dict = {}
+        for args_class in args_classes:
+            args_classes_dict.update(args_class.__dict__)
+        return args_classes_dict
+    return args_classes.__dict__
+
+
 def auto_method_docstring(func, parent_class=None):
     """
     Wrapper that automatically generates docstring using ARG_TO_DOC.
@@ -617,13 +626,8 @@ def auto_method_docstring(func, parent_class=None):
                 f"{param_name} (`{param_type}`{param_default}):{documented_params[param_name]['description']}\n",
                 indent_level + 8,
             )
-        elif param_name in ModelArgs.__dict__:
-            indented_doc = getattr(ModelArgs, param_name)
-            docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{param_default}){indented_doc}", indent_level + 8
-            )
-        elif param_name in ImageProcessorArgs.__dict__:
-            indented_doc = getattr(ImageProcessorArgs, param_name)
+        elif param_name in (source_args_dict := source_args_doc([ModelArgs, ImageProcessorArgs])):
+            indented_doc = source_args_dict[param_name]
             docstring += set_min_indent(
                 f"{param_name} (`{param_type}`{param_default}){indented_doc}", indent_level + 8
             )
@@ -677,8 +681,8 @@ def auto_method_docstring(func, parent_class=None):
                         f"{param_name} (`{param_type}`{param_default}):{documented_kwargs[param_name]['description']}\n",
                         indent_level + 8,
                     )
-                elif param_name in ImageProcessorArgs.__dict__:
-                    indented_doc = getattr(ImageProcessorArgs, param_name)
+                elif param_name in (source_args_dict := source_args_doc(ImageProcessorArgs)):
+                    indented_doc = source_args_dict[param_name]
                     docstring += set_min_indent(
                         f"{param_name} (`{param_type}`{param_default}){indented_doc}", indent_level + 8
                     )
