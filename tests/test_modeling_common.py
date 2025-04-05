@@ -73,6 +73,8 @@ from transformers.models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
+    IS_CUDA_SYSTEM,
+    IS_ROCM_SYSTEM,
     CaptureLogger,
     hub_retry,
     is_flaky,
@@ -3766,10 +3768,14 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
 
-        if not torch.version.cuda or major < 8:
+        valid_compute_capability = False
+        if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+            compute_capability = torch.cuda.get_device_capability()
+            major, _ = compute_capability
+            valid_compute_capability = major < 8
+
+        if not valid_compute_capability:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
@@ -3810,13 +3816,17 @@ class ModelTesterMixin:
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
+
         torch.compiler.reset()
-        if "cuda" in torch_device:
+
+        valid_compute_capability = False
+        if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
             compute_capability = torch.cuda.get_device_capability()
             major, _ = compute_capability
+            valid_compute_capability = major < 8
 
-            if not torch.version.cuda or major < 8:
-                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        if not valid_compute_capability:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
