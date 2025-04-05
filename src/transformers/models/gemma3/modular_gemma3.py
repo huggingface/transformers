@@ -788,7 +788,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         input_tensor,
         is_training: bool = False,
     ):
-        if self.config.text_config._attn_implementation == "flash_attention_2":
+        if self.language_model.config._attn_implementation == "flash_attention_2":
             return attention_mask
 
         if attention_mask is not None and attention_mask.dim() == 4:

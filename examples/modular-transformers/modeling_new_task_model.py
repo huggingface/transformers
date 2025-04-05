@@ -258,7 +258,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         input_tensor,
         is_training: bool = False,
     ):
-        if self.config.text_config._attn_implementation == "flash_attention_2":
+        if self.language_model.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
