@@ -28,7 +28,7 @@ Donut features vision encoder ([Swin](./swin)) and a text decoder ([BART](./bart
 You can find all the original Donut checkpoints under the [Naver Clova Information Extraction](https://huggingface.co/naver-clova-ix) organization.
 
 > [!TIP]
-> Click on the DONUT models in the right sidebar for more examples of how to apply DONUT to different language and vision tasks.
+> Click on the Donut models in the right sidebar for more examples of how to apply Donut to different language and vision tasks.
 
 The examples below demonstrate how to perform document understanding tasks using Donut with [`Pipeline`] and [`AutoModel`]
 
