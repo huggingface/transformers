@@ -330,7 +330,7 @@ class Llama4ImageProcessor(BaseImageProcessor):
         max_patches (`int`, *optional*, defaults to 16):
             The maximum number of patches to be extracted from the image.
             Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resize_to_max_canvas (`bool`, *optional*, defaults to False):
+        resize_to_max_canvas (`bool`, *optional*, defaults to `False`):
             Whether to resize the image to the maximum canvas size.
             If True, picks the canvas the allows the largest resizing without distortion.
             If False, downsample as little as possible, including no resizing at all,

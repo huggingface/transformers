@@ -5200,7 +5200,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         # Only reset it if not present or different from previous config
-        if self.model_type == "llama4":  # TODO try to enable
+        if "llama4" in self.model_type:  # TODO try to enable
             return self.__call__
         default_config = getattr(self.generation_config, "compile_config", CompileConfig())
         if (

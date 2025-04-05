@@ -1626,7 +1626,7 @@ class HybridCache(Cache):
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. If you're using more than 1 computation device, you
             should pass the `layer_device_map` argument instead.
-        dtype (torch.dtype, *optional*, defaults to `torch.float32`):
+        dtype (torch.dtype, *optional*, defaults to `torch.bfloat16`):
             The default `dtype` to use when initializing the layer.
         layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
