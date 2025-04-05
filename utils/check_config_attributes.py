@@ -105,6 +105,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used internally to calculate `mlp_dim`
+    "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users

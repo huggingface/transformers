@@ -273,6 +273,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Config"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
+        ("sam_hq", "SamHQConfig"),
+        ("sam_hq_vision_model", "SamHQVisionConfig"),
         ("sam_vision_model", "SamVisionConfig"),
         ("seamless_m4t", "SeamlessM4TConfig"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Config"),
@@ -631,6 +633,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rt_detr_v2", "RT-DETRv2"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
+        ("sam_hq", "SAM-HQ"),
+        ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4T"),
         ("seamless_m4t_v2", "SeamlessM4Tv2"),
@@ -776,6 +780,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
         ("sam_vision_model", "sam"),
+        ("sam_hq_vision_model", "sam_hq"),
     ]
 )
 
