@@ -381,10 +381,6 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 )
 ```
 
-
-## Overview
-
-
 ## Llama4Config
 
 [[autodoc]] Llama4Config
