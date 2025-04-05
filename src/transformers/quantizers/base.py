@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
-from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -295,7 +294,7 @@ class HfQuantizer(ABC):
     @abstractmethod
     def is_trainable(self): ...
     
-    def _convert_model_for_quantization(self, model):
+    def _convert_model_for_quantization(self,model):
         from accelerate import init_empty_weights
         from ..models.llama4.modeling_llama4 import Llama4TextMLP
         for module in model.modules():

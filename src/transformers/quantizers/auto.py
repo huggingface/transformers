@@ -1,4 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,316 +12,255 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+import warnings
+from typing import Dict, Optional, Union
 
-from ..utils import is_torch_available
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..models.auto.configuration_auto import AutoConfig
+from ..utils import logging
+from ..utils.quantization_config import (
+    AqlmConfig,
+    AwqConfig,
+    BitNetConfig,
+    BitsAndBytesConfig,
+    CompressedTensorsConfig,
+    EetqConfig,
+    FbgemmFp8Config,
+    FineGrainedFP8Config,
+    GPTQConfig,
+    HiggsConfig,
+    HqqConfig,
+    QuantizationConfigMixin,
+    QuantizationMethod,
+    QuantoConfig,
+    QuarkConfig,
+    SpQRConfig,
+    TorchAoConfig,
+    VptqConfig,
+)
+from .base import HfQuantizer
+from .quantizer_aqlm import AqlmHfQuantizer
+from .quantizer_awq import AwqQuantizer
+from .quantizer_bitnet import BitNetHfQuantizer
+from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
+from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
+from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
+from .quantizer_eetq import EetqHfQuantizer
+from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
+from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_gptq import GptqHfQuantizer
+from .quantizer_higgs import HiggsHfQuantizer
+from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_quark import QuarkHfQuantizer
+from .quantizer_spqr import SpQRHfQuantizer
+from .quantizer_torchao import TorchAoHfQuantizer
+from .quantizer_vptq import VptqHfQuantizer
 
 
-if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+AUTO_QUANTIZER_MAPPING = {
+    "awq": AwqQuantizer,
+    "bitsandbytes_4bit": Bnb4BitHfQuantizer,
+    "bitsandbytes_8bit": Bnb8BitHfQuantizer,
+    "gptq": GptqHfQuantizer,
+    "aqlm": AqlmHfQuantizer,
+    "quanto": QuantoHfQuantizer,
+    "quark": QuarkHfQuantizer,
+    "eetq": EetqHfQuantizer,
+    "higgs": HiggsHfQuantizer,
+    "hqq": HqqHfQuantizer,
+    "compressed-tensors": CompressedTensorsHfQuantizer,
+    "fbgemm_fp8": FbgemmFp8HfQuantizer,
+    "torchao": TorchAoHfQuantizer,
+    "bitnet": BitNetHfQuantizer,
+    "vptq": VptqHfQuantizer,
+    "spqr": SpQRHfQuantizer,
+    "fp8": FineGrainedFP8HfQuantizer,
+}
 
-if is_torch_available():
-    import torch
+AUTO_QUANTIZATION_CONFIG_MAPPING = {
+    "awq": AwqConfig,
+    "bitsandbytes_4bit": BitsAndBytesConfig,
+    "bitsandbytes_8bit": BitsAndBytesConfig,
+    "eetq": EetqConfig,
+    "gptq": GPTQConfig,
+    "aqlm": AqlmConfig,
+    "quanto": QuantoConfig,
+    "quark": QuarkConfig,
+    "hqq": HqqConfig,
+    "compressed-tensors": CompressedTensorsConfig,
+    "fbgemm_fp8": FbgemmFp8Config,
+    "higgs": HiggsConfig,
+    "torchao": TorchAoConfig,
+    "bitnet": BitNetConfig,
+    "vptq": VptqConfig,
+    "spqr": SpQRConfig,
+    "fp8": FineGrainedFP8Config,
+}
+
+logger = logging.get_logger(__name__)
 
 
-class HfQuantizer(ABC):
+class AutoQuantizationConfig:
     """
-    Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
-    This class is used only for transformers.PreTrainedModel.from_pretrained and cannot be easily used outside the scope of that method
-    yet.
-
-    Attributes
-        quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
-            The quantization config that defines the quantization parameters of your model that you want to quantize.
-        modules_to_not_convert (`List[str]`, *optional*):
-            The list of module names to not convert when quantizing the model.
-        required_packages (`List[str]`, *optional*):
-            The list of required pip packages to install prior to using the quantizer
-        requires_calibration (`bool`):
-            Whether the quantization method requires to calibrate the model before using it.
-        requires_parameters_quantization (`bool`):
-            Whether the quantization method requires to create a new Parameter. For example, for bitsandbytes, it is
-            required to create a new xxxParameter in order to properly quantize the model.
+    The Auto-HF quantization config class that takes care of automatically dispatching to the correct
+    quantization config given a quantization config stored in a dictionary.
     """
 
-    requires_calibration = False
-    required_packages = None
-    requires_parameters_quantization = False
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        self.quantization_config = quantization_config
-
-        # -- Handle extra kwargs below --
-        self.modules_to_not_convert = kwargs.pop("modules_to_not_convert", [])
-        self.pre_quantized = kwargs.pop("pre_quantized", True)
-
-        if not self.pre_quantized and self.requires_calibration:
+    @classmethod
+    def from_dict(cls, quantization_config_dict: Dict):
+        quant_method = quantization_config_dict.get("quant_method", None)
+        # We need a special care for bnb models to make sure everything is BC ..
+        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
+        elif quant_method is None:
             raise ValueError(
-                f"The quantization method {quantization_config.quant_method} does require the model to be pre-quantized."
-                f" You explicitly passed `pre_quantized=False` meaning your model weights are not quantized. Make sure to "
-                f"pass `pre_quantized=True` while knowing what you are doing."
+                "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Some quantization methods require to explicitly set the dtype of the model to a
-        target dtype. You need to override this method in case you want to make sure that behavior is
-        preserved
-
-        Args:
-            torch_dtype (`torch.dtype`):
-                The input dtype that is passed in `from_pretrained`
-        """
-        return torch_dtype
-
-    def update_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """
-        Override this method if you want to pass a override the existing device map with a new
-        one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
-        passed, the device_map is set to `"auto"``
-
-        Args:
-            device_map (`Union[dict, str]`, *optional*):
-                The device_map that is passed through the `from_pretrained` method.
-        """
-        return device_map
-
-    def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
-        to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
-        to `torch.int8` and for 4-bit we pass a custom enum `accelerate.CustomDtype.int4`.
-
-        Args:
-            torch_dtype (`torch.dtype`, *optional*):
-                The torch_dtype that is used to compute the device_map.
-        """
-        return torch_dtype
-
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        """
-        Override this method if you want to adjust the `missing_keys`.
-
-        Args:
-            missing_keys (`List[str]`, *optional*):
-                The list of missing keys in the checkpoint compared to the state dict of the model
-        """
-        return missing_keys
-
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
-        """
-        Override this method if you want to adjust the `unexpected_keys`.
-
-        Args:
-            unexpected_keys (`List[str]`, *optional*):
-                The list of unexpected keys in the checkpoint compared to the state dict of the model
-        """
-        return unexpected_keys
-
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        """
-        Override this method if you want to adjust the `missing_keys` after loading the model params,
-        but before the model is post-processed.
-
-        Args:
-            missing_keys (`List[str]`, *optional*):
-                The list of missing keys in the checkpoint compared to the state dict of the model
-        """
-        return missing_keys
-
-    def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
-        """
-        Override this method if you want to adjust the `update_expected_keys`.
-
-        Args:
-            expected_keys (`List[str]`, *optional*):
-                The list of the expected keys in the initialized model.
-            loaded_keys (`List[str]`, *optional*):
-                The list of the loaded keys in the checkpoint.
-        """
-        return expected_keys
-
-    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
-        """
-        returns dtypes for modules that are not quantized - used for the computation of the device_map in case
-        one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
-        in `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            torch_dtype (`torch.dtype`):
-                The dtype passed in `from_pretrained` method.
-        """
-
-        return {
-            name: torch_dtype
-            for name, _ in model.named_parameters()
-            if any(m in name for m in self.modules_to_not_convert)
-        }
-
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
-        """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
-        return max_memory
-
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: Dict[str, Any],
-        **kwargs,
-    ) -> bool:
-        """
-        checks if a loaded state_dict component is part of quantized param + some validation; only defined if
-        requires_parameters_quantization == True for quantization methods that require to create a new parameters
-        for quantization.
-        """
-        return False
-
-    def create_quantized_param(self, *args, **kwargs) -> "torch.nn.Parameter":
-        """
-        takes needed components from state_dict and creates quantized param; only applicable if
-        requires_parameters_quantization == True
-        """
-        if not self.requires_parameters_quantization:
-            raise AttributeError(
-                f"`.create_quantized_param()` method is not supported by quantizer class {self.__class__.__name__}."
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+            raise ValueError(
+                f"Unknown quantization type, got {quant_method} - supported types are:"
+                f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
             )
 
-    def validate_environment(self, *args, **kwargs):
+        target_cls = AUTO_QUANTIZATION_CONFIG_MAPPING[quant_method]
+        return target_cls.from_dict(quantization_config_dict)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        if getattr(model_config, "quantization_config", None) is None:
+            raise ValueError(
+                f"Did not found a `quantization_config` in {pretrained_model_name_or_path}. Make sure that the model is correctly quantized."
+            )
+        quantization_config_dict = model_config.quantization_config
+        quantization_config = cls.from_dict(quantization_config_dict)
+        # Update with potential kwargs that are passed through from_pretrained.
+        quantization_config.update(**kwargs)
+        return quantization_config
+
+
+class AutoHfQuantizer:
+    """
+     The Auto-HF quantizer class that takes care of automatically instantiating to the correct
+    `HfQuantizer` given the `QuantizationConfig`.
+    """
+
+    @classmethod
+    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, Dict], **kwargs):
+        # Convert it to a QuantizationConfig if the q_config is a dict
+        if isinstance(quantization_config, dict):
+            quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+
+        quant_method = quantization_config.quant_method
+
+        # Again, we need a special care for bnb as we have a single quantization config
+        # class for both 4-bit and 8-bit quantization
+        if quant_method == QuantizationMethod.BITS_AND_BYTES:
+            if quantization_config.load_in_8bit:
+                quant_method += "_8bit"
+            else:
+                quant_method += "_4bit"
+
+        if quant_method not in AUTO_QUANTIZER_MAPPING.keys():
+            raise ValueError(
+                f"Unknown quantization type, got {quant_method} - supported types are:"
+                f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
+            )
+
+        target_cls = AUTO_QUANTIZER_MAPPING[quant_method]
+        return target_cls(quantization_config, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        quantization_config = AutoQuantizationConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return cls.from_config(quantization_config)
+
+    @classmethod
+    def merge_quantization_configs(
+        cls,
+        quantization_config: Union[dict, QuantizationConfigMixin],
+        quantization_config_from_args: Optional[QuantizationConfigMixin],
+    ):
         """
-        This method is used to potentially check for potential conflicts with arguments that are
-        passed in `from_pretrained`. You need to define it for all future quantizers that are integrated with transformers.
-        If no explicit check are needed, simply return nothing.
+        handles situations where both quantization_config from args and quantization_config from model config are present.
         """
-        return
+        if quantization_config_from_args is not None:
+            warning_msg = (
+                "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
+                " already has a `quantization_config` attribute. The `quantization_config` from the model will be used."
+            )
+        else:
+            warning_msg = ""
 
-    def update_tp_plan(self, config):
-        "updates the tp plan for the scales"
-        return config
+        if isinstance(quantization_config, dict):
+            quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-    def preprocess_model(self, model: "PreTrainedModel", **kwargs):
-        """
-        Setting model attributes and/or converting model before weights loading. At this point
-        the model should be initialized on the meta device so you can freely manipulate the skeleton
-        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
+        if (
+            isinstance(quantization_config, (GPTQConfig, AwqConfig, FbgemmFp8Config, CompressedTensorsConfig))
+            and quantization_config_from_args is not None
+        ):
+            # special case for GPTQ / AWQ / FbgemmFp8 config collision
+            loading_attr_dict = quantization_config_from_args.get_loading_attributes()
+            for attr, val in loading_attr_dict.items():
+                setattr(quantization_config, attr, val)
 
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            kwargs (`dict`, *optional*):
-                The keyword arguments that are passed along `_process_model_before_weight_loading`.
-        """
-        model.is_quantized = True
-        model.quantization_method = self.quantization_config.quant_method
-        self._convert_model_for_quantization(model)
-        return self._process_model_before_weight_loading(model, **kwargs)
+            warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-    def postprocess_model(self, model: "PreTrainedModel", **kwargs):
-        """
-        Post-process the model post weights loading.
-        Make sure to override the abstract method `_process_model_after_weight_loading`.
+        if warning_msg != "":
+            warnings.warn(warning_msg)
 
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            kwargs (`dict`, *optional*):
-                The keyword arguments that are passed along `_process_model_after_weight_loading`.
-        """
-        return self._process_model_after_weight_loading(model, **kwargs)
-
-    def dequantize(self, model):
-        """
-        Potentially dequantize the model to retrive the original model, with some loss in accuracy / performance.
-        Note not all quantization schemes support this.
-        """
-        model = self._dequantize(model)
-
-        # Delete quantizer and quantization config
-        del model.hf_quantizer
-        del model.config.quantization_config
-        del model.config._pre_quantization_dtype
-        model.is_quantized = False
-
-        return model
-
-    def _dequantize(self, model):
-        raise NotImplementedError(
-            f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
-        )
+        return quantization_config
 
     @staticmethod
-    def get_modules_to_not_convert(
-        model: "PreTrainedModel",
-        skip_modules: Optional[List[str]] = None,
-        keep_in_fp32_modules: Optional[List[str]] = None,
-    ):
-        from ..integrations import get_keys_to_not_convert
+    def supports_quant_method(quantization_config_dict):
+        quant_method = quantization_config_dict.get("quant_method", None)
+        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
+        elif quant_method is None:
+            raise ValueError(
+                "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
+            )
 
-        modules_to_not_convert = []
-        if skip_modules is None:
-            modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            modules_to_not_convert = skip_modules
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+            logger.warning(
+                f"Unknown quantization type, got {quant_method} - supported types are:"
+                f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
+                "To remove the warning, you can delete the quantization_config attribute in config.json"
+            )
+            return False
+        return True
 
-        if keep_in_fp32_modules is not None:
-            modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        return modules_to_not_convert
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
 
-    @property
-    def is_qat_trainable(self) -> bool:
-        """Flag indicating whether the quantized model can carry out quantization aware training"""
-        return False
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
 
-    @property
-    def is_compileable(self) -> bool:
-        """Flag indicating whether the quantized model can be compiled"""
-        return False
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise ValueError("Config must extend QuantizationConfigMixin")
 
-    @abstractmethod
-    def _process_model_before_weight_loading(self, model, **kwargs): ...
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
+        return cls
 
-    @abstractmethod
-    def _process_model_after_weight_loading(self, model, **kwargs): ...
+    return register_config_fn
 
-    @abstractmethod
-    def is_serializable(self, safe_serialization=None): ...
 
-    @property
-    @abstractmethod
-    def is_trainable(self): ...
-    
-    def _convert_model_for_quantization(self,model):
-        from accelerate import init_empty_weights
-        from ..models.llama4.modeling_llama4 import Llama4TextMLP
-        for module in model.modules():
-            module_class_name = module.__class__.__name__
-            # TODO: add exception for fbgemm 
-            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
-                # TODO: check that it is fine to have the init empty weights here
-                with init_empty_weights():
-                    del module.experts
-                    module.experts = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]([Llama4TextMLP(model.config.get_text_config()) for _ in range(module.num_experts)])
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
 
-            
-class SequentialLlama4TextExperts(torch.nn.ModuleList):
-    """
-    A module that implements a compressed version of a list of expert modules.
-    This is specifically designed to work with Llama4TextExperts in MoE layers.
-    """
-    
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-        hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
-        routed_out = torch.zeros_like(hidden_states)
-        for expert_idx in range(self.num_experts):
-            routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
-        return routed_out
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = { "Llama4TextMoe": SequentialLlama4TextExperts }
+        if not issubclass(cls, HfQuantizer):
+            raise ValueError("Quantizer must extend HfQuantizer")
+
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+
+    return register_quantizer_fn
