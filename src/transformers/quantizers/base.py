@@ -325,7 +325,7 @@ class SequentialLlama4TextExperts("torch.nn.ModuleList"):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: "torch.Tensor",
     ) -> torch.Tensor:
         hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
         routed_out = torch.zeros_like(hidden_states)
