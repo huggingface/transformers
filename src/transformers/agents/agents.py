@@ -357,7 +357,7 @@ class Agent:
     def __init__(
         self,
         tools: Union[List[Tool], Toolbox],
-        llm_engine: Callable = None,
+        llm_engine: Optional[Callable] = None,
         system_prompt: Optional[str] = None,
         tool_description_template: Optional[str] = None,
         additional_args: Dict = {},

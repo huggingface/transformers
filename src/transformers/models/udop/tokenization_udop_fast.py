@@ -243,7 +243,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair_target: Optional[
@@ -278,7 +278,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,

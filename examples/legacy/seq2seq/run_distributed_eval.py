@@ -19,7 +19,7 @@ import time
 from json import JSONDecodeError
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import torch
 from torch.utils.data import DataLoader
@@ -55,7 +55,7 @@ def eval_data_dir(
     task="summarization",
     local_rank=None,
     num_return_sequences=1,
-    dataset_kwargs: Dict = None,
+    dataset_kwargs: Optional[Dict] = None,
     prefix="",
     **generate_kwargs,
 ) -> Dict:

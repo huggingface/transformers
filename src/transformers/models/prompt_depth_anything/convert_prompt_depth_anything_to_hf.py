@@ -18,6 +18,7 @@ https://github.com/DepthAnything/PromptDA"""
 import argparse
 import re
 from pathlib import Path
+from typing import Optional
 
 import requests
 import torch
@@ -130,7 +131,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     Convert old state dict keys to new keys using regex patterns.
     """
