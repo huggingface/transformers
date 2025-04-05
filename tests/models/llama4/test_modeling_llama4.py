@@ -166,7 +166,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     Model tester for `Llama4ForConditionalGeneration`.
     """
 
-    all_model_classes = (Llama4ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (Llama4ForConditionalGeneration, Llama4ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-text-to-text": Llama4ForConditionalGeneration, "text-generation": Llama4ForCausalLM}
         if is_torch_available()

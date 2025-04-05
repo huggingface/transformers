@@ -38,17 +38,21 @@ Tips:
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
-
 You can find all the original Llama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) organization.
 
 > [!TIP]
 > The Llama 4 family of models comes in two flavors: 109B, and 402B parameters. Both of these flavors are extremely 
 > large and won't fit on your run-of-the-mill device. See below for some examples to reduce the memory usage of the
 > model.
+> 
+> For the download to be faster and more resilient, we recommend installing the `hf_xet` dependency as followed:
+> `pip install transformers[hf_xet]`
 
 The examples below demonstrates how to generate with [`Pipeline`] or the [`AutoModel`]. We additionally add an example
 showcasing how to toggle the right attributes to enable very long-context generations, as some flavors of Llama 4
 have context lengths going up to 10 million tokens.
+
+
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -194,6 +198,12 @@ print(response)
 </hfoption>
 <hfoption id="AutoModel - Long context">
 
+Beware: the example below uses both `device_map="auto"` and flex-attention.
+Please use `torchrun` to run this example in tensor-parallel mode.
+
+We will work to enable running with `device_map="auto"` and flex-attention without 
+tensor-parallel in the future.
+
 ```py
 from transformers import Llama4ForConditionalGeneration, AutoTokenizer
 import torch
@@ -246,7 +256,14 @@ Switching attention mechanism is done at the model initialization step:
 
 <hfoptions id="Attention">
 <hfoption id="Flex Attention">
+
 Setting Flex Attention ensures the best results with the very long context the model can handle.
+
+> [!TIP] Beware: the example below uses both `device_map="auto"` and flex-attention.
+> Please use `torchrun` to run this example in tensor-parallel mode.
+> 
+> We will work to enable running with `device_map="auto"` and flex-attention without
+> tensor-parallel in the future.
 
 ```py
 from transformers import Llama4ForConditionalGeneration

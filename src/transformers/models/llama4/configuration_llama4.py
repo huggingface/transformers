@@ -56,17 +56,17 @@ class Llama4VisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        vision_feature_layer (`<fill_type>`, *optional*, defaults to -1): <fill_docstring>
-        vision_feature_select_strategy (`<fill_type>`, *optional*, defaults to `"default"`): <fill_docstring>
+        vision_feature_layer (``, *optional*, defaults to -1): TODO
+        vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
-        projector_input_dim (`<fill_type>`, *optional*, defaults to 4096): <fill_docstring>
-        projector_output_dim (`<fill_type>`, *optional*, defaults to 4096): <fill_docstring>
-        multi_modal_projector_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        projector_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-        rope_theta (`<fill_type>`, *optional*, defaults to 10000): <fill_docstring>
+        pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5): TODO
+        projector_input_dim (`int`, *optional*, defaults to 4096): TODO
+        projector_output_dim (`int`, *optional*, defaults to 4096): TODO
+        multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
+        projector_dropout (`int`, *optional*, defaults to 0.0): TODO
+        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
+        rope_theta (`int`, *optional*, defaults to 10000): TODO
     ```"""
 
     base_model_tp_plan = {
@@ -147,7 +147,7 @@ class Llama4TextConfig(PretrainedConfig):
             Dimensionality of the embeddings and hidden states.
         intermediate_size (`int`, *optional*, defaults to 8192):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        intermediate_size_mlp (`<fill_type>`, *optional*, defaults to 16384): <fill_docstring>
+        intermediate_size_mlp (`int`, *optional*, defaults to 16384): TODO
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 40):
@@ -155,7 +155,7 @@ class Llama4TextConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
             specified, will default to `num_attention_heads`.
-        head_dim (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
+        head_dim (`int`, *optional*, defaults to 128): TODO
         hidden_act (`str` or `Callable`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -176,15 +176,15 @@ class Llama4TextConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to `500000.0`):
             The base period of the RoPE embeddings.
-        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-        num_experts_per_tok (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        num_local_experts (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
-        moe_layers (`<fill_type>`, *optional*): <fill_docstring>
-        interleave_moe_layer_step (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        use_qk_norm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        output_router_logits (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        router_aux_loss_coef (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
-        router_jitter_noise (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
+        num_experts_per_tok (`int`, *optional*, defaults to 1): TODO
+        num_local_experts (`int`, *optional*, defaults to 16): TODO
+        moe_layers (`int`, *optional*): TODO
+        interleave_moe_layer_step (`int`, *optional*, defaults to 1): TODO
+        use_qk_norm (`int`, *optional*, defaults to `True`): TODO
+        output_router_logits (`int`, *optional*, defaults to `False`): TODO
+        router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
+        router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -224,13 +224,13 @@ class Llama4TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
             <TODO>
             <TODO>
-        no_rope_layers (`<fill_type>`, *optional*): <fill_docstring>
-        no_rope_layer_interval (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        no_rope_layers (`int`, *optional*): TODO
+        no_rope_layer_interval (`int`, *optional*, defaults to 4): TODO
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
-        attn_temperature_tuning (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        floor_scale (`<fill_type>`, *optional*, defaults to 8192): <fill_docstring>
-        attn_scale (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
+        attn_temperature_tuning (`int`, *optional*, defaults to 4): TODO
+        floor_scale (`int`, *optional*, defaults to 8192): TODO
+        attn_scale (`int`, *optional*, defaults to 0.1): TODO
 
     Example:
     ```"""
@@ -364,8 +364,10 @@ class Llama4Config(PretrainedConfig):
 
 
     Args:
-        vision_config (`<fill_type>`, *optional*): <fill_docstring>
-        text_config (`<fill_type>`, *optional*): <fill_docstring>
+        vision_config (`Llama4VisionConfig`, *optional*):
+            The Llama4 Vision config.
+        text_config (`Llama4TextConfig`, *optional*):
+            The Llama4 Text config.
         boi_token_index (`int`, *optional*, defaults to 200080):
             The begin-of-image token index to wrap the image prompt.
         eoi_token_index (`int`, *optional*, defaults to 200081):
