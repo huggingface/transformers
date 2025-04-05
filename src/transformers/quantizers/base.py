@@ -303,7 +303,7 @@ class HfQuantizer(ABC):
                 with init_empty_weights():
                     parent_module, name = get_module_from_name(model, name)
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
-        print(model)
+
 class SequentialLlama4TextExperts(torch.nn.ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.
