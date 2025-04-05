@@ -65,7 +65,7 @@ if is_vision_available():
         from torchvision.transforms import InterpolationMode
 
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
