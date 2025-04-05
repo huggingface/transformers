@@ -221,6 +221,10 @@ _torch_version = "N/A"
 _torch_available = False
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available, _torch_version = _is_package_available("torch", return_version=True)
+    if _torch_available:
+        _torch_available = version.parse(_torch_version) >= version.parse("2.0.0")
+        if not _torch_available:
+            logger.warning(f"Disabling PyTorch because PyTorch >= 2.0 is required but found {_torch_version}")
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
@@ -612,15 +616,10 @@ def is_torch_tf32_available():
 
     import torch
 
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    if not torch.cuda.is_available():
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
-    if int(torch.version.cuda.split(".")[0]) < 11:
-        return False
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
-        return False
-
     return True
 
 
