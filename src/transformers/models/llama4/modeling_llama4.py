@@ -156,11 +156,7 @@ class Llama4TextMoe(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts
-        self.for_llm_compressor = config.for_llm_compressor
-        if self.for_llm_compressor:
-            self.experts = nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
-        else:
-            self.experts = Llama4TextExperts(config)
+        self.experts = Llama4TextExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.shared_expert = Llama4TextMLP(config)
 
@@ -191,14 +187,7 @@ class Llama4TextMoe(nn.Module):
         ).to(hidden_states.device)
         # we gather inputs corresponding to each expert based on the router indices
         routed_in = routed_in * router_scores.reshape(-1, 1)
-        if self.for_llm_compressor:
-            expert_routed_out_list = []
-            routed_in = routed_in.reshape(self.num_experts, -1, routed_in.shape[-1])
-            for expert_idx in range(self.num_experts):
-                expert_routed_out_list.append(self.experts[expert_idx](routed_in[expert_idx]))
-            routed_out = torch.cat(expert_routed_out_list, dim=0)
-        else:
-            routed_out = self.experts(routed_in)
+        routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
         # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
@@ -667,7 +656,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
-        if past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if cache_position is None:
