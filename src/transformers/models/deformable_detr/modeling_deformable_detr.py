@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_mapping
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -40,6 +40,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_deformable_detr import DeformableDetrConfig
 
 
@@ -628,15 +629,17 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        output = self.attn(
-            value,
-            spatial_shapes,
-            spatial_shapes_list,
-            level_start_index,
-            sampling_locations,
-            attention_weights,
-            self.im2col_step,
-        )
+        disable_mapping = self.disable_custom_kernels or is_torchdynamo_compiling()
+        with use_kernel_mapping({}, inherit_mapping=not disable_mapping):
+            output = self.attn(
+                value,
+                spatial_shapes,
+                spatial_shapes_list,
+                level_start_index,
+                sampling_locations,
+                attention_weights,
+                self.im2col_step,
+            )
 
         output = self.output_proj(output)
 
