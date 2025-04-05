@@ -1888,7 +1888,7 @@ class HybridChunkedCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         self.cumulative_length = [0 for _ in range(config.num_hidden_layers)]
 
-    def initialise_cache_layer(self, layer_idx, key_states, sliding_window):
+    def initialise_cache_layer(self, layer_idx, key_states):
         if len(self.key_cache) > layer_idx:
             return
 
@@ -1898,7 +1898,7 @@ class HybridChunkedCache(Cache):
         sliding_cache_shape = (
             self.max_batch_size,
             num_key_value_heads,
-            sliding_window,
+            self.sliding_window,
             self.head_dim,
         )
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
