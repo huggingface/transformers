@@ -233,9 +233,9 @@ def check_dummies(overwrite: bool = False):
                         found = True
                         break
 
-                if found:
+                if not found:
                     print("A transient error was found with the dummies, please investigate.")
-                    return
+                    continue
 
                 raise ValueError(
                     "The main __init__ has objects that are not present in "
