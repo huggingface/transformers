@@ -780,7 +780,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
         ("sam_vision_model", "sam"),
-        ("llama4_text", "llama4")
+        ("llama4_text", "llama4"),
     ]
 )
 

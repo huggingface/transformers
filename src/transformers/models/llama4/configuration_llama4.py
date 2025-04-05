@@ -238,7 +238,9 @@ class Llama4TextConfig(PretrainedConfig):
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
         self.moe_layers = (
-            moe_layers if moe_layers is not None else list(range(interleave_moe_layer_step-1, num_hidden_layers, interleave_moe_layer_step))
+            moe_layers
+            if moe_layers is not None
+            else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
 
