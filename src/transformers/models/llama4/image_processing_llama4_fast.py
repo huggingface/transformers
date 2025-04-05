@@ -16,7 +16,8 @@
 
 from collections import defaultdict
 from functools import lru_cache
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Set
+import math
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
