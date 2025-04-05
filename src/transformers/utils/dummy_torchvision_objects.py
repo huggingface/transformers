@@ -142,14 +142,14 @@ class Siglip2ImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class ViTImageProcessorFast(metaclass=DummyObject):
+class ViltImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
 
-class ViltImageProcessorFast(metaclass=DummyObject):
+class ViTImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
