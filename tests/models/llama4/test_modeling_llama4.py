@@ -36,8 +36,7 @@ if is_torch_available():
 
     from transformers import (
         Llama4ForCausalLM,
-        Llama4ForSequenceClassification,
-        Llama4ForTokenClassification,
+        Llama4ForConditionalGeneration,
         Llama4Model,
     )
 
@@ -48,8 +47,7 @@ class Llama4ModelTester:
     if is_torch_available():
         model_class = Llama4Model
         for_causal_lm_class = Llama4ForCausalLM
-        for_sequence_class = Llama4ForSequenceClassification
-        for_token_class = Llama4ForTokenClassification
+        for_conditional_generation_class = Llama4ForConditionalGeneration
 
     def __init__(
         self,
@@ -276,11 +274,15 @@ class Llama4ModelTester:
 @require_torch
 class Llama4ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Llama4Model, Llama4ForCausalLM, Llama4ForSequenceClassification, Llama4ForTokenClassification)
+        (
+            Llama4Model,
+            Llama4ForCausalLM,
+            Llama4ForConditionalGeneration,
+        )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Llama4ForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (Llama4ForCausalLM, Llama4ForConditionalGeneration) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 

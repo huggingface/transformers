@@ -2522,7 +2522,6 @@ else:
         [
             "Llama4ForCausalLM",
             "Llama4ForConditionalGeneration",
-            "Llama4Model",
             "Llama4TextModel",
             "Llama4VisionModel",
             "Llama4PreTrainedModel",
@@ -7856,7 +7855,6 @@ if TYPE_CHECKING:
         from .models.llama4 import (
             Llama4ForCausalLM,
             Llama4ForConditionalGeneration,
-            Llama4Model,
             Llama4PreTrainedModel,
             Llama4TextModel,
             Llama4VisionModel,

@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
 from ..activations import ACT2FN
+from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
@@ -59,7 +60,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         weight_scale_float32 = self.weight_scale.to(torch.float32)
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
             x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
-        )   
+        )
         output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
@@ -77,14 +78,21 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.expert_dim = self.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         # Register FP8 buffers for gate_up_proj
-        self.gate_up_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 2 * self.expert_dim), dtype=torch.float8_e4m3fn))
-        self.gate_up_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, 1, self.expert_dim * 2), dtype=torch.float32))
+        self.gate_up_proj = torch.nn.Parameter(
+            torch.zeros((self.num_experts, self.hidden_size, 2 * self.expert_dim), dtype=torch.float8_e4m3fn)
+        )
+        self.gate_up_proj_scale = torch.nn.Parameter(
+            torch.zeros((self.num_experts, 1, self.expert_dim * 2), dtype=torch.float32)
+        )
         # Register FP8 buffers for down_proj
-        self.down_proj = torch.nn.Parameter(torch.zeros((self.num_experts, self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn))
-        self.down_proj_scale = torch.nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32))
+        self.down_proj = torch.nn.Parameter(
+            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size), dtype=torch.float8_e4m3fn)
+        )
+        self.down_proj_scale = torch.nn.Parameter(
+            torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
+        )
         # Register input scale upper bound
         self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
-
 
     def forward(self, hidden_states):
         """
@@ -99,7 +107,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 
         # Pre-allocate tensor for all expert outputs with same shape as hidden_states
         next_states = torch.empty_like(hidden_states)
-        
+
         for i in range(self.num_experts):
             # Extract expert's hidden states
             expert_hidden = hidden_states[i]
@@ -110,21 +118,21 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             )
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
-       
+
             gate = torch.ops.fbgemm.f8f8bf16_rowwise(
                 expert_quantized,
-                self.gate_up_proj[i].transpose(0,1)[:sharded_expert_dim].contiguous(), 
+                self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
                 expert_scale,
-                gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(), 
-                use_fast_accum=True
+                gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
+                use_fast_accum=True,
             )
 
             up = torch.ops.fbgemm.f8f8bf16_rowwise(
-                expert_quantized, 
-                self.gate_up_proj[i].transpose(0,1)[sharded_expert_dim:].contiguous(), 
-                expert_scale, 
-                gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(), 
-                use_fast_accum=True
+                expert_quantized,
+                self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
+                expert_scale,
+                gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
+                use_fast_accum=True,
             )
 
             activated = up * self.act_fn(gate)
@@ -135,11 +143,11 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
             expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
-                activated_quantized, 
-                self.down_proj[i].transpose(0,1).contiguous(), 
-                activated_scale, 
-                down_proj_scale_float32[i].view(-1, 1).contiguous(), 
-                use_fast_accum=True
+                activated_quantized,
+                self.down_proj[i].transpose(0, 1).contiguous(),
+                activated_scale,
+                down_proj_scale_float32[i].view(-1, 1).contiguous(),
+                use_fast_accum=True,
             )
 
             next_states[i] = expert_output
@@ -155,7 +163,7 @@ def _replace_with_fbgemm_fp8_linear(
     has_been_replaced=False,
     pre_quantized=False,
     config=None,
-    tp_plan=None
+    tp_plan=None,
 ):
     """
     Private method that wraps the recursion for module replacement.
@@ -163,9 +171,8 @@ def _replace_with_fbgemm_fp8_linear(
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
 
-    from transformers.models.llama4.modeling_llama4 import Llama4TextExperts
     import re
-    
+
     if current_key_name is None:
         current_key_name = []
 
@@ -192,7 +199,8 @@ def _replace_with_fbgemm_fp8_linear(
                     model._modules[name].requires_grad_(False)
                 # set non persistant buffer outside of init_empty_weights
                 model._modules[name].input_scale_ub = torch.tensor(
-                    [quantization_config.activation_scale_ub], dtype=torch.float,
+                    [quantization_config.activation_scale_ub],
+                    dtype=torch.float,
                 )
         if module.__class__.__name__ == "Llama4TextExperts" and name not in modules_to_not_convert:
             current_key_name_str = ".".join(current_key_name)
@@ -200,7 +208,9 @@ def _replace_with_fbgemm_fp8_linear(
                 (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
-                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")]
+                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[
+                        re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")
+                    ]
                     tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                     model._modules[name] = FbgemmFp8Llama4TextExperts(
                         config.text_config,
@@ -208,7 +218,7 @@ def _replace_with_fbgemm_fp8_linear(
                 model._modules[name].input_scale_ub = torch.tensor(
                     [quantization_config.activation_scale_ub], dtype=torch.float
                 )
-            
+
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fbgemm_fp8_linear(
                 module,
@@ -218,7 +228,7 @@ def _replace_with_fbgemm_fp8_linear(
                 has_been_replaced=has_been_replaced,
                 pre_quantized=pre_quantized,
                 config=config,
-                tp_plan=tp_plan
+                tp_plan=tp_plan,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
@@ -226,7 +236,13 @@ def _replace_with_fbgemm_fp8_linear(
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False, config=None, tp_plan=None
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    pre_quantized=False,
+    config=None,
+    tp_plan=None,
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -254,7 +270,13 @@ def replace_with_fbgemm_fp8_linear(
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_fbgemm_fp8_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized, config=config, tp_plan=tp_plan
+        model,
+        modules_to_not_convert,
+        current_key_name,
+        quantization_config,
+        pre_quantized=pre_quantized,
+        config=config,
+        tp_plan=tp_plan,
     )
     if not has_been_replaced:
         logger.warning(

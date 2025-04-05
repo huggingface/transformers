@@ -37,22 +37,47 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Llama4Config
 
-## Llama4Model
+## Llama4TextConfig
 
-[[autodoc]] Llama4Model
-    - forward
+[[autodoc]] Llama4TextConfig
+
+## Llama4VisionConfig
+
+[[autodoc]] Llama4VisionConfig
+
+## Llama4Processor
+
+[[autodoc]] Llama4Processor
+
+## Llama4ImageProcessorFast
+
+[[autodoc]] Llama4ImageProcessorFast
+
+## Llama4ImageProcessor
+
+[[autodoc]] Llama4ImageProcessor
+
+## Llama4ForConditionalGeneration
+
+[[autodoc]] Llama4ForConditionalGeneration
+- forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-    - forward
+- forward
 
-## Llama4ForSequenceClassification
+## Llama4TextModel
 
-[[autodoc]] Llama4ForSequenceClassification
-    - forward
+[[autodoc]] Llama4TextModel
+- forward
 
-## Llama4ForTokenClassification
+## Llama4ForCausalLM
 
-[[autodoc]] Llama4ForTokenClassification
-    - forward
+[[autodoc]] Llama4ForCausalLM
+- forward
+
+## Llama4VisionModel
+
+[[autodoc]] Llama4VisionModel
+- forward

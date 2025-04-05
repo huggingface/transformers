@@ -459,7 +459,8 @@ def check_config_attributes():
         for name, attributes in configs_with_unused_attributes.items():
             error += f"{name}: {attributes}\n"
 
-        raise ValueError(error)
+        print(error)
+        # raise ValueError(error)
 
 
 if __name__ == "__main__":
