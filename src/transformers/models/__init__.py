@@ -275,6 +275,7 @@ from . import (
     tapas,
     textnet,
     time_series_transformer,
+    timesfm,
     timesformer,
     timm_backbone,
     timm_wrapper,
