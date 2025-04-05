@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Vilt."""
 
-from typing import Optional
+from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -88,9 +88,9 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[float | list[float]],
-        image_std: Optional[float | list[float]],
-        return_tensors: Optional[str | TensorType],
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         """
