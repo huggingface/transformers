@@ -3739,7 +3739,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             init_contexts = [no_init_weights(), init_empty_weights()]
 
-        print(init_contexts)
         return init_contexts
 
     @classmethod
