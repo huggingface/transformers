@@ -40,7 +40,6 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
-from .image_processing_llama4 import get_factors, get_max_res_without_distortion
 
 
 if is_torch_available():
@@ -53,6 +52,60 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+def get_factors(dividend: int) -> Set[int]:
+    """
+    Calculate all factors of a given number, i.e. a dividor that leaves
+    no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
+
+    Args:
+        dividend (int): The number to find factors for.
+
+    Returns:
+        set: A set containing all factors of the number.
+    """
+    factors_set = set()
+
+    for i in range(1, int(dividend**0.5) + 1):
+        if dividend % i == 0:
+            factors_set.add(i)
+            factors_set.add(dividend // i)
+    return factors_set
+
+
+def get_max_res_without_distortion(
+    image_size: Tuple[int, int],
+    target_size: Tuple[int, int],
+) -> Tuple[int, int]:
+    """
+    Determines the maximum resolution to which an image can be resized to without distorting its
+    aspect ratio, based on the target resolution.
+
+    Args:
+        image_size (Tuple[int, int]): The original resolution of the image (height, width).
+        target_resolution (Tuple[int, int]): The desired resolution to fit the image into (height, width).
+    Returns:
+        Tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
+    Example:
+        >>> _get_max_res_without_distortion([200, 300], target_size = [450, 200])
+        (134, 200)
+        >>> _get_max_res_without_distortion([800, 600], target_size = [450, 1300])
+        (450, 338)
+    """
+
+    original_height, original_width = image_size
+    target_height, target_width = target_size
+
+    scale_w = target_width / original_width
+    scale_h = target_height / original_height
+
+    if scale_w < scale_h:
+        new_width = target_width
+        new_height = min(math.floor(original_height * scale_w), target_height)
+    else:
+        new_height = target_height
+        new_width = min(math.floor(original_width * scale_h), target_width)
+
+    return new_height, new_width
 class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     max_patches: Optional[int]
     resize_to_max_canvas: Optional[bool]
