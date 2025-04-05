@@ -1354,7 +1354,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         # modify the answer list
         if answer is not None:
             for i, case in enumerate(answer):
-                if case in cell_mapping.keys():
+                if case in cell_mapping:
                     answer[i] = cell_mapping[case]
 
     def truncate_cell(self, cell_value):

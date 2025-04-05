@@ -174,9 +174,8 @@ class ExamplesTests(TestCasePlus):
             testargs.append("--use_cpu")
 
         logger = run_clm.logger
-        with patch.object(sys, "argv", testargs):
-            with CaptureLogger(logger) as cl:
-                run_clm.main()
+        with patch.object(sys, "argv", testargs), CaptureLogger(logger) as cl:
+            run_clm.main()
 
         self.assertIn('"n_embd": 10', cl.out)
         self.assertIn('"n_head": 2', cl.out)

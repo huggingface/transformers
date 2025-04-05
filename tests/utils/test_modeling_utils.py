@@ -447,9 +447,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNotNone(model)
 
         logger = logging.get_logger("transformers.configuration_utils")
-        with LoggingLevel(logging.WARNING):
-            with CaptureLogger(logger) as cl:
-                BertModel.from_pretrained(TINY_T5)
+        with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+            BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
     @require_accelerate
@@ -1267,12 +1266,11 @@ class ModelUtilsTest(TestCasePlus):
             in str(missing_model_file_error.exception)
         )
 
-        with self.assertRaises(OSError) as missing_model_file_error:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
-                    f.write("{}")
-                f.close()
-                BertModel.from_pretrained(tmp_dir)
+        with self.assertRaises(OSError) as missing_model_file_error, tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write("{}")
+            f.close()
+            BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
             "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
@@ -1382,9 +1380,8 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir)
 
             # Loading the model with a new class, we don't get a warning for unexpected weights, just an info
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertNotIn("were not used when initializing ModelWithHead", cl.out)
             self.assertEqual(
                 set(loading_info["unexpected_keys"]),
@@ -1395,9 +1392,8 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = model.state_dict()
             state_dict["added_key"] = copy.deepcopy(state_dict["linear.weight"])
             safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
             self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
@@ -1406,82 +1402,75 @@ class ModelUtilsTest(TestCasePlus):
 
         with self.subTest("Ensure no warnings when pad_token_id is None."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config_no_pad_token = PretrainedConfig()
-                    config_no_pad_token.pad_token_id = None
-                    model = ModelWithHead(config_no_pad_token)
-                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config_no_pad_token = PretrainedConfig()
+                config_no_pad_token.pad_token_id = None
+                model = ModelWithHead(config_no_pad_token)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there is an attention_mask."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids end with a pad_token_id."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure that the warning is shown at most once."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertEqual(cl.out.count("We strongly recommend passing in an `attention_mask`"), 1)
 
         with self.subTest("Ensure a different warning is shown when the pad_token_id is equal to the bos_token_id."):
             logger.warning_once.cache_clear()
-            with LoggingLevel(logging.WARNING):
-                with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
-                    config.pad_token_id = 0
-                    config.bos_token_id = config.pad_token_id
-                    model = ModelWithHead(config)
-                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING), CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                config.bos_token_id = config.pad_token_id
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
         if not is_torchdynamo_available():
@@ -1597,14 +1586,13 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(model.generation_config.repetition_penalty == 1.0)
         # If the user attempts to save a custom generation parameter:
         model.config.repetition_penalty = 3.0
-        with warnings.catch_warnings(record=True) as warning_list:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.save_pretrained(tmp_dir)
-                # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
-                # generative parameters, and the old default (1.0) would no longer relect the user's wishes.
-                self.assertTrue(model.config.repetition_penalty is None)
-                # 2 - That parameter will be set in `model.generation_config` instead.
-                self.assertTrue(model.generation_config.repetition_penalty == 3.0)
+        with warnings.catch_warnings(record=True) as warning_list, tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
+            # generative parameters, and the old default (1.0) would no longer relect the user's wishes.
+            self.assertTrue(model.config.repetition_penalty is None)
+            # 2 - That parameter will be set in `model.generation_config` instead.
+            self.assertTrue(model.generation_config.repetition_penalty == 3.0)
         # 3 - The user will see a warning regarding the custom parameter that has been moved.
         self.assertTrue(len(warning_list) == 1)
         self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
@@ -1657,11 +1645,8 @@ class ModelUtilsTest(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.INFO):
-                with CaptureLogger(logger) as cl1:
-                    _, loading_info = TestModelGammaBeta.from_pretrained(
-                        tmp_dir, config=config, output_loading_info=True
-                    )
+            with LoggingLevel(logging.INFO), CaptureLogger(logger) as cl1:
+                _, loading_info = TestModelGammaBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
@@ -1838,12 +1823,14 @@ class ModelUtilsTest(TestCasePlus):
             original_set_default_torch_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
-            side_effect=debug,
+        with (
+            mock.patch(
+                "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+                side_effect=debug,
+            ),
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+            _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
         # default should still be float32
         assert torch.get_default_dtype() == torch.float32
         torch.set_default_dtype(old_dtype)
@@ -1869,15 +1856,17 @@ class ModelUtilsTest(TestCasePlus):
             original_set_default_torch_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
-            side_effect=debug,
+        with (
+            mock.patch(
+                "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+                side_effect=debug,
+            ),
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                config.torch_dtype = torch.float16
-                _ = AutoModelForCausalLM.from_config(
-                    config,
-                )
+            config.torch_dtype = torch.float16
+            _ = AutoModelForCausalLM.from_config(
+                config,
+            )
         # default should still be float32
         assert torch.get_default_dtype() == torch.float32
         torch.set_default_dtype(old_dtype)

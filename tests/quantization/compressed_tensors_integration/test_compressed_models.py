@@ -126,26 +126,25 @@ class StackCompressedModelTest(unittest.TestCase):
         warnings about missing or unexpected keys.
         """
         for model_stub in self.model_stubs:
-            with self.subTest(model_stub=model_stub):
-                with warnings.catch_warnings(record=True) as caught_warnings:
-                    warnings.simplefilter("always")
-                    AutoModelForCausalLM.from_pretrained(
-                        model_stub,
-                        device_map="auto",
-                        torch_dtype="auto",
-                        quantization_config=CompressedTensorsConfig(run_compressed=False),
+            with self.subTest(model_stub=model_stub), warnings.catch_warnings(record=True) as caught_warnings:
+                warnings.simplefilter("always")
+                AutoModelForCausalLM.from_pretrained(
+                    model_stub,
+                    device_map="auto",
+                    torch_dtype="auto",
+                    quantization_config=CompressedTensorsConfig(run_compressed=False),
+                )
+                for warning in caught_warnings:
+                    self.assertNotIn(
+                        "missing keys",
+                        str(warning.message).lower(),
+                        f"'missing keys' found in warnings for model {model_stub}",
                     )
-                    for warning in caught_warnings:
-                        self.assertNotIn(
-                            "missing keys",
-                            str(warning.message).lower(),
-                            f"'missing keys' found in warnings for model {model_stub}",
-                        )
-                        self.assertNotIn(
-                            "unexpected keys",
-                            str(warning.message).lower(),
-                            f"'unexpected keys' found in warnings for model {model_stub}",
-                        )
+                    self.assertNotIn(
+                        "unexpected keys",
+                        str(warning.message).lower(),
+                        f"'unexpected keys' found in warnings for model {model_stub}",
+                    )
 
 
 @require_compressed_tensors

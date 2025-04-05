@@ -74,7 +74,7 @@ if is_tf_available():
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key:
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
@@ -764,7 +764,7 @@ class TFModelTesterMixin:
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
             # Not all models accept "labels" in the forward pass (yet :) )
-            if "labels" in inspect.signature(model.call).parameters.keys():
+            if "labels" in inspect.signature(model.call).parameters:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs)
@@ -1146,9 +1146,9 @@ class TFModelTesterMixin:
             accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
             self.check_keras_fit_results(val_loss1, val_loss2)
             self.assertEqual(history1.history.keys(), history2.history.keys())
-            for key in history1.history.keys():
+            for key in history1.history:
                 if not key.startswith("val_"):
-                    self.assertTrue("val_" + key in history1.history.keys(), "Outputs differ in train/test step!")
+                    self.assertTrue("val_" + key in history1.history, "Outputs differ in train/test step!")
             if metrics:
                 self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
 
@@ -1158,7 +1158,7 @@ class TFModelTesterMixin:
             prepared_for_class = self._prepare_for_class(
                 inputs_dict.copy(),
                 model_class,
-                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters else False,
             )
             if not any(
                 tensor.dtype.is_integer for tensor in prepared_for_class.values() if isinstance(tensor, tf.Tensor)
@@ -1200,42 +1200,41 @@ class TFModelTesterMixin:
             if model_class not in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
                 continue
 
-            with self.subTest(msg=f"Testing {model_class}"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model = model_class(config)
-                    inputs = self._prepare_for_class(inputs_dict, model_class)
-                    _ = model(**inputs)
-                    model.save_pretrained(tmp_dir)
+            with self.subTest(msg=f"Testing {model_class}"), tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(config)
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                _ = model(**inputs)
+                model.save_pretrained(tmp_dir)
 
-                    # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(ValueError):
-                        new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
-                    with self.assertRaises(ValueError):
-                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
+                # Fails when we don't set ignore_mismatched_sizes=True
+                with self.assertRaises(ValueError):
+                    new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                with self.assertRaises(ValueError):
+                    new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
-                    logger = logging.get_logger("transformers.modeling_tf_utils")
-                    with CaptureLogger(logger) as cl:
-                        new_model = TFAutoModelForSequenceClassification.from_pretrained(
-                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
+                logger = logging.get_logger("transformers.modeling_tf_utils")
+                with CaptureLogger(logger) as cl:
+                    new_model = TFAutoModelForSequenceClassification.from_pretrained(
+                        tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
 
-                    logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 42)
+                logits = new_model(**inputs).logits
+                self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
-                        new_model_without_prefix = TFAutoModel.from_pretrained(
-                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
+                with CaptureLogger(logger) as cl:
+                    new_model_without_prefix = TFAutoModel.from_pretrained(
+                        tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
 
-                    # Although Tf models always have a prefix pointing to `MainLayer`,
-                    # we still add this "without prefix" test to keep a consistency between tf and pt tests.
-                    input_ids = ids_tensor((2, 8), 10)
-                    if self.is_encoder_decoder:
-                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
-                    else:
-                        new_model_without_prefix(input_ids)
+                # Although Tf models always have a prefix pointing to `MainLayer`,
+                # we still add this "without prefix" test to keep a consistency between tf and pt tests.
+                input_ids = ids_tensor((2, 8), 10)
+                if self.is_encoder_decoder:
+                    new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                else:
+                    new_model_without_prefix(input_ids)
 
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
@@ -1273,7 +1272,7 @@ class TFModelTesterMixin:
                     self.assertEqual(len(tensor), len(input_dataset))  # Assert we didn't lose any data
             model(test_batch, training=False)
 
-            if "labels" in inspect.signature(model_class.call).parameters.keys():
+            if "labels" in inspect.signature(model_class.call).parameters:
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 if "labels" not in tf_inputs_dict:
                     return  # This model isn't giving us labels after all, don't try training with it

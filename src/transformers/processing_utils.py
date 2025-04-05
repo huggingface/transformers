@@ -956,7 +956,7 @@ class ProcessorMixin(PushToHubMixin):
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
                     value = (
@@ -972,7 +972,7 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality in output_kwargs:
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1005,7 +1005,7 @@ class ProcessorMixin(PushToHubMixin):
             # kwargs is a flat dictionary
             for key in kwargs:
                 if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
                         output_kwargs["common_kwargs"][key] = kwargs[key]
                     elif key not in possible_modality_keywords:
                         logger.warning_once(
@@ -1078,7 +1078,7 @@ class ProcessorMixin(PushToHubMixin):
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict.keys()})
+        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict})
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1322,13 +1322,13 @@ class ProcessorMixin(PushToHubMixin):
         # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
         # and for multimodal data loading. Everything else will be used in `__call__`
         tokenizer_template_kwargs = {}
-        for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
+        for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__:
             default_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
             value = kwargs.pop(tokenizer_key, default_value)
             tokenizer_template_kwargs[tokenizer_key] = value
 
         mm_load_kwargs = {}
-        for mm_load_key in ChatTemplateLoadKwargs.__annotations__.keys():
+        for mm_load_key in ChatTemplateLoadKwargs.__annotations__:
             default_value = getattr(ChatTemplateLoadKwargs, mm_load_key, None)
             value = kwargs.pop(mm_load_key, default_value)
             mm_load_kwargs[mm_load_key] = value

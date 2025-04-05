@@ -20,7 +20,10 @@ line-length = 119
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
 ignore = ["C901", "E501", "E741", "F402", "F823" ]
-select = ["C", "E", "F", "I", "W"]
+# enumerate-for-loop (SIM113)
+# multiple-with-statements (SIM117)
+# in-dict-keys (SIM118)
+select = ["C", "E", "F", "I", "W", "SIM113", "SIM117", "SIM118"]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]

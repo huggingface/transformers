@@ -563,8 +563,8 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -693,9 +693,8 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
         # interpolate_pos_encodiung false should return value error
-        with self.assertRaises(ValueError, msg="doesn't match model"):
-            with torch.no_grad():
-                model(**inputs, interpolate_pos_encoding=False)
+        with self.assertRaises(ValueError, msg="doesn't match model"), torch.no_grad():
+            model(**inputs, interpolate_pos_encoding=False)
 
         # forward pass
         with torch.no_grad():

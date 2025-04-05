@@ -168,17 +168,16 @@ class FlaxEncoderDecoderMixin:
         self.assertEqual(config.use_cache, encoder_model.config.use_cache)
         self.assertEqual(decoder_config.use_cache, decoder_model.config.use_cache)
 
-        with tempfile.TemporaryDirectory() as enc_tmpdir:
-            with tempfile.TemporaryDirectory() as dec_tmpdir:
-                encoder_model.save_pretrained(enc_tmpdir)
-                decoder_model.save_pretrained(dec_tmpdir)
-                # load a model from pretrained encoder and decoder checkpoints, setting one encoder and one decoder kwarg opposite to that specified in their respective configs
-                enc_dec_model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
-                    encoder_pretrained_model_name_or_path=enc_tmpdir,
-                    decoder_pretrained_model_name_or_path=dec_tmpdir,
-                    encoder_use_cache=not config.use_cache,
-                    decoder_use_cache=not decoder_config.use_cache,
-                )
+        with tempfile.TemporaryDirectory() as enc_tmpdir, tempfile.TemporaryDirectory() as dec_tmpdir:
+            encoder_model.save_pretrained(enc_tmpdir)
+            decoder_model.save_pretrained(dec_tmpdir)
+            # load a model from pretrained encoder and decoder checkpoints, setting one encoder and one decoder kwarg opposite to that specified in their respective configs
+            enc_dec_model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_pretrained_model_name_or_path=enc_tmpdir,
+                decoder_pretrained_model_name_or_path=dec_tmpdir,
+                encoder_use_cache=not config.use_cache,
+                decoder_use_cache=not decoder_config.use_cache,
+            )
 
         # assert that setting encoder and decoder kwargs opposite to those in the configs has correctly been applied
         self.assertNotEqual(config.use_cache, enc_dec_model.config.encoder.use_cache)

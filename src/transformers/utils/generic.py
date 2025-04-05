@@ -741,7 +741,7 @@ def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
     Adds the information of the repo_id to a given custom pipeline.
     """
     # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
-    for task in custom_pipeline.keys():
+    for task in custom_pipeline:
         if "impl" in custom_pipeline[task]:
             module = custom_pipeline[task]["impl"]
             if "--" not in module:
@@ -845,7 +845,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message

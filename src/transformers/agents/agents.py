@@ -323,7 +323,7 @@ def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_descri
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
 
     if "<<tool_names>>" in prompt:
-        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools]
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
 
     return prompt
@@ -1072,7 +1072,7 @@ class ReactJsonAgent(ReactAgent):
                 if "answer" in arguments:
                     answer = arguments["answer"]
                     if (
-                        isinstance(answer, str) and answer in self.state.keys()
+                        isinstance(answer, str) and answer in self.state
                     ):  # if the answer is a state variable, return the value
                         answer = self.state[answer]
                 else:

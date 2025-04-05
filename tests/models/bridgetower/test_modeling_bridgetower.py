@@ -636,9 +636,8 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
         # interpolate_pos_encodiung false should return value error
-        with self.assertRaises(ValueError, msg="doesn't match model"):
-            with torch.no_grad():
-                model(**inputs, interpolate_pos_encoding=False)
+        with self.assertRaises(ValueError, msg="doesn't match model"), torch.no_grad():
+            model(**inputs, interpolate_pos_encoding=False)
 
         # forward pass
         with torch.no_grad():

@@ -765,7 +765,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     table, sequences, max_length=maximum_length + 10, padding="longest"
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -776,7 +776,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     table, sequences, max_length=maximum_length + 10, padding=False
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],

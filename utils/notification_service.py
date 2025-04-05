@@ -1060,7 +1060,7 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    for model in model_results.keys():
+    for model in model_results:
         for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
@@ -1162,10 +1162,10 @@ if __name__ == "__main__":
             "failures": {},
             "job_link": {},
         }
-        for key in additional_files.keys()
+        for key in additional_files
     }
 
-    for key in additional_results.keys():
+    for key in additional_results:
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True

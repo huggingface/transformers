@@ -1559,8 +1559,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     )
                     self._tied_weights_keys.append(main_keys_pattern)
 
-                    adapter_id = 0
-                    for _layer_type in self.layers_block_type:
+                    for adapter_id, _layer_type in enumerate(self.layers_block_type):
                         if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
                             adapter_pattern = re.compile(
                                 r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
@@ -1568,10 +1567,8 @@ class Zamba2Model(Zamba2PreTrainedModel):
                                 + r"\.(?:0|1)\.weight$"
                             )
                             self._tied_weights_keys.append(adapter_pattern)
-                        adapter_id += 1
                     if self.config.use_shared_attention_adapter:
-                        adapter_id = 0
-                        for _layer_type in self.layers_block_type:
+                        for adapter_id, _layer_type in enumerate(self.layers_block_type):
                             if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
                                 attn_adapter_pattern = re.compile(
                                     r"^shared_transformer\.self_attn\."
@@ -1580,7 +1577,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
                                     + r"\.(?:0|1)\.weight$"
                                 )
                                 self._tied_weights_keys.append(attn_adapter_pattern)
-                            adapter_id += 1
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))

@@ -66,7 +66,7 @@ def create_rename_keys_vision(state_dict, config):
     rename_keys = []
     # fmt: off
     ########################################## VISION BACKBONE - START
-    for layer_name in state_dict.keys():
+    for layer_name in state_dict:
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone._backbone")
@@ -136,7 +136,7 @@ def create_rename_keys_vision(state_dict, config):
 def create_rename_keys_language(state_dict):
     rename_keys = []
     # fmt: off
-    for layer_name in state_dict.keys():
+    for layer_name in state_dict:
         if layer_name.startswith("language_backbone") and not layer_name.startswith("language_backbone.text_projection"):
             layer_name_replace = layer_name.replace("language_backbone", "language_backbone.model.text_model")
             layer_name_replace = layer_name_replace.replace("transformer.resblocks", "encoder.layers")

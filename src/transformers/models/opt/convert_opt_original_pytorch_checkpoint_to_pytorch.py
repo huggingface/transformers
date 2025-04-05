@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 def load_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
     sd = torch.load(checkpoint_path, map_location="cpu")
-    if "model" in sd.keys():
+    if "model" in sd:
         sd = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # pop unnecessary weights

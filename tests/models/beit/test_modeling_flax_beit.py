@@ -181,9 +181,8 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):

@@ -31,7 +31,7 @@ def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str
     # Load weights and config from paths
     original_state_dict = {}
     with safe_open(path.join(mamba2_checkpoint_path, ckpt_name), framework="pt") as f:
-        for k in f.keys():
+        for k in f:
             newk = k.removeprefix("model.")
             original_state_dict[newk] = f.get_tensor(k).clone()
     return original_state_dict

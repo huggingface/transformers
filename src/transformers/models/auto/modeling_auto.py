@@ -1694,7 +1694,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
                 text_config_names += [text_config_name]
 
         text_config = config.get_text_config(decoder=True)
-        if text_config_names and type(text_config) in cls._model_mapping.keys():
+        if text_config_names and type(text_config) in cls._model_mapping:
             warnings.warn(
                 "Loading a multimodal model with `AutoModelForCausalLM` is deprecated and will be removed in v5. "
                 "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",

@@ -1785,7 +1785,7 @@ class GenerationMixin:
                 )
 
             decoder_mapped_modules = [
-                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+                module_name for module_name in execution_device_map if decoder_name in module_name
             ]
             # The decoder name may be present in `execution_device_map` in two forms:
             # a) each layer has a device mapping
@@ -5116,7 +5116,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
     # Use a dictionary comprehension to gather attributes from all objects and concatenate them
     concatenated_data = {
         k: _concat([getattr(model_output, k) for model_output in model_outputs])
-        for k in model_output_cls.__dataclass_fields__.keys()
+        for k in model_output_cls.__dataclass_fields__
     }
 
     # Return a new object of the inferred class with the concatenated attributes

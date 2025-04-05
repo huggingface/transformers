@@ -767,7 +767,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             gpu_outputs = model(pixel_values.to(torch_device), pixel_mask.to(torch_device))
 
         # 3. assert equivalence
-        for key in cpu_outputs.keys():
+        for key in cpu_outputs:
             assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
 
         expected_logits = torch.tensor(
