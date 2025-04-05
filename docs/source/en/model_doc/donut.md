@@ -80,9 +80,9 @@ answer = processor.decode(outputs[0], skip_special_tokens=True)
 print(answer)
 ```
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/quantization/overview) overview for more available quantization backends.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [torchao](https://huggingface.co/docs/transformers/main/en/quantization/torchao) to only quantize the weights to int4.
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```py
 #pip install torchao
