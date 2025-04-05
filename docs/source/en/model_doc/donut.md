@@ -25,7 +25,7 @@ specific language governing permissions and limitations under the License. -->
 
 Donut features vision encoder ([Swin](./swin)) and a text decoder ([BART](./bart)). Swin converts document images into embeddings and BART processes them into meaningful text sequences.
 
-You can find all the original DONUT checkpoints under the [DONUT](https://huggingface.co/models?other=donut) collection in Modelhub.
+You can find all the original Donut checkpoints under the [Naver Clova Information Extraction](https://huggingface.co/naver-clova-ix) organization.
 
 > [!TIP]
 > Click on the DONUT models in the right sidebar for more examples of how to apply DONUT to different language and vision tasks.
