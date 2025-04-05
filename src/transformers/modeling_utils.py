@@ -39,7 +39,7 @@ from zipfile import is_zipfile
 
 import torch
 import torch.distributed.tensor
-from huggingface_hub import split_torch_state_dict_into_shards
+from huggingface_hub import HfFileSystem, split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.distributions import constraints
@@ -3366,9 +3366,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         setattr(model_to_save.generation_config, param_name, param_value)
                         setattr(model_to_save.config, param_name, None)
 
-                model_to_save.config.save_pretrained(save_directory)
+                model_config = self._save_auto_map_remote_code(model_to_save.config, save_directory)
+                model_config.save_pretrained(save_directory)
             if self.can_generate():
-                model_to_save.generation_config.save_pretrained(save_directory)
+                model_config = self._save_auto_map_remote_code(model_to_save.generation_config, save_directory)
+                model_config.save_pretrained(save_directory)
 
             if _hf_peft_config_loaded:
                 logger.info(
@@ -4622,6 +4624,46 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
         """
         return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
+
+    def _save_auto_map_remote_code(self, model_config, save_directory):
+        """
+        Save remote code from auto_map configs to a local path
+        and update auto_map configs to point to local versions when saving to file.
+        """
+        model_config = copy.deepcopy(model_config)  # make a copy to avoid modifying the original
+
+        # collect all remote repo ids in Hugging Face Hub
+        # and update all references to point to local versions
+        download_set = set()
+        auto_map_configs = getattr(model_config, "auto_map", {})
+        for config_name, class_reference in auto_map_configs.items():
+            # get class_path from configs
+            if "--" in class_reference:
+                repo_id, class_name = class_reference.split("--")
+            else:
+                repo_id = model_config.name_or_path
+                class_name = class_reference
+
+            download_set.add(repo_id)
+
+            # update path to point to the local version
+            auto_map_configs[config_name] = class_name
+
+        # download all python files from remote repos in Hugging Face Hub
+        fs = HfFileSystem()
+        for repo_id in download_set:
+            try:
+                py_files = fs.glob(f"{repo_id}/*.py")
+                for f_path in py_files:
+                    f_name = f_path.split("/")[-1]
+                    fs.get_file(f_path, os.path.join(save_directory, f_name))
+            except FileNotFoundError:
+                logger.warning(f"Repository not found for repo_id: {repo_id}.\n"
+                               "If the model is initialized from local repository - feel free to ignore this warning.\n"
+                               "Otherwise please make sure you specified the correct `repo_id` and `repo_type`.\n"
+                               "If you are trying to access a private or gated repo, make sure you are authenticated.")
+
+        return model_config
 
     @classmethod
     def _load_pretrained_model(

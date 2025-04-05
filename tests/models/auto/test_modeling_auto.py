@@ -333,10 +333,10 @@ class AutoModelTest(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # The model file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(model.__class__, reloaded_model.__class__)
+        # The module file is not changed after dumping, but the model config no longer stores a pointer to a remote code
+        # but a full copy locally. Because of that, the module code should be reloaded for the new model.
+        # Test the dynamic module is reloaded and module objects are different.
+        self.assertIsNot(model.__class__, reloaded_model.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
@@ -363,10 +363,10 @@ class AutoModelTest(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # The model file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(model.__class__, reloaded_model.__class__)
+        # The module file is not changed after dumping, but the model config no longer stores a pointer to a remote code
+        # but a full copy locally. Because of that, the module code should be reloaded for the new model.
+        # Test the dynamic module is reloaded and module objects are different.
+        self.assertIsNot(model.__class__, reloaded_model.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
