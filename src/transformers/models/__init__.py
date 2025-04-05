@@ -97,6 +97,7 @@ from . import (
     esm,
     falcon,
     falcon_mamba,
+    fast,
     fastspeech2_conformer,
     flaubert,
     flava,

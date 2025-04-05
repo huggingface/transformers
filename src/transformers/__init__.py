@@ -448,6 +448,7 @@ _import_structure = {
     "models.esm": ["EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
+    "models.fast": ["FastConfig"],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -1275,6 +1276,7 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
+    _import_structure["models.fast"].extend(["FastImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
@@ -2396,6 +2398,12 @@ else:
             "FalconMambaForCausalLM",
             "FalconMambaModel",
             "FalconMambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.fast"].extend(
+        [
+            "FastForSceneTextRecognition",
+            "FastPreTrainedModel",
         ]
     )
     _import_structure["models.fastspeech2_conformer"].extend(
@@ -5692,6 +5700,7 @@ if TYPE_CHECKING:
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
+    from .models.fast import FastConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -6551,6 +6560,7 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.emu3 import Emu3ImageProcessor
+        from .models.fast import FastImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -7504,6 +7514,7 @@ if TYPE_CHECKING:
             FalconMambaModel,
             FalconMambaPreTrainedModel,
         )
+        from .models.fast import FastForSceneTextRecognition, FastPreTrainedModel
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
