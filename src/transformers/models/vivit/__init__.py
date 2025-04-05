@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_vivit import *
     from .image_processing_vivit import *
+    from .image_processing_vivit_fast import *
     from .modeling_vivit import *
 else:
     import sys

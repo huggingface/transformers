@@ -75,6 +75,11 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 [[autodoc]] VivitImageProcessor
     - preprocess
 
+## VivitImageProcessorFast
+
+[[autodoc]] VivitImageProcessorFast
+    - preprocess
+
 ## VivitModel
 
 [[autodoc]] VivitModel
