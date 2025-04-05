@@ -160,19 +160,6 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = LlavaForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -617,8 +604,13 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_GENERATION = "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
-        self.assertEqual(output, EXPECTED_GENERATION)
+        EXPECTED_GENERATION = [
+            # CUDA output
+            "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
+            # XPU output
+            "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+        ]  # fmt: skip
+        self.assertTrue(output in EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes
