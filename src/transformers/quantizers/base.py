@@ -303,8 +303,7 @@ class HfQuantizer(ABC):
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
                 # TODO: check that it is fine to have the init empty weights here
                 with init_empty_weights():
-                    del module.experts
-                    module.experts = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]([Llama4TextMLP(model.config.get_text_config()) for _ in range(module.num_experts)])
+                    module.experts = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
 
             
 class SequentialLlama4TextExperts(torch.nn.ModuleList):
@@ -312,6 +311,10 @@ class SequentialLlama4TextExperts(torch.nn.ModuleList):
     A module that implements a compressed version of a list of expert modules.
     This is specifically designed to work with Llama4TextExperts in MoE layers.
     """
+    def __init__(self, config):
+        from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
+        super().__init__([Llama4TextMLP(config) for _ in range(config.num_local_experts)])
+        self.num_experts = config.num_local_experts
     
     def forward(
         self,
