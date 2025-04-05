@@ -111,10 +111,10 @@ print(answer)
 
 ## Notes
 
-- The quickest way to get started with Donut is by checking the [tutorial notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Donut), which show how to use the model at inference time as well as fine-tuning on custom data.
-- Donut is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
-- This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
-[here](https://github.com/clovaai/donut).
+- Use Donut for document image classification as shown below.
+   <insert code here>
+- Use Donut for document parsing as shown below.
+   <insert code here>
 
 ## DonutSwinConfig
 
