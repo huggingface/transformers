@@ -126,7 +126,7 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 ## Notes
 
 - Don't quantize the Mamba blocks to prevent model performance degradation.
-- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`] as follows:
+- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`].
 
 ```py
 import torch
