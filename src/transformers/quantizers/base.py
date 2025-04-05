@@ -15,7 +15,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
+from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -294,18 +295,15 @@ class HfQuantizer(ABC):
     @abstractmethod
     def is_trainable(self): ...
     
-    def _convert_model_for_quantization(self,model):
+    def _convert_model_for_quantization(self, model):
         from accelerate import init_empty_weights
-        from ..models.llama4.modeling_llama4 import Llama4TextMLP
-        for module in model.modules():
+        for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
-            # TODO: add exception for fbgemm 
-            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
-                # TODO: check that it is fine to have the init empty weights here
+            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys() and self.quantization_config.quant_method == QuantizationMethod.COMPRESSED_TENSORS:
                 with init_empty_weights():
-                    module.experts = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
-
-            
+                    parent_module, name = get_module_from_name(model, name)
+                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
+        print(model)
 class SequentialLlama4TextExperts(torch.nn.ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.
@@ -326,4 +324,4 @@ class SequentialLlama4TextExperts(torch.nn.ModuleList):
             routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
         return routed_out
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = { "Llama4TextMoe": SequentialLlama4TextExperts }
+MODULES_TO_PATCH_FOR_QUANTIZATION = { "Llama4TextExperts": SequentialLlama4TextExperts }
