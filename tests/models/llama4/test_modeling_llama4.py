@@ -48,7 +48,6 @@ from ...test_modeling_common import floats_tensor
 class Llama4ForVisionText2TextModelTester:
     config_class = Llama4Config
     if is_torch_available():
-        model_class = Llama4TextModel
         for_causal_lm_class = Llama4ForCausalLM
         for_conditional_generation_class = Llama4ForConditionalGeneration
 
