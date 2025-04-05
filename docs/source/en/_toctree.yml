@@ -485,6 +485,8 @@
         title: GraniteMoe
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/helium

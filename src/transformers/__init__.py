@@ -499,6 +499,10 @@ _import_structure = {
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
+    "models.granite_speech": [
+        "GraniteSpeechConfig",
+        "GraniteSpeechEncoderConfig",
+    ],
     "models.granitemoe": ["GraniteMoeConfig"],
     "models.granitemoeshared": ["GraniteMoeSharedConfig"],
     "models.grounding_dino": [
@@ -2588,6 +2592,14 @@ else:
             "GranitePreTrainedModel",
         ]
     )
+    _import_structure["models.granite_speech"].extend(
+        [
+            "GraniteSpeechCTCEncoder",
+            "GraniteSpeechForConditionalGeneration",
+            "GraniteSpeechPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.granitemoe"].extend(
         [
             "GraniteMoeForCausalLM",
@@ -2595,7 +2607,6 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
-
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -4928,9 +4939,11 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.granite_speech"].append("GraniteSpeechFeatureExtractor")
+    _import_structure["models.granite_speech"].append("GraniteSpeechProcessor")
+
     _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
     _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
-
 
 # FLAX-backed objects
 try:
@@ -5742,6 +5755,10 @@ if TYPE_CHECKING:
     )
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
+    from .models.granite_speech import (
+        GraniteSpeechConfig,
+        GraniteSpeechEncoderConfig,
+    )
     from .models.granitemoe import GraniteMoeConfig
     from .models.granitemoeshared import GraniteMoeSharedConfig
     from .models.grounding_dino import (
@@ -7661,6 +7678,11 @@ if TYPE_CHECKING:
             GraniteModel,
             GranitePreTrainedModel,
         )
+        from .models.granite_speech import (
+            GraniteSpeechCTCEncoder,
+            GraniteSpeechForConditionalGeneration,
+            GraniteSpeechPreTrainedModel,
+        )
         from .models.granitemoe import (
             GraniteMoeForCausalLM,
             GraniteMoeModel,
@@ -9504,6 +9526,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_torchaudio_objects import *
     else:
+        from .models.granite_speech import GraniteSpeechFeatureExtractor, GraniteSpeechProcessor
         from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
     try:
         if not is_flax_available():

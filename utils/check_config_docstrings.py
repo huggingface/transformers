@@ -48,6 +48,7 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "GraniteConfig",
     "GraniteMoeConfig",
     "Qwen3MoeConfig",
+    "GraniteSpeechConfig",
 }
 
 
