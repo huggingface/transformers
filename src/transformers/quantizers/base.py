@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
+from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -294,16 +295,17 @@ class HfQuantizer(ABC):
     @abstractmethod
     def is_trainable(self): ...
     
-    def _convert_model_for_quantization(self,model):
+    def _convert_model_for_quantization(self, model):
         from accelerate import init_empty_weights
-        for module in model.modules():
+        list_modules = list(model.named_modules())
+        for name, module in list_modules:
             module_class_name = module.__class__.__name__
             # TODO: add exception for fbgemm 
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
                 # TODO: check that it is fine to have the init empty weights here
                 with init_empty_weights():
-                    module = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config)
-            
+                    parent_module, name = get_module_from_name(model, name)
+                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
 class SequentialLlama4TextExperts(torch.nn.Module):
     """
     A module that implements a compressed version of a list of expert modules.
@@ -319,8 +321,8 @@ class SequentialLlama4TextExperts(torch.nn.Module):
 
 
         super().__init__()
-        self.num_experts = config.get_text_config().num_local_experts
-        self.experts= torch.nn.ModuleList([Llama4TextMLP(config.get_text_config()) for _ in range(self.num_experts)])
+        self.num_experts = config.num_local_experts
+        self.experts = torch.nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
 
     def forward(
         self,
