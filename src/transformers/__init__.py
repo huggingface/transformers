@@ -321,6 +321,12 @@ _import_structure = {
     ],
     "models.convnext": ["ConvNextConfig"],
     "models.convnextv2": ["ConvNextV2Config"],
+    "models.cosmos": [
+        "CosmosConfig",
+        "CosmosProcessor",
+        "CosmosTextConfig",
+        "CosmosVQVAEConfig",
+    ],
     "models.cpm": [],
     "models.cpmant": [
         "CpmAntConfig",
@@ -1261,6 +1267,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
+    _import_structure["models.cosmos"].append("CosmosVideoProcessor")
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -1930,6 +1937,16 @@ else:
             "ConvNextV2ForImageClassification",
             "ConvNextV2Model",
             "ConvNextV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.cosmos"].extend(
+        [
+            "CosmosForConditionalGeneration",
+            "CosmosModel",
+            "CosmosPreTrainedModel",
+            "CosmosTextPreTrainedModel",
+            "CosmosTextModel",
+            "CosmosVQVAE",
         ]
     )
     _import_structure["models.cpmant"].extend(
@@ -5545,6 +5562,12 @@ if TYPE_CHECKING:
     from .models.convnextv2 import (
         ConvNextV2Config,
     )
+    from .models.cosmos import (
+        CosmosConfig,
+        CosmosProcessor,
+        CosmosTextConfig,
+        CosmosVQVAEConfig,
+    )
     from .models.cpmant import (
         CpmAntConfig,
         CpmAntTokenizer,
@@ -6539,6 +6562,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.cosmos import CosmosVideoProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -7134,6 +7158,14 @@ if TYPE_CHECKING:
             ConvNextV2ForImageClassification,
             ConvNextV2Model,
             ConvNextV2PreTrainedModel,
+        )
+        from .models.cosmos import (
+            CosmosForConditionalGeneration,
+            CosmosModel,
+            CosmosPreTrainedModel,
+            CosmosTextModel,
+            CosmosTextPreTrainedModel,
+            CosmosVQVAE,
         )
         from .models.cpmant import (
             CpmAntForCausalLM,

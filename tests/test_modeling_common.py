@@ -374,11 +374,11 @@ class ModelTesterMixin:
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_keep_in_fp32_modules(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if model_class._keep_in_fp32_modules is None:
                 self.skipTest(reason="Model class has no _keep_in_fp32_modules attribute defined")
 
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -395,7 +395,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config)
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
             if _keys_to_ignore_on_save is None:
                 continue
@@ -512,7 +513,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
+                copy_config = copy.deepcopy(config)  # init changes config in-place
+                model_to_save = model_class(copy_config)
                 model_to_save.save_pretrained(saved_model_path)
 
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
@@ -2688,7 +2690,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -2732,7 +2735,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -2770,7 +2774,8 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            copy_config = copy.deepcopy(config)  # init changes config in-place
+            model = model_class(copy_config).eval()
             model = model.to(torch_device)
 
             torch.manual_seed(0)
