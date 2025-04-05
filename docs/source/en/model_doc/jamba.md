@@ -75,6 +75,14 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --device 0
+```
+
+</hfoption>
+</hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
@@ -115,15 +123,6 @@ assistant_response = conversation.split(messages[-1]['content'])[1].strip()
 print(assistant_response)
 # Output: Seek and you shall find. The path is winding, but the journey is enlightening. What wisdom do you seek from the ancient echoes?
 ```
-</hfoption>
-<hfoption id="transformers-cli">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --device 0
-```
-
-</hfoption>
-</hfoptions>
 
 ## Notes
 
