@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch DeepseekVL model."""
 
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -47,6 +46,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel
+from ..sam.configuration_sam import SamVisionConfig
 from .configuration_deepseek_vl import DeepseekVLConfig
 
 
@@ -144,6 +144,58 @@ class DeepseekVLCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with Sam->DeepseekVLSam
+class DeepseekVLSamLayerNorm(nn.Module):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.data_format == "channels_last":
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
+# Copied from transformers.models.sam.modeling_sam.SamVisionNeck with Sam->DeepseekVLSam, DeepseekVLSamVisionConfig->SamVisionConfig
+class DeepseekVLSamVisionNeck(nn.Module):
+    def __init__(self, config: SamVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = DeepseekVLSamLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
+        self.layer_norm2 = DeepseekVLSamLayerNorm(config.output_channels, data_format="channels_first")
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.layer_norm1(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
+        return hidden_states
 
 
 class DeepseekVLSamVisionProj(nn.Module):
@@ -341,7 +393,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
 
             self.high_res_vision_model = AutoModel.from_config(config.high_res_vision_config)
-            self.high_res_vision_neck = deepcopy(self.high_res_vision_model.vision_encoder.neck)
+            self.high_res_vision_neck = DeepseekVLSamVisionNeck(config.high_res_vision_config)
             self.high_res_vision_proj = DeepseekVLSamVisionProj(
                 config.high_res_vision_config, output_size=self.output_size
             )
