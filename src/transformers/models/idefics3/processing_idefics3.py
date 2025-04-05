@@ -292,15 +292,25 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                image_rows = inputs.pop("rows", [[0] * len(text)])
-                image_cols = inputs.pop("cols", [[0] * len(text)])
+                image_rows = inputs.pop("rows")
+                image_cols = inputs.pop("cols")
+
+                # reshape the image rows and cols to match the shape of the images
+                image_rows_iter = iter(image_rows)
+                image_cols_iter = iter(image_cols)
+                reshaped_image_rows = [
+                    [next(image_rows_iter) for _ in range(len(sub_images))] for sub_images in images
+                ]
+                reshaped_image_cols = [
+                    [next(image_cols_iter) for _ in range(len(sub_images))] for sub_images in images
+                ]
 
                 fake_image_token = self.fake_image_token.content
                 image_token = self.image_token.content
                 global_img_token = self.global_image_tag
 
                 prompt_strings = []
-                for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
+                for sample, sample_rows, sample_cols in zip(text, reshaped_image_rows, reshaped_image_cols):
                     # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
                     image_prompt_strings = []
                     for n_rows, n_cols in zip(sample_rows, sample_cols):

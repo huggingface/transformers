@@ -211,12 +211,7 @@ class SmolVLMModel(Idefics3Model):
             )
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
+        if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
@@ -235,20 +230,6 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            batch_size, num_images, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values
-            pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-            # Remove padding images - padding images are full 0.
-            nb_values_per_image = pixel_values.shape[1:].numel()
-            real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-            if not any(real_images_inds):
-                # no images, leave one empty image.
-                real_images_inds[0] = True
-
-            pixel_values = pixel_values[real_images_inds].contiguous()
-
             # Handle the vision attention mask
             if pixel_attention_mask is None:
                 pixel_attention_mask = torch.ones(
@@ -256,12 +237,6 @@ class SmolVLMModel(Idefics3Model):
                     dtype=torch.bool,
                     device=pixel_values.device,
                 )
-            else:
-                # Remove padding images from the mask
-                pixel_attention_mask = pixel_attention_mask.view(
-                    batch_size * num_images, *pixel_attention_mask.shape[2:]
-                )
-                pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
 
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)

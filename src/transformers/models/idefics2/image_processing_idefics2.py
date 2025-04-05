@@ -29,7 +29,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_nested_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -86,18 +86,17 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images_list[0][0])
+        input_data_format = infer_channel_dimension_format(images[0])
 
     image_sizes = []
-    for images in images_list:
-        for image in images:
-            image_sizes.append(get_image_size(image, channel_dim=input_data_format))
+    for image in images:
+        image_sizes.append(get_image_size(image, channel_dim=input_data_format))
 
     max_height, max_width = max_across_indices(image_sizes)
     return (max_height, max_width)
@@ -284,7 +283,6 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
@@ -299,13 +297,6 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -313,40 +304,28 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        batch_size = len(images)
-        max_num_images = max(len(images_) for images_ in images)
         input_data_format = (
-            infer_channel_dimension_format(images[0][0]) if input_data_format is None else input_data_format
+            infer_channel_dimension_format(images[0]) if input_data_format is None else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
 
-        def empty_image(size, input_data_format):
-            if input_data_format == ChannelDimension.FIRST:
-                return np.zeros((3, *size), dtype=np.uint8)
-            elif input_data_format == ChannelDimension.LAST:
-                return np.zeros((*size, 3), dtype=np.uint8)
-            raise ValueError("Invalid channel dimension format.")
-
-        padded_images_list = [
-            [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
+        padded_masks = (
+            [make_pixel_mask(image, output_size=pad_size, input_data_format=input_data_format) for image in images]
+            if return_pixel_mask
+            else None
+        )
+        images = [
+            self._pad_image(
+                image,
+                pad_size,
+                constant_values=constant_values,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image in images
         ]
-        padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
 
-        for batch_idx in range(batch_size):
-            for sample_idx, image in enumerate(images[batch_idx]):
-                padded_images_list[batch_idx][sample_idx] = self._pad_image(
-                    image,
-                    pad_size,
-                    constant_values=constant_values,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                padded_masks[batch_idx][sample_idx] = make_pixel_mask(
-                    image, output_size=pad_size, input_data_format=input_data_format
-                )
-
-        padded_masks = padded_masks if return_pixel_mask else None
-        return padded_images_list, padded_masks
+        return images, padded_masks
 
     def _crop(
         self,
@@ -471,9 +450,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
 
-        images_list = make_nested_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
-        if not valid_images(images_list[0]):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -491,12 +470,12 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         )
 
         if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+            images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images = [to_numpy_array(image) for image in images]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -504,60 +483,44 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_image_splitting:
-            new_images_list = []
-            for images in images_list:
-                new_images = []
-                for image in images:
-                    new_images.extend(self.split_image(image, input_data_format))
-                new_images_list.append(new_images)
-            images_list = new_images_list
+            new_images = []
+            for image in images:
+                new_images.extend(self.split_image(image, input_data_format))
+            images = new_images
 
         if do_resize:
-            images_list = [
-                [
-                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
             ]
 
         if do_rescale:
-            images_list = [
-                [
-                    self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
             ]
 
         if do_normalize:
-            images_list = [
-                [
-                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
             ]
 
-        pixel_attention_mask = None
         if do_pad:
-            images_list, pixel_attention_mask = self.pad(
-                images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+            images, pixel_attention_mask = self.pad(
+                images, return_pixel_mask=True, input_data_format=input_data_format
             )
 
         if data_format is not None:
-            images_list = [
-                [
-                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                for image in images
             ]
 
-        data = {"pixel_values": np.array(images_list) if do_pad else images_list}  # Faster tensor conversion
+        data = {"pixel_values": np.array(images) if do_pad else images}  # Faster tensor conversion
         if pixel_attention_mask is not None:
             data["pixel_attention_mask"] = np.array(pixel_attention_mask) if do_pad else pixel_attention_mask
 

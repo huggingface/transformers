@@ -35,7 +35,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_nested_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -148,20 +148,19 @@ def get_resize_output_image_size(
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+        input_data_format = infer_channel_dimension_format(images[0], num_channels=(1, 3, 4))
 
     max_height = max_width = float("-inf")
-    for images in images_list:
-        for image in images:
-            height, width = get_image_size(image, channel_dim=input_data_format)
-            max_height = max(height, max_height)
-            max_width = max(width, max_width)
+    for image in images:
+        height, width = get_image_size(image, channel_dim=input_data_format)
+        max_height = max(height, max_height)
+        max_width = max(width, max_width)
     return (max_height, max_width)
 
 
@@ -525,7 +524,6 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
@@ -539,13 +537,6 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -553,48 +544,30 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        batch_size = len(images)
-        max_num_images = max(len(images_) for images_ in images)
         input_data_format = (
-            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4))
+            infer_channel_dimension_format(images[0], num_channels=(1, 3, 4))
             if input_data_format is None
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
 
-        if input_data_format == ChannelDimension.FIRST:
-            n_channels = images[0][0].shape[0]
-        elif input_data_format == ChannelDimension.LAST:
-            n_channels = images[0][0].shape[-1]
-        else:
-            raise ValueError("Invalid channel dimension format.")
-
-        def empty_image(size, input_data_format):
-            if input_data_format == ChannelDimension.FIRST:
-                return np.zeros((n_channels, *size), dtype=np.uint8)
-            elif input_data_format == ChannelDimension.LAST:
-                return np.zeros((*size, n_channels), dtype=np.uint8)
-
-        padded_images_list = [
-            [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
+        padded_masks = (
+            [make_pixel_mask(image, output_size=pad_size, input_data_format=input_data_format) for image in images]
+            if return_pixel_mask
+            else None
+        )
+        images = [
+            self._pad_image(
+                image,
+                pad_size,
+                constant_values=constant_values,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image in images
         ]
-        padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
 
-        for batch_idx in range(batch_size):
-            for sample_idx, image in enumerate(images[batch_idx]):
-                padded_images_list[batch_idx][sample_idx] = self._pad_image(
-                    image,
-                    pad_size,
-                    constant_values=constant_values,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                padded_masks[batch_idx][sample_idx] = make_pixel_mask(
-                    image, output_size=pad_size, input_data_format=input_data_format
-                )
-
-        padded_masks = padded_masks if return_pixel_mask else None
-        return padded_images_list, padded_masks
+        return images, padded_masks
 
     def preprocess(
         self,
@@ -683,9 +656,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        images_list = make_nested_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
-        if not valid_images(images_list[0]):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -703,25 +676,18 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         )
 
         # save the palettes for conversion to RGB
-        palettes_list = [
-            [im.getpalette() if isinstance(im, Image.Image) and im.mode == "P" else None for im in images]
-            for images in images_list
-        ]
+        palettes = [im.getpalette() if isinstance(im, Image.Image) and im.mode == "P" else None for im in images]
 
         # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images = [to_numpy_array(image) for image in images]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
-            images_list = [
-                [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images] for images in images_list
-            ]
+            images = [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images]
         elif input_data_format == ChannelDimension.FIRST:
-            images_list = [
-                [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
-            ]
+            images = [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -729,121 +695,90 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(images[0], num_channels=(1, 3, 4))
 
         if do_resize:
-            images_list = [
-                [
-                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
             ]
-
         if do_image_splitting:
             # We first resize both height and width of each image to the nearest max_image_size multiple, disregarding the aspect ratio
             # for size=(10, max_image_size) -> rescaled_size=(max_image_size, max_image_size)
             # for size=(11, max_image_size+1) -> rescaled_size=(max_image_size, max_image_size*2)
-            images_list = [
-                [
-                    self.resize_for_vision_encoder(
-                        image, max_image_size["longest_edge"], resample=resample, input_data_format=input_data_format
-                    )
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.resize_for_vision_encoder(
+                    image, max_image_size["longest_edge"], resample=resample, input_data_format=input_data_format
+                )
+                for image in images
             ]
-            images_list_split_arrays = []
-            palettes_list_split_arrays = []
-            images_list_rows = []
-            images_list_cols = []
-            for images, palettes in zip(images_list, palettes_list):
-                split_image_arrays = []
-                split_palettes_arrays = []
-                image_rows = []
-                image_cols = []
-                for image, palette in zip(images, palettes):
-                    split_image_array, rows, cols = self.split_image(
-                        image,
-                        max_image_size=max_image_size,
-                        input_data_format=input_data_format,
-                    )
-                    split_image_arrays.extend(split_image_array)
-                    split_palettes_arrays.extend([palette] * len(split_image_array))
-                    image_rows.append(rows)
-                    image_cols.append(cols)
-                images_list_split_arrays.append(split_image_arrays)
-                palettes_list_split_arrays.append(split_palettes_arrays)
-                images_list_rows.append(image_rows)
-                images_list_cols.append(image_cols)
-            images_list = images_list_split_arrays
-            palettes_list = palettes_list_split_arrays
+
+            split_image_arrays = []
+            split_palettes_arrays = []
+            image_rows = []
+            image_cols = []
+            for image, palette in zip(images, palettes):
+                split_image_array, rows, cols = self.split_image(
+                    image,
+                    max_image_size=max_image_size,
+                    input_data_format=input_data_format,
+                )
+                split_image_arrays.extend(split_image_array)
+                split_palettes_arrays.extend([palette] * len(split_image_array))
+                image_rows.append(rows)
+                image_cols.append(cols)
+            images = split_image_arrays
+            palettes = split_palettes_arrays
         else:
             # We square the images to max_image_size
-            images_list = [
-                [
-                    self.resize(
-                        image=image,
-                        size={"height": max_image_size["longest_edge"], "width": max_image_size["longest_edge"]},
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.resize(
+                    image=image,
+                    size={"height": max_image_size["longest_edge"], "width": max_image_size["longest_edge"]},
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
+                for image in images
             ]
-            images_list_rows = [[0] * len(images) for images in images_list]
-            images_list_cols = [[0] * len(images) for images in images_list]
+
+            image_rows = [0 for _ in images]
+            image_cols = [0 for _ in images]
 
         if do_convert_rgb:
-            images_list = [
-                [convert_to_rgb(img, palette) for img, palette in zip(images, palettes)]
-                for images, palettes in zip(images_list, palettes_list)
-            ]
+            images = [convert_to_rgb(img, palette) for img, palette in zip(images, palettes)]
 
         if do_rescale:
-            images_list = [
-                [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-                for images in images_list
-            ]
+            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
 
         if do_normalize:
-            images_list = [
-                [
-                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
             ]
 
-        pixel_attention_mask = None
         if do_pad:
-            images_list, pixel_attention_mask = self.pad(
-                images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+            images, pixel_attention_mask = self.pad(
+                images, return_pixel_mask=True, input_data_format=input_data_format
             )
 
         if data_format is not None:
-            images_list = [
-                [
-                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
+            images = [
+                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                for image in images
             ]
 
         # Faster tensor conversion
-        data = {"pixel_values": np.array(images_list) if do_pad and return_tensors is not None else images_list}
+        data = {"pixel_values": np.array(images) if do_pad and return_tensors is not None else images}
         if pixel_attention_mask is not None:
             data["pixel_attention_mask"] = (
                 np.array(pixel_attention_mask) if do_pad and return_tensors is not None else pixel_attention_mask
             )
-
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
         # This is needed for generating correct text inputs in the processor - we don't pad to the max number of images
         if return_row_col_info:
-            encoding["rows"] = images_list_rows
-            encoding["cols"] = images_list_cols
+            encoding["rows"] = image_rows
+            encoding["cols"] = image_cols
 
         return encoding
 
