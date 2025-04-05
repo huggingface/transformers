@@ -339,8 +339,8 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     num_training_steps: int,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
-    min_lr: float = None,
-    min_lr_rate: float = None,
+    min_lr: Optional[float] = None,
+    min_lr_rate: Optional[float] = None,
 ):
     """
     Create a schedule with a learning rate that decreases following the values of the cosine function between the
@@ -582,6 +582,7 @@ def get_scheduler(
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
+    # wsd scheduler requires either num_training_steps or num_stable_steps
     if name == SchedulerType.WARMUP_STABLE_DECAY:
         return schedule_func(
             optimizer,

@@ -99,7 +99,7 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    batch_size=1,
+    max_batch_size=1,
     # 캐시를 재사용할 계획이 있는 경우, 모든 경우에 충분한 캐시 길이를 설정해야 합니다
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
     device=model.device,
@@ -109,7 +109,7 @@ outputs = model.generate(**input_ids, past_key_values=past_key_values)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2']
 
-# 생성된 텍스트와 동일한 캐시 객체를 전달하여, 중단한 곳에서 생성을 계속합니다. 
+# 생성된 텍스트와 동일한 캐시 객체를 전달하여, 중단한 곳에서 생성을 계속합니다.
 # 다중 턴 대화의 경우, 생성된 텍스트에 새로운 사용자 입력을 추가할 수 있습니다.
 new_input_ids = outputs
 outputs = model.generate(new_input_ids, past_key_values=past_key_values)

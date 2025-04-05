@@ -23,7 +23,7 @@ import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -168,7 +168,7 @@ def define_sagemaker_information():
     return sagemaker_object
 
 
-def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
+def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
@@ -270,17 +270,17 @@ def cached_file(
 
 def cached_files(
     path_or_repo_id: Union[str, os.PathLike],
-    filenames: List[str],
+    filenames: list[str],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     subfolder: str = "",
     repo_type: Optional[str] = None,
-    user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    user_agent: Optional[Union[str, dict[str, str]]] = None,
     _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
@@ -378,7 +378,7 @@ def cached_files(
             if not os.path.isfile(resolved_file):
                 if _raise_exceptions_for_missing_entries and filename != os.path.join(subfolder, "config.json"):
                     revision_ = "main" if revision is None else revision
-                    raise EnvironmentError(
+                    raise OSError(
                         f"{path_or_repo_id} does not appear to have a file named {filename}. Checkout "
                         f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
@@ -410,7 +410,7 @@ def cached_files(
                 elif not _raise_exceptions_for_missing_entries:
                     file_counter += 1
                 else:
-                    raise EnvironmentError(f"Could not locate {filename} inside {path_or_repo_id}.")
+                    raise OSError(f"Could not locate {filename} inside {path_or_repo_id}.")
 
     # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
     if file_counter == len(full_filenames):
@@ -453,14 +453,14 @@ def cached_files(
     except Exception as e:
         # We cannot recover from them
         if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
-            raise EnvironmentError(
+            raise OSError(
                 f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
                 "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
                 "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
                 "`token=<your_token>`"
             ) from e
         elif isinstance(e, RevisionNotFoundError):
-            raise EnvironmentError(
+            raise OSError(
                 f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
                 "for this model name. Check the model page at "
                 f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
@@ -478,7 +478,7 @@ def cached_files(
         if isinstance(e, GatedRepoError):
             if not _raise_exceptions_for_gated_repo:
                 return None
-            raise EnvironmentError(
+            raise OSError(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
                 f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
             ) from e
@@ -488,7 +488,7 @@ def cached_files(
             # Here we only raise if both flags for missing entry and connection errors are True (because it can be raised
             # even when `local_files_only` is True, in which case raising for connections errors only would not make sense)
             elif _raise_exceptions_for_missing_entries:
-                raise EnvironmentError(
+                raise OSError(
                     f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
                     f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
@@ -498,9 +498,7 @@ def cached_files(
         elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise EnvironmentError(
-                f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}"
-            )
+            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
 
     resolved_files = [
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
@@ -632,7 +630,7 @@ def has_file(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
     revision: Optional[str] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     *,
     local_files_only: bool = False,
@@ -707,19 +705,17 @@ def has_file(
         return True
     except GatedRepoError as e:
         logger.error(e)
-        raise EnvironmentError(
+        raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
             "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
-        raise EnvironmentError(
-            f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'."
-        ) from e
+        raise OSError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.") from e
     except RevisionNotFoundError as e:
         logger.error(e)
-        raise EnvironmentError(
+        raise OSError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
             f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
         ) from e
@@ -780,7 +776,7 @@ class PushToHubMixin:
         self,
         working_dir: Union[str, os.PathLike],
         repo_id: str,
-        files_timestamps: Dict[str, float],
+        files_timestamps: dict[str, float],
         commit_message: Optional[str] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
@@ -867,7 +863,7 @@ class PushToHubMixin:
         safe_serialization: bool = True,
         revision: Optional[str] = None,
         commit_description: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[list[str]] = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -1101,7 +1097,7 @@ def get_checkpoint_shard_files(
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
-    with open(index_filename, "r") as f:
+    with open(index_filename) as f:
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
@@ -1136,7 +1132,7 @@ def get_checkpoint_shard_files(
 
 def create_and_tag_model_card(
     repo_id: str,
-    tags: Optional[List[str]] = None,
+    tags: Optional[list[str]] = None,
     token: Optional[str] = None,
     ignore_metadata_errors: bool = False,
 ):
@@ -1150,7 +1146,7 @@ def create_and_tag_model_card(
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
-        ignore_metadata_errors (`str`):
+        ignore_metadata_errors (`bool`, *optional*, defaults to `False`):
             If True, errors while parsing the metadata section will be ignored. Some information might be lost during
             the process. Use it at your own risk.
     """
