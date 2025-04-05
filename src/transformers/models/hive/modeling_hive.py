@@ -341,7 +341,7 @@ class HiveDecoderLayer(nn.Module):
         return outputs
 
 
-Hive_START_DOCSTRING = r"""
+HIVE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
