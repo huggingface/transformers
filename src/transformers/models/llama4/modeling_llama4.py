@@ -769,7 +769,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
 
         if past_key_values is not None and past_key_values.is_compileable:
-            target_length = past_key_values.max_cache_len
+            target_length = past_key_values.get_max_cache_shape
         else:
             target_length = attention_mask.shape[-1]
 
@@ -782,7 +782,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
-                    key_length=past_key_values.max_cache_len,
+                    key_length=past_key_values.get_max_cache_shape(),
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
