@@ -101,7 +101,7 @@ else:
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
+            ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
