@@ -47,7 +47,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel
-from ..sam.modeling_sam import SamVisionEncoder
 from .configuration_deepseek_vl import DeepseekVLConfig
 
 
@@ -340,10 +339,9 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         if self.use_high_res_vision:
             self.output_size = config.low_res_vision_config.image_size // config.low_res_vision_config.patch_size
             self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
-            # TODO: update this when https://github.com/huggingface/transformers/pull/36493 is merged
-            # self.high_res_vision_model = AutoModel.from_config(config.high_res_vision_config)
-            self.high_res_vision_model = SamVisionEncoder(config.high_res_vision_config)
-            self.high_res_vision_neck = deepcopy(self.high_res_vision_model.neck)
+
+            self.high_res_vision_model = AutoModel.from_config(config.high_res_vision_config)
+            self.high_res_vision_neck = deepcopy(self.high_res_vision_model.vision_encoder.neck)
             self.high_res_vision_proj = DeepseekVLSamVisionProj(
                 config.high_res_vision_config, output_size=self.output_size
             )
