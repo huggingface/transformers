@@ -26,7 +26,7 @@ if is_torch_available():
     import torch
     from torch.nn import ModuleList
 else:
-    ModuleList = None
+    ModuleList = str
 
 
 class HfQuantizer(ABC):
