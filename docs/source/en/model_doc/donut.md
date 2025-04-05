@@ -85,31 +85,26 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```py
-#pip install torchao
+# pip install datasets torchao
 import torch
-from transformers import DonutProcessor, VisionEncoderDecoderModel, TorchAoConfig
-from PIL import Image
+from datasets import load_dataset
+from transformers import TorchAoConfig, AutoProcessor, AutoModelForVision2Seq
 
-model_name = "naver-clova-ix/donut-base-finetuned-docvqa"
-processor = DonutProcessor.from_pretrained(model_name)
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-model = VisionEncoderDecoderModel.from_pretrained(
-    model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
+processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-image = Image.open("path/to/document.png")
-question = "What is the purchase amount?"
-
+dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+image = dataset[0]["image"]
+question = "What time is the coffee break?"
 task_prompt = f"<s_docvqa><s_question>{question}</s_question><s_answer>"
-inputs = processor(image, task_prompt, return_tensors="pt").to(device)
+inputs = processor(image, task_prompt, return_tensors="pt")
 
-outputs = model.generate(**inputs, max_length=512)
+outputs = model.generate(
+    input_ids=inputs.input_ids,
+    pixel_values=inputs.pixel_values,
+    max_length=512
+)
 answer = processor.decode(outputs[0], skip_special_tokens=True)
 print(answer)
 ```
