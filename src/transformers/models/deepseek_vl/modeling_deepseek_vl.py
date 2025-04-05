@@ -481,7 +481,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             flash_attn_kwargs=flash_attn_kwargs,
         )
