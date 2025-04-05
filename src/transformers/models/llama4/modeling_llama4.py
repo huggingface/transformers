@@ -1472,7 +1472,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         # encoders
         self.model = Llama4VisionEncoder(config)
-        # self.model = self.model.to(torch.bfloat16)
         self.vision_adapter = Llama4VisionPixelShuffleMLP(config)
         self.post_init()
 
