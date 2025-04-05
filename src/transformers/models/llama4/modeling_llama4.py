@@ -1489,8 +1489,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
         r"""
 
-        Returns:
-
         Example:
 
         ```python
