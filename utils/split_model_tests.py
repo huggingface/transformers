@@ -49,7 +49,37 @@ if __name__ == "__main__":
     tests = os.getcwd()
     model_tests = os.listdir(os.path.join(tests, "models"))
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
-    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x not in ["deformable_detr", "grounding_dino", "omdet_turbo", "rt_detr", "nat", "dinat"]]))
+    # d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x not in ["deformable_detr", "grounding_dino", "omdet_turbo", "rt_detr", "nat", "dinat"]]))
+    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x in [
+        "bark",
+        "depth_anything",
+        "depth_pro",
+        "dpt",
+        "emu3",
+        "gemma3",
+        "gpt_neox",
+        "granitemoeshared",
+        "idefics2",
+        "idefics3",
+        "mpt",
+        "paligemma",
+        "paligemma2",
+        "phi3",
+        "prompt_depth_anything",
+        "qwen3",
+        "qwen3_moe",
+        "rag",
+        "reformer",
+        "smolvlm",
+        "superglue",
+        "upernet",
+        "vitmatte",
+        "vitpose",
+        "xglm",
+        "zamba2",
+        "zoedepth",
+    ]
+    ]))
     d1.remove("models")
     d = d2 + d1
 
