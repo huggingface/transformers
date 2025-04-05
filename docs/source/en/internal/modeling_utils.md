@@ -33,23 +33,6 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pytorch_utils.Conv1D
 
-[[autodoc]] modeling_utils.PoolerStartLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerEndLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerAnswerClass
-    - forward
-
-[[autodoc]] modeling_utils.SquadHeadOutput
-
-[[autodoc]] modeling_utils.SQuADHead
-    - forward
-
-[[autodoc]] modeling_utils.SequenceSummary
-    - forward
-
 ## PyTorch Helper Functions
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward

@@ -5293,6 +5293,10 @@ class PoolerStartLogits(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerStartLogits` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerStartLogits`."
+        )
 
     def forward(
         self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
@@ -5335,6 +5339,10 @@ class PoolerEndLogits(nn.Module):
         self.activation = nn.Tanh()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense_1 = nn.Linear(config.hidden_size, 1)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerEndLogits` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerEndLogits`."
+        )
 
     def forward(
         self,
@@ -5402,6 +5410,10 @@ class PoolerAnswerClass(nn.Module):
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.activation = nn.Tanh()
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerAnswerClass` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerAnswerClass`."
+        )
 
     def forward(
         self,
@@ -5483,6 +5495,12 @@ class SquadHeadOutput(ModelOutput):
     end_top_index: Optional[torch.LongTensor] = None
     cls_logits: Optional[torch.FloatTensor] = None
 
+    def __post_init__(self):
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SquadHeadOutput` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSquadHeadOutput`."
+        )
+
 
 class SQuADHead(nn.Module):
     r"""
@@ -5502,6 +5520,11 @@ class SQuADHead(nn.Module):
         self.start_logits = PoolerStartLogits(config)
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
+
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SQuADHead` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSQuADHead`."
+        )
 
     @replace_return_docstrings(output_type=SquadHeadOutput, config_class=PretrainedConfig)
     def forward(
@@ -5655,6 +5678,11 @@ class SequenceSummary(nn.Module):
         self.last_dropout = Identity()
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SequenceSummary` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSequenceSummary`."
+        )
 
     def forward(
         self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
