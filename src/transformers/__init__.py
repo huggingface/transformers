@@ -565,8 +565,8 @@ _import_structure = {
     "models.llama4": [
         "Llama4Config",
         "Llama4Processor",
-        "Llama4VisionConfig",
         "Llama4TextConfig",
+        "Llama4VisionConfig",
     ],
     "models.llava": [
         "LlavaConfig",
