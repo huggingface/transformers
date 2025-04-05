@@ -23,7 +23,7 @@ specific language governing permissions and limitations under the License. -->
 
 [Donut (Document Understanding Transformer)](https://huggingface.co/papers2111.15664) is a visual document understanding model that doesn't require an Optical Character Recognition (OCR) engine. Unlike traditional approaches that extract text using OCR before processing, Donut employs an end-to-end Transformer-based architecture to directly analyze document images. This eliminates OCR-related inefficiencies making it more accurate and adaptable to diverse languages and formats. 
 
-Donut features a multimodal sequence-to-sequence design, combining a Swin Transformer as its vision encoder and BART as its text decoder. The vision encoder converts document images into embeddings, which the decoder then processes into meaningful text sequences. This architecture enhances efficiency in tasks such as document classification, form understanding, and visual question answering.
+Donut features vision encoder ([Swin](./swin)) and a text decoder ([BART](./bart)). Swin converts document images into embeddings and BART processes them into meaningful text sequences.
 
 You can find all the original DONUT checkpoints under the [DONUT](https://huggingface.co/models?other=donut) collection in Modelhub.
 
