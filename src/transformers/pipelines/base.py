@@ -981,6 +981,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
+        if torch.distributed.is_initialized():
+            self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output

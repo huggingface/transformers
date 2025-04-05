@@ -61,6 +61,21 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
         return [single_size] * blocks
 
 
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+}
+
+
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     """
     When weights are packed (gate_up_proj), we need to make sure each shard gets its correct share.
@@ -106,6 +121,12 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
         tensors_slices += range(block_offset + start, block_offset + stop)
         block_offset += block_size
 
+    slice_dtype = slice_.get_dtype()
+    # Handle F8_E4M3 dtype by converting to float16 before slicing
+    # Without upcasting, the slicing causes : RuntimeError: "index_cpu" not implemented for 'Float8_e4m3fn'
+    if slice_dtype == "F8_E4M3":
+        slice_ = slice_[...].to(torch.float16)
+
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
     elif dim == 1 or dim == -2:
@@ -114,7 +135,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
         tensor = slice_[..., tensors_slices]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return tensor
+    return tensor.to(str_to_torch_dtype[slice_dtype])
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
@@ -199,11 +220,12 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if isinstance(inputs[0], DTensor):
-            inputs[0] = inputs[0].to_local()
+            inputs = inputs[0].to_local()
         return inputs
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        # this op cannot be asynch, otherwise it completely breaks the outputs of models
         torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False)
         return outputs
 
@@ -266,7 +288,7 @@ class ColwiseParallel(TensorParallelLayer):
 
         # transform the input layouts to the desired layouts of ColwiseParallel
         if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -291,7 +313,7 @@ class ColwiseParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
         if outputs.placements != output_layouts:
-            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         # back to local tensor
         return outputs.to_local() if use_local_output else outputs
 
@@ -343,16 +365,6 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
 
-    @staticmethod
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        input_tensor = inputs[0]
-        if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
-
-        if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
-        return input_tensor
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
         # means Rowwise as nn.Linear is input * weight^T + bias, where
@@ -372,12 +384,28 @@ class RowwiseParallel(TensorParallelLayer):
         return nn.Parameter(parameter)
 
     @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        if hasattr(mod, "bias") and mod.bias is not None:
+            mod._bias = mod.bias
+            mod.bias = None
+
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
+
+    @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # Rowwise sharding produces partial output, depending on output layouts:
         # 1. to replicate -> allreduce
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        if hasattr(mod, "_bias"):
+            outputs += mod._bias
         # back to local tensor if use_local_output is True
         return outputs.to_local() if use_local_output else outputs
 
@@ -418,6 +446,90 @@ class PackedRowwiseParallel(RowwiseParallel):
         return nn.Parameter(parameter)
 
 
+class SequenceParallel(TensorParallelLayer):
+    """
+    SequenceParallel replicates a compatible ``nn.Module`` parameters and runs the sharded computation with
+    input sharded on the sequence dimension. This currently supports ``nn.LayerNorm``, ``nn.Dropout``, and the
+    `RMSNorm python implementation <https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34>`__
+
+    This style implements the operation that is described in the paper
+    `Reducing Activation Recomputation in Large Transformer Models <https://arxiv.org/abs/2205.05198>`__
+
+    If the input passed in to this ``nn.Module`` is a :class:`torch.Tensor`, it assumes that the input is already sharded
+    on the sequence dimension and converts the input to a :class:`DTensor` sharded on the sequence dimension. If the input
+    passed in to this ``nn.Module`` is already a :class:`DTensor` but is not sharded on the sequence dimension, it would
+    redistribute the input to be sharded on the sequence dimension.
+
+    The output of the ``nn.Module`` will be sharded on the sequence dimension.
+
+    Keyword Args:
+        sequence_dim (int, optional):
+            The sequence dimension of the input tensor for the ``nn.Module``, this is used to annotate the input tensor to
+            become a DTensor that is sharded on the sequence dimension, default: 1.
+        use_local_output (bool, optional):
+            Whether to use local :class:`torch.Tensor` instead of :class:`DTensor` for the module output, default: False.
+    Returns:
+        A :class:`ParallelStyle` object that represents Sequence Parallel of the ``nn.Module``.
+
+    Example::
+        >>> # xdoctest: +SKIP(failing)
+        >>> from torch.distributed.tensor.parallel import parallelize_module, SequenceParallel
+        >>> from torch.distributed.device_mesh import init_device_mesh
+        >>> ...
+        >>> m = Model(...)  # m is a nn.Module that contains a "norm" nn.LayerNorm submodule
+        >>> tp_mesh = init_device_mesh("cuda", (8,))
+        >>>
+        >>> # By default, the input of the "norm" will be converted to DTensor that shards on the sequence dim
+        >>> # and the output of "norm" will return a sharded on sequence dimension :class:`DTensor`.
+        >>>
+        >>> sharded_mod = parallelize_module(m, tp_mesh, {"norm": SequenceParallel()}),
+        >>> ...
+
+    .. note:: SequenceParallel style assumes ones initialization if there are weights in the nn.Module (i.e.
+        ``nn.LayerNorm`` or ``RMSNorm``, and they by default have ones initialization). If you have custom
+        inits for the weights on those modules, you need to broadcast the weights before/after parallelizing
+        to ensure that they are replicated.
+    """
+
+    def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = False, use_dtensor=False):
+        super().__init__()
+        self.input_layouts = (Replicate(),)
+        self.desired_input_layouts = (Shard(1),)
+        self.output_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = True
+        self.sequence_sharding = (Shard(sequence_dim),)
+        self.use_local_output = use_local_output
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        outputs = outputs.redistribute(
+            placements=(Replicate(),), async_op=True
+        )  # maybe we have to replicate ? because next layer is not sharded
+        return outputs.to_local()  # if use_local_output else outputs
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
+        # means Colwise as Linear is input * weight^T + bias, where
+        # weight would become Shard(1)
+        parameter = param[:]
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
+        return nn.Parameter(parameter)
+
+
 SUPPORTED_TP_STYLES = {
     "colwise",
     "rowwise",
@@ -428,6 +540,7 @@ SUPPORTED_TP_STYLES = {
     "local",
     "gather",
     "local_packed_rowwise",
+    "sequence_parallel",
 }
 
 
@@ -459,6 +572,8 @@ def translate_to_torch_parallel_style(style: str):
         return GatherParallel()
     elif style == "local_packed_rowwise":
         return PackedRowwiseParallel(use_dtensor=False)
+    elif style == "sequence_parallel":
+        return SequenceParallel()
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
 
@@ -518,6 +633,7 @@ def shard_and_distribute_module(
     tp_plan = model._tp_plan
     module_to_tp = model.get_submodule(param_name)
     current_module_plan = None
+    rank = int(rank)
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
         current_module_plan = tp_plan[generic_param_name]
@@ -531,12 +647,18 @@ def shard_and_distribute_module(
         module_to_tp._is_hooked = True
 
     if current_module_plan is not None:
-        tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        param = tp_layer.partition_tensor(
-            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-        )
+        try:
+            tp_layer = translate_to_torch_parallel_style(current_module_plan)
+            param = tp_layer.partition_tensor(
+                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+            )
+        except NotImplementedError as e:
+            print(
+                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+            )
     else:
         # TODO log no plan modules in set
+        # print("No plan for", parameter_name,end ="\n")
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()

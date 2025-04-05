@@ -562,6 +562,12 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.llama4": [
+        "Llama4Config",
+        "Llama4Processor",
+        "Llama4TextConfig",
+        "Llama4VisionConfig",
+    ],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -1354,6 +1360,7 @@ else:
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
+    _import_structure["models.llama4"].append("Llama4ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -2508,6 +2515,15 @@ else:
             "GlmForTokenClassification",
             "GlmModel",
             "GlmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llama4"].extend(
+        [
+            "Llama4ForCausalLM",
+            "Llama4ForConditionalGeneration",
+            "Llama4TextModel",
+            "Llama4VisionModel",
+            "Llama4PreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -5807,6 +5823,12 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.llama4 import (
+        Llama4Config,
+        Llama4Processor,
+        Llama4TextConfig,
+        Llama4VisionConfig,
+    )
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -6646,6 +6668,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrImageProcessorFast
         from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
+        from .models.llama4 import Llama4ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -7826,6 +7849,13 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.llama4 import (
+            Llama4ForCausalLM,
+            Llama4ForConditionalGeneration,
+            Llama4PreTrainedModel,
+            Llama4TextModel,
+            Llama4VisionModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
