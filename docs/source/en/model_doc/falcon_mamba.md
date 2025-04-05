@@ -110,11 +110,6 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-## Notes
-
-- FalconMamba is based on the Mamba architecture. The same [tips and best practices](./mamba) for Mamba models are relevant here.
-- The architecture is compatible with `torch.compile` for faster generation via `model = torch.compile(model)`.
-
 ## FalconMambaConfig
 
 [[autodoc]] FalconMambaConfig
