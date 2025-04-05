@@ -1,5 +1,4 @@
 <!--Copyright 2024 The HuggingFace Team. All rights reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
@@ -9,39 +8,32 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
-
 -->
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # ColPali
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ColPali](https://arxiv.org/abs/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image, capturing not just the text but also the layout, tables, charts, and other visual elements. This approach allows it to understand documents more holistically. It leverages Vision Language Models (VLMs) to create detailed embeddings of these page images, enabling efficient and accurate retrieval. By integrating visual and textual data, ColPali offers a more comprehensive understanding of documents, making it particularly effective for complex documents where visual context is crucial.
 
-## Overview
+You can find all Hf-native ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
-The *ColPali* model was proposed in [ColPali: Efficient Document Retrieval with Vision Language Models](https://doi.org/10.48550/arXiv.2407.01449) by **Manuel Faysse***, **Hugues Sibille***, **Tony Wu***, Bilel Omrani, Gautier Viaud, Céline Hudelot, Pierre Colombo (* denotes equal contribution). Work lead by ILLUIN Technology.
+> [!TIP]
+> The orginal ColPali checkpoints are not natively supported by transformers 🤗. To use them you have to install [colpali-engine](https://github.com/illuin-tech/colpali). You can find the original checkpoints [here](https://huggingface.co/collections/vidore/colpali-models-673a5676abddf84949ce3180).
 
-In our proposed *ColPali* approach, we leverage VLMs to construct efficient multi-vector embeddings directly from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity between these document embeddings and the corresponding query embeddings, using the late interaction method introduced in ColBERT.
+> [!TIP]
+> Click on the ColPali models in the right sidebar for more examples of how to use ColPali for Image Retrieval.
 
-Using *ColPali* removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
+<hfoptions id="usage">
+<hfoption id="ImageRetrieval">
 
-## Resources
-
-- The *ColPali* arXiv paper can be found [here](https://doi.org/10.48550/arXiv.2407.01449). 📄
-- The official blog post detailing ColPali can be found [here](https://huggingface.co/blog/manu/colpali). 📝
-- The original model implementation code for the ColPali model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
-- Cookbooks for learning to use the transformers-native version of *ColPali*, fine-tuning, and similarity maps generation can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
-
-This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) and [@yonigozlan](https://huggingface.co/yonigozlan).
-
-## Usage
-
-This example demonstrates how to use *ColPali* to embed both queries and images, calculate their similarity scores, and identify the most relevant matches. For a specific query, you can retrieve the top-k most similar images by selecting the ones with the highest similarity scores.
-
-```python
+```py
 import torch
 from PIL import Image
 
@@ -79,6 +71,12 @@ with torch.no_grad():
 # Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
 ```
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- The scores output by the `score_retrieval` method is a 2D tensor. First dimension is the number of queries and the second dimension is the number of images. The higher the score, the more similar the query and image are.
 
 ## ColPaliConfig
 
