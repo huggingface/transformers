@@ -395,12 +395,3 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 [[autodoc]] Llama4ForCausalLM
     - forward
 
-## Llama4ForSequenceClassification
-
-[[autodoc]] Llama4ForSequenceClassification
-    - forward
-
-## Llama4ForTokenClassification
-
-[[autodoc]] Llama4ForTokenClassification
-    - forward

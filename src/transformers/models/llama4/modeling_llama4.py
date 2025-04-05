@@ -505,7 +505,11 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.text_config.initializer_range
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1463,7 +1467,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         # encoders
         self.model = Llama4VisionEncoder(config)
-        self.model = self.model.to(torch.bfloat16)
+        # self.model = self.model.to(torch.bfloat16)
         self.vision_adapter = Llama4VisionPixelShuffleMLP(config)
         self.post_init()
 
@@ -1571,6 +1575,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
+
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {}
