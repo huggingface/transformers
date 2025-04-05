@@ -505,7 +505,11 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.text_config.initializer_range
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -742,7 +746,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask, attention_mask  # flash does not support chunked attn
+                return attention_mask, attention_mask  # flash does not support chunked attn TODO support flash
+            return None, None
+
+        if self.config._attn_implementation not in ["sdpa", "flex_attention", "eager"]:
             return None, None
 
         sequence_length = input_tensor.shape[1]
@@ -804,8 +811,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if sequence_length == 1:
                 chunked_attention_mask = chunked_attention_mask[-1:]
             if self.config._attn_implementation == "eager":
-                chunked_attention_mask = chunked_attention_mask[None,None,:,:].to(dtype).masked_fill(
-                    chunked_attention_mask, min_dtype
+                chunked_attention_mask = (
+                    chunked_attention_mask[None, None, :, :].to(dtype).masked_fill(chunked_attention_mask, min_dtype)
                 )
 
         if (
@@ -1571,6 +1578,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
+
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {}
