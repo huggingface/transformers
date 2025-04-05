@@ -812,7 +812,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 chunked_attention_mask = chunked_attention_mask[-1:]
             if self.config._attn_implementation == "eager":
                 chunked_attention_mask = (
-                    chunked_attention_mask[None, None, :, :].to(dtype).masked_fill(chunked_attention_mask, min_dtype)
+                    chunked_attention_mask[None, None, :, :]
+                    .to(dtype)
+                    .masked_fill(chunked_attention_mask, torch.finfo(dtype).min)
                 )
 
         if (

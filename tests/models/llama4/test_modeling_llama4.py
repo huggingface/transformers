@@ -339,21 +339,15 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip(
-        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("Llama4 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -376,6 +370,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     @unittest.skip("Llama4 uses GQA so it is not compatible with the standard cache format")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
+
 
 @slow
 @require_torch_large_gpu
