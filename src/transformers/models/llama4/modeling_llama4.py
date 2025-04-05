@@ -1229,7 +1229,8 @@ class Llama4VisionAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
+        # flex disable because breaks on TP 8, embed is 88 not power of 2
+        if self.config._attn_implementation not in ["eager", "flex_attention"]:
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
