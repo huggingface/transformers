@@ -771,7 +771,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if past_key_values is not None and past_key_values.is_compileable:
             target_length = past_key_values.get_max_cache_shape
         else:
-            target_length = attention_mask.shape[-1]
+            target_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
