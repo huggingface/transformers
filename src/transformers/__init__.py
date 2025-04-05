@@ -177,6 +177,10 @@ _import_structure = {
         "AriaProcessor",
         "AriaTextConfig",
     ],
+    "models.arlow": [
+        "ArlowConfig",
+        "ArlowTokenizer",
+    ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
         "ASTFeatureExtractor",
@@ -1124,6 +1128,7 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["models.albert"].append("AlbertTokenizerFast")
+    _import_structure["models.arlow"].append("ArlowTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
@@ -1525,6 +1530,13 @@ else:
             "AriaTextForCausalLM",
             "AriaTextModel",
             "AriaTextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.arlow"].extend(
+        [
+            "ArlowPreTrainedModel",
+            "ArlowModel",
+            "ArlowForCausalLM",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
@@ -5391,6 +5403,10 @@ if TYPE_CHECKING:
         AriaProcessor,
         AriaTextConfig,
     )
+    from .models.arlow import (
+        ArlowConfig,
+        ArlowTokenizer,
+    )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
         ASTFeatureExtractor,
@@ -6420,6 +6436,7 @@ if TYPE_CHECKING:
     else:
         # Fast tokenizers imports
         from .models.albert import AlbertTokenizerFast
+        from .models.arlow import ArlowTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
@@ -6793,6 +6810,13 @@ if TYPE_CHECKING:
             AriaTextForCausalLM,
             AriaTextModel,
             AriaTextPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.arlow import (
+            ArlowForCausalLM,
+            ArlowModel,
+            ArlowPreTrainedModel,
         )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
@@ -7180,8 +7204,6 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.dbrx import (
             DbrxForCausalLM,
             DbrxModel,
