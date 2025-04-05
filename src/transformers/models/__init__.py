@@ -202,6 +202,7 @@ from . import (
     oneformer,
     openai,
     opt,
+    ovis2,
     owlv2,
     owlvit,
     paligemma,

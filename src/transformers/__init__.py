@@ -673,6 +673,11 @@ _import_structure = {
         "OpenAIGPTTokenizer",
     ],
     "models.opt": ["OPTConfig"],
+    "models.ovis2": [
+        "Ovis2Config",
+        "Ovis2Processor",
+        "Ovis2VisionConfig",
+    ],
     "models.owlv2": [
         "Owlv2Config",
         "Owlv2Processor",
@@ -1303,6 +1308,7 @@ else:
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
+    _import_structure["models.ovis2"].extend(["Ovis2ImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -1358,6 +1364,7 @@ else:
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
     _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
+    _import_structure["models.ovis2"].append("Ovis2ImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -3229,6 +3236,12 @@ else:
             "OPTForSequenceClassification",
             "OPTModel",
             "OPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.ovis2"].extend(
+        [
+            "Ovis2ForConditionalGeneration",
+            "Ovis2PreTrainedModel",
         ]
     )
     _import_structure["models.owlv2"].extend(
@@ -5933,6 +5946,11 @@ if TYPE_CHECKING:
         OpenAIGPTTokenizer,
     )
     from .models.opt import OPTConfig
+    from .models.ovis2 import (
+        Ovis2Config,
+        Ovis2Processor,
+        Ovis2VisionConfig,
+    )
     from .models.owlv2 import (
         Owlv2Config,
         Owlv2Processor,
@@ -6596,6 +6614,7 @@ if TYPE_CHECKING:
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
+        from .models.ovis2 import Ovis2ImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
@@ -6649,6 +6668,7 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.ovis2 import Ovis2ImageProcessorFast
         from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
@@ -8143,6 +8163,10 @@ if TYPE_CHECKING:
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,
+        )
+        from .models.ovis2 import (
+            Ovis2ForConditionalGeneration,
+            Ovis2PreTrainedModel,
         )
         from .models.owlv2 import (
             Owlv2ForObjectDetection,
