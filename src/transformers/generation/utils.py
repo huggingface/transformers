@@ -4786,7 +4786,7 @@ class GenerationMixin:
         if "past_key_values" not in model_kwargs:
             raise ValueError("Cannot use prefill chunkink without a cache")
 
-        # model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = self.get_compiled_call(generation_config.compile_config)
         attention_mask = model_kwargs.pop("attention_mask", None)
 
         past_length = 0
@@ -4801,8 +4801,7 @@ class GenerationMixin:
             model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
             model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
-            # outputs = model_forward(**model_inputs, return_dict=True) TODO REACTIVATE THIS!!!
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = model_forward(**model_inputs, return_dict=True)
 
             model_kwargs["past_key_values"] = outputs.past_key_values
             past_length = current_length

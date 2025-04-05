@@ -1204,7 +1204,7 @@ class StaticCache(Cache):
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
-        ) // 8  # TODO use TP!
+        )
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1677,12 +1677,10 @@ class HybridCache(Cache):
         self._dtype = dtype
 
         if hasattr(config.get_text_config(), "no_rope_layers"):
-            self.is_sliding = torch.tensor(config.no_rope_layers)
+            self.is_sliding = config.no_rope_layers
         else:
             layer_switch = getattr(config, "sliding_window_pattern", 2)
-            self.is_sliding = torch.tensor(
-                [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
-            )
+            self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []

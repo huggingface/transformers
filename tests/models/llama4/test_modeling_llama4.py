@@ -297,7 +297,7 @@ class Llama4ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     @unittest.skip(reason="Llama4 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
-    
+
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
