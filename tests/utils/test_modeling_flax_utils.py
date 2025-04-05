@@ -62,7 +62,7 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             base_params = flatten_dict(unfreeze(model.params))
             new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
+            for key in base_params:
                 max_diff = (base_params[key] - new_params[key]).sum().item()
                 self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -81,7 +81,7 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             base_params = flatten_dict(unfreeze(model.params))
             new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
+            for key in base_params:
                 max_diff = (base_params[key] - new_params[key]).sum().item()
                 self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -98,7 +98,7 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             base_params = flatten_dict(unfreeze(model.params))
             new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
+            for key in base_params:
                 max_diff = (base_params[key] - new_params[key]).sum().item()
                 self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -117,7 +117,7 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             base_params = flatten_dict(unfreeze(model.params))
             new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
+            for key in base_params:
                 max_diff = (base_params[key] - new_params[key]).sum().item()
                 self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -126,7 +126,7 @@ def check_models_equal(model1, model2):
     models_are_equal = True
     flat_params_1 = flatten_dict(model1.params)
     flat_params_2 = flatten_dict(model2.params)
-    for key in flat_params_1.keys():
+    for key in flat_params_1:
         if np.sum(np.abs(flat_params_1[key] - flat_params_2[key])) > 1e-4:
             models_are_equal = False
 

@@ -514,7 +514,7 @@ def load_state_dict(
                     "you save your model with the `save_pretrained` method."
                 )
             state_dict = {}
-            for k in f.keys():
+            for k in f:
                 k_dtype = f.get_slice(k).get_dtype()
                 if k_dtype in str_to_torch_dtype:
                     dtype = str_to_torch_dtype[k_dtype]
@@ -1205,12 +1205,12 @@ def _get_torch_dtype(
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
                 config.torch_dtype = torch_dtype
-                for sub_config_key in config.sub_configs.keys():
+                for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
             config.torch_dtype = torch_dtype
-            for sub_config_key in config.sub_configs.keys():
+            for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, dict):
@@ -1236,7 +1236,7 @@ def _get_torch_dtype(
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
-        for key in config.sub_configs.keys():
+        for key in config.sub_configs:
             value = getattr(config, key)
             value.torch_dtype = default_dtype
 
@@ -1408,7 +1408,7 @@ def _find_mismatched_keys(
         # Fix the key names
         new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
 
-        for key in new_state_dict.keys():
+        for key in new_state_dict:
             if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
@@ -2090,7 +2090,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
         # Later each sub-module will dispatch with its own attn impl, by calling `XXXModel._from_config(config.text_config)`
         # If any of sub-modules doesn't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
-        for key in config.sub_configs.keys():
+        for key in config.sub_configs:
             sub_config = getattr(config, key)
             curr_attn_implementation = (
                 requested_attn_implementation
@@ -2522,7 +2522,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
                 )
 
-                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
+                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules}
                 encoder_layer_pos = 0
                 for name, module in decoder_modules.items():
                     if name.isdigit():
@@ -3428,7 +3428,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
             for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
+                if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
@@ -3540,7 +3540,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in state_dict_split.filename_to_tensors.keys()
+                and filename not in state_dict_split.filename_to_tensors
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
@@ -4725,7 +4725,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
             # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
                 key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys

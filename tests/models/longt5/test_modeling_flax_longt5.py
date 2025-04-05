@@ -274,9 +274,8 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
@@ -307,9 +306,8 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
@@ -351,7 +349,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 base_param_from_head = flatten_dict(unfreeze(head_model.params))
 
-                for key in base_param_from_head.keys():
+                for key in base_param_from_head:
                     max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -374,7 +372,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
-                for key in base_params_from_head.keys():
+                for key in base_params_from_head:
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 

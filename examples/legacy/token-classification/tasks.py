@@ -126,15 +126,13 @@ class POS(TokenClassificationTask):
         return examples
 
     def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: List):
-        example_id = 0
-        for sentence in parse_incr(test_input_reader):
+        for example_id, sentence in enumerate(parse_incr(test_input_reader)):
             s_p = preds_list[example_id]
             out = ""
             for token in sentence:
                 out += f"{token['form']} ({token['upos']}|{s_p.pop(0)}) "
             out += "\n"
             writer.write(out)
-            example_id += 1
 
     def get_labels(self, path: str) -> List[str]:
         if path:

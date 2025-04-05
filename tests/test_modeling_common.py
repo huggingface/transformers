@@ -152,7 +152,7 @@ TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -619,7 +619,7 @@ class ModelTesterMixin:
             state_dict = model.state_dict()
 
             def check_equal(loaded):
-                for key in state_dict.keys():
+                for key in state_dict:
                     max_diff = torch.max(
                         state_dict()[key] ^ loaded[key]
                         if isinstance(state_dict[key], torch.BoolTensor)
@@ -1146,8 +1146,8 @@ class ModelTesterMixin:
                 loaded_model_state_dict = loaded_model.state_dict()
 
                 non_persistent_buffers = {}
-                for key in loaded_model_state_dict.keys():
-                    if key not in model_state_dict.keys():
+                for key in loaded_model_state_dict:
+                    if key not in model_state_dict:
                         non_persistent_buffers[key] = loaded_model_state_dict[key]
 
                 loaded_model_state_dict = {
@@ -2897,40 +2897,39 @@ class ModelTesterMixin:
             if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
                 continue
 
-            with self.subTest(msg=f"Testing {model_class}"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model = model_class(config)
-                    model.save_pretrained(tmp_dir)
+            with self.subTest(msg=f"Testing {model_class}"), tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(config)
+                model.save_pretrained(tmp_dir)
 
-                    # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(RuntimeError):
-                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
-                    with self.assertRaises(RuntimeError):
-                        new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, vocab_size=10)
+                # Fails when we don't set ignore_mismatched_sizes=True
+                with self.assertRaises(RuntimeError):
+                    new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                with self.assertRaises(RuntimeError):
+                    new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
-                    logger = logging.get_logger("transformers.modeling_utils")
+                logger = logging.get_logger("transformers.modeling_utils")
 
-                    with CaptureLogger(logger) as cl:
-                        new_model = AutoModelForSequenceClassification.from_pretrained(
-                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
-                    new_model.to(torch_device)
-                    inputs = self._prepare_for_class(inputs_dict, model_class)
-                    logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 42)
+                with CaptureLogger(logger) as cl:
+                    new_model = AutoModelForSequenceClassification.from_pretrained(
+                        tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
+                new_model.to(torch_device)
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                logits = new_model(**inputs).logits
+                self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
-                        new_model_without_prefix = AutoModel.from_pretrained(
-                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
-                    input_ids = ids_tensor((2, 8), 10)
-                    new_model_without_prefix.to(torch_device)
-                    if self.is_encoder_decoder:
-                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
-                    else:
-                        new_model_without_prefix(input_ids)
+                with CaptureLogger(logger) as cl:
+                    new_model_without_prefix = AutoModel.from_pretrained(
+                        tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
+                input_ids = ids_tensor((2, 8), 10)
+                new_model_without_prefix.to(torch_device)
+                if self.is_encoder_decoder:
+                    new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                else:
+                    new_model_without_prefix(input_ids)
 
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         if not self.test_mismatched_shapes:
@@ -3008,48 +3007,47 @@ class ModelTesterMixin:
                 r"^wavlm\.",
             ]
 
-            with self.subTest(msg=f"Testing {model_class}"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model = model_class(configs_no_init)
-                    model.save_pretrained(tmp_dir)
+            with self.subTest(msg=f"Testing {model_class}"), tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(configs_no_init)
+                model.save_pretrained(tmp_dir)
 
-                    # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(RuntimeError):
-                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42)
+                # Fails when we don't set ignore_mismatched_sizes=True
+                with self.assertRaises(RuntimeError):
+                    new_model = model_class.from_pretrained(tmp_dir, num_labels=42)
 
-                    logger = logging.get_logger("transformers.modeling_utils")
+                logger = logging.get_logger("transformers.modeling_utils")
 
-                    with CaptureLogger(logger) as cl:
-                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
-                    self.assertIn("the shapes did not match", cl.out)
+                with CaptureLogger(logger) as cl:
+                    new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
+                self.assertIn("the shapes did not match", cl.out)
 
-                    for name, param in new_model.named_parameters():
-                        if param.requires_grad:
-                            param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
-                            if not (
-                                is_special_classes
-                                and any(len(re.findall(target, name)) > 0 for target in special_param_names)
-                            ):
-                                self.assertIn(
-                                    param_mean,
-                                    [0.0, 1.0],
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                            else:
-                                # Here we allow the parameters' mean to be in the range [-5.0, 5.0] instead of being
-                                # either `0.0` or `1.0`, because their initializations are not using
-                                # `config.initializer_factor` (or something similar). The purpose of this test is simply
-                                # to make sure they are properly initialized (to avoid very large value or even `nan`).
-                                self.assertGreaterEqual(
-                                    param_mean,
-                                    -5.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                                self.assertLessEqual(
-                                    param_mean,
-                                    5.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
+                for name, param in new_model.named_parameters():
+                    if param.requires_grad:
+                        param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
+                        if not (
+                            is_special_classes
+                            and any(len(re.findall(target, name)) > 0 for target in special_param_names)
+                        ):
+                            self.assertIn(
+                                param_mean,
+                                [0.0, 1.0],
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
+                        else:
+                            # Here we allow the parameters' mean to be in the range [-5.0, 5.0] instead of being
+                            # either `0.0` or `1.0`, because their initializations are not using
+                            # `config.initializer_factor` (or something similar). The purpose of this test is simply
+                            # to make sure they are properly initialized (to avoid very large value or even `nan`).
+                            self.assertGreaterEqual(
+                                param_mean,
+                                -5.0,
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
+                            self.assertLessEqual(
+                                param_mean,
+                                5.0,
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
 
     def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
@@ -3094,7 +3092,7 @@ class ModelTesterMixin:
             set_seed(0)
             new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
 
-            for key in new_model.state_dict().keys():
+            for key in new_model.state_dict():
                 # check weight values for weights with matched shapes are identical
                 # (i.e. correctly loaded from the checkpoint)
                 if key not in ["linear.weight", "linear.bias"]:
@@ -3337,12 +3335,12 @@ class ModelTesterMixin:
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {}
-            for key in config.sub_configs.keys():
+            for key in config.sub_configs:
                 attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
-            for key in config.sub_configs.keys():
+            for key in config.sub_configs:
                 sub_config = getattr(model.config, key)
                 self.assertTrue(sub_config._attn_implementation == "eager")
 
@@ -3674,19 +3672,20 @@ class ModelTesterMixin:
                     processed_inputs["noise"] = torch.from_numpy(noise)
 
                 # TODO: test gradients as well (& for FA2 as well!)
-                with torch.no_grad():
-                    with sdpa_kernel(
+                with (
+                    torch.no_grad(),
+                    sdpa_kernel(
                         enable_flash=enable_kernels,
                         enable_math=True,
                         enable_mem_efficient=enable_kernels,
-                    ):
-                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                        prepared_inputs = {
-                            k: v.to(torch_device) if isinstance(v, torch.Tensor) else v
-                            for k, v in prepared_inputs.items()
-                        }
-                        outputs_eager = model_eager(**prepared_inputs)
-                        outputs_sdpa = model_sdpa(**prepared_inputs)
+                    ),
+                ):
+                    prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                    prepared_inputs = {
+                        k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                    }
+                    outputs_eager = model_eager(**prepared_inputs)
+                    outputs_sdpa = model_sdpa(**prepared_inputs)
 
                 if "logits_per_text" in outputs_eager:
                     key = "logits_per_text"
@@ -3891,10 +3890,9 @@ class ModelTesterMixin:
                 model_eager = model_eager.eval()
                 model_sdpa = model_sdpa.eval()
 
-                with torch.no_grad():
-                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
-                        res_eager = model_eager(**inputs_dict, return_dict=False)[0]
-                        res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
+                with torch.no_grad(), sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
+                    res_eager = model_eager(**inputs_dict, return_dict=False)[0]
+                    res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 
                 # Only non-padding tokens are expected to match.
                 self.assertTrue(

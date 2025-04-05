@@ -69,7 +69,7 @@ class GPTTokenizationTest(unittest.TestCase):
                 python_outputs = tokenizer([test_inputs], return_tensors="tf")
                 tf_outputs = tf_tokenizer([test_inputs])
 
-                for key in python_outputs.keys():
+                for key in python_outputs:
                     # convert them to numpy to avoid messing with ragged tensors
                     python_outputs_values = python_outputs[key].numpy()
                     tf_outputs_values = tf_outputs[key].numpy()
@@ -86,7 +86,7 @@ class GPTTokenizationTest(unittest.TestCase):
                 compiled_outputs = compiled_tokenizer(test_inputs)
                 eager_outputs = tf_tokenizer(test_inputs)
 
-                for key in eager_outputs.keys():
+                for key in eager_outputs:
                     self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
     @slow
@@ -113,7 +113,7 @@ class GPTTokenizationTest(unittest.TestCase):
             model_from_config = TFGPT2Tokenizer.from_config(config)
             from_config_output = model_from_config(test_inputs)
 
-            for key in from_config_output.keys():
+            for key in from_config_output:
                 self.assertTrue(tf.reduce_all(from_config_output[key] == out[key]))
 
     @slow

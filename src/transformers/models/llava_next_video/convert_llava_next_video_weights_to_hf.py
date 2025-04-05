@@ -131,7 +131,7 @@ def load_original_state_dict(model_id):
     for path in glob.glob(f"{directory_path}/*"):
         if path.endswith(".safetensors"):
             with safe_open(path, framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f:
                     original_state_dict[key] = f.get_tensor(key)
 
     return original_state_dict

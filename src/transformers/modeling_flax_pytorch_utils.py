@@ -58,7 +58,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
         if pt_path.endswith(".safetensors"):
             pt_state_dict = {}
             with safe_open(pt_path, framework="flax") as f:
-                for k in f.keys():
+                for k in f:
                     pt_state_dict[k] = f.get_tensor(k)
         else:
             try:
@@ -179,10 +179,10 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     flax_state_dict = {}
 
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-        model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix in {k.split(".")[0] for k in pt_state_dict}
     )
     load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-        model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix not in {k.split(".")[0] for k in pt_state_dict}
     )
 
     # Need to change some parameters name to match Flax names
@@ -266,10 +266,10 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
             random_flax_state_dict = flatten_dict(flax_model_params)
 
         load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-            model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
+            model_prefix in {k.split(".")[0] for k in pt_state_dict}
         )
         load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-            model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
+            model_prefix not in {k.split(".")[0] for k in pt_state_dict}
         )
         # Need to change some parameters name to match Flax names
         for pt_key, pt_tensor in pt_state_dict.items():
@@ -380,10 +380,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     pt_model_dict = pt_model.state_dict()
 
     load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict}
     )
     load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict}
     )
 
     # keep track of unexpected & missing keys

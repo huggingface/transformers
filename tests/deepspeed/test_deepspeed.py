@@ -211,11 +211,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    AutoModel.from_pretrained(T5_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                AutoModel.from_pretrained(T5_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # now remove zero optimization
@@ -225,11 +224,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(dschf.is_zero3())
         self.assertFalse(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    AutoModel.from_pretrained(T5_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
     @require_torch_fp16
@@ -251,11 +249,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    AutoModel.from_pretrained(T5_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                AutoModel.from_pretrained(T5_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # now remove zero optimization
@@ -265,11 +262,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(dschf.is_zero3())
         self.assertFalse(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    AutoModel.from_pretrained(T5_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
     def test_init_zero3_missing_params(self):
@@ -308,11 +304,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
         self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
@@ -330,11 +325,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(dschf.is_zero3())
         self.assertFalse(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
         self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
         self.assertTrue(
@@ -364,11 +358,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                model = AutoModel.from_pretrained(GPTJ_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # The model weights are in BF16 as per deepspeed config
@@ -387,11 +380,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
         transformers.models.gptj.modeling_gptj.create_sinusoidal_positions = bad_deepspeed_create_sinusoidal_positions
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+        with LoggingLevel(logging.INFO), mockenv_context(**self.dist_env_1_gpu):
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                model = AutoModel.from_pretrained(GPTJ_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
@@ -624,9 +616,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             )
 
             n_trials = 3
-            with CaptureLogger(deepspeed_logger) as cl:
-                with CaptureStd() as cs:
-                    trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
+            with CaptureLogger(deepspeed_logger) as cl, CaptureStd() as cs:
+                trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
             self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")

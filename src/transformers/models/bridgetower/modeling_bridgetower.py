@@ -1530,7 +1530,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
             cross_image_features = layer_outputs_image[0]
 
-            link_layer_index += 1
+            link_layer_index += 1  # noqa: SIM113
 
             if output_hidden_states:
                 all_hidden_states_text += (text_embeds,)

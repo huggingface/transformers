@@ -228,7 +228,7 @@ class FlaxModelTesterMixin:
 
                 base_param_from_head = get_params(head_model.params, from_head_prefix=head_model.base_model_prefix)
 
-                for key in base_param_from_head.keys():
+                for key in base_param_from_head:
                     max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -250,7 +250,7 @@ class FlaxModelTesterMixin:
 
                 base_params = get_params(base_model.params)
 
-                for key in base_params_from_head.keys():
+                for key in base_params_from_head:
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
@@ -269,9 +269,8 @@ class FlaxModelTesterMixin:
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
@@ -452,37 +451,36 @@ class FlaxModelTesterMixin:
             if model_class not in get_values(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
                 continue
 
-            with self.subTest(msg=f"Testing {model_class}"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model = model_class(config)
-                    model.save_pretrained(tmp_dir)
+            with self.subTest(msg=f"Testing {model_class}"), tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(config)
+                model.save_pretrained(tmp_dir)
 
-                    # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(ValueError):
-                        new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
-                    with self.assertRaises(ValueError):
-                        new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, vocab_size=10)
+                # Fails when we don't set ignore_mismatched_sizes=True
+                with self.assertRaises(ValueError):
+                    new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                with self.assertRaises(ValueError):
+                    new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
-                    logger = logging.get_logger("transformers.modeling_flax_utils")
-                    with CaptureLogger(logger) as cl:
-                        new_model = FlaxAutoModelForSequenceClassification.from_pretrained(
-                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
+                logger = logging.get_logger("transformers.modeling_flax_utils")
+                with CaptureLogger(logger) as cl:
+                    new_model = FlaxAutoModelForSequenceClassification.from_pretrained(
+                        tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
 
-                    logits = new_model(**inputs_dict)["logits"]
-                    self.assertEqual(logits.shape[1], 42)
+                logits = new_model(**inputs_dict)["logits"]
+                self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
-                        new_model_without_prefix = FlaxAutoModel.from_pretrained(
-                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
-                        )
-                    self.assertIn("the shapes did not match", cl.out)
-                    input_ids = ids_tensor((2, 8), 10)
-                    if self.is_encoder_decoder:
-                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
-                    else:
-                        new_model_without_prefix(input_ids)
+                with CaptureLogger(logger) as cl:
+                    new_model_without_prefix = FlaxAutoModel.from_pretrained(
+                        tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                    )
+                self.assertIn("the shapes did not match", cl.out)
+                input_ids = ids_tensor((2, 8), 10)
+                if self.is_encoder_decoder:
+                    new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                else:
+                    new_model_without_prefix(input_ids)
 
     def test_default_params_dtype(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

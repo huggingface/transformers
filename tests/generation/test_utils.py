@@ -1482,7 +1482,7 @@ class GenerationTesterMixin:
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -1639,7 +1639,7 @@ class GenerationTesterMixin:
 
             # Skip models without explicit support
             model = model_class(config).to(torch_device).eval()
-            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
                 continue
 
             # There are a few exception patterns in this test:
@@ -1725,7 +1725,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
-            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
 
             #   Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
@@ -1882,7 +1882,7 @@ class GenerationTesterMixin:
 
             model = model_class(config).to(torch_device).eval()
 
-            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)

@@ -60,7 +60,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
         processor_dict_loaded = json.loads(processor_loaded.to_json_string())
         # chat templates aren't serialized to json in processors
-        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+        self.assertFalse("chat_template" in processor_dict_loaded)
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded

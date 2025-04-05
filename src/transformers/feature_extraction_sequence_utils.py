@@ -124,7 +124,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
             processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
+                key: [example[key] for example in processed_features] for key in processed_features[0]
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding

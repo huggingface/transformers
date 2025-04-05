@@ -255,7 +255,7 @@ def read_in_q_k_v_metric_head(state_dict):
 
 
 def convert_state_dict(orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         # rename key

@@ -64,7 +64,7 @@ class BertTokenizationTest(unittest.TestCase):
                 python_outputs = tokenizer(test_inputs, return_tensors="tf", padding="longest")
                 tf_outputs = tf_tokenizer(test_inputs)
 
-                for key in python_outputs.keys():
+                for key in python_outputs:
                     self.assertTrue(tf.reduce_all(python_outputs[key].shape == tf_outputs[key].shape))
                     self.assertTrue(tf.reduce_all(tf.cast(python_outputs[key], tf.int64) == tf_outputs[key]))
 
@@ -76,7 +76,7 @@ class BertTokenizationTest(unittest.TestCase):
                 text=[sentence[0] for sentence in self.paired_sentences],
                 text_pair=[sentence[1] for sentence in self.paired_sentences],
             )
-            for key in merged_outputs.keys():
+            for key in merged_outputs:
                 self.assertTrue(tf.reduce_all(tf.cast(merged_outputs[key], tf.int64) == separated_outputs[key]))
 
     @slow
@@ -88,7 +88,7 @@ class BertTokenizationTest(unittest.TestCase):
                 compiled_outputs = compiled_tokenizer(test_inputs)
                 eager_outputs = tf_tokenizer(test_inputs)
 
-                for key in eager_outputs.keys():
+                for key in eager_outputs:
                     self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
     @slow

@@ -427,15 +427,14 @@ class Mamba2IntegrationTest(unittest.TestCase):
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
-        with torch.amp.autocast(device_type="cuda", dtype=dtype):
-            with torch.no_grad():
-                mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
-                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
+        with torch.amp.autocast(device_type="cuda", dtype=dtype), torch.no_grad():
+            mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
+            hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
-                mixer.train()
-                out_train = mixer(hidden_states)
+            mixer.train()
+            out_train = mixer(hidden_states)
 
-                mixer.eval()
-                out_eval = mixer(hidden_states)
+            mixer.eval()
+            out_eval = mixer(hidden_states)
 
-                torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)

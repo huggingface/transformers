@@ -840,10 +840,10 @@ class _LazyConfigMapping(OrderedDict):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self):
-        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
+        return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
     def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
+        return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
     def __iter__(self):
         return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
@@ -855,7 +855,7 @@ class _LazyConfigMapping(OrderedDict):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys() and not exist_ok:
+        if key in self._mapping and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 

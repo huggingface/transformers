@@ -161,17 +161,20 @@ def _download(url: str, root: str) -> Any:
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
-    with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(
+    with (
+        urllib.request.urlopen(url) as source,
+        open(download_target, "wb") as output,
+        tqdm(
             total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
-        ) as loop:
-            while True:
-                buffer = source.read(8192)
-                if not buffer:
-                    break
+        ) as loop,
+    ):
+        while True:
+            buffer = source.read(8192)
+            if not buffer:
+                break
 
-                output.write(buffer)
-                loop.update(len(buffer))
+            output.write(buffer)
+            loop.update(len(buffer))
 
     model_bytes = open(download_target, "rb").read()
     if insecure_hashlib.sha256(model_bytes).hexdigest() != expected_sha256:

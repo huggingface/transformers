@@ -198,14 +198,16 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
-                        with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
-                            with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
-                                self.assertTrue(
-                                    all(
-                                        item in tokenizer.added_tokens_decoder.items()
-                                        for item in EXPECTED_ADDED_TOKENS_DECODER.items()
-                                    )
+                        with (
+                            self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"),
+                            self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"),
+                        ):
+                            self.assertTrue(
+                                all(
+                                    item in tokenizer.added_tokens_decoder.items()
+                                    for item in EXPECTED_ADDED_TOKENS_DECODER.items()
                                 )
+                            )
 
                         EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
                         with tempfile.TemporaryDirectory() as tmp_dir_4:

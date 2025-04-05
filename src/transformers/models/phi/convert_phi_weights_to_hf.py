@@ -105,7 +105,7 @@ def _download(url: str, root: str):
 def convert_phi_weights(
     model_name, checkpoint_path, pytorch_dump_folder_path, use_cuda, save_weights_directly, _MODELS
 ):
-    _MODELS = _MODELS if model_name not in _MODELS.keys() else {model_name: _MODELS.get(model_name)}
+    _MODELS = _MODELS if model_name not in _MODELS else {model_name: _MODELS.get(model_name)}
     device = "cuda" if torch.cuda.is_available() and use_cuda else "cpu"
     for model_name, model_url in _MODELS.items():
         converted_checkpoint = {}

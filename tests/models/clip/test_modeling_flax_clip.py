@@ -117,9 +117,8 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict)
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
@@ -370,9 +369,8 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
 
-                with self.subTest("JIT Disabled"):
-                    with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict)
+                with self.subTest("JIT Disabled"), jax.disable_jit():
+                    outputs = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs[:4], outputs[:4]):
@@ -401,9 +399,8 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
         with self.subTest("JIT Enabled"):
             jitted_output = model_jitted(inputs_dict["pixel_values"])
 
-        with self.subTest("JIT Disabled"):
-            with jax.disable_jit():
-                output = model_jitted(inputs_dict["pixel_values"])
+        with self.subTest("JIT Disabled"), jax.disable_jit():
+            output = model_jitted(inputs_dict["pixel_values"])
 
         self.assertEqual(jitted_output.shape, output.shape)
         self.assertTrue(np.allclose(jitted_output, output, atol=1e-3))
@@ -419,9 +416,8 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
         with self.subTest("JIT Enabled"):
             jitted_output = model_jitted(**inputs_dict)
 
-        with self.subTest("JIT Disabled"):
-            with jax.disable_jit():
-                output = model_jitted(**inputs_dict)
+        with self.subTest("JIT Disabled"), jax.disable_jit():
+            output = model_jitted(**inputs_dict)
 
         self.assertEqual(jitted_output.shape, output.shape)
         self.assertTrue(np.allclose(jitted_output, output, atol=1e-3))

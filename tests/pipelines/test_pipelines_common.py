@@ -611,7 +611,7 @@ class PipelineUtilsTest(unittest.TestCase):
         from transformers.pipelines import SUPPORTED_TASKS
 
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
-        for task in SUPPORTED_TASKS.keys():
+        for task in SUPPORTED_TASKS:
             if task == "table-question-answering":
                 # test table in separate test due to more dependencies
                 continue
@@ -629,7 +629,7 @@ class PipelineUtilsTest(unittest.TestCase):
         from transformers.pipelines import SUPPORTED_TASKS
 
         set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
-        for task in SUPPORTED_TASKS.keys():
+        for task in SUPPORTED_TASKS:
             if task == "table-question-answering":
                 # test table in separate test due to more dependencies
                 continue
@@ -699,7 +699,7 @@ class PipelineUtilsTest(unittest.TestCase):
             model_ids = []
             revisions = []
             tasks = []
-            for translation_pair in task_dict["default"].keys():
+            for translation_pair in task_dict["default"]:
                 model_id, revision = task_dict["default"][translation_pair]["model"][framework]
 
                 model_ids.append(model_id)

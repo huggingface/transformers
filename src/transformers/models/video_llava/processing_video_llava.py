@@ -162,11 +162,11 @@ class VideoLlavaProcessor(ProcessorMixin):
         prompt_strings = text
 
         if encoded_images is not None:
-            if "pixel_values_images" in encoded_images.keys():
+            if "pixel_values_images" in encoded_images:
                 height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
                 num_frames = 1
 
-            if "pixel_values_videos" in encoded_images.keys():
+            if "pixel_values_videos" in encoded_images:
                 one_video = encoded_images.get("pixel_values_videos")[0]
                 if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
                     one_video = np.array(one_video)

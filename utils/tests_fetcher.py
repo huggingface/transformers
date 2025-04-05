@@ -224,9 +224,8 @@ def diff_is_docstring_only(repo: Repo, branching_point: str, filename: str) -> b
         `bool`: Whether the diff is docstring/comments only or not.
     """
     folder = Path(repo.working_dir)
-    with checkout_commit(repo, branching_point):
-        with open(folder / filename, "r", encoding="utf-8") as f:
-            old_content = f.read()
+    with checkout_commit(repo, branching_point), open(folder / filename, "r", encoding="utf-8") as f:
+        old_content = f.read()
 
     with open(folder / filename, "r", encoding="utf-8") as f:
         new_content = f.read()
@@ -250,9 +249,8 @@ def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) 
         `bool`: Whether the diff is only in code examples of the doc or not.
     """
     folder = Path(repo.working_dir)
-    with checkout_commit(repo, branching_point):
-        with open(folder / filename, "r", encoding="utf-8") as f:
-            old_content = f.read()
+    with checkout_commit(repo, branching_point), open(folder / filename, "r", encoding="utf-8") as f:
+        old_content = f.read()
 
     with open(folder / filename, "r", encoding="utf-8") as f:
         new_content = f.read()
@@ -295,9 +293,11 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
 
     files = set()
     for commit in commits:
-        with checkout_commit(repo, commit):
-            with open(folder / "tests/utils/tiny_model_summary.json", "r", encoding="utf-8") as f:
-                old_content = f.read()
+        with (
+            checkout_commit(repo, commit),
+            open(folder / "tests/utils/tiny_model_summary.json", "r", encoding="utf-8") as f,
+        ):
+            old_content = f.read()
 
         with open(folder / "tests/utils/tiny_model_summary.json", "r", encoding="utf-8") as f:
             new_content = f.read()
@@ -539,9 +539,11 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
             continue
         # Loads the two versions
         folder = Path(repo.working_dir)
-        with checkout_commit(repo, branching_commit):
-            with open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f:
-                old_content = f.read()
+        with (
+            checkout_commit(repo, branching_commit),
+            open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f,
+        ):
+            old_content = f.read()
         with open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f:
             new_content = f.read()
         # Compute the removed lines and return them

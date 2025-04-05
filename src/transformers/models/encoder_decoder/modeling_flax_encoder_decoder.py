@@ -818,9 +818,9 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargs_encoder:
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder

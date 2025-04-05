@@ -106,10 +106,9 @@ class StreamerTester(unittest.TestCase):
         input_ids = torch.ones((1, 5), device=torch_device).long() * model.config.bos_token_id
 
         root = _get_library_root_logger()
-        with patch.object(root, "propagate", False):
-            with CaptureStdout() as cs:
-                streamer = TextStreamer(tokenizer, skip_special_tokens=True)
-                model.generate(input_ids, max_new_tokens=1, do_sample=False, streamer=streamer)
+        with patch.object(root, "propagate", False), CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer, skip_special_tokens=True)
+            model.generate(input_ids, max_new_tokens=1, do_sample=False, streamer=streamer)
 
         # The prompt contains a special token, so the streamer should not print it. As such, the output text, when
         # re-tokenized, must only contain one token
