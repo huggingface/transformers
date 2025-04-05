@@ -216,6 +216,7 @@ class HfQuantizer(ABC):
         """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
+        self._convert_model_for_quantization(model)
         return self._process_model_before_weight_loading(model, **kwargs)
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
@@ -292,3 +293,43 @@ class HfQuantizer(ABC):
     @property
     @abstractmethod
     def is_trainable(self): ...
+    
+    def _convert_model_for_quantization(model):
+        from accelerate import init_empty_weights
+        for module in model.modules():
+            module_class_name = module.__class__.__name__
+            # TODO: add exception for fbgemm 
+            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
+                # TODO: check that it is fine to have the init empty weights here
+                with init_empty_weights():
+                    module = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config)
+            
+class SequentialLlama4TextExperts(nn.Module):
+    """
+    A module that implements a compressed version of a list of expert modules.
+    This is specifically designed to work with Llama4TextExperts in MoE layers.
+    """
+
+    def __init__(self, config):
+        # Skip random weight initialization for experts. Otherwise,
+        # the init of this module would take over minutes. For a model
+        # with tens of layers of experts, it would easily take over 20 minutes.
+
+        from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
+
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.expert_modules = torch.nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
+        expert_routed_out_list = []
+        for expert_idx in range(self.num_experts):
+            expert_routed_out_list.append(self.expert_modules[expert_idx](hidden_states[expert_idx]))
+        routed_out = torch.cat(expert_routed_out_list, dim=0)
+        return routed_out
+
+MODULES_TO_PATCH_FOR_QUANTIZATION = {"Llama4TextExperts": SequentialLlama4TextExperts}
