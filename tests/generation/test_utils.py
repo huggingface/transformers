@@ -889,8 +889,7 @@ class GenerationTesterMixin:
                 num_beams=beam_kwargs["num_beams"],
             )
 
-    # TODO: @gante check why it is flaky
-    @is_flaky()
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -947,6 +946,7 @@ class GenerationTesterMixin:
             for generation_output in output_generate:
                 self._check_sequence_inside_sequence(force_tokens, generation_output)
 
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
@@ -2724,7 +2724,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 1
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2735,7 +2735,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 2
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2746,7 +2746,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 3
         input_ids = torch.randint(0, 16, (2, 12), dtype=torch.int64)
         inputs_embeds = None
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
@@ -2757,7 +2757,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Case 4
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
         inputs_embeds = None
-        cache_position = torch.range(0, 7, dtype=torch.int64)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
         export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
             input_ids, inputs_embeds, cache_position
