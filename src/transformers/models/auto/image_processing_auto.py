@@ -125,7 +125,7 @@ else:
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
-            ("pix2struct", ("Pix2StructImageProcessor",)),
+            ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
