@@ -52,6 +52,7 @@ if is_torch_available():
     from ..cache_utils import (
         HQQQuantizedCache,
         HybridCache,
+        HybridChunkedCache,
         MambaCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
@@ -59,7 +60,6 @@ if is_torch_available():
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
-        HybridChunkedCache
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
@@ -70,7 +70,7 @@ if is_torch_available():
         "offloaded_static": OffloadedStaticCache,
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
-        "hybrid_chunked":HybridChunkedCache,
+        "hybrid_chunked": HybridChunkedCache,
         "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}

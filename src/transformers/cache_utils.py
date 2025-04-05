@@ -1608,6 +1608,7 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
+
 class HybridCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
@@ -1809,6 +1810,7 @@ class HybridCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
+
 class HybridChunkedCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
@@ -2001,6 +2003,7 @@ class HybridChunkedCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
         self.cumulative_length = [0 for _ in range(len(self.cumulative_length))]
+
 
 class MambaCache:
     """
