@@ -43,7 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLVisionConfig
+from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
 
 if is_flash_attn_available():
@@ -95,7 +95,7 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen2VLRotaryEmbedding(nn.Module):
-    def __init__(self, config: Qwen2VLConfig, device=None):
+    def __init__(self, config: Qwen2VLTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -488,7 +488,7 @@ class Qwen2VLAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: Qwen2VLConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Qwen2VLTextConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -797,7 +797,7 @@ QWEN2_VL_ATTENTION_CLASSES = {
 
 
 class Qwen2VLDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2VLConfig, layer_idx: int):
+    def __init__(self, config: Qwen2VLTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -913,7 +913,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # TODO (joao): fix. torch.compile failing probably due to `cache_positions`
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.get_text_config().initializer_range
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1017,7 +1017,9 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     QWEN2VL_START_DOCSTRING,
 )
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    def __init__(self, config: Qwen2VLConfig):
+    config_class = Qwen2VLTextConfig
+
+    def __init__(self, config: Qwen2VLTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1394,9 +1396,11 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.model = Qwen2VLModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        text_config = config.get_text_config()
+        self.model = Qwen2VLModel._from_config(text_config)
+        self.vocab_size = text_config.vocab_size
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
