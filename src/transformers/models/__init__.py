@@ -230,6 +230,8 @@ from . import (
     qwen2_audio,
     qwen2_moe,
     qwen2_vl,
+    qwen3,
+    qwen3_moe,
     rag,
     recurrent_gemma,
     reformer,
