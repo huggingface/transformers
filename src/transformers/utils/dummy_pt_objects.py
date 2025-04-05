@@ -6089,6 +6089,27 @@ class M2M100PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MagmaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MagmaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MagmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MambaForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

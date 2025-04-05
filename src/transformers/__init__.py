@@ -589,6 +589,11 @@ _import_structure = {
         "LxmertTokenizer",
     ],
     "models.m2m_100": ["M2M100Config"],
+    "models.magma": [
+        "MagmaConfig",
+        "MagmaProcessor",
+        "MagmaImageProcessor",
+    ],
     "models.mamba": ["MambaConfig"],
     "models.mamba2": ["Mamba2Config"],
     "models.marian": ["MarianConfig"],
@@ -2890,6 +2895,13 @@ else:
             "M2M100ForConditionalGeneration",
             "M2M100Model",
             "M2M100PreTrainedModel",
+        ]
+    )
+    _import_structure["models.magma"].extend(
+        [
+            "MagmaForCausalLM",
+            "MagmaModel",
+            "MagmaPreTrainedModel",
         ]
     )
     _import_structure["models.mamba"].extend(
@@ -5837,6 +5849,11 @@ if TYPE_CHECKING:
         LxmertTokenizer,
     )
     from .models.m2m_100 import M2M100Config
+    from .models.magma import (
+        MagmaConfig,
+        MagmaProcessor,
+        MagmaImageProcessor,
+    )
     from .models.mamba import MambaConfig
     from .models.mamba2 import Mamba2Config
     from .models.marian import MarianConfig
@@ -7882,6 +7899,11 @@ if TYPE_CHECKING:
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
+        )
+        from .models.magma import (
+            MagmaForCausalLM,
+            MagmaModel,
+            MagmaPreTrainedModel,
         )
         from .models.mamba import (
             MambaForCausalLM,

@@ -157,6 +157,7 @@ from . import (
     luke,
     lxmert,
     m2m_100,
+    magma,
     mamba,
     mamba2,
     marian,
