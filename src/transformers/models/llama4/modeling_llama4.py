@@ -752,17 +752,23 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         first_cache_position = cache_position[0]
         last_cache_position = cache_position[-1]
-        if first_cache_position >= attention_chunk_size:
-            key_length = attention_chunk_size + sequence_length - 1
-        elif (
-            first_cache_position < attention_chunk_size
-            and first_cache_position + sequence_length > attention_chunk_size
-        ):
-            key_length = first_cache_position + sequence_length
-        else:
-            key_length = attention_chunk_size
 
-        if past_key_values.is_compileable:
+        # to avoid graph break, we introduce this hack
+        cond1 = first_cache_position >= attention_chunk_size
+        cond2 = (first_cache_position < attention_chunk_size) & \
+                (first_cache_position + sequence_length > attention_chunk_size)
+
+        key_length = torch.where(
+            cond1,
+            attention_chunk_size + sequence_length - 1,
+            torch.where(
+                cond2,
+                first_cache_position + sequence_length,
+                attention_chunk_size
+            )
+        )
+
+        if past_key_values is not None and past_key_values.is_compileable:
             target_length = past_key_values.max_cache_len
         else:
             target_length = attention_mask.shape[-1]
