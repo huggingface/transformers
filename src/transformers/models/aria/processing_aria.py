@@ -25,7 +25,12 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType
+from ...utils.import_utils import is_torch_available
 from ..auto import AutoTokenizer
+
+
+if is_torch_available():
+    pass
 
 
 class AriaProcessorKwargs(ProcessingKwargs, total=False):

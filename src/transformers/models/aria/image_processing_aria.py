@@ -37,6 +37,11 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType
+from ...utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    pass
 
 
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
