@@ -1345,6 +1345,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.bit"].append("BitImageProcessorFast")
     _import_structure["models.blip"].append("BlipImageProcessorFast")
     _import_structure["models.clip"].append("CLIPImageProcessorFast")
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
@@ -6637,6 +6638,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.bit import BitImageProcessorFast
         from .models.blip import BlipImageProcessorFast
         from .models.clip import CLIPImageProcessorFast
         from .models.convnext import ConvNextImageProcessorFast
