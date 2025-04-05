@@ -103,7 +103,7 @@ else:
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
-            ("levit", ("LevitImageProcessor",)),
+            ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
