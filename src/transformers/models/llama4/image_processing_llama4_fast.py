@@ -14,10 +14,10 @@
 # limitations under the License.
 """Fast Image processor class for Got-OCR-2."""
 
+import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import List, Optional, Tuple, Union, Set
-import math
+from typing import List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -107,6 +107,8 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
+
+
 class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     max_patches: Optional[int]
     resize_to_max_canvas: Optional[bool]
