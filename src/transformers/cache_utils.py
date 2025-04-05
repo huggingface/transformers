@@ -1686,7 +1686,7 @@ class HybridCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         self.cumulative_length = [0 for _ in range(config.num_hidden_layers)]
 
-    def initialise_cache_layer(self, layer_idx, key_states):
+    def initialise_cache_layer(self, layer_idx, key_states, sliding_window):
         if len(self.key_cache) > layer_idx:
             return
 
@@ -1696,7 +1696,7 @@ class HybridCache(Cache):
         sliding_cache_shape = (
             self.max_batch_size,
             num_key_value_heads,
-            self.sliding_window,
+            sliding_window,
             self.head_dim,
         )
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -1749,7 +1749,8 @@ class HybridCache(Cache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
-        self.initialise_cache_layer(layer_idx, key_states)
+        sliding_window = cache_kwargs.get("sliding_window", self.sliding_window)
+        self.initialise_cache_layer(layer_idx, key_states, sliding_window)
 
         # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)

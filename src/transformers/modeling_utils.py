@@ -1778,7 +1778,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     model_tags = None
 
     _auto_class = None
-    _no_split_modules = []
+    _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 

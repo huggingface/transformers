@@ -25,7 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Llama4ImageProcessor
+    from transformers import Llama4ImageProcessorFast
 
 
 @require_vision
@@ -35,7 +35,7 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = Llama4ImageProcessor(max_patches=1, size={"height": 20, "width": 20})
+        image_processor = Llama4ImageProcessorFast(max_patches=1, size={"height": 20, "width": 20})
         tokenizer = PreTrainedTokenizerFast.from_pretrained("unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit")
         processor_kwargs = self.prepare_processor_dict()
         processor = Llama4Processor(image_processor, tokenizer, **processor_kwargs)
