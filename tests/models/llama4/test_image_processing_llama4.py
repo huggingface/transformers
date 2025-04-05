@@ -23,7 +23,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_vision_available() and is_torchvision_available():
     from transformers import Llama4ImageProcessorFast

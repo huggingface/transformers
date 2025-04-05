@@ -212,8 +212,8 @@ def flex_attention_forward(
 
     # When running TP this helps:
     if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
-        key = repeat_kv(key, query.shape[1]//key.shape[1])
-        value = repeat_kv(value, query.shape[1]//value.shape[1])
+        key = repeat_kv(key, query.shape[1] // key.shape[1])
+        value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options", None)
