@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any
 
 import torch
 
@@ -14,7 +14,7 @@ class CustomConfig(QuantizationConfigMixin):
         self.quant_method = "custom"
         self.bits = 8
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = {
             "num_bits": self.bits,
         }
@@ -24,7 +24,7 @@ class CustomConfig(QuantizationConfigMixin):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         config_dict = self.to_dict()
 
         default_config_dict = CustomConfig().to_dict()

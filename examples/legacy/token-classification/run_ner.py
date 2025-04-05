@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -20,7 +19,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -159,7 +158,7 @@ def main():
 
     # Prepare CONLL-2003 task
     labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = dict(enumerate(labels))
+    label_map: dict[int, str] = dict(enumerate(labels))
     num_labels = len(labels)
 
     # Load pretrained model and tokenizer
@@ -217,7 +216,7 @@ def main():
         else None
     )
 
-    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
+    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> tuple[list[int], list[int]]:
         preds = np.argmax(predictions, axis=2)
 
         batch_size, seq_len = preds.shape
@@ -233,7 +232,7 @@ def main():
 
         return preds_list, out_label_list
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
+    def compute_metrics(p: EvalPrediction) -> dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
             "accuracy_score": accuracy_score(out_label_list, preds_list),
@@ -279,7 +278,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
             results.update(result)
 
@@ -304,13 +303,13 @@ def main():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
         if trainer.is_world_process_zero():
             with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
+                with open(os.path.join(data_args.data_dir, "test.txt")) as f:
                     token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
     return results

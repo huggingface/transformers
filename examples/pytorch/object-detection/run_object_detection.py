@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,10 @@
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, List, Mapping, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import albumentations as A
 import numpy as np
@@ -60,7 +60,7 @@ class ModelOutput:
 
 
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
@@ -94,7 +94,7 @@ def format_image_annotations_as_coco(
     }
 
 
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
@@ -148,7 +148,7 @@ def augment_and_transform_batch(
     return result
 
 
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]

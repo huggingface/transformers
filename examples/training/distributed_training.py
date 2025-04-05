@@ -19,16 +19,16 @@ def run(backend):
     tensor = torch.zeros(1)
     # Need to put tensor on a GPU device for nccl backend
     if backend == "nccl":
-        device = torch.device("cuda:{}".format(LOCAL_RANK))
+        device = torch.device(f"cuda:{LOCAL_RANK}")
         tensor = tensor.to(device)
 
     if WORLD_RANK == 0:
         for rank_recv in range(1, WORLD_SIZE):
             dist.send(tensor=tensor, dst=rank_recv)
-            print("worker_{} sent data to Rank {}\n".format(0, rank_recv))
+            print(f"worker_{0} sent data to Rank {rank_recv}\n")
     else:
         dist.recv(tensor=tensor, src=0)
-        print("worker_{} has received data from rank {}\n".format(WORLD_RANK, 0))
+        print(f"worker_{WORLD_RANK} has received data from rank {0}\n")
 
 
 def init_processes(backend):

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import datasets
 import evaluate
@@ -469,7 +468,7 @@ def main():
         question_column: str,
         context_column: str,
         answer_column: str,
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         questions = examples[question_column]
         contexts = examples[context_column]
         answers = examples[answer_column]
