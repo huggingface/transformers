@@ -2296,6 +2296,7 @@ else:
     )
     _import_structure["models.donut"].extend(
         [
+            "DonutSwinForImageClassification",
             "DonutSwinModel",
             "DonutSwinPreTrainedModel",
         ]
@@ -7423,6 +7424,7 @@ if TYPE_CHECKING:
             DistilBertPreTrainedModel,
         )
         from .models.donut import (
+            DonutSwinForImageClassification,
             DonutSwinModel,
             DonutSwinPreTrainedModel,
         )
