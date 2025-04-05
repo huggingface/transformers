@@ -24,34 +24,32 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-The Llama4 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Llama 4, developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
+This generation includes two models:
+- The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
+- The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.
+-
+Both models leverage early fusion for native multimodality, enabling them to process text and image inputs.
+Maverick and Scout are both trained on up to 40 trillion tokens on data encompassing 200 languages
+(with specific fine-tuning support for 12 languages including Arabic, Spanish, German, and Hindi).
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-< INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+For deployment, Llama 4 Scout is designed for accessibility, fitting on a single server-grade GPU via
+on-the-fly 4-bit or 8-bitint4 quantization, while Maverick is available in BF16 and FP8 formats.
+These models are released under the custom Llama 4 Community License Agreement, available on the model repositories.
 
 You can find all the original Llama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) organization.
 
 > [!TIP]
-> The Llama 4 family of models comes in two flavors: 109B, and 402B parameters. Both of these flavors are extremely 
+> The Llama 4 family of models comes in two flavors: 109B, and 402B parameters. Both of these flavors are extremely
 > large and won't fit on your run-of-the-mill device. See below for some examples to reduce the memory usage of the
 > model.
-> 
+>
 > For the download to be faster and more resilient, we recommend installing the `hf_xet` dependency as followed:
 > `pip install transformers[hf_xet]`
 
 The examples below demonstrates how to generate with [`Pipeline`] or the [`AutoModel`]. We additionally add an example
 showcasing how to toggle the right attributes to enable very long-context generations, as some flavors of Llama 4
 have context lengths going up to 10 million tokens.
-
 
 
 <hfoptions id="usage">
@@ -201,7 +199,7 @@ print(response)
 Beware: the example below uses both `device_map="auto"` and flex-attention.
 Please use `torchrun` to run this example in tensor-parallel mode.
 
-We will work to enable running with `device_map="auto"` and flex-attention without 
+We will work to enable running with `device_map="auto"` and flex-attention without
 tensor-parallel in the future.
 
 ```py
@@ -261,7 +259,7 @@ Setting Flex Attention ensures the best results with the very long context the m
 
 > [!TIP] Beware: the example below uses both `device_map="auto"` and flex-attention.
 > Please use `torchrun` to run this example in tensor-parallel mode.
-> 
+>
 > We will work to enable running with `device_map="auto"` and flex-attention without
 > tensor-parallel in the future.
 
@@ -417,10 +415,6 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ## Llama4ImageProcessorFast
 
 [[autodoc]] Llama4ImageProcessorFast
-
-## Llama4ImageProcessor
-
-[[autodoc]] Llama4ImageProcessor
 
 ## Llama4ForConditionalGeneration
 
