@@ -67,7 +67,7 @@ class Llama4VisionConfig(PretrainedConfig):
         projector_dropout (`int`, *optional*, defaults to 0.0): TODO
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
         rope_theta (`int`, *optional*, defaults to 10000): TODO
-    ```"""
+    """
 
     base_model_tp_plan = {
         "model.layers.*.self_attn.q_proj": "colwise",
@@ -233,7 +233,7 @@ class Llama4TextConfig(PretrainedConfig):
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
 
     Example:
-    ```"""
+    """
 
     model_type = "llama4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
