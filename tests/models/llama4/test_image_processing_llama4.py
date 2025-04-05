@@ -25,11 +25,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from transformers import Llama4ImageProcessor
-
-    if is_torchvision_available():
-        from transformers import Llama4ImageProcessorFast
+if is_vision_available() and is_torchvision_available():
+    from transformers import Llama4ImageProcessorFast
 
 
 class Llama4ImageProcessingTester(unittest.TestCase):
@@ -97,7 +94,7 @@ class Llama4ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Llama4ImageProcessor if is_vision_available() else None
+    test_slow_image_processor = False
     fast_image_processing_class = Llama4ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
@@ -118,40 +115,6 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "image_std"))
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    def test_slow_fast_equivalence_split_tiles(self):
-        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
-
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt", max_patches=16)
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt", max_patches=16)
-
-        torch.testing.assert_close(encoding_slow.aspect_ratios, encoding_fast.aspect_ratios)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
-        )
-
-    def test_slow_fast_equivalence_split_tiles_batched(self):
-        # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
-        # different resolutions in between
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt", max_patches=16)
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt", max_patches=16)
-
-        torch.testing.assert_close(encoding_slow.aspect_ratios, encoding_fast.aspect_ratios)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
-
     def test_split_tiles(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -163,7 +126,3 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(len(processed_images.pixel_values), 1)
             self.assertEqual(processed_images.pixel_values[0].shape[0], 17)
             self.assertEqual(processed_images.pixel_values[0].shape[-2:], (20, 20))
-
-    @unittest.skip(reason="Super flaky as slow processor also uses torch/torchvision")
-    def test_fast_is_faster_than_slow(self):
-        pass
