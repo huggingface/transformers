@@ -35,13 +35,11 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -59,7 +57,6 @@ from ..siglip import SiglipVisionConfig
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma-3-4b"
-_CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
@@ -535,9 +532,6 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-GEMMA3_START_DOCSTRING = None
-
-
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "language_model"
     _no_split_modules = [
@@ -598,6 +592,10 @@ class Gemma3TextModel(Gemma2Model):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -849,9 +847,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         return causal_mask
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
