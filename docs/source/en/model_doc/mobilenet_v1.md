@@ -77,6 +77,11 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] MobileNetV1ImageProcessor
     - preprocess
 
+## MobileNetV1ImageProcessorFast
+
+[[autodoc]] MobileNetV1ImageProcessorFast
+    - preprocess
+
 ## MobileNetV1Model
 
 [[autodoc]] MobileNetV1Model
