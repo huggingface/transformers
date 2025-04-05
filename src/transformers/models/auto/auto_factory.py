@@ -566,7 +566,8 @@ class _BaseAutoModelClass:
             )
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs["text_config"]:
+            text_config = config.sub_configs.get("text_config", None)
+            if model_class.config_class == text_config:
                 config = config.get_text_config()
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
