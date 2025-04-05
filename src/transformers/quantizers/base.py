@@ -297,33 +297,23 @@ class HfQuantizer(ABC):
     
     def _convert_model_for_quantization(self, model):
         from accelerate import init_empty_weights
-        list_modules = list(model.named_modules())
-        for name, module in list_modules:
+        from ..models.llama4.modeling_llama4 import Llama4TextMLP
+        for module in model.modules():
             module_class_name = module.__class__.__name__
             # TODO: add exception for fbgemm 
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys():
                 # TODO: check that it is fine to have the init empty weights here
                 with init_empty_weights():
-                    parent_module, name = get_module_from_name(model, name)
-                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
-class SequentialLlama4TextExperts(torch.nn.Module):
+                    del module.experts
+                    module.experts = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]([Llama4TextMLP(model.config.get_text_config()) for _ in range(module.num_experts)])
+
+            
+class SequentialLlama4TextExperts(torch.nn.ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.
     This is specifically designed to work with Llama4TextExperts in MoE layers.
     """
-
-    def __init__(self, config):
-        # Skip random weight initialization for experts. Otherwise,
-        # the init of this module would take over minutes. For a model
-        # with tens of layers of experts, it would easily take over 20 minutes.
-
-        from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
-
-
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.experts = torch.nn.ModuleList([Llama4TextMLP(config) for _ in range(self.num_experts)])
-
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -331,7 +321,7 @@ class SequentialLlama4TextExperts(torch.nn.Module):
         hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
         routed_out = torch.zeros_like(hidden_states)
         for expert_idx in range(self.num_experts):
-            routed_out[expert_idx] = self.experts[expert_idx](hidden_states[expert_idx])
+            routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
         return routed_out
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = {"Llama4TextExperts": SequentialLlama4TextExperts}
+MODULES_TO_PATCH_FOR_QUANTIZATION = { "Llama4TextMoe": SequentialLlama4TextExperts }
