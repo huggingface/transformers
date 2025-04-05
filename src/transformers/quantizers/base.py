@@ -311,7 +311,7 @@ class HfQuantizer(ABC):
                     )
 
 
-class SequentialLlama4TextExperts(torch.nn.ModuleList):
+class SequentialLlama4TextExperts("torch.nn.ModuleList"):
     """
     A module that implements a compressed version of a list of expert modules.
     This is specifically designed to work with Llama4TextExperts in MoE layers.
@@ -325,8 +325,8 @@ class SequentialLlama4TextExperts(torch.nn.ModuleList):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
+        hidden_states: "torch.Tensor",
+    ) -> "torch.Tensor":
         hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
         routed_out = torch.zeros_like(hidden_states)
         for expert_idx in range(self.num_experts):
