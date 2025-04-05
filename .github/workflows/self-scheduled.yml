@@ -336,6 +336,10 @@ jobs:
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      # TODO: update the docker image instead
+      - name: Reinstall some packages with specific versions
+        run: python3 -m pip install numpy==1.24.3 numba==0.61.0 scipy==1.12.0 scikit-learn==1.6.1
+
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
@@ -382,7 +386,7 @@ jobs:
         run: pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         shell: bash
         run: |
           echo "${{ matrix.machine_type }}"
