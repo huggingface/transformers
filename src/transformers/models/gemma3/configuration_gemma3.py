@@ -136,6 +136,9 @@ class Gemma3TextConfig(PretrainedConfig):
             The base period of the RoPE embeddings for local attention.
         sliding_window_pattern (`int`, *optional*, defaults to 6):
             Pattern for the sliding window attention.
+        activation_scale (`float`, *optional*, defaults to 1.0):
+            Scaling factor for the main activations stream in the transformer.
+            This can be used to ensure activations stay within fp16 range.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -198,6 +201,7 @@ class Gemma3TextConfig(PretrainedConfig):
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
         sliding_window_pattern=6,
+        activation_scale=1.0,
         **kwargs,
     ):
         super().__init__(
@@ -233,6 +237,7 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window_pattern = sliding_window_pattern
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+        self.activation_scale = activation_scale
 
 
 class Gemma3Config(PretrainedConfig):
