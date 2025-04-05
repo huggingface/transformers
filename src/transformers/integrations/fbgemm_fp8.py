@@ -45,7 +45,6 @@ class FbgemmFp8Linear(torch.nn.Linear):
             self.bias = None
 
     def forward(self, x):
-        num_tokens = None
         # quantize_fp8_per_row will squash the leading dimensions, so save the desired shape here
         output_shape = (*x.shape[:-1], -1)
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
