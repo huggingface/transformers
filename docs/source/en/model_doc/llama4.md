@@ -244,7 +244,7 @@ As of release, the Llama 4 model supports the following attention methods: `eage
 Switching attention mechanism is done at the model initialization step:
 
 
-<hfoptions id="usage">
+<hfoptions id="Attention">
 <hfoption id="Flex Attention">
 Setting Flex Attention ensures the best results with the very long context the model can handle.
 
@@ -297,7 +297,14 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 At time of release, both FBGEMM and LLM-Compressor are supported; more quantization methods will be supported in the days that follow the release.
 
+See below for examples using both:
+
+
+
 Here is an example loading an BF16 model in FP8 using the FBGEMM approach:
+
+<hfoptions id="Quantization">
+<hfoption id="FBGEMM">
 
 ```python
 from transformers import AutoTokenizer, Llama4ForConditionalGeneration, FbgemmFp8Config
@@ -323,6 +330,37 @@ outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
 print(outputs[0])
 ```
+
+</hfoption>
+<hfoption id="LLM-Compressor">
+
+To use the LLM-Compressor technique, we recommend leveraging the pre-quantized FP8 checkpoint available with the release:
+
+```python
+from transformers import AutoTokenizer, Llama4ForConditionalGeneration
+import torch
+
+model_id = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+messages = [
+    {"role": "user", "content": "Who are you?"},
+]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+
+model = Llama4ForConditionalGeneration.from_pretrained(
+    model_id,
+    tp_plan="auto",
+    torch_dtype=torch.bfloat16,
+)
+
+outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
+outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
+print(outputs[0])
+```
+</hfoption>
+</hfoptions>
 
 ### Offloading
 
