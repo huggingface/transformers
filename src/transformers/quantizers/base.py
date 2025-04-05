@@ -311,7 +311,7 @@ class HfQuantizer(ABC):
                     )
 
 
-class SequentialLlama4TextExperts(torch.nn.ModuleList):
+class SequentialLlama4TextExperts("torch.nn.ModuleList"):
     """
     A module that implements a compressed version of a list of expert modules.
     This is specifically designed to work with Llama4TextExperts in MoE layers.
