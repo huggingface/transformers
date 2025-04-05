@@ -3728,15 +3728,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts = [no_init_weights()]
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                init_contexts.extend([
-                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                    set_zero3_state(),
-                ])
+                init_contexts.extend(
+                    [
+                        deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                        set_zero3_state(),
+                    ]
+                )
             elif is_quantized:
                 init_contexts.append(set_quantized_state())
         else:
             init_contexts = [no_init_weights(), init_empty_weights()]
 
+        print(init_contexts)
         return init_contexts
 
     @classmethod
