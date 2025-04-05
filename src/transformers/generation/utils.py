@@ -1830,6 +1830,9 @@ class GenerationMixin:
 
         Returns the resulting cache object.
         """
+        if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
+            cache_implementation = "hybrid_chunked"
+
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None

@@ -412,8 +412,6 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
-        if self.cache_implementation == "hybrid" and self.model_type == "llama4":
-            self.cache_implementation = "hybrid_chunked"
         self.cache_config = kwargs.pop("cache_config", None)
         if self.cache_implementation is not None and self.cache_implementation in CACHE_CONFIG_MAPPING:
             cache_config_class = CACHE_CONFIG_MAPPING[self.cache_implementation]
