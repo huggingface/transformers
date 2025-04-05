@@ -294,26 +294,35 @@ class HfQuantizer(ABC):
     @property
     @abstractmethod
     def is_trainable(self): ...
-    
+
     def _convert_model_for_quantization(self, model):
         from accelerate import init_empty_weights
+
         for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
-            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys() and self.quantization_config.quant_method == QuantizationMethod.COMPRESSED_TENSORS:
+            if (
+                module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys()
+                and self.quantization_config.quant_method == QuantizationMethod.COMPRESSED_TENSORS
+            ):
                 with init_empty_weights():
                     parent_module, name = get_module_from_name(model, name)
-                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](model.config.get_text_config())
+                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](
+                        model.config.get_text_config()
+                    )
+
 
 class SequentialLlama4TextExperts(torch.nn.ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.
     This is specifically designed to work with Llama4TextExperts in MoE layers.
     """
+
     def __init__(self, config):
         from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
+
         super().__init__([Llama4TextMLP(config) for _ in range(config.num_local_experts)])
         self.num_experts = config.num_local_experts
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -324,4 +333,5 @@ class SequentialLlama4TextExperts(torch.nn.ModuleList):
             routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
         return routed_out
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = { "Llama4TextExperts": SequentialLlama4TextExperts }
+
+MODULES_TO_PATCH_FOR_QUANTIZATION = {"Llama4TextExperts": SequentialLlama4TextExperts}
