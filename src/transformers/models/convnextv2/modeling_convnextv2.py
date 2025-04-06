@@ -287,6 +287,7 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -306,12 +307,9 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ConvNextV2GRN):
-            module.weight.data.zero_()
-            module.bias.data.zero_()
 
 
 CONVNEXTV2_START_DOCSTRING = r"""

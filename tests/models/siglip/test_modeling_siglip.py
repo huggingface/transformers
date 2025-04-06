@@ -247,6 +247,14 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
@@ -393,6 +401,16 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip does not use inputs_embeds")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_from_base
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_to_base
+    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")

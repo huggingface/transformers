@@ -351,10 +351,7 @@ class PretrainedFSMTModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, SinusoidalPositionalEmbedding):
-            weight = module.get_embedding(*module.weight.shape, module.padding_idx)
-            weight = nn.Parameter(weight, requires_grad=False)
-            weight.detach_()
-            module.weight = weight
+            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1305,13 +1302,17 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_positions, embedding_dim, padding_idx):
-        super().__init__(num_positions, embedding_dim, padding_idx)
+        self.make_weight(num_positions, embedding_dim, padding_idx)
 
     def make_weight(self, num_positions, embedding_dim, padding_idx):
         weight = self.get_embedding(num_positions, embedding_dim, padding_idx)
-        # in forward put the weights on the correct dtype and device of the param
-        weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
-        self.weight = nn.Parameter(weight)
+        if not hasattr(self, "weight"):
+            # in ___init__
+            super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
+        else:
+            # in forward put the weights on the correct dtype and device of the param
+            weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
+            self.weight = nn.Parameter(weight)
         self.weight.detach_()
         self.weight.requires_grad = False
 
