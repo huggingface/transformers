@@ -132,14 +132,14 @@ class GraniteMoeHybridMambaLayer(BambaMixer):
             layer_idx
         )
 
-class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
+class GraniteMoeSharedMLP(GraniteMoeSharedMLP):
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)
         
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
         # to do later on add error handling for not found here 
         self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx) if config.layer_types[layer_idx] == "multihead_latent_attention" else GraniteMoeHybridMambaLayer(config, layer_idx)
 
