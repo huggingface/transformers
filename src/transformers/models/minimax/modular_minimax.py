@@ -666,3 +666,14 @@ class MiniMaxForTokenClassification(MixtralForTokenClassification):
 
 class MiniMaxForQuestionAnswering(MixtralForQuestionAnswering):
     pass
+
+
+__all__ = [
+    "MiniMaxConfig",
+    "MiniMaxPreTrainedModel",
+    "MiniMaxModel",
+    "MiniMaxForCausalLM",
+    "MiniMaxForSequenceClassification",
+    "MiniMaxForTokenClassification",
+    "MiniMaxForQuestionAnswering",
+]
