@@ -1760,20 +1760,9 @@ class Phi3VForTokenClassification(Phi3VPreTrainedModel):
 
 
 __all__ = [
-    "CLIPAttentionFA2",
-    "Phi3Attention",
-    "Phi3DecoderLayer",
-    "Phi3FlashAttention2",
-    "Phi3ImageEmbedding",
-    "Phi3MLP",
-    "Phi3RMSNorm",
-    "Phi3RotaryEmbedding",
-    "Phi3SdpaAttention",
-    "Phi3SuScaledRotaryEmbedding",
     "Phi3VForCausalLM",
     "Phi3VForSequenceClassification",
     "Phi3VForTokenClassification",
     "Phi3VModel",
     "Phi3VPreTrainedModel",
-    "Phi3YarnScaledRotaryEmbedding",
 ]

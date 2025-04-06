@@ -17,7 +17,6 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
-from typing import Optional
 
 import numpy as np
 import requests
