@@ -356,7 +356,7 @@ class Llama4TextAttention(nn.Module):
             attn_scales = (
                 torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
             )
-            attn_scales = attn_scales.view((*input_shape, 1, 1))
+            attn_scales = attn_scales.view((1, input_shape[-1], 1, 1)).expand((*input_shape, 1, 1))  # batch size > 1
             query_states = (query_states * attn_scales).to(query_states.dtype)
 
         query_states = query_states.transpose(1, 2)
@@ -692,6 +692,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
+                    False,  # output_router_logits is False
                     use_cache,
                     cache_position,
                     freq_cis,
@@ -1375,6 +1376,7 @@ class Llama4VisionEncoder(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
+                    freqs_ci,
                     attention_mask,
                     output_attentions,
                 )
@@ -1445,7 +1447,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
-    _no_split_modules = ["Llama4VisionAttention"]
+    _no_split_modules = ["Llama4VisionEncoderLayer"]
     config_class = Llama4VisionConfig
 
     def __init__(self, config: Llama4VisionConfig):
@@ -1754,8 +1756,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 )
 
             expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
-            inputs_embeds.masked_scatter_(expanded_mask, projected_vision_flat)
-
+            inputs_embeds = inputs_embeds.masked_scatter(expanded_mask, projected_vision_flat)
             inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
 
         outputs = self.language_model(
