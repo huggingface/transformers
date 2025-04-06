@@ -774,6 +774,32 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
+class GraniteMoeHybridMLP(nn.Module):
+    """
+    MLP layer for shared experts
+
+    Args:
+        config:
+            Configuration object with model hyperparameters.
+    """
+
+    def __init__(self, config: GraniteMoeHybridConfig):
+        super(GraniteMoeHybridMLP, self).__init__()
+
+        self.input_size = config.hidden_size
+        self.hidden_size = config.shared_intermediate_size
+        self.activation = ACT2FN[config.hidden_act]
+        self.input_linear = nn.Linear(self.input_size, self.hidden_size * 2, bias=False)
+        self.output_linear = nn.Linear(self.hidden_size, self.input_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.input_linear(hidden_states)
+        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        hidden_states = self.output_linear(hidden_states)
+        return hidden_states
+
+
 class GraniteMoeHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -960,7 +986,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.residual_multiplier = config.residual_multiplier
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
+        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
 
     def forward(
         self,
