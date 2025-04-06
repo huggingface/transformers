@@ -1,6 +1,5 @@
 """PyTorch Phi-3-V model."""
 
-import inspect
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -33,16 +32,8 @@ from ...utils import (
 )
 from .configuration_phi3_v import Phi3VConfig
 
-
-try:
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-except ImportError:
-    pass
-
-import torch
+from flash_attn import flash_attn_func, flash_attn_varlen_func
+from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 from ...configuration_utils import PretrainedConfig
 from ...models.clip.configuration_clip import CLIPVisionConfig

@@ -4,12 +4,15 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phi3_v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+from flash_attn import flash_attn_func, flash_attn_varlen_func
+from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
