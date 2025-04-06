@@ -43,6 +43,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
     MixtralRMSNorm,
+    MixtralPreTrainedModel,
 )
 
 
@@ -379,11 +380,6 @@ class MiniMaxLightningAttention(nn.Module):
         if past_key_value is not None:
             past_key_value.set_linear_cache(self.layer_idx, attn_weights_inter)
 
-        # TODO: remove these
-        # print()
-        # print(self.layer_idx)
-        # print(linear_cache)
-
         return attn_output, attn_weights_inter
 
 
@@ -487,13 +483,14 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
         return outputs
 
 
-class MiniMaxModel(MixtralModel):
-    def __init__(self, config: MiniMaxConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [MiniMaxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
 
+class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
+    _supports_cache_class = True  # Note: only supports MiniMaxCache
+    _supports_static_cache = False
+    _supports_quantized_cache = False
+
+
+class MiniMaxModel(MixtralModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -624,15 +621,6 @@ class MiniMaxModel(MixtralModel):
 
 
 class MiniMaxForCausalLM(MixtralForCausalLM):
-    _supports_cache_class = True  # Note: only supports MiniMaxCache
-    _supports_static_cache = False
-    _supports_quantized_cache = False
-
-    # TODO: remove init
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = MiniMaxModel(config)
-
     def forward(self, **super_kwargs):
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
