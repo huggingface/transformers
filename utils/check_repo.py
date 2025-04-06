@@ -144,6 +144,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
     ]
@@ -170,6 +172,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
+    "models/llama4/test_modeling_llama4.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
