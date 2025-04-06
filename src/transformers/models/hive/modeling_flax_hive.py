@@ -461,7 +461,7 @@ class FlaxHivePreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(Hive_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(HIVE_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
