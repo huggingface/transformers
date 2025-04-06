@@ -299,7 +299,7 @@ class MiniMaxLightningAttention(nn.Module):
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
         qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
-        query_states, key_states, value_states = torch.split(qkv_states, [self.head_dim] * 3, dim=3)
+        query_states, key_states, value_states = torch.split(qkv_states, 3, dim=3)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
