@@ -125,10 +125,11 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         return softmax_scale   
     
 class GraniteMoeHybridMambaLayer(BambaMixer):
-     def __init__(self, config: GraniteMoeHybridConfig):
+     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         # TO DO map variables here
         super().__init__(
-            BambaConfig(config)
+            BambaConfig(config),
+            layer_idx
         )
 
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
@@ -136,7 +137,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
         # to do later on add error handling for not found here 
-        self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx) if config.layer_types[layer_idx] == "mla" else GraniteMoeHybridMambaLayer(config)
+        self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx) if config.layer_types[layer_idx] == "multihead_latent_attention" else GraniteMoeHybridMambaLayer(config, layer_idx)
 
     def forward(
         self,

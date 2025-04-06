@@ -76,7 +76,7 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         self.causal = True
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        # Do we need this or is it always False?
+        # TO DO add this bias later
         # self.add_bias = config.add_bias
         self.query_compression_size = config.mla_query_comp_size
         self.key_value_compression_size = config.mla_key_value_comp_size
@@ -86,7 +86,8 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         self.attention_multiplier = config.attention_multiplier
         self.layer_idx = layer_idx
 
-        # will bias be a flag in config?
+        # TO DO- will bias be a flag in config?
+        # self.position_embedding_type == "rope": not implemented so went to else
         self.c_attn_down_projection = nn.Linear(
             self.hidden_size, self.query_compression_size + 2 * self.key_value_compression_size, bias=False
         )
@@ -108,6 +109,8 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         hidden_states = self.c_attn_down_projection(hidden_states)
+        # if self.position_embedding_type == "rope":
+        #     raise NotImplementedError()
         query, key, value = hidden_states.split(
             (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
         )
@@ -117,7 +120,8 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         query = self.query_up_projection(query)
         key = self.key_up_projection(key)
         value = self.value_up_projection(value)
-
+        # reference
+        # https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/modeling_utils/sequence_mixer_blocks/multihead_latent_attention.py#L177
         batch_size, query_length = query.shape[:-1]
         key_length = key.shape[1]
 
@@ -311,7 +315,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
-    def __init__(self, config: GraniteMoeHybridConfig):
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads
         self.hidden_size = config.hidden_size
@@ -947,8 +951,8 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         # to do later on add error handling for not found here
         self.self_attn = (
             GraniteMultiHeadLatentAttention(config, layer_idx)
-            if config.layer_types[layer_idx] == "mla"
-            else GraniteMoeHybridMambaLayer(config)
+            if config.layer_types[layer_idx] == "multihead_latent_attention"
+            else GraniteMoeHybridMambaLayer(config, layer_idx)
         )
 
         self.block_sparse_moe = GraniteMoeHybridMoE(config)
@@ -1018,7 +1022,9 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        # moe not needed?
+        # confirm moe is needed.
+        # referral https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/models/gpt_dolomite/layer.py
+        # dolomite does not have moe block. This is taken from sharedmoe class however
         moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
         if self.shared_mlp is None:
