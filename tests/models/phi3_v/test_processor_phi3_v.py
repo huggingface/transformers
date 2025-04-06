@@ -106,7 +106,7 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_str = "In this image, we see\n"
         text = text_str + image_str
 
-        inputs = processor(text=text, images=self.image1, return_tensors='pt')
+        inputs = processor(text=text, images=self.image1, return_tensors="pt")
         tokenized_sentence = processor.tokenizer(text_str)
         split_image1_tokens = self.get_expected_input_ids(processor, self.image1)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]

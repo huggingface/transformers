@@ -1,17 +1,21 @@
 """PyTorch Phi-3-V model."""
-from inspect import signature
+
 import math
 import warnings
+from inspect import signature
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from flash_attn import flash_attn_func, flash_attn_varlen_func
+from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
@@ -21,6 +25,9 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...models.clip.configuration_clip import CLIPVisionConfig
+from ...models.clip.modeling_clip import CLIPAttention, CLIPVisionModel
+from ...models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -31,14 +38,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_phi3_v import Phi3VConfig
-
-from flash_attn import flash_attn_func, flash_attn_varlen_func
-from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-from ...configuration_utils import PretrainedConfig
-from ...models.clip.configuration_clip import CLIPVisionConfig
-from ...models.clip.modeling_clip import CLIPAttention, CLIPVisionModel
-from ...models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 
 
 logger = logging.get_logger(__name__)
@@ -150,9 +149,9 @@ class Phi3ImageEmbedding(nn.Module):
         self.with_learnable_separator = kwargs.get("with_learnable_separator", False)
         self.hd_transform_order = kwargs.get("hd_transform_order", "glb_sub")
         # with_hd_transform and with_learnable_separator should have same value
-        assert (
-            self.use_hd_transform == self.with_learnable_separator
-        ), "use_hd_transform and with_learnable_separator should have same value"
+        assert self.use_hd_transform == self.with_learnable_separator, (
+            "use_hd_transform and with_learnable_separator should have same value"
+        )
         if self.with_learnable_separator:
             assert self.use_hd_transform, "learnable separator is only for hd transform"
             # 1024 * 4, merge spatial to channel dimension
@@ -919,6 +918,7 @@ class Phi3FlashAttention2(Phi3Attention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
+
 
 class Phi3SdpaAttention(Phi3Attention):
     """

@@ -43,9 +43,8 @@ class Phi3VProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
-            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        chat_template (`str`, *optional*): <fill_docstring>
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -57,7 +56,7 @@ class Phi3VProcessor(ProcessorMixin):
         self.image_processor = image_processor
         self.tokenizer = tokenizer
         self.num_img_tokens = image_processor.num_img_tokens
-        self.img_tokens = [f"<|image_{i+1}|>" for i in range(1000000)]
+        self.img_tokens = [f"<|image_{i + 1}|>" for i in range(1000000)]
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(
@@ -190,13 +189,13 @@ class Phi3VProcessor(ProcessorMixin):
         unique_image_ids = sorted(set(image_ids))
         # image_ids must start from 1, and must be continuous int, e.g. [1, 2, 3], cannot be [1, 4, 5]
         # check the condition
-        assert unique_image_ids == list(
-            range(1, len(unique_image_ids) + 1)
-        ), f"image_ids must start from 1, and must be continuous int, e.g. [1, 2, 3], cannot be {unique_image_ids}"
+        assert unique_image_ids == list(range(1, len(unique_image_ids) + 1)), (
+            f"image_ids must start from 1, and must be continuous int, e.g. [1, 2, 3], cannot be {unique_image_ids}"
+        )
         # total images must be the same as the number of image tags
-        assert (
-            len(unique_image_ids) == len(images)
-        ), f"total images must be the same as the number of image tags, got {len(unique_image_ids)} image tags and {len(images)} images"
+        assert len(unique_image_ids) == len(images), (
+            f"total images must be the same as the number of image tags, got {len(unique_image_ids)} image tags and {len(images)} images"
+        )
 
         image_ids_pad = [[-iid] * num_img_tokens[iid - 1] for iid in image_ids]
 
