@@ -4,9 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phi3_v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import math
 import warnings
+from inspect import signature
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -597,6 +597,9 @@ class Phi3Attention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+
+_flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
 
 
 def _get_unpad_data(attention_mask):

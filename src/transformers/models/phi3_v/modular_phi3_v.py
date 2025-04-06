@@ -1,5 +1,5 @@
 """PyTorch Phi-3-V model."""
-
+from inspect import signature
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -52,6 +52,8 @@ PHI3V_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 MAX_INPUT_ID = int(1e9)
+
+_flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
 
 CLIP_VIT_LARGE_PATCH14_336_CONFIG = CLIPVisionConfig(
     attention_dropout=0.0,
