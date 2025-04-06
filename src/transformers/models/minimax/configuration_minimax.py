@@ -225,3 +225,6 @@ class MiniMaxConfig(PretrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
+
+
+__all__ = ["MiniMaxConfig"]

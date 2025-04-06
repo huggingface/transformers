@@ -42,8 +42,8 @@ from ..mixtral.modeling_mixtral import (
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
-    MixtralRMSNorm,
     MixtralPreTrainedModel,
+    MixtralRMSNorm,
 )
 
 
@@ -481,7 +481,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
             outputs += (router_logits,)
 
         return outputs
-
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
