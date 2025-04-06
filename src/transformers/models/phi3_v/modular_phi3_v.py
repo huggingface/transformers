@@ -79,11 +79,6 @@ CLIP_VIT_LARGE_PATCH14_336_CONFIG = CLIPVisionConfig(
     projection_dim=768,
 )
 
-PHI3_ATTENTION_CLASSES = {
-    "eager": Phi3Attention,
-    "flash_attention_2": Phi3FlashAttention2,
-    "sdpa": Phi3SdpaAttention,
-}
 
 class CLIPAttentionFA2(CLIPAttention):
     """Add flash attention 2 to CLIPAttention. (This is only used in the vision encoder)"""
@@ -1019,6 +1014,13 @@ class Phi3SdpaAttention(Phi3Attention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
+
+
+PHI3_ATTENTION_CLASSES = {
+    "eager": Phi3Attention,
+    "flash_attention_2": Phi3FlashAttention2,
+    "sdpa": Phi3SdpaAttention,
+}
 
 
 class Phi3DecoderLayer(nn.Module):
