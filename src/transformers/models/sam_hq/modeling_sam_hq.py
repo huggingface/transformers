@@ -21,7 +21,7 @@
 # limitations under the License.
 import collections
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -528,7 +528,7 @@ class SamHQVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> SamHQVisionEncoderOutput:
+    ) -> Union[Tuple, SamHQVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1578,7 +1578,7 @@ class SamHQModel(SamHQPreTrainedModel):
         return_dict: Optional[bool] = None,
         intermediate_embeddings: Optional[List[torch.FloatTensor]] = None,
         **kwargs,
-    ) -> SamHQImageSegmentationOutput:
+    ) -> List[Dict[str, torch.Tensor]]:
         r"""
 
         Args:
