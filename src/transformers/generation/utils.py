@@ -2433,7 +2433,7 @@ class GenerationMixin:
         ).input_ids.to(input_ids.device)
 
         # replace bos with pad to not condition healing on it
-        if bos_token_id and pad_token_id:
+        if bos_token_id is not None and pad_token_id is not None:
             input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
         """
