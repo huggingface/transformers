@@ -47,7 +47,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...models.clip.configuration_clip import CLIPVisionConfig
 from ...models.clip.modeling_clip import CLIPAttention, CLIPVisionModel
-from ...models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv, rotate_half
+from ...models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 
 
 logger = logging.get_logger(__name__)
