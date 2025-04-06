@@ -173,7 +173,7 @@ def _preprocess_resize_output_shape(image, output_shape):
         # multichannel case: append shape of last axis
         output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
+        raise ValueError("output_shape length cannot be smaller than the image number of dimensions")
 
     return image, output_shape
 
@@ -345,10 +345,10 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(factors)
                 if np.any(anti_aliasing_sigma < 0):
-                    raise ValueError("Anti-aliasing standard deviation must be " "greater than or equal to zero")
+                    raise ValueError("Anti-aliasing standard deviation must be greater than or equal to zero")
                 elif np.any((anti_aliasing_sigma > 0) & (factors <= 1)):
                     warnings.warn(
-                        "Anti-aliasing standard deviation greater than zero but " "not down-sampling along all axes"
+                        "Anti-aliasing standard deviation greater than zero but not down-sampling along all axes"
                     )
             filtered = ndi.gaussian_filter(image, anti_aliasing_sigma, cval=cval, mode=ndi_mode)
         else:
@@ -369,12 +369,12 @@ class Owlv2ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_pad: bool = None,
-        do_resize: bool = None,
+        do_pad: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

@@ -117,7 +117,8 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.26.0,<1.0",
+    "hf_xet",
+    "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -125,10 +126,11 @@ _deps = [
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
     "jinja2>=3.1.0",
-    "kenlm",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.3.2,<0.4",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -161,10 +163,10 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.5.1",
+    "ruff==0.11.2",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.4.3",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -282,6 +284,7 @@ extras["tf-cpu"] = deps_list(
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
+extras["hf_xet"] = deps_list("hf_xet")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
@@ -301,11 +304,17 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
+extras["audio"] = deps_list(
+    "librosa",
+    "pyctcdecode",
+    "phonemizer",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
+)
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -444,7 +453,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.50.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.52.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -456,7 +465,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
