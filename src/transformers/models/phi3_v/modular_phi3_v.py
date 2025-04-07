@@ -43,6 +43,8 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
+    _flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/Phi-3.5-vision-instruct"
@@ -55,7 +57,6 @@ PHI3V_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 MAX_INPUT_ID = int(1e9)
 
-_flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
 
 CLIP_VIT_LARGE_PATCH14_336_CONFIG = CLIPVisionConfig(
     attention_dropout=0.0,
