@@ -50,7 +50,7 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        shutil.rmtree(cls.tmpdirname)
 
     # Override as Llama4Processor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
