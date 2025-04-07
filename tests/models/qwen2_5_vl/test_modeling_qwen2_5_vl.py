@@ -315,10 +315,9 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
 @require_torch
 class Qwen2_5_VLIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
-        cls.messages = [
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+        self.messages = [
             {
                 "role": "user",
                 "content": [
@@ -328,7 +327,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             }
         ]
         url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
-        cls.image = Image.open(requests.get(url, stream=True).raw)
+        self.image = Image.open(requests.get(url, stream=True).raw)
 
     def tearDown(self):
         gc.collect()

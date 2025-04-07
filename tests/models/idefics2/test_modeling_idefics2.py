@@ -563,20 +563,19 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
 @require_torch
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
-        cls.image1 = Image.open(
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
+        self.image1 = Image.open(
             BytesIO(
                 requests.get(
                     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
                 ).content
             )
         )
-        cls.image2 = Image.open(
+        self.image2 = Image.open(
             BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
         )
-        cls.image3 = Image.open(
+        self.image3 = Image.open(
             BytesIO(
                 requests.get(
                     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"

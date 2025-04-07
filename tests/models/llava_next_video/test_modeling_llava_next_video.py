@@ -363,19 +363,18 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
         image_file = hf_hub_download(
             repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
         )
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
-        cls.image = Image.open(image_file)
-        cls.video = np.load(video_file)
-        cls.prompt_image = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
-        cls.prompt_video = "USER: <video>\nWhy is this video funny? ASSISTANT:"
+        self.image = Image.open(image_file)
+        self.video = np.load(video_file)
+        self.prompt_image = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
+        self.prompt_video = "USER: <video>\nWhy is this video funny? ASSISTANT:"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

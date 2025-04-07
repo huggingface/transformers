@@ -298,9 +298,8 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 class ColPaliModelIntegrationTest(unittest.TestCase):
     model_name: ClassVar[str] = "vidore/colpali-v1.2-hf"
 
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = ColPaliProcessor.from_pretrained(cls.model_name)
+    def setUp(self):
+        self.processor = ColPaliProcessor.from_pretrained(self.model_name)
 
     def tearDown(self):
         gc.collect()

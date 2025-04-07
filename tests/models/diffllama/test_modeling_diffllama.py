@@ -640,12 +640,11 @@ class Mask4DTestHard(unittest.TestCase):
         gc.collect()
         backend_empty_cache(torch_device)
 
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
         model_name = "kajuma/DiffLlama-0.3B-handcut"
-        cls.model_dtype = torch.float32
-        cls.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        cls.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=cls.model_dtype).to(torch_device)
+        self.model_dtype = torch.float32
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"

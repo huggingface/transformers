@@ -421,10 +421,9 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @slow
 class RWKVIntegrationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.model_id = "RWKV/rwkv-4-169m-pile"
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+    def setUp(self):
+        self.model_id = "RWKV/rwkv-4-169m-pile"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     def test_simple_generate(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"

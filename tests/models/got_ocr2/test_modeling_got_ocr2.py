@@ -235,9 +235,8 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

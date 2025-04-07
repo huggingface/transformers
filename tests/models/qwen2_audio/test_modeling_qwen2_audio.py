@@ -197,9 +197,8 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

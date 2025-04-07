@@ -446,11 +446,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torch_accelerator
 @slow
 class FalconMambaIntegrationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.model_id = "tiiuae/falcon-mamba-7b"
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
-        cls.text = "Hello today"
+    def setUp(self):
+        self.model_id = "tiiuae/falcon-mamba-7b"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.text = "Hello today"
 
     def test_generation_bf16(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")

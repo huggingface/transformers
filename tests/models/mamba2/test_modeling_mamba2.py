@@ -318,11 +318,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @slow
 @require_read_token
 class Mamba2IntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id, from_slow=True, legacy=False)
-        cls.prompt = ("[INST]Write a hello world program in C++.",)
+    def setUp(self):
+        self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
+        self.prompt = ("[INST]Write a hello world program in C++.",)
 
     @require_read_token
     @parameterized.expand(

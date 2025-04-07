@@ -318,9 +318,8 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
 @require_torch
 class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
