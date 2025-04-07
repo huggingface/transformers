@@ -24,8 +24,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
-from ...utils import TensorType
+from ...utils import TensorType, logging
 from ..auto import AutoTokenizer
+
+
+logger = logging.get_logger(__name__)
 
 
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
@@ -112,10 +115,12 @@ class AriaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
         if images is not None:
             image_inputs = self.image_processor(
                 images,
@@ -129,15 +134,19 @@ class AriaProcessor(ProcessorMixin):
                 sample = sample.replace(self.tokenizer.image_token, self.tokenizer.image_token * num_crops)
                 prompt_strings.append(sample)
 
+            text_kwargs = output_kwargs["text_kwargs"]
+            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
+                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + num_crops
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                    f"The `max_length` will be updated to include +{num_crops} placeholder tokens."
+                )
+
         else:
             image_inputs = {}
             prompt_strings = text
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            **output_kwargs["text_kwargs"],
-        )
-
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs})
 
     def batch_decode(self, *args, **kwargs):

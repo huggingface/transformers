@@ -24,7 +24,11 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
+
+
+logger = logging.get_logger(__name__)
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -145,6 +149,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
             expanded_text = []
             audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+            max_num_audio_tokens = 0
 
             for sample in text:
                 replace_str = []
@@ -152,6 +157,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     audio_length = audio_lengths.pop(0)
                     input_length = (audio_length - 1) // 2 + 1
                     num_audio_tokens = (input_length - 2) // 2 + 1
+                    max_num_audio_tokens = max(max_num_audio_tokens, num_audio_tokens + 2)  # 2 for bos and eos
 
                     expanded_audio_token = self.audio_token * num_audio_tokens
 
@@ -179,6 +185,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 expanded_text.append(sample)
             text = expanded_text
 
+        text_kwargs = output_kwargs["text_kwargs"]
+        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
+            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_audio_tokens
+            logger.warning_once(
+                "Processor got truncation with `max_length` which may truncate special audio placeholder tokens. "
+                f"The `max_length` will be updated to include +{max_num_audio_tokens} placeholder tokens."
+            )
         inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if audio is not None:

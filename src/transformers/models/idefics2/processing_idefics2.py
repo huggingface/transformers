@@ -208,6 +208,7 @@ class Idefics2Processor(ProcessorMixin):
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
+                image_seq_len *= 5
 
             prompt_strings = []
             for sample in text:
@@ -216,6 +217,14 @@ class Idefics2Processor(ProcessorMixin):
                 # Remove any double fake tokens if images are adjacent
                 sample = sample.replace(f"{fake_image_token}{fake_image_token}", f"{fake_image_token}")
                 prompt_strings.append(sample)
+
+            text_kwargs = output_kwargs["text_kwargs"]
+            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
+                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + image_seq_len
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                    f"The `max_length` will be updated to include +{image_seq_len} placeholder tokens."
+                )
 
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)

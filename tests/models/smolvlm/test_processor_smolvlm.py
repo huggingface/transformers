@@ -653,3 +653,32 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             processor(text=texts, images=None)
         self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
+        inputs_truncated = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=True,
+            padding=True,
+            max_length=20,
+        )
+
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        self.assertListEqual(
+            list(inputs_truncated[self.text_input_name].shape), list(inputs[self.text_input_name].shape)
+        )

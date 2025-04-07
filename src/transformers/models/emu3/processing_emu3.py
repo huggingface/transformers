@@ -20,6 +20,10 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
@@ -155,6 +159,7 @@ class Emu3Processor(ProcessorMixin):
             image_sizes = iter(image_features.image_sizes)
 
             prompt_strings = []
+            max_num_vision_tokens = 0
             for sample in text:
                 while self.image_token in sample:
                     image_size = next(image_sizes)
@@ -162,12 +167,25 @@ class Emu3Processor(ProcessorMixin):
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
                     image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+                    max_num_vision_tokens = max(max_num_vision_tokens, image_seq_length)
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
                     sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+
+            text_kwargs = output_kwargs["text_kwargs"]
+            if (
+                "max_length" in text_kwargs
+                and text_kwargs.get("truncation", None) is not None
+                and max_num_vision_tokens
+            ):
+                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
+                )
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
         elif return_for_image_generation:

@@ -29,6 +29,10 @@ from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
 )
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Llama4ImagesKwargs(ImagesKwargs, total=False):
@@ -140,19 +144,25 @@ class Llama4Processor(ProcessorMixin):
         """
         img_string = "<|image_start|>"
         ratio_h, ratio_w = aspect_ratio
+        num_image_tokens = 0
         if ratio_h * ratio_w > 1:
             for yy in range(ratio_h):
                 for xx in range(ratio_w):
                     img_string += "<|patch|>" * num_patches_per_chunk
+                    num_image_tokens += num_patches_per_chunk
                     if xx < ratio_w - 1:
                         img_string += "<|tile_x_separator|>"
+                        num_image_tokens += 1
 
                 img_string += "<|tile_y_separator|>"
+                num_image_tokens += 1
+
         img_string += "<|image|>"
         img_string += "<|patch|>" * num_patches_per_chunk
         img_string += "<|image_end|>"
+        num_image_tokens += num_patches_per_chunk + 2
 
-        return img_string
+        return img_string, num_image_tokens
 
     def __call__(
         self,
@@ -223,6 +233,7 @@ class Llama4Processor(ProcessorMixin):
                 )
 
             image_index = 0
+            max_num_image_tokens = 0
             processed_text = []
             for prompt in text:
                 placeholder_count = prompt.count(self.fake_image_token)
@@ -235,15 +246,28 @@ class Llama4Processor(ProcessorMixin):
                 for local_image_index, split_part in enumerate(prompt_splits):
                     new_prompt.append(split_part)
                     if local_image_index < placeholder_count:
-                        tokens_for_this_image = self._prompt_split_image(
+                        tokens_for_this_image, num_image_tokens = self._prompt_split_image(
                             aspect_ratios[image_index], num_patches_per_chunk
                         )
+                        max_num_image_tokens = max(max_num_image_tokens, num_image_tokens)
                         image_index += 1
                         new_prompt.append(tokens_for_this_image)
                 processed_text.append("".join(new_prompt))
 
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
+
+            text_kwargs = output_kwargs["text_kwargs"]
+            if (
+                "max_length" in text_kwargs
+                and text_kwargs.get("truncation", None) is not None
+                and max_num_image_tokens
+            ):
+                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_image_tokens
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special multimodal placeholder tokens. "
+                    f"The `max_length` will be updated to include +{max_num_image_tokens} placeholder tokens."
+                )
 
             text = processed_text
 

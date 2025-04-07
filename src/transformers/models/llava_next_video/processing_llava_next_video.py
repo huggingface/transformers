@@ -187,6 +187,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+        max_num_vision_tokens = 0
         if image_inputs:
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
@@ -199,6 +200,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                         image_size = image_size.tolist()
                     orig_height, orig_width = image_size
                     num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                    max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                     if self.vision_feature_select_strategy == "default":
                         num_image_tokens -= 1
                     sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
@@ -218,11 +220,20 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
             num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
             num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens)
             prompt_strings = []
             for sample in text:
                 sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
                 prompt_strings.append(sample)
             text = prompt_strings
+
+        text_kwargs = output_kwargs["text_kwargs"]
+        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None and max_num_vision_tokens:
+            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
+            logger.warning_once(
+                "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
+            )
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})

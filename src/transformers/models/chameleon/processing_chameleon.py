@@ -22,6 +22,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):
@@ -139,6 +143,15 @@ class ChameleonProcessor(ProcessorMixin):
             if not return_for_text_completion:
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
+
+            text_kwargs = output_kwargs["text_kwargs"]
+            num_image_tokens = self.image_seq_length + 3
+            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
+                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + num_image_tokens
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                    f"The `max_length` will be updated to include +{num_image_tokens} placeholder tokens."
+                )
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 

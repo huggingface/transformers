@@ -160,6 +160,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = text
+        max_num_vision_tokens = 0
 
         if encoded_images is not None:
             if "pixel_values_images" in encoded_images.keys():
@@ -186,12 +187,20 @@ class VideoLlavaProcessor(ProcessorMixin):
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
+            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens, num_image_tokens)
 
             prompt_strings = []
             for sample in text:
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                 sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
                 prompt_strings.append(sample)
+
+            if max_length is not None and truncation is not None:
+                max_length = max_length + max_num_vision_tokens
+                logger.warning_once(
+                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
+                )
 
         text_inputs = self.tokenizer(
             prompt_strings,

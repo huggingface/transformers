@@ -154,6 +154,15 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
         ]
 
+        text_kwargs = output_kwargs["text_kwargs"]
+        max_num_mm_tokens = int(max(max(num_img_tokens), max(audio_embed_sizes)))
+        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
+            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_mm_tokens
+            logger.warning_once(
+                "Processor got truncation with `max_length` which may truncate special multimodal placeholder tokens. "
+                f"The `max_length` will be updated to include +{max_num_mm_tokens} placeholder tokens."
+            )
+
         text_inputs = self.tokenizer(processed_text, **text_kwargs)
 
         # prepare batch feature

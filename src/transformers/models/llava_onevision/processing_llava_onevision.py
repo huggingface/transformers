@@ -163,6 +163,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
         image_inputs = video_inputs = {}
 
+        max_num_vision_tokens = 0
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
@@ -171,7 +172,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
-            text = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
+            text, num_image_tokens = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
+            max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -186,7 +188,16 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             patches_height_width = int(math.sqrt(self.num_image_tokens))
             pooled_height_width = math.ceil(patches_height_width / 2)
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
+            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens)
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
+
+        text_kwargs = output_kwargs["text_kwargs"]
+        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None and max_num_vision_tokens:
+            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
+            logger.warning_once(
+                "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
+            )
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
@@ -201,6 +212,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         num_frames: int = 1,
     ):
         prompt_strings = []
+        max_num_vision_tokens = 0
         for sample in text:
             while special_token in sample:
                 image_size_list = next(image_sizes)
@@ -210,12 +222,13 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                     original_size = original_size.tolist()
                 orig_height, orig_width = original_size
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 sample = sample.replace(special_token, "<placeholder>" * num_image_tokens * num_frames, 1)
             prompt_strings.append(sample)
         text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
-        return text
+        return text, max_num_vision_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints

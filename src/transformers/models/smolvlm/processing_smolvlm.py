@@ -188,6 +188,7 @@ class SmolVLMProcessor(ProcessorMixin):
         image_cols = image_inputs.pop("cols", [[0] * len(text)])
 
         prompt_strings = []
+        max_num_vision_tokens = self.image_seq_len
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             image_prompt_strings = []
@@ -201,6 +202,9 @@ class SmolVLMProcessor(ProcessorMixin):
                     global_image_token=self.global_image_token,
                 )
                 image_prompt_strings.append(image_prompt_string)
+                if not (n_rows == 0 and n_cols == 0):
+                    num_image_tokens = self.image_seq_len + self.image_seq_len * n_rows * n_cols
+                    max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
 
             split_sample = sample.split(self.image_token)
             if len(split_sample) == 0:
@@ -212,7 +216,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 sample += image_prompt_string + split_sample[i + 1]
             prompt_strings.append(sample)
 
-        return prompt_strings, image_inputs
+        return prompt_strings, image_inputs, max_num_vision_tokens
 
     def __call__(
         self,
@@ -288,27 +292,39 @@ class SmolVLMProcessor(ProcessorMixin):
                 raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
 
         inputs = BatchFeature()
+        max_num_vision_tokens = 0
+
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
             images = make_nested_list_of_images(images)
-            text, vision_inputs = self.process_vision(
+            text, vision_inputs, num_image_tokens = self.process_vision(
                 text,
                 images,
                 output_kwargs,
                 do_image_splitting=self.do_image_splitting,
                 image_processor_size=self.image_size,
             )
+            max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
             inputs.update(vision_inputs)
         elif videos is not None:
             videos = make_batched_videos(videos)
-            text, vision_inputs = self.process_vision(
+            text, vision_inputs, num_video_tokens = self.process_vision(
                 text,
                 videos,
                 output_kwargs,
                 do_image_splitting=self.do_image_splitting,
                 image_processor_size=self.video_size,
             )
+            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens)
             inputs.update(vision_inputs)
+
+        text_kwargs = output_kwargs["text_kwargs"]
+        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None and max_num_vision_tokens:
+            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
+            logger.warning_once(
+                "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
+                f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
+            )
 
         if text is not None:
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
