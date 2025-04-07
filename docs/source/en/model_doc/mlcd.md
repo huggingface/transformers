@@ -48,21 +48,24 @@ Result:
 ## Usage
 
 ```python
-from transformers import AutoProcessor, MLCDVisionModel
-from PIL import Image
 import requests
+from PIL import Image
+from transformers import AutoProcessor, MLCDVisionModel
 
 # Load model and processor
-model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-336")
-processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-336")
+model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
 
 # Process single image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = processor(images=image, return_tensors="pt")
 
+# Generate outputs
+with torch.no_grads():
+    outputs = model(**inputs)
+
 # Get visual features
-outputs = model(**inputs)
 features = outputs.last_hidden_state
 
 print(f"Extracted features shape: {features.shape}")
