@@ -596,7 +596,7 @@ def is_torch_bf16_available_on_device(device):
         return True
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
         _ = x @ x
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
@@ -1864,7 +1864,7 @@ class _LazyModule(ModuleType):
         name: str,
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
-        module_spec: importlib.machinery.ModuleSpec = None,
+        module_spec: Optional[importlib.machinery.ModuleSpec] = None,
         extra_objects: Dict[str, object] = None,
     ):
         super().__init__(name)
