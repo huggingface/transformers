@@ -47,7 +47,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_torch_available():
             raise ImportError(
-                "Using fbgemm fp8 quantization requires torch > 2.1.0"
+                "Using fbgemm fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
         if not is_fbgemm_gpu_available():
