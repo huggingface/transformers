@@ -1,11 +1,16 @@
 import os
 import tempfile
-import unittest
+from tempfile import TemporaryDirectory
 
 from transformers import TrainingArguments
+from transformers.testing_utils import TestCasePlus, is_accelerate_available, require_accelerate
 
 
-class TestTrainingArguments(unittest.TestCase):
+if is_accelerate_available():
+    from accelerate.utils import patch_environment
+
+
+class TestTrainingArguments(TestCasePlus):
     def test_default_output_dir(self):
         """Test that output_dir defaults to 'trainer_output' when not specified."""
         args = TrainingArguments(output_dir=None)
@@ -65,3 +70,22 @@ class TestTrainingArguments(unittest.TestCase):
         # positive int is acceptable:
         args = TrainingArguments(torch_empty_cache_steps=1)
         self.assertEqual(args.torch_empty_cache_steps, 1)
+
+    @require_accelerate
+    def test_mixed_precision(self):
+        with TemporaryDirectory() as temp_dir:
+            # First with no env
+            TrainingArguments(fp16=True, output_dir=temp_dir)
+            args = TrainingArguments(output_dir=temp_dir, fp16=False)
+            self.assertEqual(args.fp16, False)
+            self.assertEqual(args.mixed_precision_dtype, None)
+
+            # Then with env
+            with patch_environment(accelerate_mixed_precision="fp16"):
+                args = TrainingArguments(output_dir=temp_dir)
+                self.assertEqual(args.fp16, True)
+                self.assertEqual(args.mixed_precision_dtype, "fp16")
+            # # Then as argument
+            args = TrainingArguments(output_dir=temp_dir, mixed_precision_dtype="fp16")
+            self.assertEqual(args.fp16, True)
+            self.assertEqual(args.mixed_precision_dtype, "fp16")
