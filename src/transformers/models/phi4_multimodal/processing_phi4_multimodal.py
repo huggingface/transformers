@@ -62,26 +62,22 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template", "fake_image_token_pattern", "fake_audio_token_pattern"]
+    valid_kwargs = ["chat_template"]
 
     def __init__(
         self,
         image_processor,
         audio_processor,
         tokenizer,
-        fake_image_token_pattern: str = r"<\|image_\d+\|>",
-        fake_audio_token_pattern: str = r"<\|audio_\d+\|>",
         **kwargs,
     ):
         super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
-        self.fake_image_token_pattern = fake_image_token_pattern
-        self.fake_audio_token_pattern = fake_audio_token_pattern
 
     def __call__(
         self,
         text: Union[TextInput, List[TextInput]],
         images: Optional[ImageInput] = None,
-        audios: Optional[AudioInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -99,7 +95,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            audios (`List[Union[np.ndarray, torch.Tensor]]`):
+            audio (`List[Union[np.ndarray, torch.Tensor]]`):
                 List of the audios to be prepared.
 
         Returns:
@@ -120,7 +116,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         text_kwargs = output_kwargs["text_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
-        audio_inputs = self.audio_processor(audios, **audio_kwargs) if audios is not None else {}
+        audio_inputs = self.audio_processor(audio, **audio_kwargs) if audio is not None else {}
 
         # We pop here for images as we don't need it later
         num_img_tokens = image_inputs.pop("num_img_tokens", [])
@@ -134,25 +130,25 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         image_token = self.tokenizer.image_token
         audio_token = self.tokenizer.audio_token
-        processed_text = [re.sub(self.fake_image_token_pattern, image_token, t) for t in text]
-        processed_text = [re.sub(self.fake_audio_token_pattern, audio_token, t) for t in processed_text]
 
         # Check that the number of special tokens is sound
-        concatenated_prompt = "".join(processed_text)
-        if concatenated_prompt.count(self.tokenizer.image_token) != len(num_img_tokens):
+        concatenated_prompt = "".join(text)
+        if concatenated_prompt.count(image_token) != len(num_img_tokens):
             raise ValueError(
-                "You should add as much image tokens `<|image_i|>` in your prompt as you pass `images` to the processor"
+                "You should add as much image tokens `<|image|>` in your prompt as you pass `images` to the processor. ",
+                f"Input contains {concatenated_prompt.count(image_token)} tokens != {len(num_img_tokens)} images",
             )
-        if concatenated_prompt.count(self.tokenizer.audio_token) != len(audio_embed_sizes):
+        if concatenated_prompt.count(audio_token) != len(audio_embed_sizes):
             raise ValueError(
-                "You should add as much audio tokens `<|audio_i|>` in your prompt as you pass `audios` to the processor"
+                "You should add as much audio tokens `<|audio|>` in your prompt as you pass `audios` to the processor. "
+                f"Input contains {concatenated_prompt.count(audio_token)} tokens != {len(audio_embed_sizes)} audios"
             )
 
         # Add appropriate number of image/audio tokens (note that the count of replacement is dynamic)
         image_count_iter = iter(num_img_tokens)
         audio_count_iter = iter(audio_embed_sizes)
         processed_text = [
-            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in processed_text
+            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in text
         ]
         processed_text = [
             re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text

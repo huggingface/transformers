@@ -112,8 +112,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
@@ -202,8 +202,8 @@ class RetrievAugLMOutput(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
