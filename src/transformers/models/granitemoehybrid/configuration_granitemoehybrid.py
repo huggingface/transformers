@@ -162,6 +162,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_d_state=256,
         mamba_d_head="auto",
         mamba_d_conv=4,
+        mamba_expand=2,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         # confirm this variable if needed or not
@@ -220,6 +221,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.mamba_expand = mamba_expand
 
         self.mla_query_comp_size = mla_query_comp_size
         self.mla_key_value_comp_size = mla_key_value_comp_size
