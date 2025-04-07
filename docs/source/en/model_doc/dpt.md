@@ -78,6 +78,11 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTImageProcessor
     - preprocess
+
+## DPTImageProcessorFast
+
+[[autodoc]] DPTImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
 
 ## DPTModel
