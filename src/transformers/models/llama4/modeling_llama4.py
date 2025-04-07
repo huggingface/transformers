@@ -779,10 +779,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 chunked_attention_mask = make_flex_block_causal_mask(
                     attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
                 )
+                full_key_length = past_key_values.get_max_cache_shape() if not self.training else target_length
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
-                    key_length=past_key_values.get_max_cache_shape() if not self.training else target_length,
+                    key_length=full_key_length,
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
