@@ -485,19 +485,14 @@ str_to_torch_dtype = {
     "F64": torch.float64,
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
 }
 
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
 
 if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U16"] = torch.uint16
     str_to_torch_dtype["U32"] = torch.uint32
     str_to_torch_dtype["U64"] = torch.uint64
-
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
-    str_to_torch_dtype["F8_E5M2"] = torch.float8_e5m2
 
 
 def load_state_dict(
@@ -546,12 +541,7 @@ def load_state_dict(
                 map_location = "cpu"
         extra_args = {}
         # mmap can only be used with files serialized with zipfile-based format.
-        if (
-            isinstance(checkpoint_file, str)
-            and map_location != "meta"
-            and version.parse(torch.__version__) >= version.parse("2.1.0")
-            and is_zipfile(checkpoint_file)
-        ):
+        if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
             extra_args = {"mmap": True}
         return torch.load(
             checkpoint_file,
@@ -4622,6 +4612,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_hqq = is_quantized and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
         is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
@@ -4787,7 +4778,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None:
+        if device_map is not None and not is_hqq:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
