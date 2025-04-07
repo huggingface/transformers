@@ -140,9 +140,9 @@ class DeformableDetrDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -192,10 +192,10 @@ class DeformableDetrModelOutput(ModelOutput):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    init_reference_points: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -269,8 +269,8 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -785,7 +785,7 @@ class DeformableDetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -1850,30 +1850,20 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             num_layers=3,
         )
 
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
         if config.with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
         else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
             self.model.decoder.bbox_embed = None
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            for box_embed in self.bbox_embed:
-                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         # Initialize weights and apply final processing
         self.post_init()
