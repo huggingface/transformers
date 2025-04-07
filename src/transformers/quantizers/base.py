@@ -304,12 +304,12 @@ class HfQuantizer(ABC):
         for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys() and (
-                self.quantization_config.quant_method == QuantizationMethod.COMPRESSED_TENSORS
-                or self.quantization_config.quant_method == QuantizationMethod.BITS_AND_BYTES
+                self.quantization_config.quant_method
+                in MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["quantization_methods"]
             ):
                 with init_empty_weights():
                     parent_module, name = get_module_from_name(model, name)
-                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name](
+                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()
                     )
 
@@ -337,4 +337,9 @@ class SequentialLlama4TextExperts(ModuleList):
         return routed_out
 
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = {"Llama4TextExperts": SequentialLlama4TextExperts}
+MODULES_TO_PATCH_FOR_QUANTIZATION = {
+    "Llama4TextExperts": {
+        "module_name": SequentialLlama4TextExperts,
+        "quantization_methods": [QuantizationMethod.COMPRESSED_TENSORS, QuantizationMethod.BITS_AND_BYTES],
+    }
+}
