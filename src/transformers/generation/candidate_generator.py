@@ -701,6 +701,7 @@ class AssistantToTargetTranslator:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
+        assistant_model_device: str = "cpu",
         assistant_model: "PreTrainedModel",
         assistant_prune_lm_head: Optional[bool] = True,
     ):
