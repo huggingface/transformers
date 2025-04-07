@@ -20,7 +20,6 @@ The `init_empty_weights` and `init_on_device` functions were copied from `accele
 `find_tied_parameters` was copied from `accelerate.utils.modeling.py`
 """
 
-import warnings
 from contextlib import contextmanager
 
 from ..utils import is_torch_available, logging

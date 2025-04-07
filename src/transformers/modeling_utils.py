@@ -4140,6 +4140,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_map is not None:
             if is_deepspeed_zero3_enabled():
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
+            if not is_accelerate_available():
+                raise ValueError(
+                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
+                )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
         if load_in_4bit or load_in_8bit:
