@@ -279,7 +279,7 @@ class LlavaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_pad: bool = None,
+        do_pad: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,

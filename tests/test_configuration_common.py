@@ -130,7 +130,7 @@ class ConfigTester:
             general_config_dict = config.to_dict()
 
             # Iterate over all sub_configs if there are any and load them with their own classes
-            sub_configs = self.config_class.sub_configs
+            sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if sub_class.__name__ == "AutoConfig":
                     sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__

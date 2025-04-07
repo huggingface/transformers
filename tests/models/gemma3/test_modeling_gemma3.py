@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -29,6 +30,8 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -339,13 +342,25 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_flex_attention_with_grads(self):
         pass
 
+    def test_automodelforcausallm(self):
+        """
+        Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
+        `AutoModelForCausalLM.from_pretrained` pulls the text config before loading the model
+        """
+        config = self.model_tester.get_config()
+        model = Gemma3ForConditionalGeneration(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
+
 
 @slow
 @require_torch_gpu
-# @require_read_token
+@require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Gemma3Processor.from_pretrained("gg-hf-g/gemma-3-4b-it", padding_side="left")
+        self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
@@ -363,7 +378,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_4b_bf16(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -380,11 +395,11 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like']  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_batch(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -424,7 +439,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_crops(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -452,12 +467,61 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
-        EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nDescribe this image in detail.\nmodel\nHere's a detailed description of the image:\n\n**Overall Impression:**\n\nThe image is a close-up shot of a garden scene featuring several"]  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach']  # fmt: skip
+        self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_4b_batch_crops(self):
+        model_id = "google/gemma-3-4b-it"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
+        crop_config = {
+            "images_kwargs": {
+                "do_pan_and_scan": True,
+                "pan_and_scan_max_num_crops": 448,
+                "pan_and_scan_min_crop_size": 32,
+                "pan_and_scan_min_ratio_to_activate": 0.3,
+            }
+        }
+        messages_2 = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                    },
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Are these images identical?"},
+                ],
+            },
+        ]
+
+        inputs = self.processor.apply_chat_template(
+            [self.messages, messages_2],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            add_generation_prompt=True,
+            **crop_config,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
+        EXPECTED_TEXTS = [
+            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach",
+            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nWhile they all feature a brown cow in the foreground and a similar background (including the stop signs and",
+        ]  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_multiimage(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -490,7 +554,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_1b_text_only(self):
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
 
         model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
@@ -505,29 +569,29 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
-    # @require_flash_attn
-    # @require_torch_gpu
-    # @mark.flash_attn_test
-    # def test_model_4b_flash_attn(self):
-    #     model_id = "gg-hf-g/gemma-3-4b-it"
-    #
-    #     model = Gemma3ForConditionalGeneration.from_pretrained(
-    #         model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-    #     ).to(torch_device)
-    #
-    #     inputs = self.processor.apply_chat_template(
-    #         self.messages,
-    #         tokenize=True,
-    #         return_dict=True,
-    #         return_tensors="pt",
-    #         add_generation_prompt=True,
-    #     ).to(torch_device)
-    #
-    #     output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-    #     output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-    #
-    #     EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nPlease look out that you are what Grammy and Vi- ||.xfairesr--ith alerts themselves are||ِّ\n\n**General Note:**']  # fmt: skip
-    #     self.assertEqual(output_text, EXPECTED_TEXTS)
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_model_4b_flash_attn(self):
+        model_id = "google/gemma-3-4b-it"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+        ).to(torch_device)
+
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
@@ -535,7 +599,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -552,7 +616,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
@@ -560,10 +624,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
     def test_generation_beyond_sliding_window_with_generation_config(self):
         """
-        Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
-        ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
+        Similar to `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684
+        -- ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
         """
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
         attn_implementation = "sdpa"
 
         input_text = [
@@ -579,12 +643,21 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.sliding_window)
+        self.assertGreater(input_size, model.config.sliding_window)
 
-        generation_config = GenerationConfig(max_new_tokens=20)
+        generation_config = GenerationConfig(max_new_tokens=5, min_new_tokens=5)
+        out = model.generate(**inputs, generation_config=generation_config)
 
-        out = model.generate(**inputs, generation_config=generation_config)[:, input_size:]
+        out = model.generate(**inputs, generation_config=generation_config, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
-
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+        # Generation works beyond sliding window
+        self.assertGreater(out.shape[1], model.config.sliding_window)
+        self.assertEqual(out.shape[1], input_size + 5)
+
+        # Note: Auto-inheritance only works for models saved starting from 4.50.0
+        model.generation_config.transformers_version = "4.49.0"
+        with self.assertRaises(RuntimeError):  # errors out because it is not using hybrid cache
+            out = model.generate(**inputs, generation_config=generation_config)
