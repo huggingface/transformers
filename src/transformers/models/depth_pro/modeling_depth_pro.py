@@ -381,7 +381,7 @@ class DepthProImageEncoder(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
 
         # scale the image for image_encoder
-        size = self.config.image_model_config.image_size
+        size = self.model.config.image_size
         pixel_values = F.interpolate(
             pixel_values,
             size=(size, size),
