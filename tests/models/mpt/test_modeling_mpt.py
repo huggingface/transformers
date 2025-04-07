@@ -287,14 +287,6 @@ class MptModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
-        model = MptForQuestionAnswering(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):

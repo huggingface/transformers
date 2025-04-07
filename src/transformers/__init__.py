@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.50.0.dev0"
+__version__ = "4.52.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -345,6 +345,7 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -561,6 +562,12 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.llama4": [
+        "Llama4Config",
+        "Llama4Processor",
+        "Llama4TextConfig",
+        "Llama4VisionConfig",
+    ],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -700,6 +707,13 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phi4_multimodal": [
+        "Phi4MultimodalAudioConfig",
+        "Phi4MultimodalConfig",
+        "Phi4MultimodalFeatureExtractor",
+        "Phi4MultimodalProcessor",
+        "Phi4MultimodalVisionConfig",
+    ],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -712,6 +726,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prompt_depth_anything": ["PromptDepthAnythingConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -736,6 +751,8 @@ _import_structure = {
         "Qwen2VLConfig",
         "Qwen2VLProcessor",
     ],
+    "models.qwen3": ["Qwen3Config"],
+    "models.qwen3_moe": ["Qwen3MoeConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -775,6 +792,10 @@ _import_structure = {
     "models.seggpt": ["SegGptConfig"],
     "models.sew": ["SEWConfig"],
     "models.sew_d": ["SEWDConfig"],
+    "models.shieldgemma2": [
+        "ShieldGemma2Config",
+        "ShieldGemma2Processor",
+    ],
     "models.siglip": [
         "SiglipConfig",
         "SiglipProcessor",
@@ -1023,7 +1044,6 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
-        "is_torch_tpu_available",
         "is_torchvision_available",
         "is_torch_xla_available",
         "is_torch_xpu_available",
@@ -1043,6 +1063,7 @@ _import_structure = {
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "QuarkConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -1295,6 +1316,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.prompt_depth_anything"].extend(["PromptDepthAnythingImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -1339,9 +1361,11 @@ else:
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
+    _import_structure["models.llama4"].append("Llama4ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -1370,6 +1394,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -1463,8 +1491,8 @@ else:
 
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
 
     # PyTorch models structure
 
@@ -2005,6 +2033,13 @@ else:
             "DecisionTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.deepseek_v3"].extend(
+        [
+            "DeepseekV3ForCausalLM",
+            "DeepseekV3Model",
+            "DeepseekV3PreTrainedModel",
+        ]
+    )
     _import_structure["models.deformable_detr"].extend(
         [
             "DeformableDetrForObjectDetection",
@@ -2483,6 +2518,15 @@ else:
             "GlmPreTrainedModel",
         ]
     )
+    _import_structure["models.llama4"].extend(
+        [
+            "Llama4ForCausalLM",
+            "Llama4ForConditionalGeneration",
+            "Llama4TextModel",
+            "Llama4VisionModel",
+            "Llama4PreTrainedModel",
+        ]
+    )
     _import_structure["models.glpn"].extend(
         [
             "GLPNForDepthEstimation",
@@ -2792,6 +2836,17 @@ else:
             "LlavaNextPreTrainedModel",
         ]
     )
+    _import_structure["models.phi4_multimodal"].extend(
+        [
+            "Phi4MultimodalForCausalLM",
+            "Phi4MultimodalPreTrainedModel",
+            "Phi4MultimodalAudioModel",
+            "Phi4MultimodalAudioPreTrainedModel",
+            "Phi4MultimodalModel",
+            "Phi4MultimodalVisionModel",
+            "Phi4MultimodalVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.llava_next_video"].extend(
         [
             "LlavaNextVideoForConditionalGeneration",
@@ -3024,6 +3079,7 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
@@ -3337,6 +3393,12 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3401,6 +3463,26 @@ else:
             "Qwen2VLForConditionalGeneration",
             "Qwen2VLModel",
             "Qwen2VLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen3"].extend(
+        [
+            "Qwen3ForCausalLM",
+            "Qwen3ForQuestionAnswering",
+            "Qwen3ForSequenceClassification",
+            "Qwen3ForTokenClassification",
+            "Qwen3Model",
+            "Qwen3PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen3_moe"].extend(
+        [
+            "Qwen3MoeForCausalLM",
+            "Qwen3MoeForQuestionAnswering",
+            "Qwen3MoeForSequenceClassification",
+            "Qwen3MoeForTokenClassification",
+            "Qwen3MoeModel",
+            "Qwen3MoePreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -3530,6 +3612,7 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+            "SamVisionModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -3588,6 +3671,7 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.shieldgemma2"].append("ShieldGemma2ForImageClassification")
     _import_structure["models.siglip"].extend(
         [
             "SiglipForImageClassification",
@@ -4697,6 +4781,7 @@ else:
         [
             "TFSamModel",
             "TFSamPreTrainedModel",
+            "TFSamVisionModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -5515,6 +5600,9 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_v3 import (
+        DeepseekV3Config,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5742,6 +5830,12 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.llama4 import (
+        Llama4Config,
+        Llama4Processor,
+        Llama4TextConfig,
+        Llama4VisionConfig,
+    )
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -5904,6 +5998,13 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phi4_multimodal import (
+        Phi4MultimodalAudioConfig,
+        Phi4MultimodalConfig,
+        Phi4MultimodalFeatureExtractor,
+        Phi4MultimodalProcessor,
+        Phi4MultimodalVisionConfig,
+    )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -5923,6 +6024,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prompt_depth_anything import PromptDepthAnythingConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -5944,6 +6046,8 @@ if TYPE_CHECKING:
         Qwen2VLConfig,
         Qwen2VLProcessor,
     )
+    from .models.qwen3 import Qwen3Config
+    from .models.qwen3_moe import Qwen3MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
@@ -5990,6 +6094,10 @@ if TYPE_CHECKING:
     from .models.seggpt import SegGptConfig
     from .models.sew import SEWConfig
     from .models.sew_d import SEWDConfig
+    from .models.shieldgemma2 import (
+        ShieldGemma2Config,
+        ShieldGemma2Processor,
+    )
     from .models.siglip import (
         SiglipConfig,
         SiglipProcessor,
@@ -6264,7 +6372,6 @@ if TYPE_CHECKING:
         is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
-        is_torch_tpu_available,
         is_torch_xla_available,
         is_torch_xpu_available,
         is_torchvision_available,
@@ -6286,6 +6393,7 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        QuarkConfig,
         SpQRConfig,
         TorchAoConfig,
         VptqConfig,
@@ -6527,6 +6635,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.prompt_depth_anything import PromptDepthAnythingImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -6567,9 +6676,11 @@ if TYPE_CHECKING:
         from .models.detr import DetrImageProcessorFast
         from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
+        from .models.llama4 import Llama4ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
@@ -6592,6 +6703,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6677,8 +6789,12 @@ if TYPE_CHECKING:
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )
-        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
-        from .modeling_utils import PreTrainedModel
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
+        )
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+        from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
@@ -7124,6 +7240,11 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.deepseek_v3 import (
+            DeepseekV3ForCausalLM,
+            DeepseekV3Model,
+            DeepseekV3PreTrainedModel,
         )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
@@ -7737,6 +7858,13 @@ if TYPE_CHECKING:
             LlamaModel,
             LlamaPreTrainedModel,
         )
+        from .models.llama4 import (
+            Llama4ForCausalLM,
+            Llama4ForConditionalGeneration,
+            Llama4PreTrainedModel,
+            Llama4TextModel,
+            Llama4VisionModel,
+        )
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
@@ -7922,6 +8050,7 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
@@ -8135,6 +8264,15 @@ if TYPE_CHECKING:
             Phi3Model,
             Phi3PreTrainedModel,
         )
+        from .models.phi4_multimodal import (
+            Phi4MultimodalAudioModel,
+            Phi4MultimodalAudioPreTrainedModel,
+            Phi4MultimodalForCausalLM,
+            Phi4MultimodalModel,
+            Phi4MultimodalPreTrainedModel,
+            Phi4MultimodalVisionModel,
+            Phi4MultimodalVisionPreTrainedModel,
+        )
         from .models.phimoe import (
             PhimoeForCausalLM,
             PhimoeForSequenceClassification,
@@ -8166,6 +8304,10 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.prompt_depth_anything import (
+            PromptDepthAnythingForDepthEstimation,
+            PromptDepthAnythingPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,
@@ -8216,6 +8358,22 @@ if TYPE_CHECKING:
             Qwen2VLForConditionalGeneration,
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
+        )
+        from .models.qwen3 import (
+            Qwen3ForCausalLM,
+            Qwen3ForQuestionAnswering,
+            Qwen3ForSequenceClassification,
+            Qwen3ForTokenClassification,
+            Qwen3Model,
+            Qwen3PreTrainedModel,
+        )
+        from .models.qwen3_moe import (
+            Qwen3MoeForCausalLM,
+            Qwen3MoeForQuestionAnswering,
+            Qwen3MoeForSequenceClassification,
+            Qwen3MoeForTokenClassification,
+            Qwen3MoeModel,
+            Qwen3MoePreTrainedModel,
         )
         from .models.rag import (
             RagModel,
@@ -8317,6 +8475,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+            SamVisionModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
@@ -8361,6 +8520,9 @@ if TYPE_CHECKING:
             SEWDForSequenceClassification,
             SEWDModel,
             SEWDPreTrainedModel,
+        )
+        from .models.shieldgemma2 import (
+            ShieldGemma2ForImageClassification,
         )
         from .models.siglip import (
             SiglipForImageClassification,
@@ -9255,6 +9417,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             TFSamModel,
             TFSamPreTrainedModel,
+            TFSamVisionModel,
         )
         from .models.segformer import (
             TFSegformerDecodeHead,
