@@ -13,8 +13,8 @@
 # limitations under the License.
 """
 Since, https://github.com/huggingface/transformers/pull/36963, loading is always performed with models on meta
-device. Since the `init_empty_weights` function is from accelerate, but that accelerate dependency is somewhat
-soft, we copy the function here to be used natively in Transformers.
+device. But since the `init_empty_weights` function is from accelerate, and accelerate is somewhat still a soft
+dependency, we copy the function here to be used natively in Transformers.
 """
 
 from contextlib import contextmanager
