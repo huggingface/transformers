@@ -10,6 +10,8 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
+from typing import Optional
+
 import torch
 
 from transformers.generation.configuration_utils import GenerationConfig
@@ -19,7 +21,7 @@ from ..utils.import_utils import is_torch_available
 
 if is_torch_available():
     from transformers import PreTrainedModel, StaticCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+    from transformers.pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
 
 
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
@@ -69,7 +71,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         self.model = model
         self.static_cache = StaticCache(
             config=self.model.config,
-            batch_size=self.model.generation_config.cache_config.batch_size,
+            max_batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
             device=self.model.generation_config.cache_config.device,
             dtype=self.model.dtype,
@@ -178,8 +180,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
 def convert_and_export_with_cache(
     model: PreTrainedModel,
-    example_input_ids: torch.Tensor = None,
-    example_cache_position: torch.Tensor = None,
+    example_input_ids: Optional[torch.Tensor] = None,
+    example_cache_position: Optional[torch.Tensor] = None,
 ):
     """
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
@@ -193,7 +195,6 @@ def convert_and_export_with_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-
     if not is_torch_greater_or_equal_than_2_3:
         raise ImportError("torch >= 2.3 is required.")
 
@@ -208,15 +209,25 @@ def convert_and_export_with_cache(
             example_cache_position if example_cache_position is not None else torch.tensor([0], dtype=torch.long)
         )
 
-        # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
-        # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
-        exported_program = torch.export._trace._export(
-            TorchExportableModuleWithStaticCache(model),
-            args=(example_input_ids,),
-            kwargs={"cache_position": example_cache_position},
-            pre_dispatch=False,
-            strict=True,
-        )
+        if is_torch_greater_or_equal("2.5.0"):
+            exported_program = torch.export.export(
+                TorchExportableModuleWithStaticCache(model),
+                args=(example_input_ids,),
+                kwargs={"cache_position": example_cache_position},
+                strict=True,
+            )
+        else:
+            # We have to keep this path for BC.
+            #
+            # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
+            # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
+            exported_program = torch.export._trace._export(
+                TorchExportableModuleWithStaticCache(model),
+                args=(example_input_ids,),
+                kwargs={"cache_position": example_cache_position},
+                pre_dispatch=False,
+                strict=True,
+            )
         return exported_program
 
 
