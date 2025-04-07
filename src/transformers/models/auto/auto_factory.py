@@ -544,10 +544,6 @@ class _BaseAutoModelClass:
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
-        # AutoClass-specific config manipulation
-        config = copy.deepcopy(config)
-        config = cls._prepare_config_for_auto_class(config)
-
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
         trust_remote_code = resolve_trust_remote_code(
@@ -570,6 +566,8 @@ class _BaseAutoModelClass:
             )
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
+            if model_class.config_class == config.sub_configs.get("text_config", None):
+                config = config.get_text_config()
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
