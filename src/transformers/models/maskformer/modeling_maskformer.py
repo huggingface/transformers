@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_2_1
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -39,7 +38,6 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
-from ...utils.import_utils import is_torchdynamo_compiling
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -1685,7 +1683,6 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         # get the auxiliary predictions (one for each decoder's layer)
         auxiliary_logits: List[str, Tensor] = []
 
-        is_tracing = torch.jit.is_tracing() or isinstance(outputs, torch.fx.Proxy) or is_torchdynamo_compiling()
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
         if self.config.use_auxiliary_loss:
             stacked_transformer_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
@@ -1693,18 +1690,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             class_queries_logits = classes[-1]
             # get the masks
             mask_embeddings = self.mask_embedder(stacked_transformer_decoder_outputs)
-
-            if is_tracing and not is_torch_greater_or_equal_than_2_1:
-                # Equivalent to einsum('lbqc, bchw -> lbqhw') but jit friendly
-                num_embeddings, batch_size, num_queries, num_channels = mask_embeddings.shape
-                _, _, height, width = pixel_embeddings.shape
-                binaries_masks = torch.zeros(
-                    (num_embeddings, batch_size, num_queries, height, width), device=mask_embeddings.device
-                )
-                for c in range(num_channels):
-                    binaries_masks += mask_embeddings[..., c][..., None, None] * pixel_embeddings[None, :, None, c]
-            else:
-                binaries_masks = torch.einsum("lbqc, bchw -> lbqhw", mask_embeddings, pixel_embeddings)
+            binaries_masks = torch.einsum("lbqc, bchw -> lbqhw", mask_embeddings, pixel_embeddings)
 
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
@@ -1720,18 +1706,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             # get the masks
             mask_embeddings = self.mask_embedder(transformer_decoder_hidden_states)
             # sum up over the channels
-
-            if is_tracing and not is_torch_greater_or_equal_than_2_1:
-                # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
-                batch_size, num_queries, num_channels = mask_embeddings.shape
-                _, _, height, width = pixel_embeddings.shape
-                masks_queries_logits = torch.zeros(
-                    (batch_size, num_queries, height, width), device=mask_embeddings.device
-                )
-                for c in range(num_channels):
-                    masks_queries_logits += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
-            else:
-                masks_queries_logits = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embeddings)
+            masks_queries_logits = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
         return class_queries_logits, masks_queries_logits, auxiliary_logits
 
