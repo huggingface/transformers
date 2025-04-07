@@ -859,7 +859,7 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, target_vocab_size, assistant_model, assistant_prune_lm_head
+                target_tokenizer, assistant_tokenizer, target_vocab_size, assistant_model_device, assistant_model, assistant_prune_lm_head
             )
             assistant_dict[assistant_tokenizer] = mapping
 
