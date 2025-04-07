@@ -61,7 +61,9 @@ class WrappedFlexAttention:
         Initialize or update the singleton instance.
         """
         if self._is_flex_compiled is False:
-            self._compiled_flex_attention = torch.compile(flex_attention, backend="inductor")
+            self._compiled_flex_attention = torch.compile(
+                    flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
+            )
             self._is_flex_compiled = True
 
     def __call__(self):
