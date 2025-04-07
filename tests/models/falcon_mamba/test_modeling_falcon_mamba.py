@@ -231,7 +231,7 @@ class FalconMambaModelTester:
             token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
         )
 
-        loss = torch.log(1 + torch.abs(outputs.sum()))
+        loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
         self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
         loss.backward()
