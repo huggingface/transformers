@@ -766,11 +766,15 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        key_length = torch.where(
-            cond1,
-            attention_chunk_size + sequence_length - 1,
-            torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
-        ) if not self.training else sequence_length
+        key_length = (
+            torch.where(
+                cond1,
+                attention_chunk_size + sequence_length - 1,
+                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+            )
+            if not self.training
+            else sequence_length
+        )
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
@@ -778,7 +782,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 chunked_attention_mask = make_flex_block_causal_mask(
                     attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
                 )
-                full_key_length = past_key_values.get_max_cache_shape() | target_length if not self.training else target_length
+                full_key_length = (
+                    past_key_values.get_max_cache_shape() | target_length if not self.training else target_length
+                )
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,

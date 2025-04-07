@@ -62,12 +62,12 @@ class WrappedFlexAttention:
         """
         if training:
             self._compiled_flex_attention = torch.compile(
-                    flex_attention, dynamic=False, backend="inductor", mode="max-autotune-no-cudagraphs"
+                flex_attention, dynamic=False, backend="inductor", mode="max-autotune-no-cudagraphs"
             )
         else:
             self._compiled_flex_attention = torch.compile(
-                    flex_attention, dynamic=False, backend="inductor",mode="reduce-overhead"
-            ) # inference does not work with max auto-tune or no cudagraphs
+                flex_attention, dynamic=False, backend="inductor", mode="reduce-overhead"
+            )  # inference does not work with max auto-tune or no cudagraphs
 
     def __call__(self):
         return self._compiled_flex_attention
@@ -240,7 +240,7 @@ def flex_attention_forward(
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
         return_lse=True,
-        training=module.training
+        training=module.training,
     )
     # lse is returned in float32
     attention_weights = attention_weights.to(value.dtype)
