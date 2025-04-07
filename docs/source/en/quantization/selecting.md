@@ -39,6 +39,8 @@ Consider the quantization methods below for inference.
 | Very simple, no calibration dataset required for inference.  | Primarily optimized for NVIDIA GPUs (CUDA).             |
 | Good community support and widely adopted.                   | Inference speedup isn't guaranteed.                     |
 
+See the [bitsandbytes documentation](./bitsandbytes) for more details.
+
 ### GPTQ/GPTQModel
 
 | Pros                                                                 | Cons                                                                 |
@@ -46,6 +48,8 @@ Consider the quantization methods below for inference.
 | Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
 | Can lead to inference speedups.                                      | Possible to overfit on calibration data.                             |
 | Many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). |                                           |
+
+See the [GPTQ documentation](./gptq) for more details.
 
 ### AWQ (Activation-aware Weight Quantization)
 
@@ -56,6 +60,8 @@ Consider the quantization methods below for inference.
 | Shorter calibration time than GPTQ.                                  |                                                     |
 | Many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). |                                                     |
 
+See the [AWQ documentation](./awq) for more details.
+
 ### torchao
 
 | Pros                                                                 | Cons                                                                 |
@@ -63,6 +69,8 @@ Consider the quantization methods below for inference.
 | Strong integration with `torch.compile` for potential speedups.     | Newer library, ecosystem still evolving.                             |
 | Offers decent CPU quantization support.                              | Performance depends on `torch.compile` working well.                 |
 | Flexibility in quantization schemes (int8, int4, fp8).           | 4-bit quantization may not match GPTQ/AWQ in accuracy.              |
+
+See the [torchao documentation](./torchao) for more details.
 
 ### HQQ (Half-Quadratic Quantization)
 
@@ -73,12 +81,16 @@ Consider the quantization methods below for inference.
 | Compatible with `torch.compile`.                                     |                                                                            |
 | Supports wide range of bit depths (8, 4, 3, 2, 1-bit).              |                                                                            |
 
+See the [HQQ documentation](./hqq) for more details.
+
 ### compressed-tensors
 
 | Pros                                                         | Cons                                                        |
 |--------------------------------------------------------------|-------------------------------------------------------------|
 | Supports flexible formats including FP8 and sparsity.        | Primarily for loading pre-quantized models.                 |
 |                                                              | Doesn't perform quantization within Transformers directly.  |
+
+See the [compressed-tensors documentation](./compressed_tensors) for more details.
 
 ## Fine-tuning
 
