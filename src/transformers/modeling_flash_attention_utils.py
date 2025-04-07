@@ -374,7 +374,7 @@ def _flash_attention_forward(
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and (
+    elif position_ids is not None and position_ids.shape[0] == 1 and (
         max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all())
     ):
         batch_size = query_states.size(0)
