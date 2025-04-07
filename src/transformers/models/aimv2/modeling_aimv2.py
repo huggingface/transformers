@@ -826,10 +826,6 @@ class AIMv2Model(AIMv2PreTrainedModel):
         Returns:
 
         Examples:
-        Returns:
-
-        Examples:
-
 
         ```python
         >>> from PIL import Image

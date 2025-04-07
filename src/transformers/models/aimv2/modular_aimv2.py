@@ -735,10 +735,6 @@ class AIMv2Model(CLIPModel, nn.Module):
         output_hidden_states: Optional[bool] = None,
     ) -> AIMv2Output:
         r"""
-        Returns:
-
-        Examples:
-
         ```python
         >>> from PIL import Image
         >>> import requests
