@@ -700,8 +700,8 @@ class ErnieForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1324,6 +1324,14 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: ErnieForMaskedLM can't call `generate()` from GenerationMixin.
+        Remove after v4.50, when we stop making `PreTrainedModel` inherit from `GenerationMixin`.
+        """
+        return False
 
 
 @add_start_docstrings(

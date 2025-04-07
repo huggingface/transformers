@@ -185,7 +185,7 @@ class MambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal mamba does not support decoding more than 1 token neither do we
+        # TODO the original mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -205,7 +205,7 @@ class MambaModelTester:
             token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
         )
 
-        loss = torch.log(1 + torch.abs(outputs.sum()))
+        loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
         self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
         loss.backward()
@@ -239,7 +239,6 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MambaForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
@@ -423,7 +422,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
 
         # Create cache with float32 dtype
-        cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
+        cache_params = MambaCache(config, max_batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
 
         # If code is correct, no error occurs and test passes
         outputs = model(
@@ -452,7 +451,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float32)
         model.to(device)
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
@@ -465,14 +464,13 @@ class MambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
-                -55.6875, -69.8750, -49.9062, -51.7500, -57.6875, -57.9375, -56.9688,
-                -57.9375, -54.6875, -55.9375, -55.3125, -58.0938, -60.5625, -47.0000,
-                -52.0312, -49.7812, -55.9375, -57.9062, -56.7812, -57.1250, -57.3438,
-                -58.3125, -57.8125, -58.7812, -59.6250, -59.0938, -58.7188, -52.9375,
-                -53.4688, -57.3750, -56.9375, -55.7500, -53.3125, -55.8438, -57.0000,
-                -56.9062, -56.2188, -54.7188, -56.4375, -57.5000
-            ]
-        ,dtype=torch.float32)  # fmt: skip
+                -55.6909, -69.7903, -49.8981, -51.7581, -57.6544, -57.9368, -56.9591,
+                -57.9033, -54.6787, -55.9261, -55.3011, -58.0765, -60.5642, -47.0176,
+                -52.0344, -49.7836, -55.9463, -57.8957, -56.7627, -57.1080, -57.3434,
+                -58.3015, -57.7875, -58.7760, -59.6037, -59.0665, -58.7087, -52.9293,
+                -53.4654, -57.3466, -56.9294, -55.7314, -53.3141, -55.8171, -56.9879,
+                -56.9121, -56.2139, -54.7198, -56.4134, -57.4825
+            ])  # fmt: skip
 
         torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 

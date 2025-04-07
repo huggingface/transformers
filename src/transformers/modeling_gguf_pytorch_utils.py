@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -15,10 +14,10 @@
 # limitations under the License.
 
 import re
-from typing import Dict, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from .integrations import (
     GGUF_CONFIG_MAPPING,
@@ -115,7 +114,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -291,7 +290,7 @@ def get_gguf_hf_weights_map(
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
-    if model_type == "qwen2_moe":
+    elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
@@ -347,7 +346,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     Args:
         gguf_checkpoint_path (`str`):
             The path the to GGUF file to load
-        return_tensors (`bool`, defaults to `True`):
+        return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """
@@ -369,14 +368,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     architecture = read_field(reader, "general.architecture")[0]
     model_name = read_field(reader, "general.name")
 
+    updated_architecture = None
     # in llama.cpp mistral models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
-    # FIXME: Currnetly this implementation is only for flan-t5 architecture.
+    # FIXME: Currently this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
+        if "t5encoder" in architecture:
+            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
         updated_architecture = "t5"
     else:
         updated_architecture = architecture
@@ -395,7 +397,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
+    if architecture not in GGUF_SUPPORTED_ARCHITECTURES and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
@@ -437,7 +439,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
 
     # retrieve config vocab_size from tokenizer
-    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
+    # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:

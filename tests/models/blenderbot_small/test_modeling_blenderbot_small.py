@@ -217,7 +217,6 @@ class BlenderbotSmallModelTester:
 @require_torch
 class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BlenderbotSmallModel,
@@ -542,7 +541,6 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 @require_torch
 class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallDecoder, BlenderbotSmallForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

@@ -169,8 +169,8 @@ class DetrObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -238,9 +238,9 @@ class DetrSegmentationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -632,7 +632,7 @@ class DetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        object_queries: torch.Tensor = None,
+        object_queries: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         """
@@ -1801,7 +1801,7 @@ class DetrMHAttentionMap(nn.Module):
         weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
 
         if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
+            weights = weights.masked_fill(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
         weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights

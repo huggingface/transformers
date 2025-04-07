@@ -282,9 +282,9 @@ class Seq2SeqDataCollator:
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
         self.decoder_start_token_id = decoder_start_token_id
-        assert (
-            self.pad_token_id is not None
-        ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
+        assert self.pad_token_id is not None, (
+            f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
+        )
         self.data_args = data_args
         self.tpu_num_cores = tpu_num_cores
         self.dataset_kwargs = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
@@ -593,7 +593,7 @@ def assert_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
     npars = len(model_grads)
-    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
+    assert not any(model_grads), f"{n_require_grad / npars:.1%} of {npars} weights require grad"
 
 
 def assert_not_all_frozen(model):

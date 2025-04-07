@@ -61,11 +61,11 @@ class WatermarkDetectorOutput:
             Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
-    num_tokens_scored: np.array = None
-    num_green_tokens: np.array = None
-    green_fraction: np.array = None
-    z_score: np.array = None
-    p_value: np.array = None
+    num_tokens_scored: Optional[np.array] = None
+    num_green_tokens: Optional[np.array] = None
+    green_fraction: Optional[np.array] = None
+    z_score: Optional[np.array] = None
+    p_value: Optional[np.array] = None
     prediction: Optional[np.array] = None
     confidence: Optional[np.array] = None
 
@@ -257,7 +257,7 @@ class BayesianDetectorConfig(PretrainedConfig):
             Prior probability P(w) that a text is watermarked.
     """
 
-    def __init__(self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs):
+    def __init__(self, watermarking_depth: Optional[int] = None, base_rate: float = 0.5, **kwargs):
         self.watermarking_depth = watermarking_depth
         self.base_rate = base_rate
         # These can be set later to store information about this detector.
@@ -490,7 +490,7 @@ class SynthIDTextWatermarkDetector:
     Parameters:
         detector_module ([`BayesianDetectorModel`]):
             Bayesian detector module object initialized with parameters.
-            Check examples/research_projects/synthid_text/detector_training.py for usage.
+            Check https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for usage.
         logits_processor (`SynthIDTextWatermarkLogitsProcessor`):
             The logits processor used for watermarking.
         tokenizer (`Any`):
@@ -502,7 +502,7 @@ class SynthIDTextWatermarkDetector:
     ...     AutoTokenizer, BayesianDetectorModel, SynthIDTextWatermarkLogitsProcessor, SynthIDTextWatermarkDetector
     ... )
 
-    >>> # Load the detector. See examples/research_projects/synthid_text for training a detector.
+    >>> # Load the detector. See https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for training a detector.
     >>> detector_model = BayesianDetectorModel.from_pretrained("joaogante/dummy_synthid_detector")
     >>> logits_processor = SynthIDTextWatermarkLogitsProcessor(
     ...     **detector_model.config.watermarking_config, device="cpu"

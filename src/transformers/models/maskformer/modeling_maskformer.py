@@ -140,7 +140,7 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
             weighted average in the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -235,9 +235,9 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: torch.FloatTensor = None
-    masks_queries_logits: torch.FloatTensor = None
-    auxiliary_logits: torch.FloatTensor = None
+    class_queries_logits: Optional[torch.FloatTensor] = None
+    masks_queries_logits: Optional[torch.FloatTensor] = None
+    auxiliary_logits: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
     transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -1424,7 +1424,11 @@ class MaskFormerTransformerModule(nn.Module):
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        inputs_embeds = torch.zeros_like(queries_embeddings, requires_grad=True)
+        inputs_embeds = torch.zeros_like(queries_embeddings, requires_grad=self.training)
+
+        # torch.export.export does no support requires_grad
+        if self.training:
+            inputs_embeds.requires_grad_(True)
 
         batch_size, num_channels, height, width = image_features.shape
         # rearrange both image_features and object_queries "b c h w -> b (h w) c"

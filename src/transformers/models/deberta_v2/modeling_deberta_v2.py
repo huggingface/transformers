@@ -300,7 +300,7 @@ class DisentangledSelfAttention(nn.Module):
             raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
         att_span = self.pos_ebd_size
-        relative_pos = relative_pos.long().to(query_layer.device)
+        relative_pos = relative_pos.to(device=query_layer.device, dtype=torch.long)
 
         rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
         if self.share_att_key:
@@ -551,10 +551,10 @@ class DebertaV2Embeddings(nn.Module):
 
         embeddings = inputs_embeds
         if self.position_biased_input:
-            embeddings += position_embeddings
+            embeddings = embeddings + position_embeddings
         if self.token_type_embeddings is not None:
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
-            embeddings += token_type_embeddings
+            embeddings = embeddings + token_type_embeddings
 
         if self.embed_proj is not None:
             embeddings = self.embed_proj(embeddings)

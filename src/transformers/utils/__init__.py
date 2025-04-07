@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
@@ -16,7 +15,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import FrozenSet
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
@@ -45,6 +43,7 @@ from .generic import (
     add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
+    can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     find_labels,
@@ -91,12 +90,10 @@ from .hub import (
     define_sagemaker_information,
     download_url,
     extract_commit_hash,
-    get_file_from_repo,
     has_file,
     http_user_agent,
     is_offline_mode,
     is_remote_url,
-    move_cache,
     send_example_telemetry,
     try_to_load_from_cache,
 )
@@ -118,6 +115,7 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
@@ -148,6 +146,7 @@ from .import_utils import (
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
+    is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
     is_in_notebook,
@@ -165,6 +164,7 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_nltk_available,
+    is_num2words_available,
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
@@ -180,6 +180,8 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
+    is_rich_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -193,6 +195,7 @@ from .import_utils import (
     is_soundfile_available,
     is_spacy_available,
     is_speech_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -215,6 +218,7 @@ from .import_utils import (
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -223,7 +227,6 @@ from .import_utils import (
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -231,6 +234,7 @@ from .import_utils import (
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_training_run_on_sagemaker,
@@ -294,8 +298,8 @@ def check_min_version(min_version):
         )
 
 
-@lru_cache()
-def get_available_devices() -> FrozenSet[str]:
+@lru_cache
+def get_available_devices() -> frozenset[str]:
     """
     Returns a frozenset of devices available for the current PyTorch installation.
     """
@@ -312,6 +316,9 @@ def get_available_devices() -> FrozenSet[str]:
 
     if is_torch_npu_available():
         devices.add("npu")
+
+    if is_torch_hpu_available():
+        devices.add("hpu")
 
     if is_torch_mlu_available():
         devices.add("mlu")

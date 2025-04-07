@@ -27,20 +27,19 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from .configuration_sew import SEWConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -124,7 +123,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -567,9 +566,9 @@ class SEWFlashAttention2(SEWAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -1219,7 +1218,7 @@ class SEWModel(SEWPreTrainedModel):
     """SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     SEW_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEW, wav2vec2->sew, WAV_2_VEC_2->SEW
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEW, wav2vec2->sew, WAV2VEC2->SEW
 class SEWForCTC(SEWPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1378,7 +1377,7 @@ class SEWForCTC(SEWPreTrainedModel):
     """,
     SEW_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEW, wav2vec2->sew, WAV_2_VEC_2->SEW
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEW, wav2vec2->sew, WAV2VEC2->SEW
 class SEWForSequenceClassification(SEWPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

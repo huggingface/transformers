@@ -164,13 +164,11 @@ class ImageGPTLayerNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.Tensor(hidden_size))
 
-    def forward(self, tensor: torch.Tensor) -> tuple:
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         # input is not mean centered
-        return (
-            tensor
-            / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
-            * self.weight.data[..., :]
-        )
+        tensor = tensor / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
+        tensor = tensor * self.weight
+        return tensor
 
 
 class ImageGPTAttention(nn.Module):
@@ -249,7 +247,7 @@ class ImageGPTAttention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -299,7 +297,7 @@ class ImageGPTAttention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -775,7 +773,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+        hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -953,7 +951,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         >>> height = image_processor.size["height"]
         >>> width = image_processor.size["width"]
 
-        >>> samples = output[:, 1:].cpu().detach().numpy()
+        >>> samples = output[:, 1:].detach().cpu().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [height, width, 3]).astype(np.uint8) for s in samples
         ... ]  # convert color cluster tokens back to pixels

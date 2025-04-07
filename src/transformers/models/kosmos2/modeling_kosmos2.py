@@ -309,7 +309,7 @@ class Kosmos2ModelOutput(ModelOutput):
             input) to speed up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -367,7 +367,7 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -451,7 +451,7 @@ class Kosmos2VisionEmbeddings(nn.Module):
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
             )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
@@ -543,7 +543,7 @@ class Kosmos2VisionAttention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
@@ -837,10 +837,10 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        input_ids: torch.Tensor = None,
-        inputs_embeds: torch.Tensor = None,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         if input_ids is not None:
             bsz, seq_len = input_ids.size()
@@ -1187,11 +1187,11 @@ class Kosmos2TextTransformer(nn.Module):
     def forward_embedding(
         self,
         input_ids,
-        inputs_embeds: torch.Tensor = None,
-        image_embeds: torch.Tensor = None,
-        img_input_mask: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        img_input_mask: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`.
         if inputs_embeds is None:
@@ -1694,31 +1694,23 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        cache_position=None,
         **model_kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
+        # Kosmos2 has offset for position ids, so we need to create them correctly
+        position_ids = create_position_ids_from_input_ids(
+            input_ids,
+            padding_idx=self.config.pad_token_id,
+            past_key_values_length=0,
+        )
 
-        position_ids = None
-
-        # cut input_ids if past_key_values is used
         if past_key_values is not None:
-            position_ids = create_position_ids_from_input_ids(
-                input_ids,
-                padding_idx=self.config.pad_token_id,
-                past_key_values_length=0,
-            )[:, -1:]
-
-            input_ids = input_ids[:, -1:]
-            # the image info. is already encoded into the past keys/values
             image_embeds = None
             image_embeds_position_mask = None
+        # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
-            # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
             batch_size, seq_len = input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
             image_embeds_position_mask = torch.cat(
@@ -1729,15 +1721,19 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
                 dim=1,
             )
 
-        return {
-            "input_ids": input_ids,
-            "image_embeds": image_embeds,
-            "image_embeds_position_mask": image_embeds_position_mask,
-            "past_key_values": past_key_values,
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "use_cache": use_cache,
-        }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
+            use_cache=use_cache,
+            position_ids=position_ids,
+            cache_position=cache_position,
+            **model_kwargs,
+        )
+
+        return model_inputs
 
     @staticmethod
     # Copied from transformers.models.umt5.modeling_umt5.UMT5ForConditionalGeneration._reorder_cache

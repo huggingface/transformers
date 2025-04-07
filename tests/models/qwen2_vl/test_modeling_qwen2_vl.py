@@ -167,7 +167,9 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
+        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
         labels = torch.zeros(
             (self.batch_size, self.seq_length),
             dtype=torch.long,
@@ -182,39 +184,6 @@ class Qwen2VLVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_qwen2_vl_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_qwen2_vl_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        config.torch_dtype = torch.float16
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_grid_thw=image_grid_thw,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -223,7 +192,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     """
 
     all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
     test_pruning = False
     test_head_masking = False
@@ -344,12 +312,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(
-        reason="Qwen2-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -427,6 +389,26 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+        ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_expand(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
+
+        EXPECTED_DECODED_TEXT = [
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
         ]  # fmt: skip

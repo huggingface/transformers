@@ -259,6 +259,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -544,10 +545,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -576,10 +577,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)

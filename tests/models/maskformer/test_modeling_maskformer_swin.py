@@ -181,6 +181,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
@@ -232,10 +233,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @unittest.skip(reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions")
     def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="MaskFormerSwin is only used as an internal backbone")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):

@@ -250,7 +250,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BigBirdPegasusModel,
@@ -465,7 +464,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         torch.testing.assert_close(outputs1, outputs2, rtol=1e-5, atol=1e-5)
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -792,7 +791,6 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BigBirdPegasusForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

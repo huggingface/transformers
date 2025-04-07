@@ -245,23 +245,16 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[List[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
+        from ..integrations import replace_with_bnb_linear
 
         llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.llm_int8_skip_modules is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+        )
 
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:

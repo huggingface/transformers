@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
@@ -40,16 +41,24 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_moonshine import MoonshineConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -326,45 +335,18 @@ class MoonshineRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -430,7 +412,7 @@ class MoonshineEncoderLayer(nn.Module):
 
 
 class MoonshineDecoderLayer(nn.Module):
-    def __init__(self, config: MoonshineConfig, layer_idx: int = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -607,15 +589,15 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @can_return_tuple
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         r"""
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
@@ -642,7 +624,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_values is None:
             raise ValueError("You must specify input_values.")
@@ -717,12 +698,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
 
 MOONSHINE_INPUTS_DOCSTRING = r"""
@@ -760,20 +740,12 @@ MOONSHINE_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -836,10 +808,11 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MOONSHINE_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -847,7 +820,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -869,7 +841,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -937,7 +908,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     encoder_hidden_states,
@@ -977,14 +948,13 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
@@ -992,12 +962,17 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1078,7 +1053,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1099,7 +1074,9 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1163,7 +1140,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -1392,6 +1369,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
 
         return input_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1407,9 +1385,8 @@ class MoonshineModel(MoonshinePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> Seq2SeqModelOutput:
         r"""
         Returns:
 
@@ -1435,18 +1412,16 @@ class MoonshineModel(MoonshinePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
+            encoder_outputs: BaseModelOutput = self.encoder(
                 input_values,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1454,23 +1429,19 @@ class MoonshineModel(MoonshinePreTrainedModel):
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_attention_mask=attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1530,6 +1501,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1545,10 +1517,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1578,7 +1549,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> transcription
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1586,7 +1556,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model(
+        outputs: Seq2SeqModelOutput = self.model(
             input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1598,18 +1568,13 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
-        logits = self.proj_out(outputs[0])
+        logits = self.proj_out(outputs.last_hidden_state)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,

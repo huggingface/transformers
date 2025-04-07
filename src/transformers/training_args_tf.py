@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional
 
 from .training_args import TrainingArguments
 from .utils import cached_property, is_tf_available, logging, requires_backends
@@ -160,7 +160,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for wandb, mlflow and comet logging.
+            A descriptor for the run. Notably used for wandb, mlflow, comet and swanlab logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """
@@ -189,7 +189,7 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
+    def _setup_strategy(self) -> tuple["tf.distribute.Strategy", int]:
         requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
 

@@ -18,7 +18,6 @@ import numpy as np
 from transformers import AutoTokenizer, GemmaConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_read_token, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -174,9 +173,8 @@ class FlaxGemmaModelTester:
 
 
 @require_flax
-class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxGemmaModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxGemmaModel, FlaxGemmaForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxGemmaForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxGemmaModelTester(self)

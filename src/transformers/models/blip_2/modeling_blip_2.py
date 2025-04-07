@@ -106,10 +106,10 @@ class Blip2ImageTextMatchingModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -145,7 +145,7 @@ class Blip2TextModelOutput(ModelOutput):
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -175,7 +175,7 @@ class Blip2VisionModelOutput(ModelOutput):
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -419,7 +419,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "OPTDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"
-    _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -579,6 +578,9 @@ BLIP_2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 """
 
 BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
@@ -1236,6 +1238,9 @@ class Blip2TextEmbeddings(nn.Module):
                 embeddings += position_embeddings
 
             if query_embeds is not None:
+                # `query_embeds` are kept in fp32 when we use it with Qformer
+                if query_embeds.dtype != embeddings.dtype:
+                    query_embeds = query_embeds.to(embeddings.dtype)
                 embeddings = torch.cat((query_embeds, embeddings), dim=1)
         else:
             embeddings = query_embeds
@@ -1383,6 +1388,10 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
+            # Qformer and latent query tokens are kept in fp32. We cast `encoder_hidden_states` if not fp32 already
+            if encoder_hidden_states.dtype != query_embeds.dtype:
+                encoder_hidden_states = encoder_hidden_states.to(query_embeds.dtype)
+
             if isinstance(encoder_hidden_states, list):
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
@@ -1445,6 +1454,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1725,6 +1735,10 @@ class Blip2Model(Blip2PreTrainedModel):
         )
         query_output = query_outputs[0]
 
+        # Qformer is kept in fp32, we downcast the output back if needed
+        if query_output.dtype != image_embeds.dtype:
+            query_output = query_output.to(image_embeds.dtype)
+
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
         language_model_attention_mask = torch.ones(
@@ -1796,7 +1810,7 @@ class Blip2Model(Blip2PreTrainedModel):
 )
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1895,7 +1909,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 )
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2013,6 +2027,10 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+    _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2094,6 +2112,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -2184,6 +2203,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         )
         query_output = query_outputs[0]
 
+        # Qformer is kept in fp32, we downcast the output back if needed
+        if query_output.dtype != image_embeds.dtype:
+            query_output = query_output.to(image_embeds.dtype)
+
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
         language_model_attention_mask = torch.ones(
@@ -2217,6 +2240,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -2242,6 +2266,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
+                use_cache=use_cache,
             )
             loss = outputs.loss
             logits = outputs.logits
@@ -2303,6 +2328,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         )
         query_output = query_outputs.last_hidden_state
 
+        # Qformer is kept in fp32, we downcast the output back if needed
+        if query_output.dtype != image_embeds.dtype:
+            query_output = query_output.to(image_embeds.dtype)
+
         language_model_inputs = self.language_projection(query_output)
         language_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
@@ -2362,7 +2391,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2469,7 +2498,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         if use_image_text_matching_head:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(query_tokens.device)
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device)
             attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
 
             query_embeds = self.embeddings(

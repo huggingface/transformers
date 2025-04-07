@@ -186,6 +186,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -257,13 +258,13 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

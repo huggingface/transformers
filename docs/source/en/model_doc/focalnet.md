@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # FocalNet
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The FocalNet model was proposed in [Focal Modulation Networks](https://arxiv.org/abs/2203.11926) by Jianwei Yang, Chunyuan Li, Xiyang Dai, Lu Yuan, Jianfeng Gao.

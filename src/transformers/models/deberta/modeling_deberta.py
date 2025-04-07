@@ -418,10 +418,10 @@ class DebertaEmbeddings(nn.Module):
 
         embeddings = inputs_embeds
         if self.position_biased_input:
-            embeddings += position_embeddings
+            embeddings = embeddings + position_embeddings
         if self.token_type_embeddings is not None:
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
-            embeddings += token_type_embeddings
+            embeddings = embeddings + token_type_embeddings
 
         if self.embed_proj is not None:
             embeddings = self.embed_proj(embeddings)

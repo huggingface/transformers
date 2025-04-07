@@ -230,7 +230,6 @@ class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxPegasusForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False

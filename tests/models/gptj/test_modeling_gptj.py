@@ -341,7 +341,6 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTJModel,
@@ -467,7 +466,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 

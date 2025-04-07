@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # I-BERT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The I-BERT model was proposed in [I-BERT: Integer-only BERT Quantization](https://arxiv.org/abs/2101.01321) by
