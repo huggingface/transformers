@@ -79,10 +79,10 @@ class Cache:
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx] != []:
+            if self.key_cache[layer_idx].numel():
                 device = self.key_cache[layer_idx].device
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            if self.value_cache[layer_idx] != []:
+            if self.value_cache[layer_idx].numel():
                 device = self.value_cache[layer_idx].device
                 self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
@@ -433,12 +433,12 @@ class DynamicCache(Cache):
             if len(self.key_cache) <= layer_idx:
                 # There may be skipped layers, fill them with empty lists
                 for _ in range(len(self.key_cache), layer_idx):
-                    self.key_cache.append([])
-                    self.value_cache.append([])
+                    self.key_cache.append(torch.tensor([]))
+                    self.value_cache.append(torch.tensor([]))
                 self.key_cache.append(key_states)
                 self.value_cache.append(value_states)
             elif (
-                len(self.key_cache[layer_idx]) == 0
+                not self.key_cache[layer_idx].numel()  # prefers not t.numel() to len(t) == 0 to export the model
             ):  # fills previously skipped layers; checking for tensor causes errors
                 self.key_cache[layer_idx] = key_states
                 self.value_cache[layer_idx] = value_states
@@ -454,7 +454,7 @@ class DynamicCache(Cache):
         is_empty_layer = (
             len(self.key_cache) == 0  # no cache in any layer
             or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
-            or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
+            or not self.key_cache[layer_idx].numel()  # the layer has no cache
         )
         layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
         return layer_seq_length
@@ -494,7 +494,7 @@ class DynamicCache(Cache):
 
         self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            if self.key_cache[idx] != []:
+            if self.key_cache[idx].numel():
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
@@ -516,8 +516,8 @@ class DynamicCache(Cache):
         `generation.utils`"""
         cache = cls()
         for idx in range(len(splits[0])):
-            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
-            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx] != []]
+            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx].numel()]
+            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx].numel()]
             if key_cache != []:
                 layer_keys = torch.cat(key_cache, dim=0)
                 layer_values = torch.cat(value_cache, dim=0)
@@ -1204,7 +1204,7 @@ class StaticCache(Cache):
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
-        ) // 8  # TODO use TP!
+        )
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1626,7 +1626,7 @@ class HybridCache(Cache):
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. If you're using more than 1 computation device, you
             should pass the `layer_device_map` argument instead.
-        dtype (torch.dtype, *optional*, defaults to `torch.float32`):
+        dtype (torch.dtype, *optional*, defaults to `torch.bfloat16`):
             The default `dtype` to use when initializing the layer.
         layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
@@ -1677,12 +1677,10 @@ class HybridCache(Cache):
         self._dtype = dtype
 
         if hasattr(config.get_text_config(), "no_rope_layers"):
-            self.is_sliding = torch.tensor(config.no_rope_layers)
+            self.is_sliding = config.no_rope_layers
         else:
             layer_switch = getattr(config, "sliding_window_pattern", 2)
-            self.is_sliding = torch.tensor(
-                [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
-            )
+            self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []

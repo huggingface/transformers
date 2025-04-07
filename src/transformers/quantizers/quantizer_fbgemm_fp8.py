@@ -152,20 +152,21 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         """
 
         from ..integrations import FbgemmFp8Llama4TextExperts
+
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately
                 # Transpose the second and third dimension
                 transposed_param = param_value.transpose(1, 2)
-                
+
                 # Reshape to 2D for quantization
                 original_shape = transposed_param.shape
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
-                
+
                 # Quantize using per row instead of per column
                 new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
-                
+
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
                 new_value = new_value.transpose(1, 2)
@@ -174,24 +175,26 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 # Process each expert separately
                 # Transpose the weights for proper quantization
                 transposed_param = param_value.transpose(1, 2)
-                
+
                 # Reshape to 2D for quantization
                 original_shape = transposed_param.shape
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
-                
+
                 # Quantize using per column
                 new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
-                
+
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
                 new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
 
             module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.to(target_device))
-        else : 
+        else:
             new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
-            module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1).to(target_device))
-        
+            module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(
+                weight_scale.view(weight_scale.shape[0], 1).to(target_device)
+            )
+
         module._parameters[tensor_name] = torch.nn.Parameter(new_value.to(target_device))
 
         if unexpected_keys is not None and param_name in unexpected_keys:
@@ -208,6 +211,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
+
         tp_plan = model._tp_plan
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
@@ -220,7 +224,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
             config=config,
-            tp_plan=tp_plan
+            tp_plan=tp_plan,
         )
 
         model.config.quantization_config = self.quantization_config

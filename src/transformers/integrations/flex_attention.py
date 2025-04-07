@@ -191,7 +191,7 @@ def flex_attention_forward(
     block_mask = None
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
-        block_mask = attention_mask  # ._adjust(query.shape[2], key.shape[2])
+        block_mask = attention_mask
     else:
         causal_mask = attention_mask
 
@@ -212,8 +212,8 @@ def flex_attention_forward(
 
     # When running TP this helps:
     if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
-        key = repeat_kv(key, num_local_query_heads)
-        value = repeat_kv(value, num_local_query_heads)
+        key = repeat_kv(key, query.shape[1] // key.shape[1])
+        value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options", None)

@@ -565,8 +565,8 @@ _import_structure = {
     "models.llama4": [
         "Llama4Config",
         "Llama4Processor",
-        "Llama4VisionConfig",
         "Llama4TextConfig",
+        "Llama4VisionConfig",
     ],
     "models.llava": [
         "LlavaConfig",
@@ -1286,7 +1286,6 @@ else:
     _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
-    _import_structure["models.llama4"].extend(["Llama4ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
@@ -1491,7 +1490,7 @@ else:
 
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
 
     # PyTorch models structure
@@ -2522,7 +2521,6 @@ else:
         [
             "Llama4ForCausalLM",
             "Llama4ForConditionalGeneration",
-            "Llama4Model",
             "Llama4TextModel",
             "Llama4VisionModel",
             "Llama4PreTrainedModel",
@@ -6599,7 +6597,6 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
-        from .models.llama4 import Llama4ImageProcessor
         from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
@@ -6788,7 +6785,7 @@ if TYPE_CHECKING:
             model_addition_debugger,
             model_addition_debugger_context,
         )
-        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
@@ -7856,7 +7853,6 @@ if TYPE_CHECKING:
         from .models.llama4 import (
             Llama4ForCausalLM,
             Llama4ForConditionalGeneration,
-            Llama4Model,
             Llama4PreTrainedModel,
             Llama4TextModel,
             Llama4VisionModel,

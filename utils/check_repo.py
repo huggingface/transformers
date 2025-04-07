@@ -144,6 +144,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
     ]
@@ -1083,8 +1085,7 @@ def check_all_objects_are_documented():
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
-            "The following objects are in the public init so should be documented:\n - "
-            + "\n - ".join(undocumented_objs)
+            "The following objects are in the public init, but not in the docs:\n - " + "\n - ".join(undocumented_objs)
         )
     check_model_type_doc_match()
     check_public_method_exists(documented_methods_map)

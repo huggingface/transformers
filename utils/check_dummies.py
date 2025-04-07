@@ -226,10 +226,16 @@ def check_dummies(overwrite: bool = False):
                 for _actual, _dummy in zip(
                     actual_dummies["torch"].split("class"), dummy_files["torch"].split("class")
                 ):
+                    found = False
                     if _actual != _dummy:
                         actual_broken = _actual
                         dummy_broken = _dummy
+                        found = True
                         break
+
+                if found:
+                    print("A transient error was found with the dummies, please investigate.")
+
                 raise ValueError(
                     "The main __init__ has objects that are not present in "
                     f"transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py.\n"
