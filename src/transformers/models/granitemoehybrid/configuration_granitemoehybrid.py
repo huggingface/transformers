@@ -160,6 +160,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_n_heads=128,
         mamba_n_groups=1,
         mamba_d_state=256,
+        mamba_d_head="auto",
         mamba_d_conv=4,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
@@ -211,7 +212,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         self.layer_types = layer_types
         #mamba2 variables
-        self.mamba_num_heads = mamba_n_heads
+        self.mamba_n_heads = mamba_n_heads
+        self.mamba_d_head = mamba_d_head
         self.mamba_n_groups = mamba_n_groups
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
