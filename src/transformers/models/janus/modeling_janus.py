@@ -37,6 +37,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_available,
     logging,
     replace_return_docstrings,
@@ -47,7 +48,6 @@ from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfi
 
 
 if is_torch_available():
-    import torch.nn as nn
     import torch.nn.functional as F
 
 
@@ -162,7 +162,7 @@ class JanusBaseModelOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -204,7 +204,7 @@ class JanusCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -432,13 +432,12 @@ class JanusVisionEncoderLayer(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = JanusVisionMLP(config)
+        self.self_attn = JanusVisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = JanusVisionMLP(config)
         self.config = config
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -494,14 +493,14 @@ class JanusVisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     # Ignore copy
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -528,7 +527,6 @@ class JanusVisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -559,10 +557,10 @@ class JanusVisionEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1093,29 +1091,28 @@ class JanusVQVAE(JanusPreTrainedModel):
         pixel_values = self.decoder(hidden_states)
         return pixel_values
 
+    @can_return_tuple
     def forward(
-        self, pixel_values: torch.FloatTensor, return_dict: bool = None
+        self,
+        pixel_values: torch.FloatTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Encodes pixel values into quantized tokens and decodes them back.
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
             decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Reconstructed pixel values after encoding and decoding the input.
             embedding_loss (`torch.FloatTensor`): Embedding loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
         output = JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
 
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -1212,8 +1209,6 @@ JANUS_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
             Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
@@ -1258,6 +1253,7 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1271,7 +1267,6 @@ class JanusModel(JanusPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
@@ -1279,7 +1274,6 @@ class JanusModel(JanusPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1333,7 +1327,7 @@ class JanusModel(JanusPreTrainedModel):
             image_hidden_states=image_embeds if pixel_values is not None else None,
         )
 
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
@@ -1372,6 +1366,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=JanusCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1387,7 +1382,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
@@ -1411,7 +1405,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1423,7 +1416,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1444,7 +1436,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-        return output if return_dict else output.to_tuple()
+        return output
 
     def prepare_inputs_for_generation(
         self,

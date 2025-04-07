@@ -43,14 +43,10 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
-    is_torch_available,
     is_vision_available,
     logging,
 )
 
-
-if is_torch_available():
-    pass
 
 if is_vision_available():
     import PIL
@@ -215,7 +211,7 @@ class JanusImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> PIL.Image.Image:

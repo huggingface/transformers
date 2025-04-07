@@ -22,15 +22,8 @@
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import (
-    is_torch_available,
-    logging,
-)
+from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-if is_torch_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
