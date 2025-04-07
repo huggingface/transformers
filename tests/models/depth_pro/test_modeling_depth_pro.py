@@ -323,7 +323,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    # this started when switched from normal initialization to kaiming_normal intialization
+    # this started when switched from normal initialization to kaiming_normal initialization
     # maybe because the magnitude of offset values from ViT-encoders increases when followed by many convolution layers
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)

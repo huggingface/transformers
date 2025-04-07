@@ -43,4 +43,3 @@ Transformers is designed for developers and machine learning engineers and resea
   </a>
 </div>
 
-Join us on the Hugging Face [Hub](https://huggingface.co/), [Discord](https://discord.com/invite/JfAtkvEtRb), or [forum](https://discuss.huggingface.co/) to collaborate and build models, datasets, and applications together.
