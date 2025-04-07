@@ -1453,8 +1453,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
-        intermediate_predicted_corners = ()
-        initial_reference_points = ()
 
         reference_points = F.sigmoid(reference_points)
 
@@ -1485,8 +1483,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
                 predicted_corners = self.bbox_embed[idx](hidden_states)
                 new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
-                intermediate_predicted_corners += (predicted_corners,)
-                initial_reference_points += (reference_points,)
 
             intermediate += (hidden_states,)
             intermediate_reference_points += (
@@ -1509,10 +1505,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         if self.class_embed is not None:
             intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
-        if self.bbox_embed is not None:
-            intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
-            initial_reference_points = torch.stack(initial_reference_points, dim=1)
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -1525,8 +1517,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
                     intermediate,
                     intermediate_logits,
                     intermediate_reference_points,
-                    intermediate_predicted_corners,
-                    initial_reference_points,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1538,8 +1528,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
-            intermediate_predicted_corners=intermediate_predicted_corners,
-            initial_reference_points=initial_reference_points,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
