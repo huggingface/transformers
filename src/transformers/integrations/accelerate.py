@@ -142,23 +142,6 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
             setattr(torch, torch_function_name, old_torch_function)
 
 
-class FindTiedParametersResult(list):
-    """
-    This is a subclass of a list to handle backward compatibility for Transformers. Do not rely on the fact this is not
-    a list or on the `values` method as in the future this will be removed.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def values(self):
-        warnings.warn(
-            "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
-            FutureWarning,
-        )
-        return sum([x[1:] for x in self], [])
-
-
 def find_tied_parameters(model: "nn.Module", **kwargs):
     """
     Find the tied parameters in a given model.
@@ -211,4 +194,4 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
                     tied_param_groups[param_name] = []
                 tied_param_groups[param_name].append(tied_param_name)
 
-    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()])
+    return [sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()]
