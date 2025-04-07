@@ -52,6 +52,7 @@ if is_torch_available():
     from ..cache_utils import (
         HQQQuantizedCache,
         HybridCache,
+        HybridChunkedCache,
         MambaCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
@@ -70,6 +71,7 @@ if is_torch_available():
         "offloaded_static": OffloadedStaticCache,
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
+        "hybrid_chunked": HybridChunkedCache,
         "mamba": MambaCache,
         "xlstm": xLSTMCache,
     }
@@ -419,6 +421,7 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
+        self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
