@@ -397,7 +397,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = int((layer_idx + 1) % 4 != 0)  # <=> use rope
+        self.use_chunked_attention = layer_idx not in config.no_rope_layers
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
