@@ -38,13 +38,21 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 384, "width": 384}
-    default_to_square = None
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
 
+    # SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT, NOT INCLUDED IN GENERATED:
+    # rescaled factiore is specified in BaseImageProcessorFast, do_pad is not given default value there
+    do_pad = False
+    rescale_factor = 1 / 255
+    # In BaseImageProcessorFast this is called size_divisibility (I think)
+    size_divisor = None
+
+    # NOT SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT:
+    default_to_square = None
+    crop_size = None
+    do_center_crop = None
+    do_convert_rgb = None
 
 __all__ = ["DPTImageProcessorFast"]
