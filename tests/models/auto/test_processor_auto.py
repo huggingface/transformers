@@ -186,7 +186,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             model_config.save_pretrained(tmpdirname)
             # copy relevant files
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
-            # create emtpy sample processor
+            # create empty sample processor
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 f.write("{}")
 

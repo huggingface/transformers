@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). It has been tested on Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, and Flax.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). It has been tested on Python 3.9+, PyTorch 2.1+, TensorFlow 2.6+, and Flax 0.4.1+.
 
 ## Virtual environment
 
@@ -33,7 +33,7 @@ Create and activate a virtual environment in your project directory with [venv](
 
 ```bash
 python -m venv .env
-source ./env/bin/activate
+source .env/bin/activate
 ```
 
 </hfoption>
@@ -43,7 +43,7 @@ source ./env/bin/activate
 
 ```bash
 uv venv .env
-source ./env/bin/activate
+source .env/bin/activate
 ```
 
 </hfoption>

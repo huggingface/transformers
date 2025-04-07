@@ -20,7 +20,10 @@ rendered properly in your Markdown viewer.
 
 [LLM.int8()](https://hf.co/papers/2208.07339) is a quantization method that aims to make large language model inference more accessible without significant degradation. Unlike naive 8-bit quantization, which can result in loss of critical information and accuracy, LLM.int8() dynamically adapts to ensure sensitive components of the computation retain higher precision when needed.
 
-QLoRA, or 4-bit quantization, compresses a model even further to 4-bits and inserts a small set of trainable low-rank adaptation (LoRA) weights to allowing training.
+QLoRA, or 4-bit quantization, compresses a model even further to 4-bits and inserts a small set of trainable low-rank adaptation (LoRA) weights to allowing training. 
+
+> **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
+
 
 Run the command below to install bitsandbytes.
 
