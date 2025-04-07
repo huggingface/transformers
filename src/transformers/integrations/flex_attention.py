@@ -66,8 +66,8 @@ class WrappedFlexAttention:
             )
         else:
             self._compiled_flex_attention = torch.compile(
-                flex_attention, dynamic=False, backend="inductor", mode="reduce-overhead"
-            )  # inference does not work with max auto-tune or no cudagraphs
+                flex_attention, dynamic=False, backend="inductor"
+            )  # inference does not work with max auto-tune or no cudagraphs or cudagraphs
 
     def __call__(self):
         return self._compiled_flex_attention
