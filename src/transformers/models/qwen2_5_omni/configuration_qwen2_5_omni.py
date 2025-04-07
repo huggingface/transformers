@@ -22,6 +22,7 @@
 
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -319,7 +320,23 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_text"
-    is_composition = False
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    # Default tensor parallel plan for base model `Qwen25OmniText`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -331,17 +348,22 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         num_key_value_heads=4,
         hidden_act="silu",
         max_position_embeddings=32768,
-        rms_norm_eps=1e-06,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
         use_cache=True,
+        tie_word_embeddings=False,
         rope_theta=1000000.0,
+        rope_scaling=None,
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
         attention_dropout=0.0,
-        rope_scaling=None,
-        initializer_range=0.02,
         **kwargs,
     ):
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -349,7 +371,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -358,16 +380,19 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
+        self.attention_dropout = attention_dropout
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
-        self.initializer_range = initializer_range
-
-        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -394,8 +419,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_index (`int`, *optional*, defaults to 151656):
             The video token index to encode the video prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         position_id_per_seconds (`int`, *optional*, defaults to 25):
             The increment of position id per second.
         seconds_per_chunk (`int`, *optional*, defaults to 2):
@@ -439,7 +462,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
         "text_config": Qwen2_5OmniTextConfig,
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -449,7 +471,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         audio_token_index=151646,
         image_token_index=151655,
         video_token_index=151656,
-        tie_word_embeddings=False,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -461,7 +482,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
-        # 2025.02.20 the add
         self.user_token_id = user_token_id
         self.position_id_per_seconds = position_id_per_seconds
         self.seconds_per_chunk = seconds_per_chunk
@@ -487,7 +507,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
             text_config = Qwen2_5OmniTextConfig()
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniTalkerConfig(PretrainedConfig):
@@ -641,7 +661,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
-    is_composition = False
 
     def __init__(
         self,
@@ -922,7 +941,6 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
         "dit_config": Qwen2_5OmniDiTConfig,
         "bigvgan_config": Qwen2_5OmniBigVGANConfig,
     }
-    is_composition = True
 
     def __init__(self, dit_config=None, bigvgan_config=None, **kwargs):
         if dit_config is None:
@@ -987,7 +1005,6 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         "talker_config": Qwen2_5OmniTalkerConfig,
         "token2wav_config": Qwen2_5OmniToken2WavConfig,
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -1015,29 +1032,6 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         self.enable_audio_output = enable_audio_output
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_sub_model_configs(
-        cls,
-        thinker_config: Qwen2_5OmniThinkerConfig,
-        talker_config: Qwen2_5OmniTalkerConfig,
-        token2wav_config: Qwen2_5OmniToken2WavConfig,
-        enable_audio_output: bool = True,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`Qwen2_5OmniConfig`] (or a derived class) from sub-models configuration.
-
-        Returns:
-            [`Qwen2_5OmniConfig`]: An instance of a configuration object
-        """
-        return cls(
-            thinker_config=thinker_config.to_dict(),
-            talker_config=talker_config.to_dict(),
-            token2wav_config=token2wav_config.to_dict(),
-            enable_audio_output=enable_audio_output,
-            **kwargs,
-        )
 
 
 __all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]

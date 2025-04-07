@@ -75,10 +75,32 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
+Qwen2_5Omni_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Qwen2_5OmniConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare Qwen2_5Omni Model outputting raw hidden-states without any specific head on top.",
+    Qwen2_5Omni_START_DOCSTRING,
+)
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5OmniConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -176,17 +198,39 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
         return llm_pos_ids
 
-    def get_chunked_index(self, llm_pos_ids, t_ntoken_per_chunk, st_idx):
+    def get_chunked_index(
+        self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
+    ) -> list[tuple[int, int]]:
+        """
+        Splits token index list into chunks based on token value ranges.
+
+        Given a list of token indices, returns a list of (start, end) index tuples representing
+        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+
+        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        - the first chunk contains token values < 1000,
+        - the second chunk contains values >= 1000 and < 2000, and so on.
+
+        Parameters:
+            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+            remove_index (`int`) An index id to subtract from `token_indices` before chunking
+
+        Returns:
+            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+                                and end (exclusive) indices of a chunk in `token_indices`.
+        """
+
         def _iter():
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
-            while i < llm_pos_ids.shape[1]:  # skip eos token
-                if llm_pos_ids[0][i] - st_idx >= current_chunk * t_ntoken_per_chunk:
+            while i < len(token_indices):  # skip eos token
+                if token_indices[0][i] - remove_index >= current_chunk * tokens_per_chunk:
                     yield (start_idx, i)
                     start_idx = i
                     current_chunk += 1
                 i += 1
-            yield (start_idx, llm_pos_ids.shape[1])
+            yield (start_idx, token_indices.shape[1])
 
         return list(_iter())
 
@@ -2257,6 +2301,7 @@ QWEN2_5OMNITHINKER_INPUTS_DOCSTRING = r"""
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config_class = Qwen2_5OmniThinkerConfig
+    base_model_prefix = "thinker"
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
@@ -2875,6 +2920,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
 
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config_class = Qwen2_5OmniTalkerConfig
+    base_model_prefix = "talker"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)

@@ -159,14 +159,14 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 "input_features"
             )  # rename input_features to prevent conflicts later on
             input_lengths = (audio_inputs["feature_attention_mask"].sum(-1)) // 2 + 1
-            audio_lengths = (input_lengths - 2) // 2 + 1
+            audio_lengths = iter((input_lengths - 2) // 2 + 1)
         else:
             audio_inputs = {}
             audio_lengths = None
 
         if images is not None:
             images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
-            image_grid_thw = images_inputs["image_grid_thw"]
+            image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
             image_grid_thw = None
@@ -179,7 +179,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             videos_inputs["video_second_per_grid"] = [
                 self.image_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]
-            video_grid_thw = videos_inputs["video_grid_thw"]
+            video_grid_thw = iter(videos_inputs["video_grid_thw"])
+            video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -187,86 +188,16 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = text.copy()
-
-        # Extend mm token length
-        merge_length = self.image_processor.merge_size**2
-        audio_index = 0
-        image_index = 0
-        video_index = 0
-
-        for i in range(len(text)):
-            positions = []
-            special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
-            pattern = "|".join(special_tokens)
-            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, text[i])])
-
-            positions.sort(key=lambda x: x[0])
-            for _, special_token in positions:
-                if audio is not None and special_token == self.audio_token:
-                    text[i] = text[i].replace(
-                        self.audio_token,
-                        "<|audio_placeholder|>" * audio_lengths[audio_index],
-                        1,
-                    )
-                    audio_index += 1
-                elif images is not None and special_token == self.image_token:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|image_placeholder|>" * (image_grid_thw[image_index].prod() // merge_length),
-                        1,
-                    )
-                    image_index += 1
-                elif videos is not None and special_token == self.video_token:
-                    if not use_audio_in_video:
-                        text[i] = text[i].replace(
-                            self.video_token,
-                            "<|video_placeholder|>" * (video_grid_thw[video_index].prod() // merge_length),
-                            1,
-                        )
-                        video_index += 1
-                    else:
-                        audio_t_index = torch.arange(audio_lengths[audio_index])
-                        video_t_index = (
-                            torch.arange(video_grid_thw[video_index][0])
-                            .view(-1, 1, 1)
-                            .expand(
-                                -1,
-                                video_grid_thw[video_index][1] // self.image_processor.merge_size,
-                                video_grid_thw[video_index][2] // self.image_processor.merge_size,
-                            )
-                            .flatten()
-                            * videos_inputs["video_second_per_grid"][video_index]
-                            * position_id_per_seconds
-                        ).long()
-                        t_ntoken_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
-                        video_chunk_indexes = self.get_chunked_index(video_t_index, t_ntoken_per_chunk)
-                        audio_chunk_indexes = self.get_chunked_index(audio_t_index, t_ntoken_per_chunk)
-                        placeholder_string = str()
-                        placeholder_string += self.vision_bos_token + self.audio_bos_token
-                        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
-                            video_chunk_index = video_chunk_indexes[j] if j < len(video_chunk_indexes) else None
-                            audio_chunk_index = audio_chunk_indexes[j] if j < len(audio_chunk_indexes) else None
-                            if video_chunk_index is not None:
-                                placeholder_string += "<|video_placeholder|>" * (
-                                    video_chunk_index[1] - video_chunk_index[0]
-                                )
-                            if audio_chunk_index is not None:
-                                placeholder_string += "<|audio_placeholder|>" * (
-                                    audio_chunk_index[1] - audio_chunk_index[0]
-                                )
-                        placeholder_string += self.audio_eos_token + self.vision_eos_token
-                        text[i] = text[i].replace(
-                            self.vision_bos_token + self.video_token + self.vision_eos_token,
-                            placeholder_string,
-                            1,
-                        )
-                        audio_index += 1
-                        video_index += 1
-
-            text[i] = text[i].replace("<|audio_placeholder|>", self.audio_token)
-            text[i] = text[i].replace("<|image_placeholder|>", self.image_token)
-            text[i] = text[i].replace("<|video_placeholder|>", self.video_token)
+        text = self.replace_multimodal_special_tokens(
+            text,
+            audio_lengths,
+            image_grid_thw,
+            video_grid_thw,
+            video_second_per_grid=video_second_per_grid,
+            use_audio_in_video=use_audio_in_video,
+            position_id_per_seconds=position_id_per_seconds,
+            seconds_per_chunk=seconds_per_chunk,
+        )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -275,27 +206,103 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             tensor_type=kwargs.get("return_tensors"),
         )
 
-    def get_chunked_index(self, t_index, t_ntoken_per_chunk):
+    def replace_multimodal_special_tokens(
+        self,
+        text,
+        audio_lengths,
+        image_grid_thw,
+        video_grid_thw,
+        video_second_per_grid,
+        use_audio_in_video,
+        position_id_per_seconds,
+        seconds_per_chunk,
+    ):
+        # Extend mm token length
+        merge_length = self.image_processor.merge_size**2
+
+        processed_text = []
+        for sample in text:
+            positions = []
+            special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
+            pattern = "|".join(special_tokens)
+            positions = sorted([match.group() for match in re.finditer(pattern, sample)])
+
+            for special_token in positions:
+                if special_token == self.audio_token:
+                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
+                elif special_token == self.image_token:
+                    image_seq_length = next(image_grid_thw).prod() // merge_length
+                    sample = sample.replace(self.image_token, "<|image_placeholder|>" * image_seq_length, 1)
+                elif special_token == self.video_token:
+                    if not use_audio_in_video:
+                        video_seq_length = next(video_grid_thw).prod() // merge_length
+                        sample = sample.replace(self.video_token, "<|video_placeholder|>" * video_seq_length, 1)
+                    else:
+                        audio_token_indices = torch.arange(next(audio_lengths))
+                        curr_video_grid_thw = next(video_grid_thw)
+                        height = curr_video_grid_thw[1] // self.image_processor.merge_size
+                        width = curr_video_grid_thw[2] // self.image_processor.merge_size
+                        video_token_indices = torch.arange(curr_video_grid_thw[0]).view(-1, 1, 1)
+                        video_token_indices = video_token_indices.expand(-1, height, width).flatten()
+                        video_token_indices = (
+                            video_token_indices * next(video_second_per_grid) * position_id_per_seconds
+                        ).long()
+
+                        tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
+                        video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
+                        audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
+
+                        placeholder_string = self.vision_bos_token + self.audio_bos_token
+                        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
+                            if j < len(video_chunk_indexes):
+                                video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
+                                placeholder_string += "<|video_placeholder|>" * video_seq_length
+                            if j < len(audio_chunk_indexes):
+                                audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
+                                placeholder_string += "<|audio_placeholder|>" * audio_seq_length
+                        placeholder_string += self.audio_eos_token + self.vision_eos_token
+                        sample = sample.replace(
+                            self.vision_bos_token + self.video_token + self.vision_eos_token,
+                            placeholder_string,
+                            1,
+                        )
+
+            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
+            sample = sample.replace("<|image_placeholder|>", self.image_token)
+            sample = sample.replace("<|video_placeholder|>", self.video_token)
+            processed_text.append(sample)
+        return processed_text
+
+    def get_chunked_index(self, token_indices: torch.Tensor, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
-        Divides a list of indices into chunks based on token count per chunk.
-        Args:
-            t_index: A list of integers representing token indices.
-            t_ntoken_per_chunk: The maximum number of tokens allowed in each chunk.
+        Splits token index list into chunks based on token value ranges.
+
+        Given a list of token indices, returns a list of (start, end) index tuples representing
+        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+
+        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        - the first chunk contains token values < 1000,
+        - the second chunk contains values >= 1000 and < 2000, and so on.
+
+        Parameters:
+            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+
         Returns:
-            A list of tuples, where each tuple represents the start and end
-            indices of a chunk.
+            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+                                and end (exclusive) indices of a chunk in `token_indices`.
         """
 
         def _iter():
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
-            while i < len(t_index):  # skip eos token
-                if t_index[i] >= current_chunk * t_ntoken_per_chunk:
+            while i < len(token_indices):  # skip eos token
+                if token_indices[i] >= current_chunk * tokens_per_chunk:
                     yield (start_idx, i)
                     start_idx = i
                     current_chunk += 1
                 i += 1
-            yield (start_idx, len(t_index))
+            yield (start_idx, len(token_indices))
 
         return list(_iter())
 

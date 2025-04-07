@@ -27,12 +27,14 @@ from torch import nn
 from torch.nn import Parameter
 
 from transformers.models.llama.modeling_llama import rotate_half
+from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
     Qwen2_5_VLMLP,
     Qwen2_5_VLModel,
+    Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
 )
 from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
@@ -42,7 +44,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbeddin
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -247,7 +249,7 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
         del self.encoder_layerdrop
 
 
-class Qwen2_5OmniTextConfig(PretrainedConfig):
+class Qwen2_5OmniTextConfig(Qwen2Config):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -358,7 +360,6 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_text"
-    is_composition = False
 
     def __init__(
         self,
@@ -368,45 +369,13 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         num_hidden_layers=28,
         num_attention_heads=28,
         num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        rms_norm_eps=1e-06,
-        use_cache=True,
         rope_theta=1000000.0,
-        use_sliding_window=False,
         sliding_window=32768,
-        max_window_layers=28,
-        attention_dropout=0.0,
-        rope_scaling=None,
-        initializer_range=0.02,
-        **kwargs,
+        **super_kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        super().__init__(**super_kwargs)
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
-        self.initializer_range = initializer_range
-
-        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -433,8 +402,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_index (`int`, *optional*, defaults to 151656):
             The video token index to encode the video prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         position_id_per_seconds (`int`, *optional*, defaults to 25):
             The increment of position id per second.
         seconds_per_chunk (`int`, *optional*, defaults to 2):
@@ -478,7 +445,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
         "text_config": Qwen2_5OmniTextConfig,
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -488,7 +454,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         audio_token_index=151646,
         image_token_index=151655,
         video_token_index=151656,
-        tie_word_embeddings=False,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -500,7 +465,6 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
-        # 2025.02.20 the add
         self.user_token_id = user_token_id
         self.position_id_per_seconds = position_id_per_seconds
         self.seconds_per_chunk = seconds_per_chunk
@@ -526,7 +490,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
             text_config = Qwen2_5OmniTextConfig()
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniTalkerConfig(PretrainedConfig):
@@ -680,7 +644,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
-    is_composition = False
 
     def __init__(
         self,
@@ -961,7 +924,6 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
         "dit_config": Qwen2_5OmniDiTConfig,
         "bigvgan_config": Qwen2_5OmniBigVGANConfig,
     }
-    is_composition = True
 
     def __init__(self, dit_config=None, bigvgan_config=None, **kwargs):
         if dit_config is None:
@@ -1026,7 +988,6 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         "talker_config": Qwen2_5OmniTalkerConfig,
         "token2wav_config": Qwen2_5OmniToken2WavConfig,
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -1055,55 +1016,9 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    @classmethod
-    def from_sub_model_configs(
-        cls,
-        thinker_config: Qwen2_5OmniThinkerConfig,
-        talker_config: Qwen2_5OmniTalkerConfig,
-        token2wav_config: Qwen2_5OmniToken2WavConfig,
-        enable_audio_output: bool = True,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`Qwen2_5OmniConfig`] (or a derived class) from sub-models configuration.
 
-        Returns:
-            [`Qwen2_5OmniConfig`]: An instance of a configuration object
-        """
-        return cls(
-            thinker_config=thinker_config.to_dict(),
-            talker_config=talker_config.to_dict(),
-            token2wav_config=token2wav_config.to_dict(),
-            enable_audio_output=enable_audio_output,
-            **kwargs,
-        )
-
-
-QWEN2_5OMNI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`{config_class}`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
+class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Qwen2_5OmniConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
     _supports_static_cache = True
 
     def _init_weights(self, module):
@@ -1197,17 +1112,39 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
         return llm_pos_ids
 
-    def get_chunked_index(self, llm_pos_ids, t_ntoken_per_chunk, st_idx):
+    def get_chunked_index(
+        self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
+    ) -> list[tuple[int, int]]:
+        """
+        Splits token index list into chunks based on token value ranges.
+
+        Given a list of token indices, returns a list of (start, end) index tuples representing
+        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+
+        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        - the first chunk contains token values < 1000,
+        - the second chunk contains values >= 1000 and < 2000, and so on.
+
+        Parameters:
+            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+            remove_index (`int`) An index id to subtract from `token_indices` before chunking
+
+        Returns:
+            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+                                and end (exclusive) indices of a chunk in `token_indices`.
+        """
+
         def _iter():
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
-            while i < llm_pos_ids.shape[1]:  # skip eos token
-                if llm_pos_ids[0][i] - st_idx >= current_chunk * t_ntoken_per_chunk:
+            while i < len(token_indices):  # skip eos token
+                if token_indices[0][i] - remove_index >= current_chunk * tokens_per_chunk:
                     yield (start_idx, i)
                     start_idx = i
                     current_chunk += 1
                 i += 1
-            yield (start_idx, llm_pos_ids.shape[1])
+            yield (start_idx, token_indices.shape[1])
 
         return list(_iter())
 
@@ -2172,6 +2109,23 @@ class Qwen2MLP(Qwen2_5_VLMLP):
     pass
 
 
+QWEN2_5OMNI_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`{config_class}`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
 @add_start_docstrings(
     "The bare Qwen2.5OmniThinker Model outputting raw hidden-states without any specific head on top.",
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniTextConfig"),
@@ -2279,6 +2233,7 @@ QWEN2_5OMNITHINKER_INPUTS_DOCSTRING = r"""
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config_class = Qwen2_5OmniThinkerConfig
+    base_model_prefix = "thinker"
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
@@ -2610,6 +2565,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLModel):
 
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config_class = Qwen2_5OmniTalkerConfig
+    base_model_prefix = "talker"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)

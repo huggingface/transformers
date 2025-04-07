@@ -32,6 +32,14 @@ The abstract from the technical report is the following:
 
 
 
+## Notes
+
+- Use [`Qwen2_5OmniForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen2_5OmniThinkerForConditionalGeneration`] for text-only and [`Qwen2_5OmniTalkersForConditionalGeneration`] for audio-only outputs.
+- Audio generation with [`Qwen2_5OmniForConditionalGeneration`] supports only single batch size at the moment.
+- In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
+- The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
+
+
 ## Usage example
 
 `Qwen2.5-Omni` can be found on the [Huggingface Hub](https://huggingface.co/Qwen).
@@ -42,9 +50,9 @@ The model can accept text, images, audio and videos as input. Here's an example 
 
 ```python
 import soundfile as sf
-from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
+from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     torch_dtype="auto",
     device_map="auto"
@@ -81,7 +89,8 @@ inputs = processor.apply_chat_template(
     use_audio_in_video=True,
 ).to(model.device)
 
-text_ids, audio = model.generate(**inputs, use_audio_in_video=True)
+# Generation params for audio or text can be different and have to be prefixed with `thinker_` or `talker_`
+text_ids, audio = model.generate(**inputs, use_audio_in_video=True, thinker_do_sample=False, talker_do_sample=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
 sf.write(
@@ -94,16 +103,15 @@ print(text)
 
 ### Text-only generation
 
-To generate only text output and save compute by not loading the audio generation model, we can set `enable_audio_output=False` when loading the model.  
+To generate only text output and save compute by not loading the audio generation model, we can use `Qwen2_5OmniThinkerForConditionalGeneration` model.  
 
 ```python
-from transformers import Qwen2_5OmniModel, Qwen2_5OmniProcessor
+from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
 
-model = Qwen2_5OmniModel.from_pretrained(
+model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     torch_dtype="auto",
     device_map="auto",
-    enable_audio_output=False,
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
 
@@ -138,7 +146,7 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 
-text_ids = model.generate(**inputs, use_audio_in_video=True, return_audio=False)
+text_ids = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
 sf.write(
@@ -151,7 +159,7 @@ print(text)
 
 ### Batch Mixed Media Inference
 
-The model can batch inputs composed of mixed samples of various types such as text, images, audio and videos as input when `return_audio=False` is set. Here is an example.
+The model can batch inputs composed of mixed samples of various types such as text, images, audio and videos as input when using `Qwen2_5OmniThinkerForConditionalGeneration` model. Here is an example.
 
 ```python
 import soundfile as sf
