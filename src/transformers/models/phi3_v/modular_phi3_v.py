@@ -42,8 +42,9 @@ from .configuration_phi3_v import Phi3VConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+else:
+    flash_attn_func = None
 
-    _flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
 
 logger = logging.get_logger(__name__)
 
@@ -632,6 +633,7 @@ class Phi3FlashAttention2(Phi3Attention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_supports_window_size = "window_size" in list(signature(flash_attn_func).parameters)
 
     def forward(
         self,
@@ -645,7 +647,7 @@ class Phi3FlashAttention2(Phi3Attention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # Phi3FlashAttention2 attention does not support output_attentions
 
-        if not _flash_supports_window_size:
+        if not self._flash_supports_window_size:
             logger.warning_once(
                 "The current flash attention version does not support sliding window attention. Please use `attn_implementation='eager'` or upgrade flash-attn library."
             )
@@ -693,7 +695,7 @@ class Phi3FlashAttention2(Phi3Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         use_sliding_windows = (
-            _flash_supports_window_size
+            self._flash_supports_window_size
             and getattr(self.config, "sliding_window", None) is not None
             and kv_seq_len > self.config.sliding_window
         )
