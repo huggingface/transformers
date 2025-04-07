@@ -80,6 +80,9 @@ answer = processor.decode(outputs[0], skip_special_tokens=True)
 print(answer)
 ```
 
+</hfoption>
+</hfoptions>
+
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
@@ -113,89 +116,88 @@ print(answer)
 
 - Use Donut for document image classification as shown below.
 
-```py
->>> import re
+    ```py
+    >>> import re
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+    >>> from datasets import load_dataset
+    >>> import torch
 
->>> from transformers import DonutProcessor, VisionEncoderDecoderModel
->>> from datasets import load_dataset
->>> import torch
+    >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+    >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
->>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
->>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+    >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+    >>> model.to(device)  # doctest: +IGNORE_RESULT
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
->>> model.to(device)  # doctest: +IGNORE_RESULT
+    >>> # load document image
+    >>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+    >>> image = dataset[1]["image"]
 
->>> # load document image
->>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
->>> image = dataset[1]["image"]
+    >>> # prepare decoder inputs
+    >>> task_prompt = "<s_rvlcdip>"
+    >>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
 
->>> # prepare decoder inputs
->>> task_prompt = "<s_rvlcdip>"
->>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    >>> pixel_values = processor(image, return_tensors="pt").pixel_values
 
->>> pixel_values = processor(image, return_tensors="pt").pixel_values
+    >>> outputs = model.generate(
+    ...     pixel_values.to(device),
+    ...     decoder_input_ids=decoder_input_ids.to(device),
+    ...     max_length=model.decoder.config.max_position_embeddings,
+    ...     pad_token_id=processor.tokenizer.pad_token_id,
+    ...     eos_token_id=processor.tokenizer.eos_token_id,
+    ...     use_cache=True,
+    ...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
+    ...     return_dict_in_generate=True,
+    ... )
 
->>> outputs = model.generate(
-...     pixel_values.to(device),
-...     decoder_input_ids=decoder_input_ids.to(device),
-...     max_length=model.decoder.config.max_position_embeddings,
-...     pad_token_id=processor.tokenizer.pad_token_id,
-...     eos_token_id=processor.tokenizer.eos_token_id,
-...     use_cache=True,
-...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-...     return_dict_in_generate=True,
-... )
-
->>> sequence = processor.batch_decode(outputs.sequences)[0]
->>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
->>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
->>> print(processor.token2json(sequence))
-{'class': 'advertisement'}
-```
+    >>> sequence = processor.batch_decode(outputs.sequences)[0]
+    >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+    >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+    >>> print(processor.token2json(sequence))
+    {'class': 'advertisement'}
+    ```
 
 - Use Donut for document parsing as shown below.
 
-```py
->>> import re
+    ```py
+    >>> import re
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+    >>> from datasets import load_dataset
+    >>> import torch
 
->>> from transformers import DonutProcessor, VisionEncoderDecoderModel
->>> from datasets import load_dataset
->>> import torch
+    >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+    >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
->>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
->>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+    >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+    >>> model.to(device)  # doctest: +IGNORE_RESULT
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
->>> model.to(device)  # doctest: +IGNORE_RESULT
+    >>> # load document image
+    >>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+    >>> image = dataset[2]["image"]
 
->>> # load document image
->>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
->>> image = dataset[2]["image"]
+    >>> # prepare decoder inputs
+    >>> task_prompt = "<s_cord-v2>"
+    >>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
 
->>> # prepare decoder inputs
->>> task_prompt = "<s_cord-v2>"
->>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    >>> pixel_values = processor(image, return_tensors="pt").pixel_values
 
->>> pixel_values = processor(image, return_tensors="pt").pixel_values
+    >>> outputs = model.generate(
+    ...     pixel_values.to(device),
+    ...     decoder_input_ids=decoder_input_ids.to(device),
+    ...     max_length=model.decoder.config.max_position_embeddings,
+    ...     pad_token_id=processor.tokenizer.pad_token_id,
+    ...     eos_token_id=processor.tokenizer.eos_token_id,
+    ...     use_cache=True,
+    ...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
+    ...     return_dict_in_generate=True,
+    ... )
 
->>> outputs = model.generate(
-...     pixel_values.to(device),
-...     decoder_input_ids=decoder_input_ids.to(device),
-...     max_length=model.decoder.config.max_position_embeddings,
-...     pad_token_id=processor.tokenizer.pad_token_id,
-...     eos_token_id=processor.tokenizer.eos_token_id,
-...     use_cache=True,
-...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-...     return_dict_in_generate=True,
-... )
-
->>> sequence = processor.batch_decode(outputs.sequences)[0]
->>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
->>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
->>> print(processor.token2json(sequence))
-{'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total': {'total_price': '17,000', 'cashprice': '20,000', 'changeprice': '3,000'}}
-```
+    >>> sequence = processor.batch_decode(outputs.sequences)[0]
+    >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+    >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+    >>> print(processor.token2json(sequence))
+    {'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total': 
+    {'total_price': '17,000', 'cashprice': '20,000', 'changeprice': '3,000'}}
+    ```
 
 ## DonutSwinConfig
 
