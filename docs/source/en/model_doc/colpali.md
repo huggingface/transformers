@@ -25,54 +25,129 @@ rendered properly in your Markdown viewer.
 You can find all the original ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
 > [!TIP]
-> The orginal ColPali checkpoints are not natively supported by transformers 🤗. To use them you have to install [colpali-engine](https://github.com/illuin-tech/colpali). You can find the original checkpoints [here](https://huggingface.co/collections/vidore/colpali-models-673a5676abddf84949ce3180).
-
-> [!TIP]
 > Click on the ColPali models in the right sidebar for more examples of how to use ColPali for image retrieval.
 
 <hfoptions id="usage">
 <hfoption id="image retrieval">
 
 ```py
+from io import BytesIO
+import requests
 import torch
 from PIL import Image
-
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
-model_name = "vidore/colpali-v1.2-hf"
-
+# Load model (bfloat16 support is limited; fallback to float32 if needed)
 model = ColPaliForRetrieval.from_pretrained(
-    model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="cuda:0",  # or "mps" if on Apple Silicon
+    "vidore/colpali-v1.2-hf",
+    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+    device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
 ).eval()
 
 processor = ColPaliProcessor.from_pretrained(model_name)
 
-# Your inputs (replace dummy images with screenshots of your documents)
-images = [
-    Image.new("RGB", (32, 32), color="white"),
-    Image.new("RGB", (16, 16), color="black"),
-]
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
+
+def load_image_from_url(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; PierreBot/1.0; +http://example.com/bot)"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # Ensure the download was successful
+    return Image.open(BytesIO(response.content)).convert("RGB")
+
+
+images = [load_image_from_url(url1), load_image_from_url(url2)]
+
 queries = [
-    "What is the organizational structure for our R&D department?",
-    "Can you provide a breakdown of last year’s financial performance?",
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
 ]
 
 # Process the inputs
-batch_images = processor(images=images).to(model.device)
-batch_queries = processor(text=queries).to(model.device)
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
 
 # Forward pass
 with torch.no_grad():
-    image_embeddings = model(**batch_images).embeddings
-    query_embeddings = model(**batch_queries).embeddings
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
 
-# Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
 ```
 </hfoption>
 </hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to int4.
+
+```py
+from io import BytesIO
+import requests
+import torch
+from PIL import Image
+from transformers import ColPaliForRetrieval, ColPaliProcessor
+from transformers import BitsAndBytesConfig
+
+# 4-bit quantization configuration
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+)
+
+model_name = "vidore/colpali-v1.2-hf"
+
+# Load model 
+model = ColPaliForRetrieval.from_pretrained(
+    model_name,
+    quantization_config=bnb_config,
+    device_map="cuda"
+).eval()
+
+processor = ColPaliProcessor.from_pretrained(model_name)
+
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
+
+def load_image_from_url(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; PierreBot/1.0; +http://example.com/bot)"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # Ensure the download was successful
+    return Image.open(BytesIO(response.content)).convert("RGB")
+
+
+images = [load_image_from_url(url1), load_image_from_url(url2)]
+
+queries = [
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
+]
+
+# Process the inputs
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
+
+# Forward pass
+with torch.no_grad():
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
+
+scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
+```
 
 ## Notes
 
