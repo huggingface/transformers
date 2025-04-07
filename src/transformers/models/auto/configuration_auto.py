@@ -170,6 +170,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
+        ("llama4", "Llama4Config"),
+        ("llama4_text", "Llama4TextConfig"),
         ("llava", "LlavaConfig"),
         ("llava_next", "LlavaNextConfig"),
         ("llava_next_video", "LlavaNextVideoConfig"),
@@ -519,6 +521,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
         ("llama3", "Llama3"),
+        ("llama4", "Llama4"),
+        ("llama4_text", "Llama4ForCausalLM"),
         ("llava", "LLaVa"),
         ("llava_next", "LLaVA-NeXT"),
         ("llava_next_video", "LLaVa-NeXT-Video"),
@@ -776,6 +780,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
         ("sam_vision_model", "sam"),
+        ("llama4_text", "llama4"),
     ]
 )
 

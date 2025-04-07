@@ -1263,7 +1263,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
-            self.quantization_config = QuantizationConfig.parse_obj(
+            self.quantization_config = QuantizationConfig.model_validate(
                 {
                     "config_groups": config_groups,
                     "quant_method": quant_method,
@@ -1282,7 +1282,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 sparsity_config.get("format"), **sparsity_config
             )
 
-        super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
+        self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
+
+    def post_init(self):
+        if self.run_compressed:
+            if self.is_sparsification_compressed:
+                logger.warn(
+                    "`run_compressed` is only supported for quantized_compressed models"
+                    " and not for sparsified models. Setting `run_compressed=False`"
+                )
+                self.run_compressed = False
+            elif not self.is_quantization_compressed:
+                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                self.run_compressed = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1355,6 +1367,28 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         return {"run_compressed": self.run_compressed}
+
+    @property
+    def is_quantized(self):
+        return bool(self.quantization_config) and bool(self.quantization_config.config_groups)
+
+    @property
+    def is_quantization_compressed(self):
+        from compressed_tensors.quantization import QuantizationStatus
+
+        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+
+    @property
+    def is_sparsification_compressed(self):
+        from compressed_tensors.config import (
+            CompressionFormat,
+            SparsityCompressionConfig,
+        )
+
+        return (
+            isinstance(self.sparsity_config, SparsityCompressionConfig)
+            and self.sparsity_config.format != CompressionFormat.dense.value
+        )
 
 
 @dataclass
@@ -1528,7 +1562,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         # Handle quant_type based on type and version
         if isinstance(self.quant_type, str):
             self._validate_string_quant_type()
-        elif ao_version >= version.parse("0.10.0"):
+        elif ao_version > version.parse("0.9.0"):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
@@ -1537,8 +1571,8 @@ class TorchAoConfig(QuantizationConfigMixin):
                 )
         else:
             raise ValueError(
-                f"In torchao < 0.10.0, quant_type must be a string. Got {type(self.quant_type)}. "
-                f"Please upgrade to torchao >= 0.10.0 to use AOBaseConfig instances."
+                f"In torchao <= 0.9.0, quant_type must be a string. Got {type(self.quant_type)}. "
+                f"Please upgrade to torchao > 0.9.0 to use AOBaseConfig instances."
             )
 
     def _validate_string_quant_type(self):
@@ -1624,9 +1658,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse("0.10.0"), (
-            "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
-        )
+        assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"

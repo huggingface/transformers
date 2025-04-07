@@ -21,12 +21,12 @@ import os
 import tempfile
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Dict, Iterable, List, Optional, Tuple, TypedDict
+from typing import Any, ContextManager, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -465,7 +465,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
@@ -475,7 +475,7 @@ class ModelOutput(OrderedDict):
 if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
@@ -542,7 +542,7 @@ class ContextManagers:
     in the `fastcore` library.
     """
 
-    def __init__(self, context_managers: List[ContextManager]):
+    def __init__(self, context_managers: list[ContextManager]):
         self.context_managers = context_managers
         self.stack = ExitStack()
 
@@ -883,7 +883,7 @@ class LossKwargs(TypedDict, total=False):
     num_items_in_batch: Optional[int]
 
 
-def is_timm_config_dict(config_dict: Dict[str, Any]) -> bool:
+def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
     """Checks whether a config dict is a timm config dict."""
     return "pretrained_cfg" in config_dict
 
@@ -903,13 +903,13 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
 
     # pretrained_model_path is a file
     if is_file and pretrained_model_path.endswith(".json"):
-        with open(pretrained_model_path, "r") as f:
+        with open(pretrained_model_path) as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
     # pretrained_model_path is a directory with a config.json
     if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
-        with open(os.path.join(pretrained_model_path, "config.json"), "r") as f:
+        with open(os.path.join(pretrained_model_path, "config.json")) as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
