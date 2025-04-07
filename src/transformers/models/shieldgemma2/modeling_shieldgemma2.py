@@ -26,7 +26,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModelForImageTextToText
 from .configuration_shieldgemma2 import ShieldGemma2Config
 
@@ -150,7 +149,6 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     def tie_weights(self):
         return self.model.language_model.tie_weights()
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(SHIELDGEMMA2_INPUTS_DOCSTRING)
     def forward(
         self,
