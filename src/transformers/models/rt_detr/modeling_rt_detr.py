@@ -210,8 +210,8 @@ class RTDetrModelOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    intermediate_predicted_corners: torch.FloatTensor = None
-    initial_reference_points: torch.FloatTensor = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -308,8 +308,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    intermediate_predicted_corners: torch.FloatTensor = None
-    initial_reference_points: torch.FloatTensor = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None

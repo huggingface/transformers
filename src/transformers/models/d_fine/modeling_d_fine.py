@@ -20,7 +20,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -377,7 +377,7 @@ class DFineDecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ):
+    ) -> tuple[torch.Tensor, Any, Any]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -500,15 +500,15 @@ class DFineModelOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    intermediate_predicted_corners: torch.FloatTensor = None
-    initial_reference_points: torch.FloatTensor = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    init_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -591,15 +591,15 @@ class DFineObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    intermediate_predicted_corners: torch.FloatTensor = None
-    initial_reference_points: torch.FloatTensor = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -732,7 +732,7 @@ class DFineEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
     ):
@@ -1215,7 +1215,7 @@ class DFineDecoder(DFinePreTrainedModel):
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
-    ):
+    ) -> DFineDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
