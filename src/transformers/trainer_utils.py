@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -165,10 +164,10 @@ class EvalPrediction:
 
     def __init__(
         self,
-        predictions: Union[np.ndarray, Tuple[np.ndarray]],
-        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
-        losses: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        predictions: Union[np.ndarray, tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
+        losses: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
@@ -190,22 +189,22 @@ class EvalPrediction:
 
 
 class EvalLoopOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
+    predictions: Union[np.ndarray, tuple[np.ndarray]]
+    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
+    metrics: Optional[dict[str, float]]
     num_samples: Optional[int]
 
 
 class PredictionOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
+    predictions: Union[np.ndarray, tuple[np.ndarray]]
+    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
+    metrics: Optional[dict[str, float]]
 
 
 class TrainOutput(NamedTuple):
     global_step: int
     training_loss: float
-    metrics: Dict[str, float]
+    metrics: dict[str, float]
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
@@ -267,12 +266,12 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: Union[float, List[float]]
-    hyperparameters: Dict[str, Any]
+    objective: Union[float, list[float]]
+    hyperparameters: dict[str, Any]
     run_summary: Optional[Any] = None
 
 
-def default_compute_objective(metrics: Dict[str, float]) -> float:
+def default_compute_objective(metrics: dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
@@ -297,7 +296,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 
-def default_hp_space_optuna(trial) -> Dict[str, float]:
+def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
     assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
@@ -309,7 +308,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> Dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, float]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -336,7 +335,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> Dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, float]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -762,6 +761,9 @@ def has_length(dataset):
     except TypeError:
         # TypeError: len() of unsized object
         return False
+    except AttributeError:
+        # Ray DataSets raises an AttributeError: https://github.com/ray-project/ray/blob/master/python/ray/data/dataset.py#L5616
+        return False
 
 
 def denumpify_detensorize(metrics):
@@ -864,7 +866,7 @@ class RemoveColumnsCollator:
                 self.message_logged = True
         return {k: v for k, v in feature.items() if k in self.signature_columns}
 
-    def __call__(self, features: List[dict]):
+    def __call__(self, features: list[dict]):
         features = [self._remove_columns(feature) for feature in features]
         return self.data_collator(features)
 

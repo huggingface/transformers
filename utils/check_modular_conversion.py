@@ -173,5 +173,5 @@ if __name__ == "__main__":
     if skipped_models:
         console.print(
             f"[bold green]Skipped {len(skipped_models)} models and their dependencies that are not in the diff: "
-            f"{', '.join(skipped_models)}[/bold green]"
+            f"{', '.join(sorted(skipped_models))}[/bold green]"
         )

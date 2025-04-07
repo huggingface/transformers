@@ -148,7 +148,7 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.old_features = torch.load(cached_features_file)
+                self.old_features = torch.load(cached_features_file, weights_only=True)
 
                 # Legacy cache files have only features, while new cache files
                 # will have dataset and examples also.

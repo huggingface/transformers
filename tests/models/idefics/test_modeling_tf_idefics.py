@@ -372,7 +372,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(attentions[0] is None)
             out_len = len(outputs)
 
@@ -386,7 +386,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(self_attentions[0] is None)
 
     def test_hidden_states_output(self):

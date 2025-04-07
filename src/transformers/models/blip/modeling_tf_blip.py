@@ -96,7 +96,7 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     loss: Tuple[tf.Tensor] | None = None
     logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -138,7 +138,7 @@ class TFBlipTextVisionModelOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -179,7 +179,7 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     itm_score: tf.Tensor | None = None
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_pooler_output: tf.Tensor | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
@@ -209,10 +209,10 @@ class TFBlipOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits_per_image: tf.Tensor = None
-    logits_per_text: tf.Tensor = None
-    text_embeds: tf.Tensor = None
-    image_embeds: tf.Tensor = None
+    logits_per_image: Optional[tf.Tensor] = None
+    logits_per_text: Optional[tf.Tensor] = None
+    text_embeds: Optional[tf.Tensor] = None
+    image_embeds: Optional[tf.Tensor] = None
     text_model_output: TFBaseModelOutputWithPooling = None
     vision_model_output: TFBaseModelOutputWithPooling = None
 
@@ -309,9 +309,9 @@ class TFBlipTextEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.

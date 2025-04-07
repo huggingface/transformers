@@ -123,7 +123,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
-        # Model for Image-classsification
+        # Model for Image-classification
         ("beit", "FlaxBeitForImageClassification"),
         ("dinov2", "FlaxDinov2ForImageClassification"),
         ("regnet", "FlaxRegNetForImageClassification"),

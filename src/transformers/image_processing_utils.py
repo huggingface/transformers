@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,8 @@
 # limitations under the License.
 
 import math
-from typing import Dict, Iterable, Optional, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -116,7 +116,7 @@ class BaseImageProcessor(ImageProcessingMixin):
     def center_crop(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -207,7 +207,7 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: Union[int, Iterable[int], Dict[str, int]] = None,
+    size: Union[int, Iterable[int], dict[str, int]] = None,
     max_size: Optional[int] = None,
     height_width_order: bool = True,
     default_to_square: bool = True,

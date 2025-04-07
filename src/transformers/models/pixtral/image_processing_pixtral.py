@@ -128,8 +128,9 @@ def get_resize_output_image_size(
 
     if ratio > 1:
         # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
-        height = int(math.ceil(height / ratio))
-        width = int(math.ceil(width / ratio))
+        # Here we use floor to ensure the image is always smaller than the given "longest_edge"
+        height = int(math.floor(height / ratio))
+        width = int(math.floor(width / ratio))
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
@@ -318,16 +319,16 @@ class PixtralImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         patch_size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,

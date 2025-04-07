@@ -445,18 +445,8 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip(
-        reason="SeamlessM4Tv2Model is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4Tv2Model can takes input_ids or input_features")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4Tv2 has no base model")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(
@@ -592,7 +582,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     # TODO: @ydshieh: refer to #34968
     @unittest.skip(reason="Failing on multi-gpu runner")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        self.skipTest(reason="Failing on multi-gpu runner")
 
 
 @require_torch
@@ -686,16 +676,6 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @unittest.skip(
-        reason="SeamlessM4Tv2Model is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4Tv2 has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

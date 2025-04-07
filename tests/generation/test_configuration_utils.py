@@ -193,7 +193,7 @@ class GenerationConfigTest(unittest.TestCase):
             generation_config_bad_temperature.update(temperature=None)
         self.assertEqual(len(captured_warnings), 0)
 
-        # Impossible sets of contraints/parameters will raise an exception
+        # Impossible sets of constraints/parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
         with self.assertRaises(ValueError):

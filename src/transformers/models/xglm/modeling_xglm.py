@@ -177,7 +177,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
-    def forward(self, position_ids: torch.Tensor = None, past_key_values_length: int = 0):
+    def forward(self, position_ids: Optional[torch.Tensor] = None, past_key_values_length: int = 0):
         bsz, seq_len = position_ids.size()
         position_ids += self.offset
 
@@ -601,8 +601,7 @@ class XGLMModel(XGLMPreTrainedModel):
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
-                    "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache ="
-                    " False`..."
+                    "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
                 )
                 use_cache = False
 

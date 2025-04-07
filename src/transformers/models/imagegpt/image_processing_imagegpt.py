@@ -177,10 +177,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_normalize: bool = None,
+        do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

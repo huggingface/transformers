@@ -48,7 +48,7 @@ class WhisperProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] and the `text`
-        argument to [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        argument to [`~WhisperTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
         # For backward compatibility

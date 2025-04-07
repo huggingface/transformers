@@ -349,7 +349,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         header_text: Optional[str] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
         patch_size: Optional[Dict[str, int]] = None,

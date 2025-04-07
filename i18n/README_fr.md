@@ -225,7 +225,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 1. Choisissez le bon framework pour chaque partie de la vie d'un modèle :
     - Entraînez des modèles de pointe en 3 lignes de code.
-    - Trasnférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
+    - Transférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
     - Choisissez facilement le bon framework pour l'entraînement, l'évaluation et la production.
 
 1. Personnalisez facilement un modèle ou un exemple selon vos besoins :

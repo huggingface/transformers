@@ -1044,7 +1044,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).loss
 
         # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
-        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+        self.assertTrue(loss.item() <= loss_more_masked.item())
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
@@ -1885,9 +1885,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)

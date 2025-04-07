@@ -136,8 +136,8 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:

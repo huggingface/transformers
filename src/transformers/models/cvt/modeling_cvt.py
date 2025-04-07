@@ -60,8 +60,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             plus the initial embedding outputs.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    cls_token_value: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cls_token_value: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 

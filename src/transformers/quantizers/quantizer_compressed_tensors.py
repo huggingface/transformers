@@ -46,6 +46,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 "`pip install compressed-tensors`"
             )
 
+        # Call post_init here to ensure proper config setup when `run_compressed`
+        # is provided directly via CompressedTensorsConfig, and to avoid duplicate logging.
+
+        quantization_config.post_init()
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
@@ -117,16 +121,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
 
         if self.run_compressed:
-            if not self.is_quantization_compressed:
-                raise ValueError("`run_compressed` is only supported for quantized_compressed models")
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
-        elif self.is_quantized and not self.is_quantization_compressed:
+        elif not self.quantization_config.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
-        if (self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed:
+        if (
+            self.quantization_config.is_quantization_compressed and not self.run_compressed
+        ) or self.quantization_config.is_sparsification_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
 
@@ -136,35 +140,24 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 config_file_path = cached_file(cache_path, "config.json")
                 cache_path = os.path.sep.join(config_file_path.split(os.path.sep)[:-1])
 
-            if self.is_quantization_compressed and not self.run_compressed:
+            if self.quantization_config.is_quantization_compressed and not self.run_compressed:
                 from compressed_tensors.quantization import QuantizationStatus
 
                 self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
             self.compressor.decompress(model_path=cache_path, model=model)
 
-    @property
-    def is_quantized(self):
-        return self.quantization_config.quantization_config is not None and bool(
-            self.quantization_config.quantization_config.config_groups
-        )
+    def update_tp_plan(self, config):
+        additional_plan = {
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+        }
+        if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
+            config.get_text_config().base_model_tp_plan.update(additional_plan)
 
-    @property
-    def is_quantization_compressed(self):
-        from compressed_tensors.quantization import QuantizationStatus
-
-        return (
-            self.quantization_config.quantization_config is not None
-            and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
-        )
-
-    @property
-    def is_sparsification_compressed(self):
-        from compressed_tensors.config.base import CompressionFormat
-
-        return (
-            self.quantization_config.sparsity_config is not None
-            and self.quantization_config.sparsity_config.format != CompressionFormat.dense.value
-        )
+        return config
 
     @property
     def is_trainable(self):
@@ -173,7 +166,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
         # models need to be decompressed carry out qat
-        return not self.run_compressed or not self.is_quantization_compressed
+        return not self.run_compressed or not self.quantization_config.is_quantization_compressed
 
     def is_serializable(self, safe_serialization=None) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""

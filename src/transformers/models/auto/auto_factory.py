@@ -445,6 +445,11 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
+        return config
+
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -561,6 +566,8 @@ class _BaseAutoModelClass:
             )
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
+            if model_class.config_class == config.sub_configs.get("text_config", None):
+                config = config.get_text_config()
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

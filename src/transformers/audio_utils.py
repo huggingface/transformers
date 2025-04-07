@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team and the librosa & torchaudio authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,57 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 
+import os
 import warnings
+from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import requests
+
+from .utils import is_librosa_available, requires_backends
+
+
+if is_librosa_available():
+    import librosa
+
+
+def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be laoded to the numpy array format.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The samlping rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `np.ndarray`: A numpy artay representing the audio.
+    """
+    requires_backends(load_audio, ["librosa"])
+
+    if isinstance(audio, str):
+        # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
+        if audio.startswith("http://") or audio.startswith("https://"):
+            audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+        elif os.path.isfile(audio):
+            audio = librosa.load(audio, sr=sampling_rate)[0]
+    elif isinstance(audio, np.ndarray):
+        audio = audio
+    else:
+        raise TypeError(
+            "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
+        )
+    return audio
+
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -146,7 +192,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
+    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
@@ -247,7 +293,7 @@ def mel_filter_bank(
 
     Args:
         num_frequency_bins (`int`):
-            Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
         num_mel_filters (`int`):
             Number of mel filters to generate.
         min_frequency (`float`):
@@ -271,6 +317,12 @@ def mel_filter_bank(
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
 
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
+
     # center points of the triangular mel filters
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
     mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
@@ -279,7 +331,7 @@ def mel_filter_bank(
 
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
-        fft_bin_width = sampling_rate / (num_frequency_bins * 2)
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
         fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         filter_freqs = mel_freqs
     else:
@@ -592,7 +644,7 @@ def spectrogram(
 
 
 def spectrogram_batch(
-    waveform_list: List[np.ndarray],
+    waveform_list: list[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
@@ -611,7 +663,7 @@ def spectrogram_batch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
     This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
@@ -1079,7 +1131,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     return frames
 
 
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+def stft(frames: np.array, windowing_function: np.array, fft_window_size: Optional[int] = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`.

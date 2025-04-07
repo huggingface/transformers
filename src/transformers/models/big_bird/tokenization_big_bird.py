@@ -184,7 +184,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:

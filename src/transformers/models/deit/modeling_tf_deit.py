@@ -88,9 +88,9 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    cls_logits: Optional[tf.Tensor] = None
+    distillation_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -813,9 +813,9 @@ class TFDeiTPooler(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.pooler_output_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
+            activation=config.pooler_act,
             name="dense",
         )
         self.config = config

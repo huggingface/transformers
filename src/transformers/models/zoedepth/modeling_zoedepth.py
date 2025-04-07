@@ -69,8 +69,8 @@ class ZoeDepthDepthEstimatorOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    predicted_depth: torch.FloatTensor = None
-    domain_logits: torch.FloatTensor = None
+    predicted_depth: Optional[torch.FloatTensor] = None
+    domain_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -1219,7 +1219,8 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         return out, None
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->ZoeDepth,dpt->zoedepth
+# Modified from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->ZoeDepth,dpt->zoedepth
+# avoiding sdpa and flash_attn_2 support, it's done int the backend
 class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

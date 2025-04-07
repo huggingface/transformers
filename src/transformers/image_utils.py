@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,11 @@
 
 import base64
 import os
+from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import numpy as np
 import requests
@@ -83,19 +83,19 @@ logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[
-    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
+    "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
 ]  # noqa
 
 
 VideoInput = Union[
-    List["PIL.Image.Image"],
+    list["PIL.Image.Image"],
     "np.ndarray",
     "torch.Tensor",
-    List["np.ndarray"],
-    List["torch.Tensor"],
-    List[List["PIL.Image.Image"]],
-    List[List["np.ndarrray"]],
-    List[List["torch.Tensor"]],
+    list["np.ndarray"],
+    list["torch.Tensor"],
+    list[list["PIL.Image.Image"]],
+    list[list["np.ndarray"]],
+    list[list["torch.Tensor"]],
 ]  # noqa
 
 
@@ -122,7 +122,7 @@ class VideoMetadata:
     video_backend: str
 
 
-AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+AnnotationType = dict[str, Union[int, str, list[dict]]]
 
 
 def is_pil_image(img):
@@ -155,7 +155,7 @@ def is_valid_image(img):
     return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
 
 
-def is_valid_list_of_images(images: List):
+def is_valid_list_of_images(images: list):
     return images and all(is_valid_image(image) for image in images)
 
 
@@ -188,7 +188,7 @@ def is_scaled_image(image: np.ndarray) -> bool:
     return np.min(image) >= 0 and np.max(image) <= 1
 
 
-def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
+def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
     """
     Ensure that the output is a list of images. If the input is a single image, it is converted to a list of length 1.
     If the input is a batch of images, it is converted to a list of images.
@@ -228,7 +228,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
 
 
 def make_flat_list_of_images(
-    images: Union[List[ImageInput], ImageInput],
+    images: Union[list[ImageInput], ImageInput],
 ) -> ImageInput:
     """
     Ensure that the output is a flat list of images. If the input is a single image, it is converted to a list of length 1.
@@ -263,7 +263,7 @@ def make_flat_list_of_images(
 
 
 def make_nested_list_of_images(
-    images: Union[List[ImageInput], ImageInput],
+    images: Union[list[ImageInput], ImageInput],
 ) -> ImageInput:
     """
     Ensure that the output is a nested list of images.
@@ -339,7 +339,7 @@ def to_numpy_array(img) -> np.ndarray:
 
 
 def infer_channel_dimension_format(
-    image: np.ndarray, num_channels: Optional[Union[int, Tuple[int, ...]]] = None
+    image: np.ndarray, num_channels: Optional[Union[int, tuple[int, ...]]] = None
 ) -> ChannelDimension:
     """
     Infers the channel dimension format of `image`.
@@ -399,7 +399,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
@@ -424,10 +424,10 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
 
 
 def get_image_size_for_max_height_width(
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     max_height: int,
     max_width: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
     Important, even if image_height < max_height and image_width < max_width, the image will be resized
@@ -454,7 +454,7 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -469,7 +469,7 @@ def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]
     return False
 
 
-def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -485,11 +485,11 @@ def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]])
     return False
 
 
-def valid_coco_detection_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+def valid_coco_detection_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
     return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
 
 
-def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
@@ -880,8 +880,8 @@ def load_video(
 
 
 def load_images(
-    images: Union[List, Tuple, str, "PIL.Image.Image"], timeout: Optional[float] = None
-) -> Union["PIL.Image.Image", List["PIL.Image.Image"], List[List["PIL.Image.Image"]]]:
+    images: Union[list, tuple, str, "PIL.Image.Image"], timeout: Optional[float] = None
+) -> Union["PIL.Image.Image", list["PIL.Image.Image"], list[list["PIL.Image.Image"]]]:
     """Loads images, handling different levels of nesting.
 
     Args:
@@ -904,14 +904,14 @@ def validate_preprocess_arguments(
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,
     do_normalize: Optional[bool] = None,
-    image_mean: Optional[Union[float, List[float]]] = None,
-    image_std: Optional[Union[float, List[float]]] = None,
+    image_mean: Optional[Union[float, list[float]]] = None,
+    image_std: Optional[Union[float, list[float]]] = None,
     do_pad: Optional[bool] = None,
     size_divisibility: Optional[int] = None,
     do_center_crop: Optional[bool] = None,
-    crop_size: Optional[Dict[str, int]] = None,
+    crop_size: Optional[dict[str, int]] = None,
     do_resize: Optional[bool] = None,
-    size: Optional[Dict[str, int]] = None,
+    size: Optional[dict[str, int]] = None,
     resample: Optional["PILImageResampling"] = None,
 ):
     """
@@ -1295,8 +1295,8 @@ class ImageFeatureExtractionMixin:
 
 def validate_annotations(
     annotation_format: AnnotationFormat,
-    supported_annotation_formats: Tuple[AnnotationFormat, ...],
-    annotations: List[Dict],
+    supported_annotation_formats: tuple[AnnotationFormat, ...],
+    annotations: list[dict],
 ) -> None:
     if annotation_format not in supported_annotation_formats:
         raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
@@ -1318,7 +1318,7 @@ def validate_annotations(
             )
 
 
-def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str]):
+def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str]):
     unused_keys = set(captured_kwargs).difference(set(valid_processor_keys))
     if unused_keys:
         unused_key_str = ", ".join(unused_keys)
@@ -1332,12 +1332,12 @@ class SizeDict:
     Hashable dictionary to store image size information.
     """
 
-    height: int = None
-    width: int = None
-    longest_edge: int = None
-    shortest_edge: int = None
-    max_height: int = None
-    max_width: int = None
+    height: Optional[int] = None
+    width: Optional[int] = None
+    longest_edge: Optional[int] = None
+    shortest_edge: Optional[int] = None
+    max_height: Optional[int] = None
+    max_width: Optional[int] = None
 
     def __getitem__(self, key):
         if hasattr(self, key):

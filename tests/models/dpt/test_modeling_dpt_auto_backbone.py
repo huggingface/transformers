@@ -221,14 +221,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )

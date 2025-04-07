@@ -64,8 +64,6 @@ class AyaVisionProcessor(ProcessorMixin):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
             The size of the image to be tokenized. This should correspond to the size given to the image processor.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The token to be used to represent an image in the text.
         downsample_factor (`int`, *optional*, defaults to 1):
@@ -93,7 +91,6 @@ class AyaVisionProcessor(ProcessorMixin):
         "patch_size",
         "img_size",
         "downsample_factor",
-        "vision_feature_select_strategy",
         "start_of_img_token",
         "end_of_img_token",
         "img_patch_token",
@@ -110,7 +107,6 @@ class AyaVisionProcessor(ProcessorMixin):
         tokenizer=None,
         patch_size: int = 28,
         img_size: int = 364,
-        vision_feature_select_strategy="full",
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         downsample_factor: int = 1,
         start_of_img_token="<|START_OF_IMG|>",
@@ -127,7 +123,6 @@ class AyaVisionProcessor(ProcessorMixin):
         self.image_token = image_token
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
-        self.vision_feature_select_strategy = vision_feature_select_strategy
 
         self.start_of_img_token = start_of_img_token
         self.end_of_img_token = end_of_img_token
@@ -214,22 +209,15 @@ class AyaVisionProcessor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             num_patches = image_inputs.pop("num_patches")
             image_index = 0
-            img_start_idx = 0
             processed_text = []
-            image_num_patches = []
             for prompt in text:
                 new_prompt = prompt
-                curr_num_image_patches = 0
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
                     image_tokens = self._prompt_split_image(num_patches[image_index])
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
-                    curr_num_image_patches += num_patches[image_index]
                     image_index += 1
-
                 processed_text.append(new_prompt)
-                image_num_patches.append(curr_num_image_patches.item())
-                img_start_idx += curr_num_image_patches
 
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")

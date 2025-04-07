@@ -78,7 +78,7 @@ class DonutSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -114,7 +114,7 @@ class DonutSwinModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -869,6 +869,13 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DonutSwinEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, DonutSwinSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 SWIN_START_DOCSTRING = r"""

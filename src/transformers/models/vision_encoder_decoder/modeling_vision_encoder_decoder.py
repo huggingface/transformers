@@ -21,7 +21,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
@@ -368,21 +367,13 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
                 return model
 
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -582,6 +573,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # num_items_in_batch is only needed for loss computation
+        num_items_in_batch = kwargs.pop("num_items_in_batch", None)
+
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
@@ -638,8 +632,13 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.decoder.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
+            )
 
         if not return_dict:
             if loss is not None:

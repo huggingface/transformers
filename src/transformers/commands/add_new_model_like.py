@@ -918,7 +918,7 @@ def add_model_to_main_init(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         frameworks (`List[str]`, *optional*):
             If specified, only the models implemented in those frameworks will be added.
-        with_processsing (`bool`, *optional*, defaults to `True`):
+        with_processing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
