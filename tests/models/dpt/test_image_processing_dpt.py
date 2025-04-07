@@ -20,6 +20,7 @@ from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,6 +32,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import DPTImageProcessor
+
+    if is_torchvision_available():
+        from transformers import DPTImageProcessorFast
 
 
 class DPTImageProcessingTester:
@@ -114,6 +118,7 @@ def prepare_semantic_batch_inputs():
 @require_vision
 class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DPTImageProcessor if is_vision_available() else None
+    fast_image_processing_class = DPTImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
