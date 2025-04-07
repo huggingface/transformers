@@ -46,12 +46,19 @@ from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
 
+from transformers.utils import is_torchao_available
+
+
+if is_torchao_available():
+    from torchao.quantization import Int4WeightOnlyConfig
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.accelerate import find_tied_parameters, init_empty_weights
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -73,7 +80,6 @@ from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
-    ACCELERATE_MIN_VERSION,
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
@@ -126,18 +132,16 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate import dispatch_model, infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         extract_model_from_parallel,
-        find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
-        set_module_tensor_to_device,
     )
 
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
@@ -148,6 +152,10 @@ if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
+
+
+if is_deepspeed_available():
+    import deepspeed
 
 logger = logging.get_logger(__name__)
 
@@ -208,32 +216,29 @@ TORCH_INIT_FUNCTIONS = {
 
 
 @contextmanager
-def no_init_weights(_enable=True):
+def no_init_weights():
     """
     Context manager to globally disable weight initialization to speed up loading large models.
-
-    TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
     """
     global _init_weights
     old_init_weights = _init_weights
 
-    if _enable:
-        _init_weights = False
+    _init_weights = False
 
-        def _skip_init(*args, **kwargs):
-            pass
+    def _skip_init(*args, **kwargs):
+        pass
 
-        # # Save the original initialization functions
-        for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, _skip_init)
+    # Save the original initialization functions
+    for name, init_func in TORCH_INIT_FUNCTIONS.items():
+        setattr(torch.nn.init, name, _skip_init)
+
     try:
         yield
     finally:
         _init_weights = old_init_weights
-        if _enable:
-            # # Restore the original initialization functions
-            for name, init_func in TORCH_INIT_FUNCTIONS.items():
-                setattr(torch.nn.init, name, init_func)
+        # Restore the original initialization functions
+        for name, init_func in TORCH_INIT_FUNCTIONS.items():
+            setattr(torch.nn.init, name, init_func)
 
 
 @contextmanager
@@ -384,57 +389,6 @@ def get_state_dict_dtype(state_dict):
         return next(state_dict.values()).dtype
 
 
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`.
-
-    Example:
-
-    ```py
-    >>> dtype_byte_size(torch.float32)
-    4
-    ```
-    """
-    if dtype == torch.bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)_?", str(dtype))
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
-
-
-def check_support_param_buffer_assignment(model_to_load, state_dict):
-    """
-    Checks if `model_to_load` supports param buffer assignment (such
-    as when loading in empty weights) by first checking
-    if the model explicitly disables it, then by ensuring that the state dict keys
-    are a subset of the model's parameters.
-
-    Note: We fully disable this if we are using `deepspeed`
-    """
-    if len(state_dict) == 0:
-        return False
-
-    if is_deepspeed_zero3_enabled():
-        return False
-
-    # Some models explicitly do not support param buffer assignment
-    if not getattr(model_to_load, "_supports_param_buffer_assignment", True):
-        logger.debug(
-            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
-        )
-        return False
-
-    # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
-    first_key = next(iter(model_to_load.state_dict().keys()))
-    if first_key in state_dict:
-        return state_dict[first_key].dtype == model_to_load.state_dict()[first_key].dtype
-
-    # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
-    return False
-
-
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     """
     This is the same as
@@ -530,6 +484,7 @@ str_to_torch_dtype = {
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
 }
 
 if is_torch_greater_or_equal("2.1.0"):
@@ -750,6 +705,13 @@ def _infer_parameter_dtype(
     return old_param is not None and old_param.is_contiguous(), casting_dtype
 
 
+def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
+    """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
+    module, param_type = get_module_from_name(model, param_name)
+    # This will check potential shape mismatch if skipped before
+    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+
+
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
@@ -781,14 +743,15 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors")
+    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+        QuantizationMethod.HQQ,
+        QuantizationMethod.BITS_AND_BYTES,
+    ]
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
-    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
-    # we need to make sure they are not loaded as tied weights!
-    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -857,20 +820,9 @@ def _load_state_dict_into_meta_model(
             ):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                module, param_type = get_module_from_name(model, param_name)
 
-                # avoid tied weights
-                if param.data_ptr() in data_ptrs:
-                    param = param.clone()
+                _load_parameter_into_model(model, param_name, param.to(param_device))
 
-                module.load_state_dict(
-                    {param_type: param.to(param_device)},
-                    strict=False,
-                    assign=True,
-                )
-
-                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
-                data_ptrs.add(model.state_dict()[param_name].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
@@ -1397,18 +1349,7 @@ def _find_missing_and_unexpected_keys(
     if has_inv_freq_buffers:
         unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
 
-    if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-        ptrs = collections.defaultdict(list)
-        for name, tensor in model.state_dict().items():
-            id_tensor = id_tensor_storage(tensor)
-            ptrs[id_tensor].append(name)
-
-        # These are all the pointers of shared tensors.
-        tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-    else:
-        # id function doesn't work for meta tensor so we need this function
-        tied_params = find_tied_parameters(model)
-
+    tied_params = find_tied_parameters(model)
     for group in tied_params:
         missing_in_group = [k for k in missing_keys if k in group]
         if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
@@ -1416,6 +1357,7 @@ def _find_missing_and_unexpected_keys(
 
     if hf_quantizer is not None:
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+        unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
     # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
     if cls._keys_to_ignore_on_load_missing is not None:
@@ -1430,29 +1372,59 @@ def _find_missing_and_unexpected_keys(
 
 
 def _find_mismatched_keys(
-    model_to_load: "PreTrainedModel",
-    state_dict: Dict,
+    model: "PreTrainedModel",
+    state_dict: Optional[Dict],
+    checkpoint_files: Optional[List[str]],
     ignore_mismatched_sizes: bool,
-    prefix: str,
-) -> List:
-    """Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
-    problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`."""
+    keys_to_rename_mapping: Dict[str, str],
+    is_quantized: bool,
+    weights_only: bool,
+) -> Tuple[List[str], List[Tuple[int, int]]]:
+    """
+    Find potential shape mismatch between the different state dicts and the model parameters, but only if `ignore_mismatched_sizes`
+    is True. Otherwise, return immediately and any shape mismatch that may exist will be raised later on. This avoids checking
+    every parameter in advance, as shape mismatch are extremely rare in practice. If we want to ignore them however, we do
+    need to check in advance as we need to know which parameters we need to move back from meta to cpu, and initialize
+    correctly. Indeed, as our model initialization takes place at the module level, and not the weight level, in the
+    case of a sharded checkpoint we cannot correctly initialize the weights according to `model._init_weights()` if we perform
+    this check on each state dict at loading time (after the first loaded checkpoint, there are no way to initialize only the
+    mismatched weights if any, without overwriting the previously loaded weights as well because all the module will be
+    initialized, not only the weights that are mismatched).
+    """
+
+    # An error will be raised later on anyway if there is a mismatch - this avoids running the rest of this function
+    # if there are no mismatch (which is almost always the case)
+    if not ignore_mismatched_sizes:
+        return [], []
+
+    if state_dict is not None:
+        checkpoint_files = [""]
+
+    model_state_dict = model.state_dict()
     mismatched_keys = []
-    if ignore_mismatched_sizes:
-        model_state_dict = model_to_load.state_dict()
-        state_dict_keys = list(state_dict.keys())
-        for key in state_dict_keys:
-            if key in model_state_dict and state_dict[key].shape != model_state_dict[key].shape:
-                if state_dict[key].shape[-1] == 1 and state_dict[key].numel() * 2 == model_state_dict[key].numel():
-                    # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
-                    # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
-                    pass
-                else:
-                    # Add prefix if we removed it before, to add the correct state dict key to the warnings
-                    key_with_prefix = prefix + key
-                    mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[key].shape))
-                    del state_dict[key]
-    return mismatched_keys
+    mismatched_shapes = []
+    for shard_file in checkpoint_files:
+        # If shard_file is "", we use the existing state_dict instead of loading it
+        if shard_file != "":
+            state_dict = load_state_dict(
+                shard_file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only
+            )
+
+        # Fix the key names
+        new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
+
+        for key in new_state_dict.keys():
+            if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
+                # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
+                # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
+                if not (
+                    new_state_dict[key].shape[-1] == 1
+                    and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                ):
+                    mismatched_keys.append(key)
+                    mismatched_shapes.append((new_state_dict[key].shape, model_state_dict[key].shape))
+
+    return mismatched_keys, mismatched_shapes
 
 
 class PipelineParallel(Enum):
@@ -1943,16 +1915,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        if self.base_model is self:
-            self._pp_plan = (
-                self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-            )
-            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        else:
-            self._tp_plan = self._tp_plan or {}
-            for name, module in self.named_children():
-                if plan := getattr(module, "_tp_plan", None):
-                    self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
@@ -2054,8 +2021,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
-            import deepspeed
-
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
@@ -2276,11 +2241,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
             if importlib.util.find_spec("flash_attn") is None:
+                # package `flash-attn` can not be installed on Ascend NPU, ignore related validation logic and early exit.
                 if is_torch_npu_available():
-                    recommend_message_npu = "You should use attn_implementation='sdpa' instead when using NPU. "
-                    raise ImportError(
-                        f"{preface} the package flash_attn is not supported on Ascend NPU. {recommend_message_npu}"
-                    )
+                    if not hard_check_only:
+                        config._attn_implementation = "flash_attention_2"
+
+                    logger.info("Detect using FlashAttention2 on Ascend NPU.")
+                    return config
                 else:
                     raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
 
@@ -2693,8 +2660,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Since we are basically reusing the same old embeddings with new weight values, gathering is required
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
                 vocab_size = model_embeds.weight.shape[0]
         else:
@@ -2725,8 +2690,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
                     new_num_tokens = new_embeddings.weight.shape[0]
             else:
@@ -2815,8 +2778,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
                 old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
         else:
@@ -2861,8 +2822,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                     self._init_added_embeddings_weights_with_mean(
                         old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
@@ -2878,8 +2837,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         n = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
@@ -2890,8 +2847,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # This ensures correct functionality when a Custom Embedding class is passed as input.
         # The input and output embedding types remain consistent. (c.f. https://github.com/huggingface/transformers/pull/31979)
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 old_embeddings.weight = new_embeddings.weight
@@ -2949,8 +2904,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
                 old_num_tokens, old_lm_head_dim = (
                     old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
@@ -3001,8 +2954,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 params = [old_lm_head.weight]
                 if has_new_lm_head_bias:
                     params += [old_lm_head.bias]
@@ -3023,8 +2974,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._copy_lm_head_original_to_resized(
@@ -3769,32 +3718,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def get_init_context(
-        cls: Type[SpecificPreTrainedModelType],
-        _fast_init=True,
-        is_quantized=None,
-        _is_ds_init_called=None,
-        low_cpu_mem_usage=True,
-    ):
-        init_contexts = [no_init_weights(_enable=_fast_init)]
+    def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
+        if is_deepspeed_zero3_enabled():
+            init_contexts = [no_init_weights()]
+            # We cannot initialize the model on meta device with deepspeed when not quantized
+            if not is_quantized and not _is_ds_init_called:
+                logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+            elif is_quantized:
+                init_contexts.extend([init_empty_weights(), set_quantized_state()])
+        else:
+            init_contexts = [no_init_weights(), init_empty_weights()]
 
-        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
-            import deepspeed
-
-            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [
-                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                set_zero3_state(),
-            ] + init_contexts
-        elif low_cpu_mem_usage:
-            if not is_accelerate_available():
-                raise ImportError(
-                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-                )
-            init_contexts.append(init_empty_weights())
-
-        if is_deepspeed_zero3_enabled() and is_quantized:
-            init_contexts.append(set_quantized_state())
         return init_contexts
 
     @classmethod
@@ -3826,10 +3761,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         The warning *Weights from XXX not used in YYY* means that the layer XXX is not used by YYY, therefore those
         weights are discarded.
-
-        If model weights are the same precision as the base model (and is a supported model), weights will be lazily loaded
-        in using the `meta` device and brought into memory once an input is passed through that layer regardless of
-        `low_cpu_mem_usage`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`, *optional*):
@@ -3909,30 +3840,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
-            _fast_init(`bool`, *optional*, defaults to `True`):
-                Whether or not to disable fast initialization.
-
-                <Tip warning={true}>
-
-                One should only disable *_fast_init* to ensure backwards compatibility with `transformers.__version__ <
-                4.6.0` for seeded model initialization. This argument will be removed at the next major version. See
-                [pull request 11471](https://github.com/huggingface/transformers/pull/11471) for more information.
-
-                </Tip>
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
             > Parameters for big model inference
 
-            low_cpu_mem_usage(`bool`, *optional*):
-                Tries not to use more than 1x model size in CPU memory (including peak memory) while loading the model.
-                Generally should be combined with a `device_map` (such as `"auto"`) for best results.
-                This is an experimental feature and a subject to change at any moment.
-                </Tip>
-                    If the model weights are in the same precision as the model loaded in, `low_cpu_mem_usage` (without
-                    `device_map`) is redundant and will not provide any benefit in regards to CPU memory usage. However,
-                    this should still be enabled if you are passing in a `device_map`.
-                </Tip>
             torch_dtype (`str` or `torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
                 are:
@@ -4043,37 +3955,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
         >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", from_flax=True)
         ```
-
-        * `low_cpu_mem_usage` algorithm:
-
-        This is an experimental function that loads the model using ~1x model size CPU memory
-
-        Here is how it works:
-
-        1. save which state_dict keys we have
-        2. drop state_dict before the model is created, since the latter takes 1x model size CPU memory
-        3. after the model has been instantiated switch to the meta device all params/buffers that
-        are going to be replaced from the loaded state_dict
-        4. load state_dict 2nd time
-        5. replace the params/buffers from the state_dict
-
-        Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
-
         """
         state_dict = kwargs.pop("state_dict", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
-        _ = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        _ = kwargs.pop("trust_remote_code", None)
-        _ = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
-        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", None)
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
@@ -4092,6 +3983,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         key_mapping = kwargs.pop("key_mapping", None)
+        # Not used anymore -- remove them from the kwargs
+        _ = kwargs.pop("resume_download", None)
+        _ = kwargs.pop("trust_remote_code", None)
+        _ = kwargs.pop("mirror", None)
+        _ = kwargs.pop("_fast_init", True)
+        _ = kwargs.pop("low_cpu_mem_usage", None)
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
@@ -4148,14 +4045,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 import sys
 
                 sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
-
-        if is_fsdp_enabled():
-            low_cpu_mem_usage = True
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4238,19 +4133,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map = {"": device_map}
 
         if device_map is not None:
-            if low_cpu_mem_usage is None:
-                low_cpu_mem_usage = True
-            elif not low_cpu_mem_usage:
-                raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
-
-        if low_cpu_mem_usage:
             if is_deepspeed_zero3_enabled():
+                raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
+            if not is_accelerate_available():
                 raise ValueError(
-                    "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
-                )
-            elif not is_accelerate_available():
-                raise ImportError(
-                    f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -4347,16 +4234,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
             device_map = hf_quantizer.update_device_map(device_map)
+            config = hf_quantizer.update_tp_plan(config)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
             if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
                 user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
             else:
                 user_agent["quant"] = hf_quantizer.quantization_config.quant_method
-            # Force-set to `True` for more mem efficiency
-            if low_cpu_mem_usage is None:
-                low_cpu_mem_usage = True
-                logger.warning("`low_cpu_mem_usage` was None, now default to True since model is quantized.")
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -4436,8 +4320,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
                     "tensors"
                 ]
-                # Force it if is not already the case
-                low_cpu_mem_usage = True
 
             # Find the correct dtype based on current state
             config, torch_dtype, dtype_orig = _get_torch_dtype(
@@ -4447,7 +4329,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model_init_context = cls.get_init_context(_fast_init, is_quantized, _is_ds_init_called, low_cpu_mem_usage)
+        model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
@@ -4478,8 +4360,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if model._keep_in_fp32_modules is not None and (
             torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
-            # Only the path with `low_cpu_mem_usage` will check every param for the correct dtype
-            low_cpu_mem_usage = True
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
             keep_in_fp32_regex = re.compile(
                 "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
@@ -4487,9 +4367,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules, config=config
             )
-
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
@@ -4524,7 +4403,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 pretrained_model_name_or_path,
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 sharded_metadata=sharded_metadata,
-                low_cpu_mem_usage=low_cpu_mem_usage,
                 device_map=device_map,
                 disk_offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
@@ -4534,7 +4412,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_mesh=device_mesh,
                 key_mapping=key_mapping,
                 weights_only=weights_only,
-                _fast_init=_fast_init,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -4733,7 +4610,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         pretrained_model_name_or_path: Optional[str],
         ignore_mismatched_sizes: bool = False,
         sharded_metadata: Optional[Dict] = None,
-        low_cpu_mem_usage: bool = False,
         device_map: Optional[Dict] = None,
         disk_offload_folder: Optional[str] = None,
         offload_state_dict: Optional[bool] = None,
@@ -4743,10 +4619,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[Dict[str, str]] = None,
         weights_only: bool = True,
-        _fast_init: bool = True,
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+            QuantizationMethod.HQQ,
+            QuantizationMethod.BITS_AND_BYTES,
+        ]
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4785,20 +4664,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             hf_quantizer,
             device_map,
         )
+        # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
+        # same way as missing keys)
+        mismatched_keys, mismatched_shapes = _find_mismatched_keys(
+            model,
+            state_dict,
+            checkpoint_files,
+            ignore_mismatched_sizes,
+            key_renaming_mapping,
+            is_quantized,
+            weights_only,
+        )
 
-        # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
-        # they are not in the loaded state dict)
-        if low_cpu_mem_usage:
-            model._move_missing_keys_from_meta_to_cpu(missing_keys, unexpected_keys, dtype, hf_quantizer)
-            # In this case we also need to move everything back
-            if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-                for key, param in model.state_dict().items():
-                    if param.device == torch.device("meta"):
-                        set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=dtype))
+        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched ones
+        key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys}
+        checkpoint_keys = list(key_renaming_mapping.values())
 
-        # correctly initialize the missing keys if it was skipped before
-        if _fast_init or low_cpu_mem_usage:
-            model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
+        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
+        # loading the weights as they are not in the loaded state dict)
+        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
+
+        # correctly initialize the missing (and potentially mismatched) keys
+        model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
         if keep_in_fp32_regex is not None:
@@ -4900,12 +4787,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None:  # and hf_quantizer is None:
+        if device_map is not None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
-        mismatched_keys = []
         # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights
@@ -4913,16 +4799,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
 
             map_location = "cpu"
-            if low_cpu_mem_usage:
-                if shard_file.endswith(".safetensors"):
-                    map_location = "meta"
-                elif (
-                    device_map is not None
-                    and hf_quantizer is not None
-                    and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                    and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-                ):
-                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+            if (
+                shard_file.endswith(".safetensors")
+                and not is_hqq_or_bnb
+                and not (is_deepspeed_zero3_enabled() and not is_quantized)
+            ):
+                map_location = "meta"
+            elif (
+                device_map is not None
+                and hf_quantizer is not None
+                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+                and (
+                    hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                    or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+                )
+            ):
+                map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
             # If shard_file is "", we use the existing state_dict instead of loading it
             if shard_file != "":
@@ -4933,41 +4825,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-            # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
-            # matching the weights in the model.
-            mismatched_keys += _find_mismatched_keys(
-                model_to_load,
-                state_dict,
-                ignore_mismatched_sizes,
-                prefix if loading_base_model_from_task_state_dict else "",
-            )
-
-            if low_cpu_mem_usage:
-                # Skip it with fsdp on ranks other than 0
-                if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
-                    disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
-                        model_to_load,
-                        state_dict,
-                        shard_file,
-                        expected_keys,
-                        reverse_key_renaming_mapping,
-                        device_map=device_map,
-                        disk_offload_folder=disk_offload_folder,
-                        disk_offload_index=disk_offload_index,
-                        cpu_offload_folder=cpu_offload_folder,
-                        cpu_offload_index=cpu_offload_index,
-                        hf_quantizer=hf_quantizer,
-                        is_safetensors=is_offloaded_safetensors,
-                        keep_in_fp32_regex=keep_in_fp32_regex,
-                        unexpected_keys=unexpected_keys,
-                        device_mesh=device_mesh,
-                    )
-            else:
-                assign_params = check_support_param_buffer_assignment(model_to_load, state_dict)
-                if is_deepspeed_zero3_enabled():
-                    error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_params)
-                else:
-                    model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
+            # Skip it with fsdp on ranks other than 0
+            elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
+                disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
+                    model_to_load,
+                    state_dict,
+                    shard_file,
+                    expected_keys,
+                    reverse_key_renaming_mapping,
+                    device_map=device_map,
+                    disk_offload_folder=disk_offload_folder,
+                    disk_offload_index=disk_offload_index,
+                    cpu_offload_folder=cpu_offload_folder,
+                    cpu_offload_index=cpu_offload_index,
+                    hf_quantizer=hf_quantizer,
+                    is_safetensors=is_offloaded_safetensors,
+                    keep_in_fp32_regex=keep_in_fp32_regex,
+                    unexpected_keys=unexpected_keys,
+                    device_mesh=device_mesh,
+                )
 
             # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
             del state_dict
@@ -5023,7 +4901,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         name,
                         casting_dtype,
                         to_contiguous,
-                        tp_device.index,
+                        os.environ["RANK"],
                         device_mesh,
                     )
 
@@ -5066,7 +4944,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mismatched_warning = "\n".join(
                 [
                     f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
-                    for key, shape1, shape2 in mismatched_keys
+                    for key, (shape1, shape2) in zip(mismatched_keys, mismatched_shapes)
                 ]
             )
             logger.warning(
@@ -5296,6 +5174,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         # Only reset it if not present or different from previous config
+        if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
+            return self.__call__
         default_config = getattr(self.generation_config, "compile_config", CompileConfig())
         if (
             not hasattr(self, "_compiled_call")
@@ -5321,19 +5201,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         is_quantized = hf_quantizer is not None
 
+        # In this case we need to move everything back
+        if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+            # We only do it for the parameters, as the buffers are not initialized on the meta device by default
+            for key, param in self.named_parameters():
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                _load_parameter_into_model(self, key, value)
+            return
+
         model_state_dict = self.state_dict()
         for key in missing_keys:
             param = model_state_dict[key]
+            # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
-                # upcast in fp32 if any
-                target_dtype = dtype
-                value = torch.empty(*param.size(), dtype=target_dtype)
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
                 if (
                     not is_quantized
                     or (getattr(hf_quantizer, "requires_parameters_quantization", False))
                     or not hf_quantizer.check_quantized_param(self, param_value=value, param_name=key, state_dict={})
                 ):
-                    set_module_tensor_to_device(self, key, "cpu", value)
+                    _load_parameter_into_model(self, key, value)
                 else:
                     hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict, unexpected_keys)
 
@@ -5364,8 +5251,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             not_initialized_submodules = dict(self.named_modules())
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             not_initialized_parameters = list(
                 set(
                     itertools.chain.from_iterable(
@@ -5898,7 +5783,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = math.prod(param.shape) * dtype_byte_size(param.dtype)
+        param_byte_count = math.prod(param.shape) * param.element_size()
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)

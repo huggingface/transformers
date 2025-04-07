@@ -128,7 +128,7 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: torch.FloatTensor = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -174,7 +174,7 @@ class LongformerMaskedLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -222,8 +222,8 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    start_logits: torch.FloatTensor = None
-    end_logits: torch.FloatTensor = None
+    start_logits: Optional[torch.FloatTensor] = None
+    end_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -269,7 +269,7 @@ class LongformerSequenceClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -317,7 +317,7 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -363,7 +363,7 @@ class LongformerTokenClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
