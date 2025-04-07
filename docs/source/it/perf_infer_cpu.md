@@ -23,7 +23,7 @@ Abbiamo integrato di recente `BetterTransformer` per fare inferenza più rapidam
 
 ## PyTorch JIT-mode (TorchScript)
 
-TorchScript è un modo di creare modelli serializzabili e ottimizzabili da codice PyTorch. Ogni programmma TorchScript può esere salvato da un processo Python  e caricato in un processo dove non ci sono dipendenze Python.
+TorchScript è un modo di creare modelli serializzabili e ottimizzabili da codice PyTorch. Ogni programma TorchScript può esere salvato da un processo Python  e caricato in un processo dove non ci sono dipendenze Python.
 Comparandolo con l'eager mode di default, jit mode in PyTorch normalmente fornisce prestazioni migliori per l'inferenza del modello da parte di metodologie di ottimizzazione come la operator fusion.
 
 Per una prima introduzione a TorchScript, vedi la Introduction to [PyTorch TorchScript tutorial](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html#tracing-modules).

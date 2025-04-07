@@ -415,16 +415,20 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         )
 
         expected_en = [
-            "The NSA case highlights the total absence of intelligence debate",
-            "I think there are two levels of response from the French government.",
+            "</s> __en__ "
+            "The NSA case highlights the total absence of intelligence debate"
+            "</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+            "</s> __en__ "
+            "I think there are two levels of response from the French government."
+            "</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+            "</s> __en__ "
             "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
             " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
-            " communications in France.",
+            " communications in France."
+            "</s>",
         ]
 
-        generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tokenizer.batch_decode(hypotheses_batch)
         assert generated == expected_en
 
     @require_flash_attn
@@ -433,7 +437,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_flash_attn_2_seq_to_seq_generation(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = M2M100ForConditionalGeneration.from_pretrained(
             "facebook/m2m100_418M", attn_implementation="flash_attention_2"
