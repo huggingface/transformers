@@ -17,7 +17,6 @@
 import copy
 import json
 import os
-import re
 import warnings
 from typing import Any, Optional, Union
 
@@ -43,8 +42,6 @@ from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
-
-_re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -804,18 +801,19 @@ class PretrainedConfig(PushToHubMixin):
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
-        Removes all attributes from config which correspond to the default config attributes for better readability and
-        serializes to a Python dictionary.
+        Removes all attributes from the configuration that correspond to the default config attributes for
+        better readability, while always retaining the `config` attribute from the class. Serializes to a
+        Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         config_dict = self.to_dict()
 
-        # get the default config dict
+        # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PretrainedConfig().to_dict()
 
-        # get class specific config dict
+        # Get class-specific config dict if not part of a composition
         class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
 
         serializable_config_dict = {}
@@ -850,8 +848,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
             _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
@@ -1160,9 +1157,8 @@ def get_configuration_file(configuration_files: list[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
-        search = _re_configuration_file.search(file_name)
-        if search is not None:
-            v = search.groups()[0]
+        if file_name.startswith("config.") and file_name.endswith(".json") and file_name != "config.json":
+            v = file_name.removeprefix("config.").removesuffix(".json")
             configuration_files_map[v] = file_name
     available_versions = sorted(configuration_files_map.keys())
 
@@ -1184,7 +1180,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
 
-    dict_b : the default config dictionnary. We want to remove values that are in this one
+    dict_b : the default config dictionary. We want to remove values that are in this one
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}

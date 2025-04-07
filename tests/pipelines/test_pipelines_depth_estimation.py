@@ -21,7 +21,6 @@ from huggingface_hub.utils import insecure_hashlib
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
-    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -59,13 +58,17 @@ def hashimage(image: Image) -> str:
 @require_torch
 class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
+    _dataset = None
 
-    if _run_pipeline_tests:
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        _dataset = datasets.load_dataset(
-            "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
-        )
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
 
     def get_test_pipeline(
         self,
@@ -90,6 +93,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         ]
 
     def run_pipeline_test(self, depth_estimator, examples):
+        self._load_dataset()
         outputs = depth_estimator("./tests/fixtures/tests_samples/COCO/000000039769.png")
         self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)}, outputs)
 

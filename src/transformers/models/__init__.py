@@ -149,6 +149,7 @@ from . import (
     levit,
     lilt,
     llama,
+    llama4,
     llava,
     llava_next,
     llava_next_video,
