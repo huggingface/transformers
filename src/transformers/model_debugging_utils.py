@@ -131,7 +131,6 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
     model._call_tree = {"module_path": class_name, "inputs": None, "outputs": None, "children": []}
     model._debugger_model_call_stack = []
     model._debugger_module_dump_name = class_name  # used for final JSON filename
-
     def wrap_forward(module, full_path):
         orig_forward = module.forward
 
@@ -188,7 +187,6 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
             model._debugger_model_call_stack.append(top_node)
 
         out = real_top_forward(*inps, **kws)
-
         if _is_rank_zero() and model._debugger_model_call_stack:
             top_node["outputs"] = _serialize_io(out)
             finished = model._debugger_model_call_stack.pop()
@@ -197,32 +195,33 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
             model._call_tree["children"] = finished["children"]
             # prune empty stuff for visibility
             [model._call_tree.pop(k, None) for k in list(model._call_tree.keys()) if not model._call_tree[k]]
-
+            # Write final JSON trace here
+            log_model_debug_trace(debug_path=debug_path, model=model)
         return out
 
     model.forward = top_wrapped_forward
 
-    # Final hook for writing JSON on forward-end
-    def final_hook(_, inputs, outputs):
-        if _is_rank_zero() and model._debugger_model_call_stack:
-            finished = model._debugger_model_call_stack.pop()
-            model._call_tree["inputs"] = finished["inputs"]
-            model._call_tree["outputs"] = finished["outputs"]
-            model._call_tree["children"] = finished["children"]
+    # # Final hook for writing JSON on forward-end
+    # def final_hook(_, inputs, outputs):
+    #     if _is_rank_zero() and model._debugger_model_call_stack:
+    #         finished = model._debugger_model_call_stack.pop()
+    #         model._call_tree["inputs"] = finished["inputs"]
+    #         model._call_tree["outputs"] = finished["outputs"]
+    #         model._call_tree["children"] = finished["children"]
 
-        if _is_rank_zero():
-            log_model_debug_trace(debug_path=debug_path, model=model)
+    #     if _is_rank_zero():
+    #         log_model_debug_trace(debug_path=debug_path, model=model)
 
-    model.register_forward_hook(final_hook)
-    # Optionally also for a couple possible hooks that have specific names. It should be just one.
-    # This means modules that are not typically called "forward" within the model. But we should not need to recurse
-    # through them.
-    possible_model_calls = ["language_model", "model"]
-    for model_call in possible_model_calls:
-        this_model_call = getattr(model, model_call, None)
-        if this_model_call and isinstance(this_model_call, (nn.Module, PreTrainedModel)):
-            this_model_call.register_forward_hook(final_hook)
-            break  # exit the loop after finding one (unsure, but should be just one call.)
+    # model.register_forward_hook(final_hook)
+    # # Optionally also for a couple possible hooks that have specific names. It should be just one.
+    # # This means modules that are not typically called "forward" within the model. But we should not need to recurse
+    # # through them.
+    # possible_model_calls = ["language_model", "model"]
+    # for model_call in possible_model_calls:
+    #     this_model_call = getattr(model, model_call, None)
+    #     if this_model_call and isinstance(this_model_call, (nn.Module, PreTrainedModel)):
+    #         this_model_call.register_forward_hook(final_hook)
+    #         break  # exit the loop after finding one (unsure, but should be just one call.)
 
 
 @export(backends=("torch",))
