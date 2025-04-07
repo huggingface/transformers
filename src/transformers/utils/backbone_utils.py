@@ -193,6 +193,8 @@ class BackboneMixin:
         else:
             raise ValueError(f"backbone_type {self.backbone_type} not supported.")
 
+        self._forward_signature = dict(inspect.signature(self.forward).parameters)
+
     @property
     def out_features(self):
         return self._out_features
@@ -230,8 +232,7 @@ class BackboneMixin:
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in self._forward_signature}
         return self(*args, **filtered_kwargs)
 
     def forward(
