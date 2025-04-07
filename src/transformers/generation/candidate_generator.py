@@ -847,6 +847,7 @@ class AssistantVocabTranslatorCache:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,
+        assistant_model_device: str = "cpu",
         assistant_model: "PreTrainedModel",
         assistant_prune_lm_head=True,
     ) -> AssistantToTargetTranslator:
