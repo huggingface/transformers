@@ -213,6 +213,18 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         self.layer_types = layer_types
         #mamba2 variables
+        mamba_intermediate = mamba_expand * hidden_size
+
+        if mamba_intermediate % mamba_n_heads != 0:
+            raise ValueError("mamba_n_heads must divide mamba_expand * hidden_size")
+
+        # for the mamba_v2, must satisfy the following
+        if mamba_d_head == "auto":
+            mamba_d_head = mamba_intermediate // mamba_n_heads
+
+        if mamba_d_head * mamba_n_heads != mamba_intermediate:
+            raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
+
         self.mamba_n_heads = mamba_n_heads
         self.mamba_d_head = mamba_d_head
         self.mamba_n_groups = mamba_n_groups
