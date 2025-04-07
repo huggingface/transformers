@@ -356,6 +356,11 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
 
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(tokenizer.__class__, reloaded_tokenizer.__class__)
+
         # Test the dynamic module is reloaded if we force it.
         reloaded_tokenizer = AutoTokenizer.from_pretrained(
             "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, force_download=True
