@@ -397,7 +397,7 @@ def get_cached_module_file(
         logger.info(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
 
-    # Check we have all the requirements in our environment
+    # Check we have all the requirements in our environment and get all missing modules from relative imports
     modules_needed = check_imports(resolved_module_file)
 
     # Now we move the module inside our cached dynamic modules.
@@ -418,8 +418,23 @@ def get_cached_module_file(
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
             ):
-                shutil.copy(module_needed_file, submodule_path / module_needed)
-                importlib.invalidate_caches()
+                destination = submodule_path / module_needed
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                shutil.copy(module_needed_file, destination)
+
+            # Make sure we also have every file from relative imports
+            get_cached_module_file(
+                pretrained_model_name_or_path,
+                module_needed,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
+            )
     else:
         # Get the commit hash
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
@@ -434,7 +449,7 @@ def get_cached_module_file(
         if not (submodule_path / module_file).exists():
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
-        # Make sure we also have every file with relative
+        # Make sure we also have every file from relative imports
         for module_needed in modules_needed:
             if not (submodule_path / f"{module_needed}.py").exists():
                 get_cached_module_file(
@@ -565,8 +580,14 @@ def get_class_from_dynamic_module(
         token = use_auth_token
 
     # Catch the name of the repo if it's specified in `class_reference`
+    # or use `pretrained_model_name_or_path` in case of local model
     if "--" in class_reference:
-        repo_id, class_reference = class_reference.split("--")
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if is_local:
+            repo_id = pretrained_model_name_or_path
+            class_reference = class_reference.split("--")[1]
+        else:
+            repo_id, class_reference = class_reference.split("--")
     else:
         repo_id = pretrained_model_name_or_path
     module_file, class_name = class_reference.split(".")
