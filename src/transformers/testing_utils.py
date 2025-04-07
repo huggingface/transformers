@@ -3102,6 +3102,7 @@ def get_device_properties() -> DeviceProperties:
     elif IS_XPU_SYSTEM:
         import torch
 
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def 
         arch = torch.xpu.get_device_capability()["architecture"]
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
