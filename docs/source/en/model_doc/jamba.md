@@ -90,9 +90,8 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_8bit=True,
                                          llm_int8_skip_modules=["mamba"])
 
@@ -129,12 +128,12 @@ print(assistant_response)
 - Don't quantize the Mamba blocks to prevent model performance degradation.
 - It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`].
 
-```py
-import torch
-from transformers import AutoModelForCausalLM
-model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
-                                             use_mamba_kernels=False)
-```
+    ```py
+    import torch
+    from transformers import AutoModelForCausalLM
+    model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
+                                                 use_mamba_kernels=False)
+    ```
 
 ## JambaConfig
 
