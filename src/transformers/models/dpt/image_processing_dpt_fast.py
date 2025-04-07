@@ -50,9 +50,9 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     size_divisor = None
 
     # NOT SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT:
-    default_to_square = None
-    crop_size = None
-    do_center_crop = None
-    do_convert_rgb = None
+    # default_to_square = None (<-- this broke one of the tests as it override this value to None)
+    # crop_size = None
+    # do_center_crop = None
+    # do_convert_rgb = None
 
 __all__ = ["DPTImageProcessorFast"]
