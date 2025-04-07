@@ -4875,6 +4875,43 @@ class GenerationMixin:
 
         if "past_key_values" not in model_kwargs:
             raise ValueError("Cannot use prefill chunkink without a cache")
+        
+        # In this case, special care must be taken because of the images -> we cannot simply chunk the input_ids as we should
+        # not overlap a single images with 2 chunks
+        pixel_values = model_kwargs.pop("pixel_values", None)
+        pre_embed = pixel_values is not None
+        if pixel_values is not None:
+            image_features = self.get_image_features(pixel_values, vision_feature_select_strategy=self.config.vision_config.vision_feature_select_strategy)
+            vision_flat = image_features.view(-1, image_features.size(-1))
+            image_embeds = self.multi_modal_projector(vision_flat).to(device="cpu")
+            del image_features, vision_flat
+
+            # offload input_embeds to cpu in case context is super super large
+            inputs_embeds = torch.empty((*input_ids[:, :-1].shape, self.config.text_config.hidden_size), device="cpu")
+
+            # Use super large chunks here to go faster (memory usage is low)
+            embed_chunk_size = 100000
+            for i, chunk in enumerate(torch.split(input_ids[:, :-1], embed_chunk_size, dim=-1)):
+                chunk_embed = self.get_input_embeddings()(chunk).to("cpu")
+                index = torch.arange(i * embed_chunk_size, (i+1) * embed_chunk_size)
+                inputs_embeds.index_copy_(1, index, chunk_embed)
+            
+            original_inputs_embeds_shape = inputs_embeds.shape
+            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
+
+            final_mask_1d = (input_ids == self.config.image_token_index).reshape(-1).to("cpu")
+            num_tokens_to_fill = final_mask_1d.sum()
+
+            if num_tokens_to_fill != image_embeds.size(0):
+                raise ValueError(
+                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"but multi_modal_projector returned {image_embeds.size(0)}"
+                )
+
+            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
+            inputs_embeds = inputs_embeds.masked_scatter(expanded_mask, image_embeds)
+            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+
 
         model_forward = self.get_compiled_call(generation_config.compile_config)
         attention_mask = model_kwargs.pop("attention_mask", None)
@@ -4889,7 +4926,8 @@ class GenerationMixin:
                 past_length, current_length, dtype=torch.long, device=input_chunk.device
             )
             model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
-            model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+            chunk_embeds = inputs_embeds[:, past_length: past_length + chunk_size, :].to(self.device) if pre_embed else None
+            model_inputs = self.prepare_inputs_for_generation(input_chunk, inputs_embeds=chunk_embeds, **model_kwargs)
 
             outputs = model_forward(**model_inputs, return_dict=True)
 
