@@ -32,7 +32,11 @@ Consider the quantization methods below for inference.
 | HQQ | fast on the fly quantization without calibration |
 | torchao | flexibility and fast inference with torch.compile |
 
-### bitsandbytes
+### No Calibration Required (On-the-fly Quantization)
+
+These methods are generally easier to use as they don't need a separate calibration dataset or step.
+
+#### bitsandbytes
 
 | Pros                                                         | Cons                                                    |
 |--------------------------------------------------------------|---------------------------------------------------------|
@@ -41,38 +45,7 @@ Consider the quantization methods below for inference.
 
 See the [bitsandbytes documentation](./bitsandbytes) for more details.
 
-### GPTQ/GPTQModel
-
-| Pros                                                                 | Cons                                                                 |
-|----------------------------------------------------------------------|----------------------------------------------------------------------|
-| Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
-| Can lead to inference speedups.                                      | Possible to overfit on calibration data.                             |
-| Many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). |                                           |
-
-See the [GPTQ documentation](./gptq) for more details.
-
-### AWQ (Activation-aware Weight Quantization)
-
-| Pros                                                                 | Cons                                                |
-|----------------------------------------------------------------------|-----------------------------------------------------|
-| Often achieves high accuracy at 4-bit. (Sometimes surpasses GPTQ on specific tasks.) | Requires calibration if quantizing yourself.        |
-| Can lead to inference speedups.                                      |                                                     |
-| Shorter calibration time than GPTQ.                                  |                                                     |
-| Many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). |                                                     |
-
-See the [AWQ documentation](./awq) for more details.
-
-### torchao
-
-| Pros                                                                 | Cons                                                                 |
-|----------------------------------------------------------------------|----------------------------------------------------------------------|
-| Strong integration with `torch.compile` for potential speedups.     | Newer library, ecosystem still evolving.                             |
-| Offers decent CPU quantization support.                              | Performance depends on `torch.compile` working well.                 |
-| Flexibility in quantization schemes (int8, int4, fp8).           | 4-bit quantization may not match GPTQ/AWQ in accuracy.              |
-
-See the [torchao documentation](./torchao) for more details.
-
-### HQQ (Half-Quadratic Quantization)
+#### HQQ (Half-Quadratic Quantization)
 
 | Pros                                                                 | Cons                                                                       |
 |----------------------------------------------------------------------|----------------------------------------------------------------------------|
@@ -83,7 +56,44 @@ See the [torchao documentation](./torchao) for more details.
 
 See the [HQQ documentation](./hqq) for more details.
 
-### compressed-tensors
+#### torchao
+
+| Pros                                                                 | Cons                                                                 |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| Strong integration with `torch.compile` for potential speedups.     | Newer library, ecosystem still evolving.                             |
+| Offers decent CPU quantization support.                              | Performance depends on `torch.compile` working well.                 |
+| Flexibility in quantization schemes (int8, int4, fp8).           | 4-bit quantization (int4wo) may not match GPTQ/AWQ in accuracy.              |
+
+See the [torchao documentation](./torchao) for more details.
+
+### Calibration-based Quantization
+
+These methods require an upfront calibration step using a dataset to potentially achieve higher accuracy.
+
+#### GPTQ/GPTQModel
+
+| Pros                                                                 | Cons                                                                 |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
+| Can lead to inference speedups.                                      | Possible to overfit on calibration data.                             |
+| Many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). |                                           |
+
+See the [GPTQ documentation](./gptq) for more details.
+
+#### AWQ (Activation-aware Weight Quantization)
+
+| Pros                                                                 | Cons                                                |
+|----------------------------------------------------------------------|-----------------------------------------------------|
+| Often achieves high accuracy at 4-bit. (Sometimes surpasses GPTQ on specific tasks.) | Requires calibration if quantizing yourself.        |
+| Can lead to inference speedups.                                      |                                                     |
+| Shorter calibration time than GPTQ.                                  |                                                     |
+| Many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). |                                                     |
+
+See the [AWQ documentation](./awq) for more details.
+
+### Loading Specific Formats
+
+#### compressed-tensors
 
 | Pros                                                         | Cons                                                        |
 |--------------------------------------------------------------|-------------------------------------------------------------|
