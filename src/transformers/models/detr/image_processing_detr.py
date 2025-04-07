@@ -928,7 +928,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -1237,7 +1237,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
