@@ -71,14 +71,13 @@ A processor requires an image_processor and a tokenizer. Hence, inputs can be lo
 
 ```py
 from PIL import Image
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoImageProcessor, FuyuProcessor
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 
 
 tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
-image_processor = FuyuImageProcessor()
-
+image_processor = AutoImageProcessor.from_pretrained('adept-hf-collab/fuyu-8b') 
 
 processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
 text_prompt = "Generate a coco-style caption.\\n"
@@ -111,6 +110,11 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 ## FuyuImageProcessor
 
 [[autodoc]] FuyuImageProcessor
+    - __call__
+
+## FuyuImageProcessorFast
+
+[[autodoc]] FuyuImageProcessorFast
     - __call__
 
 ## FuyuProcessor

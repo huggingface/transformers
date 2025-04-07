@@ -85,7 +85,7 @@ else:
             ("efficientnet", ("EfficientNetImageProcessor",)),
             ("flava", ("FlavaImageProcessor",)),
             ("focalnet", ("BitImageProcessor",)),
-            ("fuyu", ("FuyuImageProcessor",)),
+            ("fuyu", ("FuyuImageProcessor", "FuyuImageProcessorFast")),
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor",)),
