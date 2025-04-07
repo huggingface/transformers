@@ -127,6 +127,7 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     test_resize_embeddings = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MLCDVisionModelTester(self)
@@ -168,6 +169,9 @@ class MLCDVisionModelIntegrationTest(unittest.TestCase):
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(images=image, return_tensors="pt")
+
+        # move inputs to the same device as the model
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
 
         # forward pass
         with torch.no_grad():

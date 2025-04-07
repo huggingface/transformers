@@ -232,12 +232,6 @@ class MLCDAttention(CLIPAttention):
         key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
         value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
         if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
             emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
             cos = emb.cos().unsqueeze(0).float()
             sin = emb.sin().unsqueeze(0).float()
@@ -564,15 +558,19 @@ class MLCDVisionModel(CLIPVisionModel):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         ```python
-        >>> from PIL import Image
         >>> import requests
+        >>> from PIL import Image
         >>> from transformers import AutoProcessor, MLCDVisionModel
-        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-336")
-        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-336")
+        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs, output_attentions=True)
+
+        >>> with torch.no_grads():
+        ...     outputs = model(**inputs, output_attentions=True)
+
         >>> features = outputs.last_hidden_state
         >>> print(f"Extracted features shape: {features.shape}")
         >>> print(f"Number of attention layers: {len(outputs.attentions)}")
