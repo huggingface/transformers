@@ -78,8 +78,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    extract_features: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    extract_features: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1397,7 +1397,7 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
         return attention_mask
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
+WAV2VEC2_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1439,7 +1439,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -1497,7 +1497,7 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
@@ -1505,7 +1505,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         self.config = config
         self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
@@ -1579,7 +1579,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
 @add_start_docstrings(
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
@@ -1612,7 +1612,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor.trainable = False
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,

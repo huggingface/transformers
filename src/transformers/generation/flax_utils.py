@@ -63,7 +63,7 @@ class FlaxGreedySearchOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -77,7 +77,7 @@ class FlaxSampleOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -93,8 +93,8 @@ class FlaxBeamSearchOutput(ModelOutput):
             The scores (log probabilities) of the generated sequences.
     """
 
-    sequences: jnp.ndarray = None
-    scores: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
+    scores: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass

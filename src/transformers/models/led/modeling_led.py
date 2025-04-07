@@ -1247,7 +1247,7 @@ class LEDSeq2SeqModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1314,7 +1314,7 @@ class LEDSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1381,7 +1381,7 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1450,8 +1450,8 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    start_logits: torch.FloatTensor = None
-    end_logits: torch.FloatTensor = None
+    start_logits: Optional[torch.FloatTensor] = None
+    end_logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None

@@ -261,8 +261,8 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    attention_mask: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    attention_mask: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1719,8 +1719,8 @@ class UdopModel(UdopPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
@@ -1895,8 +1895,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
@@ -2108,9 +2108,9 @@ class UdopEncoderModel(UdopPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithAttentionMask, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
+        input_ids: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
-        attention_mask: Tensor = None,
+        attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
         head_mask: Optional[Tensor] = None,

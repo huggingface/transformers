@@ -1087,9 +1087,9 @@ class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    cls_logits: Optional[tf.Tensor] = None
+    distillation_logits: Optional[tf.Tensor] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 

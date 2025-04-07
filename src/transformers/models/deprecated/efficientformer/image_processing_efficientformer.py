@@ -181,7 +181,7 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
+        do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,

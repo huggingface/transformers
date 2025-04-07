@@ -1178,10 +1178,6 @@ class ProcessorMixin(PushToHubMixin):
         unused_kwargs = {}
         unused_keys = set(kwargs_from_config) - set(valid_kwargs)
         if unused_keys:
-            unused_key_str = ", ".join(unused_keys)
-            logger.warning(
-                f"Some kwargs in processor config are unused and will not have any effect: {unused_key_str}. "
-            )
             unused_kwargs = {k: processor_config[k] for k in unused_keys}
         return unused_kwargs
 

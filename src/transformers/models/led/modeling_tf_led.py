@@ -1470,7 +1470,7 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -1533,7 +1533,7 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
     decoder_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -1600,7 +1600,7 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
     decoder_attentions: Tuple[tf.Tensor, ...] | None = None

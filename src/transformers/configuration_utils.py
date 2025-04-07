@@ -801,18 +801,19 @@ class PretrainedConfig(PushToHubMixin):
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
-        Removes all attributes from config which correspond to the default config attributes for better readability and
-        serializes to a Python dictionary.
+        Removes all attributes from the configuration that correspond to the default config attributes for
+        better readability, while always retaining the `config` attribute from the class. Serializes to a
+        Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         config_dict = self.to_dict()
 
-        # get the default config dict
+        # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PretrainedConfig().to_dict()
 
-        # get class specific config dict
+        # Get class-specific config dict if not part of a composition
         class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
 
         serializable_config_dict = {}
@@ -847,8 +848,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
             _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(serializable_config_dict)

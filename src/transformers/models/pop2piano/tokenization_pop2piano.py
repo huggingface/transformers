@@ -245,7 +245,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
+    def relative_tokens_ids_to_notes(
+        self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: Optional[float] = None
+    ):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 

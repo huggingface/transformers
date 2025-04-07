@@ -112,29 +112,29 @@ class EsmForProteinFoldingOutput(ModelOutput):
             Per-sample maximum predicted error.
     """
 
-    frames: torch.FloatTensor = None
-    sidechain_frames: torch.FloatTensor = None
-    unnormalized_angles: torch.FloatTensor = None
-    angles: torch.FloatTensor = None
-    positions: torch.FloatTensor = None
-    states: torch.FloatTensor = None
-    s_s: torch.FloatTensor = None
-    s_z: torch.FloatTensor = None
-    distogram_logits: torch.FloatTensor = None
-    lm_logits: torch.FloatTensor = None
-    aatype: torch.FloatTensor = None
-    atom14_atom_exists: torch.FloatTensor = None
-    residx_atom14_to_atom37: torch.FloatTensor = None
-    residx_atom37_to_atom14: torch.FloatTensor = None
-    atom37_atom_exists: torch.FloatTensor = None
-    residue_index: torch.FloatTensor = None
-    lddt_head: torch.FloatTensor = None
-    plddt: torch.FloatTensor = None
-    ptm_logits: torch.FloatTensor = None
-    ptm: torch.FloatTensor = None
-    aligned_confidence_probs: torch.FloatTensor = None
-    predicted_aligned_error: torch.FloatTensor = None
-    max_predicted_aligned_error: torch.FloatTensor = None
+    frames: Optional[torch.FloatTensor] = None
+    sidechain_frames: Optional[torch.FloatTensor] = None
+    unnormalized_angles: Optional[torch.FloatTensor] = None
+    angles: Optional[torch.FloatTensor] = None
+    positions: Optional[torch.FloatTensor] = None
+    states: Optional[torch.FloatTensor] = None
+    s_s: Optional[torch.FloatTensor] = None
+    s_z: Optional[torch.FloatTensor] = None
+    distogram_logits: Optional[torch.FloatTensor] = None
+    lm_logits: Optional[torch.FloatTensor] = None
+    aatype: Optional[torch.FloatTensor] = None
+    atom14_atom_exists: Optional[torch.FloatTensor] = None
+    residx_atom14_to_atom37: Optional[torch.FloatTensor] = None
+    residx_atom37_to_atom14: Optional[torch.FloatTensor] = None
+    atom37_atom_exists: Optional[torch.FloatTensor] = None
+    residue_index: Optional[torch.FloatTensor] = None
+    lddt_head: Optional[torch.FloatTensor] = None
+    plddt: Optional[torch.FloatTensor] = None
+    ptm_logits: Optional[torch.FloatTensor] = None
+    ptm: Optional[torch.FloatTensor] = None
+    aligned_confidence_probs: Optional[torch.FloatTensor] = None
+    predicted_aligned_error: Optional[torch.FloatTensor] = None
+    max_predicted_aligned_error: Optional[torch.FloatTensor] = None
 
 
 ESMFOLD_INPUTS_DOCSTRING = r"""

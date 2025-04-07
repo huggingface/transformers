@@ -63,7 +63,7 @@ class FlavaMaskingGenerator:
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
         mask_group_min_aspect_ratio: Optional[float] = 0.3,
-        mask_group_max_aspect_ratio: float = None,
+        mask_group_max_aspect_ratio: Optional[float] = None,
     ):
         if not isinstance(input_size, tuple):
             input_size = (input_size,) * 2
@@ -246,7 +246,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         # Codebook related params
         return_codebook_pixels: bool = False,
         codebook_do_resize: bool = True,
-        codebook_size: bool = None,
+        codebook_size: Optional[bool] = None,
         codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
         codebook_crop_size: Optional[int] = None,
@@ -389,17 +389,17 @@ class FlavaImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
+        do_center_crop: Optional[bool] = None,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_map_pixels: bool = None,
+        do_map_pixels: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:

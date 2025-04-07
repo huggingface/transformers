@@ -573,7 +573,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_input_images(
         self,
         images: ImageInput,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
     ) -> list["torch.Tensor"]:

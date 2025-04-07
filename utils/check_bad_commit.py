@@ -47,6 +47,9 @@ print(result.stdout)
 
 if len(result.stderr) > 0:
     if "ERROR: file or directory not found: " in result.stderr:
+        print("test file or directory not found in this commit")
+        exit(0)
+    elif "ERROR: not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
     else:

@@ -236,6 +236,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "text_config",
         "vision_config",
     ],
+    "Llama4Config": ["boi_token_index", "eoi_token_index"],
+    "Llama4TextConfig": [
+        "interleave_moe_layer_step",
+        "no_rope_layer_interval",
+        "no_rope_layers",
+        "output_router_logits",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+    ],
+    "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
 
 
@@ -358,6 +368,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
+        "boi_token_index",
+        "eoi_token_index",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
