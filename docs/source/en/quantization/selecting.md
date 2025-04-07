@@ -72,6 +72,8 @@ These methods require an upfront calibration step using a dataset to potentially
 
 #### GPTQ/GPTQModel
 
+Calibration for 8B model takes ~20 minutes on one A100 gpu.
+
 | Pros                                                                 | Cons                                                                 |
 |----------------------------------------------------------------------|----------------------------------------------------------------------|
 | Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
@@ -81,6 +83,8 @@ These methods require an upfront calibration step using a dataset to potentially
 See the [GPTQ documentation](./gptq) for more details.
 
 #### AWQ (Activation-aware Weight Quantization)
+
+Calibration for 8B model takes ~10 minutes on one A100 gpu.
 
 | Pros                                                                 | Cons                                                |
 |----------------------------------------------------------------------|-----------------------------------------------------|
