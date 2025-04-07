@@ -1111,7 +1111,7 @@ class DFineDecoderOutput(ModelOutput):
     intermediate_logits: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     intermediate_predicted_corners: Optional[torch.FloatTensor] = None
-    initial_reference_points: torch.FloatTensor = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
