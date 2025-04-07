@@ -151,7 +151,7 @@ class CacheTest(unittest.TestCase):
             return random_keys, random_values
 
         mha_config = LlamaConfig(num_attention_heads=32)
-        mha_static_cache = StaticCache(config=mha_config, batch_size=1, max_cache_len=10, device=torch_device)
+        mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
             *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -159,7 +159,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
-        gqa_static_cache = StaticCache(config=gqa_config, batch_size=1, max_cache_len=10, device=torch_device)
+        gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
             *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -167,12 +167,66 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
-        mqa_static_cache = StaticCache(config=mqa_config, batch_size=1, max_cache_len=10, device=torch_device)
+        mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
             *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_dynamic_cache_exportability(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        prompt = "What is the best way to debug python script?"
+        inputs = tokenizer(prompt, return_tensors="pt")
+        attention_mask = inputs.attention_mask
+        input_ids = inputs.input_ids
+
+        past_key_values = DynamicCache()
+        ep = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": True,
+            },
+            strict=False,
+        )
+        res = ep.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+        )
+        self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
+        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        self.assertEqual(
+            3,
+            len(
+                [
+                    x
+                    for x in ep.graph_signature.input_specs
+                    if x.kind == torch.export.graph_signature.InputKind.USER_INPUT
+                ]
+            ),
+        )
+
+        past_key_values_eager = DynamicCache()
+        res_eager = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values_eager,
+            use_cache=True,
+        )
+        self.assertTrue(torch.allclose(res.logits, res_eager.logits))
+        for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
+            self.assertTrue(torch.allclose(k1, k2))
+
+        for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
+            self.assertTrue(torch.allclose(v1, v2))
 
     @slow
     @require_read_token
@@ -551,7 +605,7 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
 
-        if not is_torch_greater_or_equal("2.7") and device.type == "xpu":
+        if not is_torch_greater_or_equal("2.7", accept_dev=True) and device.type == "xpu":
             self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
 
         input_text = "Fun fact:"
@@ -579,7 +633,7 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
 
-        if not is_torch_greater_or_equal("2.7") and device.type == "xpu":
+        if not is_torch_greater_or_equal("2.7", accept_dev=True) and device.type == "xpu":
             self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
 
         input_text = "Fun fact:"

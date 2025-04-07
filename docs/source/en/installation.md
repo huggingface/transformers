@@ -33,7 +33,7 @@ Create and activate a virtual environment in your project directory with [venv](
 
 ```bash
 python -m venv .env
-source ./env/bin/activate
+source .env/bin/activate
 ```
 
 </hfoption>
@@ -43,7 +43,7 @@ source ./env/bin/activate
 
 ```bash
 uv venv .env
-source ./env/bin/activate
+source .env/bin/activate
 ```
 
 </hfoption>

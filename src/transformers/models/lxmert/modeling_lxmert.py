@@ -790,6 +790,8 @@ class LxmertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LxmertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 LXMERT_START_DOCSTRING = r"""
@@ -1071,6 +1073,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
+
+    def _tie_weights(self):
+        self.cls.predictions.decoder.weight = self.lxmert.embeddings.word_embeddings.weight
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True

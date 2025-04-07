@@ -25,6 +25,7 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -159,33 +160,6 @@ class Mistral3VisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = Mistral3ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
-        config.torch_dtype = torch.float16
-        model = Mistral3ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -315,6 +289,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_read_token
     def test_mistral3_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -342,6 +317,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
         self.assertEqual(decoded_output, expected_output)
 
+    @require_read_token
     def test_mistral3_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -368,6 +344,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an"
         self.assertEqual(decoded_output, expected_output)
 
+    @require_read_token
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -418,6 +395,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
 
+    @require_read_token
     @require_bitsandbytes
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
