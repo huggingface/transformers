@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
+import shutil
 import tempfile
 import unittest
 
@@ -34,14 +35,17 @@ if is_vision_available():
 class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
 
         image_processor = LlavaNextImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
     def get_tokenizer(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -49,20 +53,13 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-            "patch_size": 3,
+            "patch_size": 128,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
-
-    @unittest.skip(
-        "Skip because the model has no processor kwargs except for chat template and"
-        "chat template is saved as a separate file. Stop skipping this test when the processor"
-        "has new kwargs saved in config file."
-    )
-    def test_processor_to_json_string(self):
-        pass
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):

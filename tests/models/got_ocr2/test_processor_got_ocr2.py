@@ -39,6 +39,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
         processor = GotOcr2Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
+        self.image_token = processor.img_pad_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
