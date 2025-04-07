@@ -95,8 +95,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 3, 653, 980))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 653, 980))
         # fmt: on
 
         # Test a single sample with image and text
@@ -110,8 +110,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 3, 653, 980))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 653, 980))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -143,8 +143,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(inputs['pixel_values'].shape, (2, 2, 3, 767, 980))
-        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 2, 767, 980))
+        self.assertEqual(inputs['pixel_values'].shape, (3, 3, 767, 980))
+        self.assertEqual(inputs['pixel_attention_mask'].shape, (3, 767, 980))
         # fmt: on
 
     def test_process_interleaved_images_prompts_image_splitting(self):
@@ -154,8 +154,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
-        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (5, 3, 653, 980))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (5, 653, 980))
         # fmt: on
 
         # Test a single sample with image and text
@@ -169,8 +169,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_input_ids = [[self.bos_token_id] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (5, 3, 653, 980))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (5, 653, 980))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -202,8 +202,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(inputs['pixel_values'].shape, (2, 10, 3, 767, 980))
-        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 10, 767, 980))
+        self.assertEqual(inputs['pixel_values'].shape, (15, 3, 767, 980))
+        self.assertEqual(inputs['pixel_attention_mask'].shape, (15, 767, 980))
         # fmt: on
 
     def test_add_special_tokens_processor(self):
@@ -242,8 +242,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=text, images=images, padding=True)
 
-        self.assertEqual(inputs["pixel_values"].shape, (2, 2, 3, 767, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (2, 2, 767, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (3, 3, 767, 980))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (3, 767, 980))
 
     def test_process_interleaved_images_prompts_image_error(self):
         processor = self.get_processor()
@@ -328,6 +328,126 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
+
+    # Override as Idefics3Processor returns flattened images/patches
+    def test_image_chat_template_single(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                },
+            ]
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 1)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        expected_output = processor.tokenizer(
+            formatted_prompt, return_tensors=None, add_special_tokens=add_special_tokens
+        ).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
+
+        # Now test the ability to return dict
+        messages[0][0]["content"].append(
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        )
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertTrue(self.images_input_name in out_dict)
+
+        # should always have input_ids and attention_mask
+        self.assertEqual(len(out_dict["input_ids"]), 1)
+        self.assertEqual(len(out_dict["attention_mask"]), 1)
+        self.assertEqual(len(out_dict[self.images_input_name]), 5)
+
+    # Override as Idefics2Processor returns flattened images/patches
+    def test_image_chat_template_batched(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        batched_messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What do you see?"},
+                    ],
+                },
+            ],
+        ]
+
+        formatted_prompt = processor.apply_chat_template(batched_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 2)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=True, padding=True, return_tensors=None
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        expected_output = processor.tokenizer(
+            formatted_prompt,
+            return_tensors=None,
+            padding=True,
+            add_special_tokens=add_special_tokens,
+        ).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(
+            batched_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            padding=True,
+        )
+        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
+
+        # Now test the ability to return dict
+        batched_messages[0][0]["content"].append(
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        )
+        batched_messages[1][0]["content"].append(
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"}
+        )
+        out_dict = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+        )
+        self.assertTrue(self.images_input_name in out_dict)
+
+        # should always have input_ids and attention_mask
+        self.assertEqual(len(out_dict["input_ids"]), 2)
+        self.assertEqual(len(out_dict["attention_mask"]), 2)
+        self.assertEqual(len(out_dict[self.images_input_name]), 10)
 
     # Override as Idefics2Processor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
