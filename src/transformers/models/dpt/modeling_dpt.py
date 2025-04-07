@@ -1213,9 +1213,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
                 hidden_states = backbone_hidden_states
 
         patch_height, patch_width = None, None
-        if self.config.backbone_config is not None and self.config.is_hybrid is False:
+        if self.backbone is not None and self.config.is_hybrid is False:
             _, _, height, width = pixel_values.shape
-            patch_size = self.config.backbone_config.patch_size
+            patch_size = self.backbone.config.patch_size
             patch_height = height // patch_size
             patch_width = width // patch_size
 
