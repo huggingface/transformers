@@ -62,7 +62,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 inputs = processor(images=image, return_tensors="pt")
 
 # Generate outputs
-with torch.no_grads():
+with torch.no_grad():
     outputs = model(**inputs)
 
 # Get visual features

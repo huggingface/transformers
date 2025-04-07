@@ -568,7 +568,7 @@ class MLCDVisionModel(CLIPVisionModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> with torch.no_grads():
+        >>> with torch.no_grad():
         ...     outputs = model(**inputs, output_attentions=True)
 
         >>> features = outputs.last_hidden_state
