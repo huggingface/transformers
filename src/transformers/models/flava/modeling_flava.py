@@ -438,7 +438,7 @@ class FlavaSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -874,6 +874,18 @@ class FlavaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, FlavaMaskedPredictionHead):
+            module.bias.data.zero_()
+        elif isinstance(module, FlavaImageEmbeddings):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+        elif isinstance(module, FlavaMultimodalModel):
+            if module.use_cls_token:
+                module.cls_token.data.zero_()
+        elif isinstance(module, FlavaModel):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
 
 
 @add_start_docstrings(
@@ -1495,9 +1507,9 @@ class FlavaImageCodebookLayerGroup(nn.Module):
         blocks = OrderedDict()
         for i in range(num_blocks):
             if i == 0:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
             else:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
 
         if use_pool:
             blocks["pool"] = nn.MaxPool2d(kernel_size=2)
@@ -1791,7 +1803,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
-        skip_unmasked_multimodal_encoder: bool = None,
+        skip_unmasked_multimodal_encoder: Optional[bool] = None,
         mlm_labels: Optional[torch.Tensor] = None,
         mim_labels: Optional[torch.Tensor] = None,
         itm_labels: Optional[torch.Tensor] = None,

@@ -45,6 +45,7 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`~integrations.DagsHubCallback`] if [dagshub](https://dagshub.com/) is installed.
 - [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
 - [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
+- [`~integrations.SwanLabCallback`] if [swanlab](http://swanlab.cn/) is installed.
 
 If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
 
@@ -90,6 +91,9 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.FlyteCallback
 
 [[autodoc]] integrations.DVCLiveCallback
+    - setup
+
+[[autodoc]] integrations.SwanLabCallback
     - setup
 
 ## TrainerCallback

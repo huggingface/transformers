@@ -174,39 +174,6 @@ class LlavaOnevisionVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_onevision_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        model = LlavaOnevisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_sizes=image_sizes,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_llava_onevision_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        config.torch_dtype = torch.float16
-        model = LlavaOnevisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_sizes=image_sizes,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -319,19 +286,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model(**input_dict)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

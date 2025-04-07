@@ -30,4 +30,4 @@ http://www.apache.org/licenses/LICENSE-2.0
 - 访问BERT/GPT/GPT-2每个注意力头的所有注意力权重，
 - 检索注意力头的输出值和梯度，以便计算头的重要性得分并对头进行剪枝，详情可见论文：https://arxiv.org/abs/1905.10650。
 
-为了帮助您理解和使用这些功能，我们添加了一个具体的示例脚本：[bertology.py](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bertology/run_bertology.py)，该脚本可以对一个在 GLUE 数据集上预训练的模型进行信息提取与剪枝。
+为了帮助您理解和使用这些功能，我们添加了一个具体的示例脚本：[bertology.py](https://github.com/huggingface/transformers-research-projects/tree/main/bertology/run_bertology.py)，该脚本可以对一个在 GLUE 数据集上预训练的模型进行信息提取与剪枝。

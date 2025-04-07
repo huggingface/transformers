@@ -23,7 +23,6 @@ from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vis
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -174,15 +173,8 @@ class DabDetrModelTester:
 
 
 @require_torch
-class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            DabDetrModel,
-            DabDetrForObjectDetection,
-        )
-        if is_torch_available()
-        else ()
-    )
+class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (DabDetrModel, DabDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DabDetrModel,
@@ -707,10 +699,10 @@ class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -734,7 +726,7 @@ class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                             abs(param.data.max().item()),
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    # Modifed from RT-DETR
+                    # Modified from RT-DETR
                     elif "class_embed" in name and "bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
                         torch.testing.assert_close(
