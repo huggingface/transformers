@@ -20,18 +20,18 @@ rendered properly in your Markdown viewer.
 
 # ColPali
 
-[ColPali](https://arxiv.org/abs/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image, capturing not just the text but also the layout, tables, charts, and other visual elements. This approach allows it to understand documents more holistically. It leverages Vision Language Models (VLMs) to create detailed embeddings of these page images, enabling efficient and accurate retrieval. By integrating visual and textual data, ColPali offers a more comprehensive understanding of documents, making it particularly effective for complex documents where visual context is crucial.
+[ColPali](https://huggingface.co/papers/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image. It uses [Paligemma-3B](./paligemma) to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.
 
-You can find all Hf-native ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
+You can find all the original ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
 > [!TIP]
 > The orginal ColPali checkpoints are not natively supported by transformers 🤗. To use them you have to install [colpali-engine](https://github.com/illuin-tech/colpali). You can find the original checkpoints [here](https://huggingface.co/collections/vidore/colpali-models-673a5676abddf84949ce3180).
 
 > [!TIP]
-> Click on the ColPali models in the right sidebar for more examples of how to use ColPali for Image Retrieval.
+> Click on the ColPali models in the right sidebar for more examples of how to use ColPali for image retrieval.
 
 <hfoptions id="usage">
-<hfoption id="ImageRetrieval">
+<hfoption id="image retrieval">
 
 ```py
 import torch
@@ -76,7 +76,7 @@ scores = processor.score_retrieval(query_embeddings, image_embeddings)
 
 ## Notes
 
-- The scores output by the `score_retrieval` method is a 2D tensor. First dimension is the number of queries and the second dimension is the number of images. The higher the score, the more similar the query and image are.
+- [`~ColPaliProcessor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.
 
 ## ColPaliConfig
 
