@@ -61,7 +61,7 @@ if is_torch_flex_attn_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-air-0414"
+_CHECKPOINT_FOR_DOC = "THUDM/GLM-4-9B-Chat-0414"
 _CONFIG_FOR_DOC = "Glm4Config"
 
 
@@ -843,8 +843,8 @@ class Glm4ForCausalLM(Glm4PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Glm4ForCausalLM
 
-        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/glm-4-air-0414")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-air-0414")
+        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
+        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
