@@ -70,7 +70,7 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
     attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
 
@@ -322,7 +322,7 @@ class ViltSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 

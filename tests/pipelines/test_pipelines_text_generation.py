@@ -500,7 +500,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             outputs = text_generator("test", return_text=True, return_tensors=True)
 
-        # Empty prompt is slighly special
+        # Empty prompt is slightly special
         # it requires BOS token to exist.
         # Special case for Pegasus which will always append EOS so will
         # work even without BOS.
@@ -637,7 +637,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             logger = logging.get_logger("transformers.generation.tf_utils")
         else:
             logger = logging.get_logger("transformers.generation.utils")
-        logger_msg = "Both `max_new_tokens`"  # The beggining of the message to be checked in this test
+        logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
 
         # Both are set by the user -> log warning
         with CaptureLogger(logger) as cl:

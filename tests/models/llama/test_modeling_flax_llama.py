@@ -20,7 +20,6 @@ import numpy as np
 from transformers import LlamaConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -174,7 +173,7 @@ class FlaxLlamaModelTester:
 
 
 @require_flax
-class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxLlamaModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxLlamaModel, FlaxLlamaForCausalLM) if is_flax_available() else ()
 
     def setUp(self):

@@ -87,7 +87,7 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     loss: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -129,7 +129,7 @@ class BlipTextVisionModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -170,7 +170,7 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     itm_score: Optional[torch.FloatTensor] = None
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_pooler_output: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -200,10 +200,10 @@ class BlipOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -1198,7 +1198,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 
         image_embeds = vision_outputs[0]
 
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1233,7 +1233,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     """,
     BLIP_START_DOCSTRING,
 )
-class BlipForQuestionAnswering(BlipPreTrainedModel):
+class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
@@ -1424,7 +1424,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1439,7 +1439,9 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         question_embeds = question_outputs[0]
 
-        question_attention_mask = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
+        question_attention_mask = torch.ones(
+            question_embeds.size()[:-1], dtype=torch.long, device=question_embeds.device
+        )
 
         bos_ids = torch.full(
             (question_embeds.size(0), 1), fill_value=self.decoder_start_token_id, device=question_embeds.device

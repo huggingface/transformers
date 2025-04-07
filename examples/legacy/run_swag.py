@@ -34,7 +34,6 @@ from tqdm import tqdm, trange
 import transformers
 from transformers import (
     WEIGHTS_NAME,
-    AdamW,
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
@@ -245,7 +244,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = torch.load(cached_features_file, weights_only=True)
     else:
         logger.info("Creating features from dataset file at %s", input_file)
         examples = read_swag_examples(input_file)
@@ -298,7 +297,7 @@ def train(args, train_dataset, model, tokenizer):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )

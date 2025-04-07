@@ -27,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -188,39 +189,6 @@ class Qwen2_5_VLVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_qwen2_5_vl_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        model = Qwen2_5_VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_qwen2_5_vl_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        config.torch_dtype = torch.float16
-        model = Qwen2_5_VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_grid_thw=image_grid_thw,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -262,7 +230,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
@@ -332,12 +300,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(
-        reason="Qwen2.5-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -346,6 +308,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
     def test_generate_compile_fullgraph(self):
         pass
+
+    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        super().test_prompt_lookup_decoding_matches_greedy_search()
 
 
 @require_torch

@@ -66,7 +66,7 @@ python run_instance_segmentation.py \
     --dataloader_persistent_workers \
     --dataloader_prefetch_factor 4 \
     --do_eval \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --logging_strategy epoch \
     --save_strategy epoch \
     --save_total_limit 2 \

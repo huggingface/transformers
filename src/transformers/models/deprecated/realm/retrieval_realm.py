@@ -21,7 +21,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from .... import AutoTokenizer
-from ....utils import logging
+from ....utils import logging, strtobool
 
 
 _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
@@ -113,6 +113,14 @@ class RealmRetriever:
         else:
             block_records_path = hf_hub_download(
                 repo_id=pretrained_model_name_or_path, filename=_REALM_BLOCK_RECORDS_FILENAME, **kwargs
+            )
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is "
+                "potentially malicious. It's recommended to never unpickle data that could have come from an "
+                "untrusted source, or that could have been tampered with. If you already verified the pickle "
+                "data and decided to use it, you can set the environment variable "
+                "`TRUST_REMOTE_CODE` to `True` to allow it."
             )
         block_records = np.load(block_records_path, allow_pickle=True)
 
