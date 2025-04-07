@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
-from packaging import version
 
 from .base import HfQuantizer
 
@@ -48,9 +45,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+        if not is_torch_available():
             raise ImportError(
-                "Using fbgemm fp8 quantization requires torch > 2.1.0"
+                "Using fbgemm fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
         if not is_fbgemm_gpu_available():
