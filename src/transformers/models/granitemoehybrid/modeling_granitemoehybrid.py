@@ -975,6 +975,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         # to do later on add error handling for not found here
+        # TODO: rename
         self.self_attn = (
             GraniteMultiHeadLatentAttention(config, layer_idx)
             if config.layer_types[layer_idx] == "multihead_latent_attention"
@@ -987,6 +988,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
 
         self.residual_multiplier = config.residual_multiplier
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        self.self_attn_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -1031,16 +1033,12 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # check implementation of this function
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        # TODO - rename to something else
+        hidden_states = self._self_attn_forward(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
         )
 
         hidden_states = residual + hidden_states * self.residual_multiplier
@@ -1062,16 +1060,38 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
 
         outputs = (hidden_states,)
 
-        if output_attentions:
-            outputs += (self_attn_weights,)
+        # TODO: understand what this is
+        # if output_attentions:
+        #     outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
+        # if use_cache:
+        #     outputs += (present_key_value,)
 
         if output_router_logits:
             outputs += (router_logits,)
 
         return outputs
+
+    def _self_attn_forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
+        # TODO add elif and else here for error handling
+        if self.self_attn_type == "multihead_latent_attention":
+            return self.self_attn(
+                hidden_states=hidden_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+            )
+        else:
+            return self.self_attn(
+                hidden_states=hidden_states,
+                cache_position=cache_position,
+                attention_mask=attention_mask,
+            )
 
 
 # TO DO update docstring
