@@ -22,8 +22,8 @@ import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BaseImageProcessorFast
-from ...image_utils import ChannelDimension, PILImageResampling
-from ...utils import logging
+from ...image_utils import PILImageResampling
+from ...utils import logging, TensorType
 
 
 logger = logging.get_logger(__name__)
