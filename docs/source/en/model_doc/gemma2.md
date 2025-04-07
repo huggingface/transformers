@@ -122,25 +122,25 @@ visualizer("You are an assistant. Make sure you print me")
 ```
 
 <div class="flex justify-center">
-    <img src="https://cdn-lfs.hf.co/datasets/huggingface/documentation-images/40cd4e474aa40b71027bea6ed80a646c2ace2a162bee6ec55de7aacc4aaebb41?response-content-disposition=inline%3B+filename*%3DUTF-8%27%27gemma-2-attn-mask.png%3B+filename%3D%22gemma-2-attn-mask.png%22%3B&response-content-type=image%2Fpng&Expires=1743827245&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc0MzgyNzI0NX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2RuLWxmcy5oZi5jby9kYXRhc2V0cy9odWdnaW5nZmFjZS9kb2N1bWVudGF0aW9uLWltYWdlcy80MGNkNGU0NzRhYTQwYjcxMDI3YmVhNmVkODBhNjQ2YzJhY2UyYTE2MmJlZTZlYzU1ZGU3YWFjYzRhYWViYjQxP3Jlc3BvbnNlLWNvbnRlbnQtZGlzcG9zaXRpb249KiZyZXNwb25zZS1jb250ZW50LXR5cGU9KiJ9XX0_&Signature=FcZG8y3bTTgs1IcU812zFWpB10T6ztbeBE52n5yja7-sCvusEPQArLpWFz1aQ1ft%7EIzVHcCKyR2QZbH5p-z3d7xfrWcYKGovSVfVQ06PEMVn0EoAob5yKul6qYTwKbu2GzKlmqY6iNxWaO1hjI6anJeij0iyZbI1Ku46uBS76iwGkb86ME4LQ1Zj%7Egd338TD7WaCXPC2MczrjZ0vV-vYKZwrP4isd2fLJsD-J-o9AxaW5IRvGs04xzqxFvuZUMfX%7EF5YtI6fI4AyBUg0vt4HsS6D8EumSMpbn838solL6zV2C2MR34r-hSPBtsse-Ww%7EKJqJ4CcoOISWMI9cFwq2tA__&Key-Pair-Id=K3RPWS32NSSJCE"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-2-attn-mask.png"/>
 </div>
 
 ## Notes
-Use a [HybridCache] instance to enable caching in Gemma 2. Gemma 2 doesn't support kv-caching strategies like [DynamicCache] or tuples of tensors because it uses sliding window attention every second layer.
 
+- Use a [`HybridCache`] instance to enable caching in Gemma 2. Gemma 2 doesn't support kv-caching strategies like [`DynamicCache`] or tuples of tensors because it uses sliding window attention every second layer.
 
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
+    ```python
+    from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
 
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
+    model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
+    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 
-inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
-max_generated_length = inputs.input_ids.shape[1] + 10
-past_key_values = HybridCache(config=model.config, max_batch_size=1, 
-max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
-outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-```
+    inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
+    max_generated_length = inputs.input_ids.shape[1] + 10
+    past_key_values = HybridCache(config=model.config, max_batch_size=1, 
+    max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+    outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    ```
 
 ## Gemma2Config
 
