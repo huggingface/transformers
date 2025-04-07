@@ -105,7 +105,7 @@ class GraniteMultiHeadLatentAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: DynamicCache | None = None,
+        past_key_value: DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         hidden_states = self.c_attn_down_projection(hidden_states)
@@ -114,8 +114,8 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         query, key, value = hidden_states.split(
             (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
         )
-        if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx)
+        if past_key_value is not None:
+            key, value = past_key_value.update(key, value, self.layer_idx)
 
         query = self.query_up_projection(query)
         key = self.key_up_projection(key)

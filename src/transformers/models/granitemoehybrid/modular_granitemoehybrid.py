@@ -69,7 +69,7 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         self.dropout = nn.Identity() if config.mla_dropout == 0 else nn.Dropout(config.mla_dropout)
     
     def forward(self,  hidden_states: torch.Tensor,
-        past_key_values: DynamicCache | None = None,
+        past_key_value: DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,   
     ) -> torch.Tensor:
         
@@ -79,8 +79,8 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         query, key, value = hidden_states.split(
                 (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
             )
-        if past_key_values is not None:
-                key, value = past_key_values.update(key, value, self.layer_idx)
+        if past_key_value is not None:
+                key, value = past_key_value.update(key, value, self.layer_idx)
 
         query = self.query_up_projection(query)
         key = self.key_up_projection(key)
