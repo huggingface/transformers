@@ -1349,9 +1349,9 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.level_embed)
 
 
-class DinoDetrEncoderLayer(DinoDetrPreTrainedModel):
+class DinoDetrEncoderLayer(nn.Module):
     def __init__(self, config: DinoDetrConfig):
-        super().__init__(config)
+        super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DinoDetrMultiscaleDeformableAttention(
             config,
@@ -1365,8 +1365,6 @@ class DinoDetrEncoderLayer(DinoDetrPreTrainedModel):
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-        self.post_init()
 
     def forward(
         self,
@@ -1440,7 +1438,7 @@ class DinoDetrEncoderLayer(DinoDetrPreTrainedModel):
         return outputs
 
 
-class DinoDetrDecoderLayer(DinoDetrPreTrainedModel):
+class DinoDetrDecoderLayer(nn.Module):
     def __init__(self, config: DinoDetrConfig):
         """
         d_model=256,
@@ -1456,7 +1454,7 @@ class DinoDetrDecoderLayer(DinoDetrPreTrainedModel):
         decoder_sa_type="ca",
         module_seq=["sa", "ca", "ffn"],
         """
-        super().__init__(config)
+        super().__init__()
         self.module_seq = config.module_seq
         assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
         # cross attention
@@ -1484,8 +1482,6 @@ class DinoDetrDecoderLayer(DinoDetrPreTrainedModel):
 
         if config.decoder_sa_type == "ca_content":
             self.self_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
-
-        self.post_init()
 
     def rm_self_attn_modules(self):
         self.self_attn = None
