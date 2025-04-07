@@ -293,6 +293,7 @@ class Llama4TextConfig(PretrainedConfig):
         attn_temperature_tuning=4,
         floor_scale=8192,
         attn_scale=0.1,
+        cache_implementation = "hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -314,7 +315,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
         self.attention_bias = False
-
+        self.cache_implementation = cache_implementation
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -395,6 +396,7 @@ class Llama4Config(PretrainedConfig):
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",
     }
+    
 
     def __init__(
         self,

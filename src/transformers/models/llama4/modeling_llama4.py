@@ -771,7 +771,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             else sequence_length
         )
 
-
         if past_key_values is not None:
             target_length = past_key_values.get_max_cache_shape()
             if target_length is None:
@@ -823,6 +822,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     .to(dtype)
                     .masked_fill(chunked_attention_mask, torch.finfo(dtype).min)
                 )
+                print(chunked_attention_mask.int(), causal_mask.int())
 
         if (
             self.config._attn_implementation == "sdpa"
