@@ -100,6 +100,11 @@ def make_flex_block_causal_mask(
     Returns:
         BlockMask
     """
+    batch_size, total_seq_len = attention_mask_2d.shape
+    if not key_length:
+        key_length = total_seq_len
+    if not query_length:
+        query_length = total_seq_len
     attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
     device = attention_mask_2d.device
     document_ids = attention_mask_2d.clone()
@@ -139,7 +144,7 @@ def make_flex_block_causal_mask(
         mask_mod = causal_mask_mod
     return create_block_causal_mask_flex(
         mask_mod=mask_mod,
-        B=1,
+        B=batch_size,
         H=None,  # attention head
         Q_LEN=query_length,
         KV_LEN=key_length,
