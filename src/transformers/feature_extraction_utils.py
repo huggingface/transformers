@@ -422,6 +422,9 @@ class FeatureExtractionMixin(PushToHubMixin):
         self.to_json_file(output_feature_extractor_file)
         logger.info(f"Feature extractor saved in {output_feature_extractor_file}")
 
+        # Save remote code to local
+        custom_object_save(self, save_directory)
+
         if push_to_hub:
             self._upload_modified_files(
                 save_directory,
