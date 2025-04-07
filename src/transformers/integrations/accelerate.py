@@ -17,6 +17,7 @@ device. But since the `init_empty_weights` function is from accelerate, and acce
 dependency, we copy the function here to be used natively in Transformers.
 """
 
+import warnings
 from contextlib import contextmanager
 
 from ..utils import is_torch_available, logging
@@ -136,3 +137,75 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
             nn.Module.register_buffer = old_register_buffer
         for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
             setattr(torch, torch_function_name, old_torch_function)
+
+
+class FindTiedParametersResult(list):
+    """
+    This is a subclass of a list to handle backward compatibility for Transformers. Do not rely on the fact this is not
+    a list or on the `values` method as in the future this will be removed.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def values(self):
+        warnings.warn(
+            "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
+            FutureWarning,
+        )
+        return sum([x[1:] for x in self], [])
+
+
+def find_tied_parameters(model: "nn.Module", **kwargs):
+    """
+    Find the tied parameters in a given model.
+
+    <Tip warning={true}>
+
+    The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
+    them.
+
+    </Tip>
+
+    Args:
+        model (`torch.nn.Module`): The model to inspect.
+
+    Returns:
+        List[List[str]]: A list of lists of parameter names being all tied together.
+
+    Example:
+
+    ```py
+    >>> from collections import OrderedDict
+    >>> import torch.nn as nn
+
+    >>> model = nn.Sequential(OrderedDict([("linear1", nn.Linear(4, 4)), ("linear2", nn.Linear(4, 4))]))
+    >>> model.linear2.weight = model.linear1.weight
+    >>> find_tied_parameters(model)
+    [['linear1.weight', 'linear2.weight']]
+    ```
+    """
+
+    # get ALL model parameters and thier names
+    all_named_parameters = dict(model.named_parameters(remove_duplicate=False))
+
+    # get ONLY unique named parameters,
+    # if parameter is tied and have multiple names, it will be included only once
+    no_duplicate_named_parameters = dict(model.named_parameters(remove_duplicate=True))
+
+    # the difference of the two sets will give us the tied parameters
+    tied_param_names = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
+
+    # 'tied_param_names' contains the names of parameters that are tied in the model, but we do not know
+    # which names refer to the same parameter. To identify this, we need to group them together.
+    tied_param_groups = {}
+    for tied_param_name in tied_param_names:
+        tied_param = all_named_parameters[tied_param_name]
+        for param_name, param in no_duplicate_named_parameters.items():
+            # compare if parameters are the same, if so, group thier names together
+            if param is tied_param:
+                if param_name not in tied_param_groups:
+                    tied_param_groups[param_name] = []
+                tied_param_groups[param_name].append(tied_param_name)
+
+    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()])
