@@ -29,6 +29,10 @@ from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
 )
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class AyaVisionImagesKwargs(ImagesKwargs, total=False):
@@ -121,6 +125,7 @@ class AyaVisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
 
@@ -144,13 +149,16 @@ class AyaVisionProcessor(ProcessorMixin):
 
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"
+        num_image_token = 1
         if num_patches > 1:
             for idx in range(1, num_patches):
                 img_string += f"{self.tile_token}_{idx}" + f"{self.img_patch_token}" * img_patches_per_tile
+                num_image_token += img_patches_per_tile + 1
 
         img_string += f"{self.tile_global_token}" + f"{self.img_patch_token}" * img_patches_per_tile
         img_string += f"{self.end_of_img_token}"
-        return img_string
+        num_image_token += img_patches_per_tile + 2
+        return img_string, num_image_token
 
     def __call__(
         self,
@@ -214,7 +222,7 @@ class AyaVisionProcessor(ProcessorMixin):
                 new_prompt = prompt
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
-                    image_tokens = self._prompt_split_image(num_patches[image_index])
+                    image_tokens, num_image_token = self._prompt_split_image(num_patches[image_index])
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
                     image_index += 1
                 processed_text.append(new_prompt)
@@ -224,9 +232,11 @@ class AyaVisionProcessor(ProcessorMixin):
 
             text = processed_text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

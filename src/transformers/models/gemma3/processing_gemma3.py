@@ -22,7 +22,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import to_py_obj
+from ...utils import logging, to_py_obj
+
+
+logger = logging.get_logger(__name__)
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
@@ -65,7 +68,7 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
-        self.image_token = tokenizer.boi_token
+        self.image_token = tokenizer.image_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -138,6 +141,7 @@ class Gemma3Processor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
         array_ids = text_inputs["input_ids"]
