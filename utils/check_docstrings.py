@@ -580,6 +580,7 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "Llama4TextConfig",
 ]
 
 # Supported math operations when interpreting the value of defaults.
