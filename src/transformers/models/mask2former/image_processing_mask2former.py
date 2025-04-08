@@ -261,7 +261,6 @@ def compute_segments(
 
 
 # TODO: (Amy) Move to image_transforms
-# Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
@@ -286,9 +285,22 @@ def convert_segmentation_map_to_binary_masks(
 
     # Stack the binary masks
     if binary_masks:
-        binary_masks = np.stack(binary_masks, axis=0)
+        if binary_masks[0].ndim > 2:
+            # If masks has a batch dimension (i.e. overlapping masks)
+            new_masks = []
+            new_labels = []
+            for i, mask in enumerate(binary_masks):
+                # mask in (C,H,W) means there can be C labels per pixel
+                # treat them as separate binary masks
+                new_masks.append(mask[np.any(mask, axis=(-1, -2))])
+                new_labels.append([all_labels[i]] * len(new_masks[-1]))
+
+            binary_masks = np.concatenate(new_masks, 0)
+            all_labels = np.concatenate(new_labels, 0)
+        else:
+            binary_masks = np.stack(binary_masks, axis=0)
     else:
-        binary_masks = np.zeros((0, *segmentation_map.shape))
+        binary_masks = np.zeros((0, *segmentation_map.shape[-2:]))
 
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
@@ -653,26 +665,45 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             added_channel_dim = True
             segmentation_map = segmentation_map[None, ...]
             input_data_format = ChannelDimension.FIRST
+            segmentation_maps = [segmentation_map]
         else:
             added_channel_dim = False
             if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(segmentation_map)
+                raise ValueError(
+                    "To process multiple segmentation masks, e.g. overlapping masks, "
+                    "explicitly provide `input_data_format` to indicate channel dimension. "
+                    "This must align with the channel dimension of the image."
+                )
+
+            chan_dim = 0 if input_data_format == ChannelDimension.FIRST else -1
+            segmentation_maps = np.split(segmentation_map, segmentation_map.shape[chan_dim], chan_dim)
+
         # TODO: (Amy)
         # Remork segmentation map processing to include reducing labels and resizing which doesn't
         # drop segment IDs > 255.
-        segmentation_map = self._preprocess(
-            image=segmentation_map,
-            do_resize=do_resize,
-            resample=PILImageResampling.NEAREST,
-            size=size,
-            size_divisor=size_divisor,
-            do_rescale=False,
-            do_normalize=False,
-            input_data_format=input_data_format,
-        )
+        segmentation_maps = [
+            self._preprocess(
+                image=segmentation_map,
+                do_resize=do_resize,
+                resample=PILImageResampling.NEAREST,
+                size=size,
+                size_divisor=size_divisor,
+                do_rescale=False,
+                do_normalize=False,
+                input_data_format=input_data_format,
+            )
+            for segmentation_map in segmentation_maps
+        ]
+
         # Remove extra channel dimension if added for processing
         if added_channel_dim:
+            segmentation_map = segmentation_maps[0]
             segmentation_map = segmentation_map.squeeze(0)
+        else:
+            segmentation_map = np.concatenate(segmentation_maps, chan_dim)
+            # Move overlapping masks (chan_dim) to batch dimension for further processing.
+            segmentation_map = np.moveaxis(segmentation_map, chan_dim, 0)
+
         return segmentation_map
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")

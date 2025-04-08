@@ -187,6 +187,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         segmentation_type="np",
         numpify=False,
         input_data_format=None,
+        stack_annotations=0,
+        return_annotations=False,
+        instance_id_map_per_image=False,
     ):
         image_processing = self.image_processing_class(**image_processor_tester.prepare_image_processor_dict())
         # prepare image and target
@@ -205,8 +208,25 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 )
                 for img in image_inputs
             ]
+
+            if stack_annotations > 0:
+                chan_dim = 0 if input_data_format == ChannelDimension.FIRST else -1
+
+                new_annotations = []
+                for i in range(len(image_inputs)):
+                    stacked = []
+                    for _ in range(stack_annotations):
+                        stacked.append((annotations[i] + 1) % num_labels)
+
+                    new_annotations.append(np.stack(stacked, chan_dim))
+
+                annotations = new_annotations
+
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
+
+        if is_instance_map and instance_id_map_per_image:
+            instance_id_to_semantic_id = [instance_id_to_semantic_id.copy() for _ in range(len(image_inputs))]
 
         if input_data_format is ChannelDimension.FIRST and numpify:
             image_inputs = [np.moveaxis(img, -1, 0) for img in image_inputs]
@@ -220,7 +240,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             input_data_format=input_data_format,
         )
 
-        return inputs
+        if not return_annotations:
+            return inputs
+        return inputs, annotations
 
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
@@ -551,3 +573,119 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         # test we still support reduce_labels with config
         image_processor = self.image_processing_class.from_dict(image_processor_dict)
         self.assertEqual(image_processor.do_reduce_labels, True)
+
+    def test_call_overlapping_segments(self):
+        def common(
+            is_instance_map=False,
+            segmentation_type=None,
+            num_channels=3,
+            input_data_format=None,
+            do_resize=True,
+            numpify=False,
+            num_features=1,
+            instance_id_map_per_image=False,
+        ):
+            image_processor_tester = Mask2FormerImageProcessingTester(
+                self,
+                num_channels=num_channels,
+                do_resize=do_resize,
+                image_mean=[0.5] * num_channels,
+                image_std=[0.5] * num_channels,
+            )
+
+            inputs, annotations = self.comm_get_image_processing_inputs(
+                image_processor_tester=image_processor_tester,
+                with_segmentation_maps=True,
+                is_instance_map=is_instance_map,
+                segmentation_type=segmentation_type,
+                numpify=numpify,
+                input_data_format=input_data_format,
+                stack_annotations=num_features,
+                return_annotations=True,
+                instance_id_map_per_image=instance_id_map_per_image,
+            )
+
+            mask_labels = inputs["mask_labels"]
+            class_labels = inputs["class_labels"]
+            pixel_values = inputs["pixel_values"]
+
+            chan_dim = 0 if input_data_format == ChannelDimension.FIRST else -1
+
+            self.assertEqual(len(mask_labels), image_processor_tester.batch_size)
+
+            for mask_label, class_label, anns in zip(mask_labels, class_labels, annotations):
+                self.assertEqual(mask_label.shape[0], class_label.shape[0])
+                # this ensure padding has happened
+                self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
+
+                # each annotation per image has multiple masks (overlapping labels) e.g, CxHxW
+                # the number of expected binary masks is then number of unique labels per C
+                # excluding background masks if necessary
+                overlapped_annotations = np.split(anns, anns.shape[chan_dim], chan_dim)
+                num_expected_masks = 0
+                for mask in overlapped_annotations:
+                    num_expected_masks += len(np.unique(mask))
+                    if np.any(mask == 0) and image_processor_tester.do_reduce_labels:
+                        num_expected_masks -= 1
+
+                self.assertEqual(mask_label.shape[0], num_expected_masks)
+
+        common(num_features=5, input_data_format=ChannelDimension.LAST)
+        common(numpify=True, input_data_format=ChannelDimension.FIRST, num_features=5)
+        common(numpify=True, input_data_format=ChannelDimension.LAST, num_features=5)
+        common(numpify=True, input_data_format=ChannelDimension.LAST, num_features=5, instance_id_map_per_image=True)
+
+        with self.assertRaisesRegex(ValueError, expected_regex="To process multiple segmentation masks, "):
+            common(numpify=True, do_resize=False, input_data_format=None, num_features=5)
+
+    def test_call_overlapping_segments_edge_cases(self):
+        def stack_annotations(ann, chan_dim, num_stack, num_labels):
+            stacked = [ann]
+            for _ in range(num_stack - 1):
+                stacked.append(((stacked[-1] + 1) % num_labels))
+            return np.stack(stacked, chan_dim)
+
+        # just include background labels for simplicity
+        cfg = Mask2FormerImageProcessingTester(self, do_reduce_labels=False).prepare_image_processor_dict()
+        processer = self.image_processing_class(**cfg)
+
+        batch_size = 5
+        num_labels = 10
+
+        imgs = [np.random.randint(0, 255, (256, 256, 3)).astype(np.uint8) for _ in range(batch_size)]
+
+        # different overlapping masks per image should calculate correctly
+        anns = [np.random.randint(0, num_labels, (256, 256)) for _ in range(batch_size)]
+        anns = [stack_annotations(anns[i], -1, i + 1, num_labels) for i in range(batch_size)]
+        inputs = processer(imgs, anns, input_data_format=ChannelDimension.LAST)
+        num_binary_masks = [inputs["mask_labels"][i].shape[0] for i in range(batch_size)]
+
+        self.assertListEqual(num_binary_masks, [(i + 1) * num_labels for i in range(batch_size)])
+
+        # Not all pixels may have C different labels
+        # In which case, padding it with ignore_index should account for this in flattening
+        anns = [np.random.randint(0, num_labels, (256, 256)) for _ in range(batch_size)]
+        anns = [stack_annotations(anns[i], -1, i + 1, num_labels) for i in range(batch_size)]
+
+        new_anns = []
+        for ann in anns:
+            ann[..., -1][ann[..., -1] == num_labels - 1] = cfg["ignore_index"]
+            new_anns.append(ann)
+        inputs = processer(imgs, anns, input_data_format=ChannelDimension.LAST)
+        num_binary_masks = [inputs["mask_labels"][i].shape[0] for i in range(batch_size)]
+
+        self.assertListEqual(num_binary_masks, [(i + 1) * num_labels - 1 for i in range(batch_size)])
+
+        anns = [np.random.randint(0, num_labels, (256, 256)) for _ in range(batch_size)]
+        anns_stacked = [stack_annotations(anns[i], -1, 1, num_labels) for i in range(batch_size)]
+
+        # C=1 is equivalent to base case
+        inputs = processer(imgs, anns, input_data_format=ChannelDimension.LAST)
+        inputs_stacked = processer(imgs, anns_stacked, input_data_format=ChannelDimension.LAST)
+
+        self.assertTrue(
+            all(np.array_equal(m, ms) for m, ms in zip(inputs["mask_labels"], inputs_stacked["mask_labels"]))
+        )
+        self.assertTrue(
+            all(np.array_equal(c, cs) for c, cs in zip(inputs["class_labels"], inputs_stacked["class_labels"]))
+        )
