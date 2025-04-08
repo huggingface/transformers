@@ -266,8 +266,7 @@ class MLCDAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -278,12 +277,11 @@ class MLCDAttention(nn.Module):
         query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
         key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
         value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        if position_embeddings is None:
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos().unsqueeze(0).float()
-            sin = emb.sin().unsqueeze(0).float()
-        else:
-            cos, sin = position_embeddings
+
+        # Apply positional embeddings
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        cos = emb.cos().unsqueeze(0).float()
+        sin = emb.sin().unsqueeze(0).float()
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         # Each of shape: [batch_size, num_heads, seq_length, head_dim]
@@ -332,8 +330,7 @@ class MLCDEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
@@ -342,12 +339,9 @@ class MLCDEncoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
                 Represents the hidden states from the previous layer or the input embeddings.
-            rotary_pos_emb (`torch.Tensor`, *optional*):
+            rotary_pos_emb (`torch.Tensor`):
                 Rotary positional embeddings of shape `(seq_len, embed_dim)`.
                 Used to incorporate relative positional information into the attention mechanism.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-                A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
-                Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
             output_attentions (`bool`, *optional*, defaults to `False`):
@@ -360,7 +354,6 @@ class MLCDEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -398,8 +391,7 @@ class MLCDEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -411,12 +403,9 @@ class MLCDEncoder(nn.Module):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            rotary_pos_emb (`torch.Tensor`, *optional*):
+            rotary_pos_emb (`torch.Tensor`):
                 Rotary positional embeddings of shape `(seq_len, embed_dim)`.
                 Used to incorporate relative positional information into the attention mechanism.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-                A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
-                Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
                 - 1 for tokens that are **not masked**,
@@ -450,7 +439,6 @@ class MLCDEncoder(nn.Module):
                     encoder_layer.__call__,
                     hidden_states,
                     rotary_pos_emb,
-                    position_embeddings,
                     attention_mask,
                     output_attentions,
                 )
@@ -458,7 +446,6 @@ class MLCDEncoder(nn.Module):
                 layer_outputs = encoder_layer(
                     hidden_states=hidden_states,
                     rotary_pos_emb=rotary_pos_emb,
-                    position_embeddings=position_embeddings,
                     attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
@@ -533,6 +520,7 @@ class MLCDVisionTransformer(nn.Module):
         num_patches_height = pixel_values.shape[-2] // self.config.patch_size
         num_patches_width = pixel_values.shape[-1] // self.config.patch_size
         rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
+        rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
 
         hidden_states = self.embeddings(pixel_values)
@@ -570,7 +558,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
     config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
-
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
