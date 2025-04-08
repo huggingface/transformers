@@ -66,7 +66,7 @@ class WrappedFlexAttention:
             )
         else:
             self._compiled_flex_attention = torch.compile(
-                flex_attention, dynamic=False, backend="inductor"
+                flex_attention, dynamic=True, backend="inductor"
             )  # inference does not work with max auto-tune or no cudagraphs or cudagraphs
 
     def __call__(self):
@@ -203,20 +203,20 @@ def flex_attention_forward(
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
         block_mask = attention_mask
+        score_mod = None
     else:
         causal_mask = attention_mask
 
-    if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-    def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
-        if softcap is not None:
-            score = softcap * torch.tanh(score / softcap)
-        if causal_mask is not None:
-            score = score + causal_mask[batch_idx][0][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
-        return score
+        def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
+            if softcap is not None:
+                score = softcap * torch.tanh(score / softcap)
+            if causal_mask is not None:
+                score = score + causal_mask[batch_idx][0][q_idx][kv_idx]
+            if head_mask is not None:
+                score = score + head_mask[batch_idx][head_idx][0][0]
+            return score
 
     enable_gqa = True
     num_local_query_heads = query.shape[1]
