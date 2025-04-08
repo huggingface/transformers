@@ -14,16 +14,16 @@
 # limitations under the License.
 
 
-import requests
 import unittest
 from typing import Dict, List, Optional, Union
 
-import numpy as np
+import requests
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available, is_torch_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -124,7 +124,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
-    
+
     def _assertEquivalence(self, a, b):
         self.assertTrue(torch.allclose(a, b, atol=1e-1))
         self.assertLessEqual(torch.mean(torch.abs(a - b)).item(), 1e-3)
