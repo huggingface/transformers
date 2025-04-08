@@ -27,8 +27,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import TimmBackbone, TimmBackboneConfig
 
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -74,17 +72,6 @@ class TimmBackboneModelTester:
             stage_names=self.stage_names,
             use_pretrained_backbone=self.use_pretrained_backbone,
             backbone=self.backbone,
-        )
-
-    def create_and_check_model(self, config, pixel_values):
-        model = TimmBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        self.parent.assertEqual(
-            result.feature_map[-1].shape,
-            (self.batch_size, model.channels[-1], 14, 14),
         )
 
     def prepare_config_and_inputs_for_common(self):

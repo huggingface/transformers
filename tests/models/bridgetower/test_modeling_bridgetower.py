@@ -14,10 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch BridgeTower model."""
 
-import tempfile
 import unittest
-
-import numpy as np
 
 from transformers import (
     BridgeTowerConfig,
@@ -358,39 +355,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         model_name = "BridgeTower/bridgetower-base"
         model = BridgeTowerModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @slow
-    def test_save_load_fast_init_from_base(self):
-        # Override as it is a slow test on this model
-        super().test_save_load_fast_init_from_base()
-
-    # Override as extracting meaningful tensor from output is different for BridgeTower
-    def test_save_load(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**input_dict)
-
-            out_2 = self.extract_output(outputs, model_class.__name__)
-            out_2 = out_2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**input_dict)
-
-                # Make sure we don't have nans
-                out_1 = self.extract_output(after_outputs, model_class.__name__)
-                out_1 = out_1.cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
 
     # Override this as `hidden states output` is different for BridgeTower
     def test_hidden_states_output(self):

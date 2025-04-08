@@ -379,15 +379,12 @@ def is_torch_sdpa_available():
     elif _torch_version == "N/A":
         return False
 
-    # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
-    # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
-    # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
     # NOTE: MLU is OK with non-contiguous inputs.
     if is_torch_mlu_available():
-        return version.parse(_torch_version) >= version.parse("2.1.0")
+        return True
     # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
     if is_torch_npu_available():
-        return version.parse(_torch_version) >= version.parse("2.1.0")
+        return True
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
 
@@ -564,7 +561,7 @@ def is_torch_fp16_available_on_device(device):
     import torch
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
         _ = x @ x
 
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
@@ -596,7 +593,7 @@ def is_torch_bf16_available_on_device(device):
         return True
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
         _ = x @ x
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
@@ -673,31 +670,6 @@ def is_ftfy_available():
 
 def is_g2p_en_available():
     return _g2p_en_available
-
-
-@lru_cache()
-def is_torch_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-
-    if not _torch_available:
-        return False
-    if importlib.util.find_spec("torch_xla") is not None:
-        if check_device:
-            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-            try:
-                import torch_xla.core.xla_model as xm
-
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-        return True
-    return False
 
 
 @lru_cache
@@ -811,6 +783,10 @@ def is_torch_hpu_available():
 
     import torch
 
+    if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
+        # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
+        import habana_frameworks.torch  # noqa: F401
+
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
@@ -854,7 +830,7 @@ def is_torchdynamo_available():
     if not is_torch_available():
         return False
 
-    return version.parse(_torch_version) >= version.parse("2.0.0")
+    return True
 
 
 def is_torch_compile_available():
@@ -883,6 +859,23 @@ def is_torchdynamo_compiling():
             import torch._dynamo as dynamo  # noqa: F401
 
             return dynamo.is_compiling()
+        except Exception:
+            return False
+
+
+def is_torchdynamo_exporting():
+    if not is_torch_available():
+        return False
+
+    try:
+        import torch
+
+        return torch.compiler.is_exporting()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_exporting()
         except Exception:
             return False
 
@@ -1035,11 +1028,6 @@ def is_flash_attn_2_available():
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
-        return False
-
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:
@@ -1873,7 +1861,7 @@ class _LazyModule(ModuleType):
         name: str,
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
-        module_spec: importlib.machinery.ModuleSpec = None,
+        module_spec: Optional[importlib.machinery.ModuleSpec] = None,
         extra_objects: Dict[str, object] = None,
     ):
         super().__init__(name)
