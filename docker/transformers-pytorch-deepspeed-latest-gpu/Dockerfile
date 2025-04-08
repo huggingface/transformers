@@ -15,7 +15,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 
 # `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing] 'pandas<2' 'numpy<2'
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
