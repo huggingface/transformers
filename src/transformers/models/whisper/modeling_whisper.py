@@ -648,6 +648,29 @@ class WhisperEncoderLayer(nn.Module):
         return outputs
 
 
+class MLPWrapper(nn.Module):
+    def __init__(self, fc1, fc2, activation_function, activation_dropout, dropout):
+        super().__init__()
+
+        self.in_features = fc1.in_features
+        self.out_features = fc2.out_features
+
+        self.fc1 = fc1
+        self.fc2 = fc2
+
+        self.activation_fn = activation_function
+        self.activation_dropout = activation_dropout
+        self.dropout = dropout
+
+    def forward(self, hidden_states):
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        return hidden_states
+
+
 class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
@@ -676,8 +699,13 @@ class WhisperDecoderLayer(nn.Module):
             config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+
+        self.mlp = MLPWrapper(self.fc1, self.fc2, activation_function=self.activation_fn,
+                              activation_dropout=self.activation_dropout, dropout=self.dropout)
+
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -748,10 +776,7 @@ class WhisperDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
