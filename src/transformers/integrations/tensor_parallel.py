@@ -146,21 +146,21 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         if (rank * split_size) < size_:
             param = param[rank * split_size : min((rank + 1) * split_size, size_), ...]
         else:
-            param = torch.tensor([])
+            param = torch.tensor([], dtype=torch.int64)
     elif dim == 1 or dim == -2:
         size_ = empty_param.shape[-2]
         split_size = math.ceil(size_ / device_mesh.size())
         if (rank * split_size) < size_:
             param = param[..., rank * split_size : min((rank + 1) * split_size, size_), :]
         else:
-            param = torch.tensor([])
+            param = torch.tensor([], dtype=torch.int64)
     elif dim == 2 or dim == -1:
         size_ = empty_param.shape[-1]
         split_size = math.ceil(size_ / device_mesh.size())
         if (rank * split_size) < size_:
             param = param[..., rank * split_size : min((rank + 1) * split_size, size_)]
         else:
-            param = torch.tensor([])
+            param = torch.tensor([], dtype=torch.int64)
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
     return param
