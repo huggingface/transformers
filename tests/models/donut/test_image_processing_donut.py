@@ -133,6 +133,27 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Previous config had dimensions in (width, height) order
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
+    
+    def test_image_processor_preprocess_with_kwargs(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+            height = 84
+            width = 42
+            # Previous config had dimensions in (width, height) order
+            encoded_images = image_processing(image_inputs[0], size=(width, height), return_tensors="pt").pixel_values
+            self.assertEqual(
+                encoded_images.shape,
+                (
+                    1,
+                    self.image_processor_tester.num_channels,
+                    height,
+                    width,
+                ),
+            )
 
     @is_flaky()
     def test_call_pil(self):
