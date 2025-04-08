@@ -194,7 +194,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         # Prepare segmentation maps
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=1)
+            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
