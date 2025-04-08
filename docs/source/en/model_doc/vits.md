@@ -58,34 +58,88 @@ write("hello.wav", sampling_rate, audio_data.squeeze())
 
 ```python
 import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
+import scipy
+from IPython.display import Audio
+from transformers import AutoTokenizer, VitsModel, set_seed
+
+tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16).to("cuda")
+inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
 
 set_seed(555)
-
-model_id = "facebook/mms-tts-eng"
-tokenizer = VitsTokenizer.from_pretrained(model_id)
-model = VitsModel.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
-
-inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     outputs = model(**inputs)
 
 waveform = outputs.waveform[0]
+scipy.io.wavfile.write("hello.wav", rate=model.config.sampling_rate, data=waveform)
 
-# To save the generated waveform as an audio file:
-
-import scipy
-scipy.io.wavfile.write("hello.wav", rate=model.config.sampling_rate, data=waveform.cpu().numpy())
-
-# Or play it in a notebook:
-
-from IPython.display import Audio
-Audio(waveform.cpu().numpy(), rate=model.config.sampling_rate)
+# display in Colab notebook
+Audio(waveform, rate=model.config.sampling_rate)
 ```
 
 </hfoption>
 </hfoptions>
+
+## Notes
+
+- Set a seed for reproducibility because VITS synthesizes speech non-deterministically.
+- For languages with non-Roman alphabets (Korean, Arabic, etc.), install the [uroman](https://github.com/isi-nlp/uroman) package to preprocess the text inputs to the Roman alphabet. You can check if the tokenizer requires uroman as shown below.
+
+   ```py
+   # pip install -U uroman
+   from transformers import VitsTokenizer
+
+   tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+   print(tokenizer.is_uroman)
+   ```
+
+   If your language requires uroman, the tokenizer automatically applies it to the text inputs. Python >= 3.10 doesn't require any additional preprocessing steps. For Python < 3.10, follow the steps below.
+
+   ```bash
+   git clone https://github.com/isi-nlp/uroman.git
+   cd uroman
+   export UROMAN=$(pwd)
+   ```
+
+   Create a function to preprocess the inputs. You can either use the bash variable `UROMAN` or pass the directory path directly to the function.
+
+   ```py
+   import torch
+   from transformers import VitsTokenizer, VitsModel, set_seed
+   import os
+   import subprocess
+
+   tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
+   model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+
+   def uromanize(input_string, uroman_path):
+       """Convert non-Roman strings to Roman using the `uroman` perl package."""
+       script_path = os.path.join(uroman_path, "bin", "uroman.pl")
+
+       command = ["perl", script_path]
+
+       process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+       # Execute the perl command
+       stdout, stderr = process.communicate(input=input_string.encode())
+
+       if process.returncode != 0:
+           raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
+
+       # Return the output as a string and skip the new-line character at the end
+       return stdout.decode()[:-1]
+
+   text = "이봐 무슨 일이야"
+   uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
+
+   inputs = tokenizer(text=uromanized_text, return_tensors="pt")
+
+   set_seed(555)  # make deterministic
+   with torch.no_grad():
+      outputs = model(inputs["input_ids"])
+
+   waveform = outputs.waveform[0]
+   ```
 
 ## VitsConfig
 
