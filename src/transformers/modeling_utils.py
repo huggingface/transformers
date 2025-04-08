@@ -4862,18 +4862,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Prepare arguments for multiprocessing
         args_list = [
             (
-                state_dict,
                 shard_file,
                 disk_only_shard_files,
+                is_hqq_or_bnb,
                 is_quantized,
                 device_map,
                 hf_quantizer,
                 key_renaming_mapping,
                 weights_only,
                 model_to_load,
-                ignore_mismatched_sizes,
-                prefix,
-                loading_base_model_from_task_state_dict,
                 expected_keys,
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
@@ -4881,8 +4878,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 cpu_offload_folder,
                 cpu_offload_index,
                 is_offloaded_safetensors,
+                keep_in_fp32_regex,
                 unexpected_keys,
-                device_mesh,
+                device_mesh
             )
             for shard_file in checkpoint_files
         ]
