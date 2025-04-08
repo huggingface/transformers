@@ -89,10 +89,19 @@ def _serialize_io(value):
         # DTensor-like handling, just use local tensor attribute
         torch.set_printoptions(sci_mode=True)
         val_repr = repr(value)
+        mean_repr = repr(value.mean())
+        std_repr = repr(value.std())
+        max_repr = repr(value.max())
+        min_repr = repr(value.min())
         return {
             "shape": repr(value._local_tensor.shape),
             "dtype": repr(value._local_tensor.dtype),
             "value": _sanitize_repr_for_diff(val_repr),
+            "mean": _sanitize_repr_for_diff(mean_repr),
+            "std": _sanitize_repr_for_diff(std_repr),
+            "min": _sanitize_repr_for_diff(min_repr),
+            "max": _sanitize_repr_for_diff(max_repr),
+
         }
 
     if isinstance(value, torch.Tensor):
