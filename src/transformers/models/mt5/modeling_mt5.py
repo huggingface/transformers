@@ -2183,7 +2183,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,

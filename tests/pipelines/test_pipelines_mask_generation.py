@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from typing import Dict
 
 import numpy as np
 from huggingface_hub.utils import insecure_hashlib
@@ -50,7 +49,7 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"hash": hashimage(mask), "shape": shape}
@@ -60,11 +59,9 @@ def mask_to_test_readable(mask: Image) -> Dict:
 @require_vision
 @require_torch
 class MaskGenerationPipelineTests(unittest.TestCase):
-    model_mapping = dict(
-        (list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
-    )
+    model_mapping = dict(list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
     tf_model_mapping = dict(
-        (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
+        list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else []
     )
 
     def get_test_pipeline(

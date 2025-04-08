@@ -46,12 +46,19 @@ from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
 
+from transformers.utils import is_torchao_available
+
+
+if is_torchao_available():
+    from torchao.quantization import Int4WeightOnlyConfig
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.accelerate import find_tied_parameters, init_empty_weights
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -125,12 +132,11 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate import dispatch_model, infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         extract_model_from_parallel,
-        find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
         load_offloaded_weights,
@@ -146,6 +152,10 @@ if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
+
+
+if is_deepspeed_available():
+    import deepspeed
 
 logger = logging.get_logger(__name__)
 
@@ -288,24 +298,6 @@ def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
         return first_tuple[1].device
 
 
-def get_first_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
-    """
-    Returns the first parameter dtype (can be non-floating) or asserts if none were found.
-    """
-    try:
-        return next(parameter.parameters()).dtype
-    except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch > 1.5
-
-        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
-
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        first_tuple = next(gen)
-        return first_tuple[1].dtype
-
-
 def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
@@ -355,17 +347,6 @@ def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     return last_dtype
 
 
-def get_state_dict_float_dtype(state_dict):
-    """
-    Returns the first found floating dtype in `state_dict` or asserts if none were found.
-    """
-    for t in state_dict.values():
-        if t.is_floating_point():
-            return t.dtype
-
-    raise ValueError("couldn't find any floating point dtypes in state_dict")
-
-
 def get_state_dict_dtype(state_dict):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
@@ -377,26 +358,6 @@ def get_state_dict_dtype(state_dict):
     # if no floating dtype was found return whatever the first dtype is
     else:
         return next(state_dict.values()).dtype
-
-
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`.
-
-    Example:
-
-    ```py
-    >>> dtype_byte_size(torch.float32)
-    4
-    ```
-    """
-    if dtype == torch.bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)_?", str(dtype))
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
 
 
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
@@ -494,19 +455,15 @@ str_to_torch_dtype = {
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
 }
 
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
 
 if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U16"] = torch.uint16
     str_to_torch_dtype["U32"] = torch.uint32
     str_to_torch_dtype["U64"] = torch.uint64
-
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
-    str_to_torch_dtype["F8_E5M2"] = torch.float8_e5m2
 
 
 def load_state_dict(
@@ -555,12 +512,7 @@ def load_state_dict(
                 map_location = "cpu"
         extra_args = {}
         # mmap can only be used with files serialized with zipfile-based format.
-        if (
-            isinstance(checkpoint_file, str)
-            and map_location != "meta"
-            and version.parse(torch.__version__) >= version.parse("2.1.0")
-            and is_zipfile(checkpoint_file)
-        ):
+        if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
             extra_args = {"mmap": True}
         return torch.load(
             checkpoint_file,
@@ -752,14 +704,15 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors")
+    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+        QuantizationMethod.HQQ,
+        QuantizationMethod.BITS_AND_BYTES,
+    ]
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
-    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
-    # we need to make sure they are not loaded as tied weights!
-    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -829,14 +782,8 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                # avoid tied weights
-                if param.data_ptr() in data_ptrs:
-                    param = param.clone()
-
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
-                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
-                data_ptrs.add(model.state_dict()[param_name].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
@@ -1371,6 +1318,7 @@ def _find_missing_and_unexpected_keys(
 
     if hf_quantizer is not None:
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+        unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
     # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
     if cls._keys_to_ignore_on_load_missing is not None:
@@ -1927,16 +1875,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        if self.base_model is self:
-            self._pp_plan = (
-                self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-            )
-            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        else:
-            self._tp_plan = self._tp_plan or {}
-            for name, module in self.named_children():
-                if plan := getattr(module, "_tp_plan", None):
-                    self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
@@ -2038,8 +1981,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
-            import deepspeed
-
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
@@ -2678,8 +2619,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Since we are basically reusing the same old embeddings with new weight values, gathering is required
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
                 vocab_size = model_embeds.weight.shape[0]
         else:
@@ -2710,8 +2649,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
                     new_num_tokens = new_embeddings.weight.shape[0]
             else:
@@ -2800,8 +2737,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
                 old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
         else:
@@ -2846,8 +2781,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                     self._init_added_embeddings_weights_with_mean(
                         old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
@@ -2863,8 +2796,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         n = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
@@ -2875,8 +2806,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # This ensures correct functionality when a Custom Embedding class is passed as input.
         # The input and output embedding types remain consistent. (c.f. https://github.com/huggingface/transformers/pull/31979)
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 old_embeddings.weight = new_embeddings.weight
@@ -2934,8 +2863,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
                 old_num_tokens, old_lm_head_dim = (
                     old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
@@ -2986,8 +2913,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
                 params = [old_lm_head.weight]
                 if has_new_lm_head_bias:
                     params += [old_lm_head.bias]
@@ -3008,8 +2933,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._copy_lm_head_original_to_resized(
@@ -3754,25 +3677,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return super().float(*args)
 
     @classmethod
-    def get_init_context(
-        cls: Type[SpecificPreTrainedModelType],
-        is_quantized=None,
-        _is_ds_init_called=None,
-    ):
-        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
-            import deepspeed
-
-            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [
-                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                set_zero3_state(),
-                no_init_weights(),
-            ]
+    def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
+        if is_deepspeed_zero3_enabled():
+            init_contexts = [no_init_weights()]
+            # We cannot initialize the model on meta device with deepspeed when not quantized
+            if not is_quantized and not _is_ds_init_called:
+                logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+            elif is_quantized:
+                init_contexts.extend([init_empty_weights(), set_quantized_state()])
         else:
             init_contexts = [no_init_weights(), init_empty_weights()]
 
-        if is_deepspeed_zero3_enabled() and is_quantized:
-            init_contexts.append(set_quantized_state())
         return init_contexts
 
     @classmethod
@@ -4088,6 +4004,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 import sys
 
                 sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
             # Assuming sharding the model onto the world
@@ -4177,6 +4094,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if device_map is not None:
             if is_deepspeed_zero3_enabled():
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
+            if not is_accelerate_available():
+                raise ValueError(
+                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
+                )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
         if load_in_4bit or load_in_8bit:
@@ -4272,6 +4193,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
             torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
             device_map = hf_quantizer.update_device_map(device_map)
+            config = hf_quantizer.update_tp_plan(config)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
             if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
@@ -4404,9 +4326,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules, config=config
             )
-
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
@@ -4660,6 +4581,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_hqq = is_quantized and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
+        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
+            QuantizationMethod.HQQ,
+            QuantizationMethod.BITS_AND_BYTES,
+        ]
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4821,7 +4747,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None:  # and hf_quantizer is None:
+        if device_map is not None and not is_hqq:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
@@ -4833,13 +4759,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 continue
 
             map_location = "cpu"
-            if shard_file.endswith(".safetensors"):
+            if (
+                shard_file.endswith(".safetensors")
+                and not is_hqq_or_bnb
+                and not (is_deepspeed_zero3_enabled() and not is_quantized)
+            ):
                 map_location = "meta"
             elif (
                 device_map is not None
                 and hf_quantizer is not None
                 and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                and (
+                    hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                    or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+                )
             ):
                 map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
@@ -4852,7 +4785,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
             # Skip it with fsdp on ranks other than 0
             elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
@@ -4928,7 +4861,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         name,
                         casting_dtype,
                         to_contiguous,
-                        tp_device.index,
+                        os.environ["RANK"],
                         device_mesh,
                     )
 
@@ -5201,6 +5134,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         # Only reset it if not present or different from previous config
+        if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
+            return self.__call__
         default_config = getattr(self.generation_config, "compile_config", CompileConfig())
         if (
             not hasattr(self, "_compiled_call")
@@ -5276,8 +5211,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             not_initialized_submodules = dict(self.named_modules())
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
-
             not_initialized_parameters = list(
                 set(
                     itertools.chain.from_iterable(
@@ -5810,7 +5743,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = math.prod(param.shape) * dtype_byte_size(param.dtype)
+        param_byte_count = math.prod(param.shape) * param.element_size()
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
