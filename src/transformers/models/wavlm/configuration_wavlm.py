@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" WavLM model configuration"""
+"""WavLM model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-}
 
 
 class WavLMConfig(PretrainedConfig):
@@ -337,3 +332,6 @@ class WavLMConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["WavLMConfig"]

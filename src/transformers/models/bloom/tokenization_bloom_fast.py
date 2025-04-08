@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Bloom."""
 
-
 import pickle
 from typing import Optional, Tuple
 
@@ -26,18 +25,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "tokenizer_file": {
-        "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
-        "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/tokenizer.json",
-        "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/tokenizer.json",
-        "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/tokenizer.json",
-        "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/tokenizer.json",
-        "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/tokenizer.json",
-        "bigscience/bloom": "https://huggingface.co/bigscience/bloom/blob/main/tokenizer.json",
-    },
-}
 
 
 class BloomTokenizerFast(PreTrainedTokenizerFast):
@@ -94,7 +81,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
     # No `max_model_input_sizes` as BLOOM uses ALiBi positional embeddings
@@ -113,8 +99,8 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         super().__init__(
-            vocab_file,
-            merges_file,
+            vocab_file=vocab_file,
+            merges_file=merges_file,
             tokenizer_file=tokenizer_file,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -162,16 +148,5 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+
+__all__ = ["BloomTokenizerFast"]

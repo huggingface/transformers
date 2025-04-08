@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -197,7 +196,6 @@ class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFLEDForConditionalGeneration,
             "feature-extraction": TFLEDModel,
             "summarization": TFLEDForConditionalGeneration,
             "text2text-generation": TFLEDForConditionalGeneration,

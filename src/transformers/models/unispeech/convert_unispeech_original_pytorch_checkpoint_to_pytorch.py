@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert UniSpeech checkpoint."""
 
-
 import argparse
 import json
 import os

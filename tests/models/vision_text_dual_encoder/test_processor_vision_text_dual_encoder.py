@@ -18,23 +18,23 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
 from transformers.testing_utils import require_tokenizers, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import VisionTextDualEncoderProcessor, ViTImageProcessor
+    from transformers import VisionTextDualEncoderProcessor, ViTImageProcessor, ViTImageProcessorFast
 
 
 @require_tokenizers
 @require_vision
-class VisionTextDualEncoderProcessorTest(unittest.TestCase):
+class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = VisionTextDualEncoderProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -54,25 +54,21 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
+        tokenizer = self.get_tokenizer()
+        image_processor = self.get_image_processor()
+        processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_image_processor(self, **kwargs):
+        if is_torchvision_available():
+            return ViTImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
         return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
@@ -87,7 +83,7 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, (BertTokenizer, BertTokenizerFast))
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.image_processor, ViTImageProcessor)
+        self.assertIsInstance(processor.image_processor, (ViTImageProcessor, ViTImageProcessorFast))
 
     def test_save_load_pretrained_additional_features(self):
         processor = VisionTextDualEncoderProcessor(
@@ -106,7 +102,7 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, (BertTokenizer, BertTokenizerFast))
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, ViTImageProcessor)
+        self.assertIsInstance(processor.image_processor, (ViTImageProcessor, ViTImageProcessorFast))
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -116,8 +112,8 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

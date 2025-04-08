@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViT model."""
-
+"""PyTorch MobileViT model."""
 
 import math
 from typing import Dict, Optional, Set, Tuple, Union
@@ -40,6 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_mobilevit import MobileViTConfig
 
@@ -57,17 +57,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -226,7 +215,7 @@ class MobileViTSelfAttention(nn.Module):
 
         if hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -449,8 +438,16 @@ class MobileViTLayer(nn.Module):
 
         batch_size, channels, orig_height, orig_width = features.shape
 
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
+        new_height = (
+            torch_int(torch.ceil(orig_height / patch_height) * patch_height)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_height / patch_height) * patch_height)
+        )
+        new_width = (
+            torch_int(torch.ceil(orig_width / patch_width) * patch_width)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_width / patch_width) * patch_width)
+        )
 
         interpolate = False
         if new_width != orig_width or new_height != orig_height:
@@ -652,6 +649,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -1037,6 +1035,9 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.mobilevit(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -1049,15 +1050,12 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
@@ -1072,3 +1070,11 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "MobileViTForImageClassification",
+    "MobileViTForSemanticSegmentation",
+    "MobileViTModel",
+    "MobileViTPreTrainedModel",
+]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Bort checkpoint."""
 
-
 import argparse
 import os
 
@@ -181,9 +180,9 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
         gluon_param = to_torch(params[gluon_param])
         shape_gluon = gluon_param.shape
 
-        assert (
-            shape_hf == shape_gluon
-        ), f"The gluon parameter {gluon_param} has shape {shape_gluon}, but expects shape {shape_hf} for Transformers"
+        assert shape_hf == shape_gluon, (
+            f"The gluon parameter {gluon_param} has shape {shape_gluon}, but expects shape {shape_hf} for Transformers"
+        )
 
         return gluon_param
 
@@ -277,7 +276,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     hf_bort_model.half()
 
     # Compare output of both models
-    tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+    tokenizer = RobertaTokenizer.from_pretrained("FacebookAI/roberta-base")
 
     input_ids = tokenizer.encode_plus(SAMPLE_TEXT)["input_ids"]
 

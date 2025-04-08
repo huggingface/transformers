@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Hugging Face
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import re
 import time
 from typing import Optional
@@ -114,8 +114,13 @@ class NotebookProgressBar:
         self.last_value = None
         self.comment = None
         self.output = None
+        self.value = None
+        self.label = None
+        if "VSCODE_PID" in os.environ:
+            self.update_every = 0.5  # Adjusted for smooth updated as html rending is slow on VS Code
+            # This is the only adjustment required to optimize training html rending
 
-    def update(self, value: int, force_update: bool = False, comment: str = None):
+    def update(self, value: int, force_update: bool = False, comment: Optional[str] = None):
         """
         The main method to update the progress bar to `value`.
 
@@ -180,7 +185,7 @@ class NotebookProgressBar:
             if self.average_time_per_item == 0:
                 self.label += ", +inf it/s"
             else:
-                self.label += f", {1/self.average_time_per_item:.2f} it/s"
+                self.label += f", {1 / self.average_time_per_item:.2f} it/s"
 
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
@@ -292,11 +297,11 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_train_begin(self, args, state, control, **kwargs):
-        self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
+        self.first_column = "Epoch" if args.eval_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
-        if args.evaluation_strategy != IntervalStrategy.NO:
+        if args.eval_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
@@ -328,7 +333,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
-        if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:
+        if args.eval_strategy == IntervalStrategy.NO and "loss" in logs:
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step

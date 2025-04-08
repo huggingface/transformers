@@ -11,18 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VipLlava model configuration"""
+"""VipLlava model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
-
-VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
-}
 
 
 class VipLlavaConfig(PretrainedConfig):
@@ -41,19 +37,16 @@ class VipLlavaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`List[int]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
-            The list of layers to select the vision features from.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the VipLlava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~VipLlavaForConditionalGeneration`]
+        vision_feature_layers (`Union[int, List[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+            The vision feature layer, or list of layers to select the vision features from.
+        image_seq_length (`int`, *optional*, defaults to 576):
+            Sequence length of one image embedding.
 
     Example:
 
@@ -77,27 +70,24 @@ class VipLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "vipllava"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
         projector_layernorm_eps=1e-5,
         vision_feature_layers=[-2, -5, -8, -11, 6],
-        vocab_size=32000,
+        image_seq_length=576,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.projector_layernorm_eps = projector_layernorm_eps
         self.vision_feature_layers = vision_feature_layers
-        self.vocab_size = vocab_size
-
+        self.image_seq_length = image_seq_length
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
@@ -116,15 +106,16 @@ class VipLlavaConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
-        self.vocab_size = self.vocab_size
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
 
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
-        elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
-
         super().__init__(**kwargs)
+
+
+__all__ = ["VipLlavaConfig"]

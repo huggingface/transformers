@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPT-J model configuration"""
+"""GPT-J model configuration"""
+
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -23,11 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-j-6B": "https://huggingface.co/EleutherAI/gpt-j-6B/resolve/main/config.json",
-    # See all GPT-J models at https://huggingface.co/models?filter=gpt_j
-}
 
 
 class GPTJConfig(PretrainedConfig):
@@ -218,3 +214,6 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["GPTJConfig", "GPTJOnnxConfig"]

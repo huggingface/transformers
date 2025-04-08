@@ -14,20 +14,28 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-
 import re
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import tensorflow as tf
 
 
 try:
+    from tf_keras.optimizers.legacy import Adam
+except (ImportError, ModuleNotFoundError):
     from tensorflow.keras.optimizers.legacy import Adam
-except ImportError:
-    from tensorflow.keras.optimizers import Adam
+
+from .modeling_tf_utils import keras
 
 
-class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
+# This block because Keras loves randomly moving things to different places - this changed somewhere between 2.10 - 2.15
+if hasattr(keras.optimizers.schedules, "learning_rate_schedule"):
+    schedules = keras.optimizers.schedules.learning_rate_schedule
+else:
+    schedules = keras.optimizers.schedules
+
+
+class WarmUp(schedules.LearningRateSchedule):
     """
     Applies a warmup schedule on a given learning rate decay schedule.
 
@@ -51,7 +59,7 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
         decay_schedule_fn: Callable,
         warmup_steps: int,
         power: float = 1.0,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         super().__init__()
         self.initial_learning_rate = initial_learning_rate
@@ -97,7 +105,7 @@ def create_optimizer(
     adam_global_clipnorm: Optional[float] = None,
     weight_decay_rate: float = 0.0,
     power: float = 1.0,
-    include_in_weight_decay: Optional[List[str]] = None,
+    include_in_weight_decay: Optional[list[str]] = None,
 ):
     """
     Creates an optimizer with a learning rate schedule using a warmup phase followed by a linear decay.
@@ -131,7 +139,7 @@ def create_optimizer(
             applied to all parameters except bias and layer norm parameters.
     """
     # Implements linear decay of the learning rate.
-    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+    lr_schedule = schedules.PolynomialDecay(
         initial_learning_rate=init_lr,
         decay_steps=num_train_steps - num_warmup_steps,
         end_learning_rate=init_lr * min_lr_ratio,
@@ -156,7 +164,7 @@ def create_optimizer(
             include_in_weight_decay=include_in_weight_decay,
         )
     else:
-        optimizer = tf.keras.optimizers.Adam(
+        optimizer = keras.optimizers.Adam(
             learning_rate=lr_schedule,
             beta_1=adam_beta1,
             beta_2=adam_beta2,
@@ -180,7 +188,7 @@ class AdamWeightDecay(Adam):
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
-        learning_rate (`Union[float, tf.keras.optimizers.schedules.LearningRateSchedule]`, *optional*, defaults to 0.001):
+        learning_rate (`Union[float, LearningRateSchedule]`, *optional*, defaults to 0.001):
             The learning rate to use or a schedule.
         beta_1 (`float`, *optional*, defaults to 0.9):
             The beta1 parameter in Adam, which is the exponential decay rate for the 1st momentum estimates.
@@ -210,14 +218,14 @@ class AdamWeightDecay(Adam):
 
     def __init__(
         self,
-        learning_rate: Union[float, tf.keras.optimizers.schedules.LearningRateSchedule] = 0.001,
+        learning_rate: Union[float, schedules.LearningRateSchedule] = 0.001,
         beta_1: float = 0.9,
         beta_2: float = 0.999,
         epsilon: float = 1e-7,
         amsgrad: bool = False,
         weight_decay_rate: float = 0.0,
-        include_in_weight_decay: Optional[List[str]] = None,
-        exclude_from_weight_decay: Optional[List[str]] = None,
+        include_in_weight_decay: Optional[list[str]] = None,
+        exclude_from_weight_decay: Optional[list[str]] = None,
         name: str = "AdamWeightDecay",
         **kwargs,
     ):
@@ -230,10 +238,10 @@ class AdamWeightDecay(Adam):
     def from_config(cls, config):
         """Creates an optimizer from its config with WarmUp custom object."""
         custom_objects = {"WarmUp": WarmUp}
-        return super(AdamWeightDecay, cls).from_config(config, custom_objects=custom_objects)
+        return super().from_config(config, custom_objects=custom_objects)
 
     def _prepare_local(self, var_device, var_dtype, apply_state):
-        super(AdamWeightDecay, self)._prepare_local(var_device, var_dtype, apply_state)
+        super()._prepare_local(var_device, var_dtype, apply_state)
         apply_state[(var_device, var_dtype)]["weight_decay_rate"] = tf.constant(
             self.weight_decay_rate, name="adam_weight_decay_rate"
         )
@@ -249,7 +257,7 @@ class AdamWeightDecay(Adam):
 
     def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
+        return super().apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""
@@ -268,13 +276,13 @@ class AdamWeightDecay(Adam):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_dense(grad, var, **kwargs)
+            return super()._resource_apply_dense(grad, var, **kwargs)
 
     def _resource_apply_sparse(self, grad, var, indices, apply_state=None):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_sparse(grad, var, indices, **kwargs)
+            return super()._resource_apply_sparse(grad, var, indices, **kwargs)
 
     def get_config(self):
         config = super().get_config()
@@ -299,7 +307,7 @@ class AdamWeightDecay(Adam):
 
 
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
-class GradientAccumulator(object):
+class GradientAccumulator:
     """
     Gradient accumulation utility. When used with a distribution strategy, the accumulator should be called in a
     replica context. Gradients will be accumulated locally on each replica and without synchronization. Users should

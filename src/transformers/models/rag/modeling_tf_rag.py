@@ -15,7 +15,6 @@
 
 """TFRAG model implementation."""
 
-
 from __future__ import annotations
 
 import copy
@@ -31,6 +30,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    keras,
     shape_list,
     unpack_inputs,
 )
@@ -115,7 +115,7 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
@@ -123,13 +123,13 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -198,7 +198,7 @@ class TFRetrievAugLMOutput(ModelOutput):
             average in the self-attention heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
@@ -206,13 +206,13 @@ class TFRetrievAugLMOutput(ModelOutput):
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 class TFRagPreTrainedModel(TFPreTrainedModel):
@@ -232,8 +232,8 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: str = None,
-        generator_pretrained_model_name_or_path: str = None,
+        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        generator_pretrained_model_name_or_path: Optional[str] = None,
         retriever: RagRetriever = None,
         *model_args,
         **kwargs,
@@ -247,7 +247,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
-                      `bert-base-uncased`.
+                      `google-bert/bert-base-uncased`.
                     - A string with the *identifier name* of a pretrained model that was user-uploaded to our S3, e.g.,
                       `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
@@ -259,7 +259,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
-                      `t5-small`.
+                      `google-t5/t5-small`.
                     - A string with the *identifier name* of a pretrained model that was user-uploaded to our S3, e.g.,
                       `facebook/bart-base`.
                     - A path to a *directory* containing model weights saved using
@@ -289,7 +289,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         >>> # initialize a RAG from two pretrained models.
         >>> model = TFRagModel.from_pretrained_question_encoder_generator(
-        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ...     "facebook/dpr-question_encoder-single-nq-base", "google-t5/t5-small"
         ... )
         >>> # alternatively, initialize from pytorch pretrained models can also be done
         >>> model = TFRagModel.from_pretrained_question_encoder_generator(
@@ -406,7 +406,7 @@ RAG_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a Tensorflow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
 
@@ -506,9 +506,9 @@ class TFRagModel(TFRagPreTrainedModel):
         load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an question_encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an question_encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -533,9 +533,9 @@ class TFRagModel(TFRagPreTrainedModel):
 
         self.retriever = retriever
         if self.retriever is not None:
-            assert isinstance(
-                retriever, RagRetriever
-            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            assert isinstance(retriever, RagRetriever), (
+                f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            )
             self.retriever = retriever
 
         self.question_encoder = question_encoder
@@ -589,9 +589,9 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> input_ids = input_dict["input_ids"]
         >>> outputs = model(input_ids)
         ```"""
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         # aliasing to minimize code changing
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -657,9 +657,9 @@ class TFRagModel(TFRagPreTrainedModel):
                     " retriever using the `set_retriever(...)` function."
                 )
 
-        assert (
-            doc_scores is not None
-        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        assert doc_scores is not None, (
+            "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        )
 
         assert (doc_scores.shape[1] % n_docs) == 0, (
             f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
@@ -720,6 +720,15 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        with tf.name_scope(self.generator.name):
+            self.generator.build(None)
+        with tf.name_scope(self.question_encoder.name):
+            self.question_encoder.build(None)
+
 
 @add_start_docstrings_to_model_forward(
     """
@@ -738,9 +747,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -877,7 +886,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -930,9 +939,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         do_marginalize = do_marginalize if do_marginalize else self.config.do_marginalize
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -1266,9 +1275,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         """CrossEntropyLoss that ignores pad tokens"""
         # Matt: As written, this loss is not XLA-compatible, but it's doing some very weird things
         #       and I don't feel comfortable converting it.
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
-            reduction=tf.keras.losses.Reduction.SUM,
+            reduction=keras.losses.Reduction.SUM,
         )
 
         if from_logits is False:  # convert to logits
@@ -1318,9 +1327,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -1391,7 +1400,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1445,9 +1454,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         exclude_bos_score = exclude_bos_score if exclude_bos_score else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -1654,9 +1663,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        assert (
-            input_ids is not None or context_input_ids is not None
-        ), " At least one of input_ids or context_input_ids must be given"
+        assert input_ids is not None or context_input_ids is not None, (
+            " At least one of input_ids or context_input_ids must be given"
+        )
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
@@ -1759,3 +1768,6 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         if getattr(self, "rag", None) is not None:
             with tf.name_scope(self.rag.name):
                 self.rag.build(None)
+
+
+__all__ = ["TFRagModel", "TFRagPreTrainedModel", "TFRagSequenceForGeneration", "TFRagTokenForGeneration"]

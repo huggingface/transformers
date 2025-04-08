@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BEiT checkpoints from the unilm repository."""
 
-
 import argparse
 import json
 from pathlib import Path
@@ -267,7 +266,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Check outputs on an image
     if is_semantic:
         image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
     else:
         image_processor = BeitImageProcessor(

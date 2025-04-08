@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW model configuration"""
+"""SEW model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SEW_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "asapp/sew-tiny-100k": "https://huggingface.co/asapp/sew-tiny-100k/resolve/main/config.json",
-    # See all SEW models at https://huggingface.co/models?filter=sew
-}
 
 
 class SEWConfig(PretrainedConfig):
@@ -256,3 +251,6 @@ class SEWConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["SEWConfig"]

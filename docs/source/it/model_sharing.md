@@ -43,7 +43,7 @@ Come risultato, puoi caricare una specifica versione di un modello con il parame
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # nome di un tag, di un branch, o commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # nome di un tag, di un branch, o commit hash
 ... )
 ```
 
@@ -235,4 +235,4 @@ Per assicurarti che chiunque possa comprendere le abilità, limitazioni, i poten
 * Creando manualmente e caricando un file `README.md`.
 * Premendo sul pulsante **Edit model card** nel repository del tuo modello.
 
-Dai un'occhiata alla [scheda del modello](https://huggingface.co/distilbert-base-uncased) di DistilBert per avere un buon esempio del tipo di informazioni che una scheda di un modello deve includere. Per maggiori dettagli legati ad altre opzioni che puoi controllare nel file `README.md`, come l'impatto ambientale o widget di esempio, fai riferimento alla documentazione [qui](https://huggingface.co/docs/hub/models-cards).
+Dai un'occhiata alla [scheda del modello](https://huggingface.co/distilbert/distilbert-base-uncased) di DistilBert per avere un buon esempio del tipo di informazioni che una scheda di un modello deve includere. Per maggiori dettagli legati ad altre opzioni che puoi controllare nel file `README.md`, come l'impatto ambientale o widget di esempio, fai riferimento alla documentazione [qui](https://huggingface.co/docs/hub/models-cards).

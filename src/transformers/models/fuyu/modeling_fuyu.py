@@ -12,13 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Fuyu model."""
+"""PyTorch Fuyu model."""
+
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
@@ -144,12 +146,14 @@ FUYU_INPUTS_DOCSTRING = r"""
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
-class FuyuForCausalLM(FuyuPreTrainedModel):
+class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -164,6 +168,18 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
 
     def gather_continuous_embeddings(
         self,
@@ -211,9 +227,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        image_patches: Optional[
+            torch.Tensor
+        ] = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -223,12 +241,13 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
         Returns:
 
@@ -242,17 +261,17 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
         >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
-        >>> inputs = processor(text=text_prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> generated_ids = model.generate(**model_inputs, max_new_tokens=7)
-        >>> generation_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        >>> print(generation_text)
-        'A bus parked on the side of a road.'
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
+        >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
+        >>> print(generation_text[0])
+        A blue bus parked on the side of a road.
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -290,7 +309,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = [
-                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
+                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype))
+                    .squeeze(0)
+                    .to(inputs_embeds.device)
                     for patch in image_patches
                 ]
                 inputs_embeds = self.gather_continuous_embeddings(
@@ -309,6 +330,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             labels=labels,
             use_cache=use_cache,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return outputs
@@ -323,34 +345,32 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         image_patches_indices=None,
         **kwargs,
     ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        if image_patches_indices is not None:
-            model_inputs["image_patches_indices"] = image_patches_indices
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "image_patches_indices": image_patches_indices if past_key_values is None else None,
-                "image_patches": image_patches if past_key_values is None else None,
-            }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            image_patches=image_patches,
+            image_patches_indices=image_patches_indices,
+            **kwargs,
         )
+
+        if past_key_values is not None:
+            model_inputs["image_patches_indices"] = None
+            model_inputs["image_patches"] = None
+
         return model_inputs
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
+
+
+__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel"]

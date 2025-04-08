@@ -17,7 +17,6 @@
 Processor class for CLVP
 """
 
-
 from ...processing_utils import ProcessorMixin
 
 
@@ -49,7 +48,7 @@ class ClvpProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the `text`
-        argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        argument to [`~ClvpTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
 
@@ -89,3 +88,6 @@ class ClvpProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+
+__all__ = ["ClvpProcessor"]

@@ -37,7 +37,7 @@ if is_flax_available():
 
 
 # Copied from tests.models.roberta.test_modeling_flax_roberta.FlaxRobertaModelTester with Roberta->RobertaPreLayerNorm
-class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
+class FlaxRobertaPreLayerNormModelTester:
     def __init__(
         self,
         parent,
@@ -134,7 +134,7 @@ class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
 
 
 @require_flax
-# Copied from tests.models.roberta.test_modeling_flax_roberta.FlaxRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
+# Copied from tests.models.roberta.test_modeling_flax_roberta.FlaxRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40
 class FlaxRobertaPreLayerNormModelTest(FlaxModelTesterMixin, unittest.TestCase):
     test_head_masking = True
 

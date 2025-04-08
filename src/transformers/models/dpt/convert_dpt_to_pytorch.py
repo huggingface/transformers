@@ -14,14 +14,13 @@
 # limitations under the License.
 """Convert DPT checkpoints from the original repository. URL: https://github.com/isl-org/DPT"""
 
-
 import argparse
 import json
 from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import DPTConfig, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTImageProcessor
@@ -50,7 +49,7 @@ def get_dpt_config(checkpoint_url):
         config.num_labels = 150
         repo_id = "huggingface/label-files"
         filename = "ade20k-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+        id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -108,7 +107,7 @@ def rename_key(name):
     if "refinenet" in name:
         layer_idx = int(name[len("neck.refinenet") : len("neck.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
-        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}")
+        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx - 4)}")
     if "out_conv" in name:
         name = name.replace("out_conv", "projection")
     if "resConfUnit1" in name:

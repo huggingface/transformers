@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BEiT model. """
-
+"""Testing suite for the PyTorch BEiT model."""
 
 import unittest
 
@@ -21,9 +19,18 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers import BeitConfig
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    cached_property,
+    is_torch_available,
+    is_vision_available,
+)
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -36,15 +43,13 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_BACKBONE_MAPPING,
-        MODEL_MAPPING,
         BeitBackbone,
         BeitForImageClassification,
         BeitForMaskedImageModeling,
         BeitForSemanticSegmentation,
         BeitModel,
     )
-    from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -78,6 +83,8 @@ class BeitModelTester:
         scope=None,
         out_indices=[1, 2, 3, 4],
         out_features=["stage1", "stage2", "stage3", "stage4"],
+        attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -104,6 +111,9 @@ class BeitModelTester:
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.mask_length = self.seq_length - 1
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -135,6 +145,7 @@ class BeitModelTester:
             initializer_range=self.initializer_range,
             out_indices=self.out_indices,
             out_features=self.out_features,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -242,7 +253,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BeitModel,
+            "image-feature-extraction": BeitModel,
             "image-classification": BeitForImageClassification,
             "image-segmentation": BeitForSemanticSegmentation,
         }
@@ -253,6 +264,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BeitModelTester(self)
@@ -274,7 +286,11 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="BEiT can't compile dynamic")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -305,17 +321,17 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING),
-                BeitForMaskedImageModeling,
+            if model_class.__name__ in [
+                *MODEL_MAPPING_NAMES.values(),
+                *MODEL_FOR_BACKBONE_MAPPING_NAMES.values(),
+                "BeitForMaskedImageModeling",
             ]:
                 continue
 
@@ -329,7 +345,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config.use_cache = False
         config.return_dict = True
@@ -337,8 +353,12 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
             if (
-                model_class
-                in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING), BeitForMaskedImageModeling]
+                model_class.__name__
+                in [
+                    *MODEL_MAPPING_NAMES.values(),
+                    *MODEL_FOR_BACKBONE_MAPPING_NAMES.values(),
+                    "BeitForMaskedImageModeling",
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -352,13 +372,13 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -383,9 +403,9 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BeitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/beit-base-patch16-224"
+        model = BeitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -425,7 +445,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2))
+        torch.testing.assert_close(logits[bool_masked_pos][:3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
@@ -446,7 +466,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 281
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -472,7 +492,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([1.6881, -0.2787, 0.5901]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 2396
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -484,7 +504,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
@@ -518,7 +538,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
                 device=torch_device,
             )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):
@@ -527,7 +547,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
@@ -544,6 +564,26 @@ class BeitModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((160, 160))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "microsoft/beit-base-patch16-224-pt22k"
+        model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = BeitImageProcessor.from_pretrained(model_name)
+        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # with interpolate_pos_encoding being True the model should process the higher resolution image
+        # successfully and produce the expected output.
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 1 + 30 * 30 = 901
+        expected_shape = torch.Size((1, 901, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 
 @require_torch

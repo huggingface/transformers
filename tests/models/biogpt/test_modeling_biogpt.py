@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BioGPT model. """
+"""Testing suite for the PyTorch BioGPT model."""
 
 import math
 import unittest
 
-from transformers import BioGptConfig, is_torch_available
+from transformers import BioGptConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -36,7 +35,6 @@ if is_torch_available():
         BioGptModel,
         BioGptTokenizer,
     )
-    from transformers.models.biogpt.modeling_biogpt import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BioGptModelTester:
@@ -136,24 +134,6 @@ class BioGptModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = BioGptForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_biogpt_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -285,7 +265,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BioGptForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BioGptModel,
@@ -294,7 +273,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "token-classification": BioGptForTokenClassification,
             "zero-shot": BioGptForSequenceClassification,
         }
-        if is_torch_available()
+        if is_torch_available() and is_sacremoses_available()
         else {}
     )
     test_pruning = False
@@ -365,7 +344,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -382,9 +361,9 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BioGptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/biogpt"
+        model = BioGptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
     def test_biogpt_sequence_classification_model(self):
@@ -433,10 +412,10 @@ class BioGptModelIntegrationTest(unittest.TestCase):
             [[[-9.5236, -9.8918, 10.4557], [-11.0469, -9.6423, 8.1022], [-8.8664, -7.8826, 5.5325]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
-    def test_biogpt_generation(self):
+    def test_biogpt_generation_beam_search(self):
         tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
         model = BioGptForCausalLM.from_pretrained("microsoft/biogpt")
         model.to(torch_device)
@@ -450,13 +429,15 @@ class BioGptModelIntegrationTest(unittest.TestCase):
             num_beams=5,
             early_stopping=True,
         )
-        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_str = tokenizer.decode(output_ids[0])
 
         EXPECTED_OUTPUT_STR = (
+            "</s>"
             "COVID-19 is a global pandemic caused by severe acute respiratory syndrome coronavirus 2 (SARS-CoV-2), the"
             " causative agent of coronavirus disease 2019 (COVID-19), which has spread to more than 200 countries and"
             " territories, including the United States (US), Canada, Australia, New Zealand, the United Kingdom (UK),"
             " and the United States of America (USA), as of March 11, 2020, with more than 800,000 confirmed cases and"
-            " more than 800,000 deaths."
+            " more than 800,000 deaths. "
+            "</s>"
         )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)

@@ -16,13 +16,18 @@ rendered properly in your Markdown viewer.
 
 # Transformer XL
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, so we won't accept any new PRs changing its code. This model was deprecated due to security issues linked to `pickle.load`.
 
 We recommend switching to more recent models for improved security.
 
-In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
+In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
 
 You will need to set the environment variable `TRUST_REMOTE_CODE` to `True` in order to allow the
 usage of `pickle.load()`:
@@ -33,7 +38,7 @@ from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
 
 os.environ["TRUST_REMOTE_CODE"] = "True"
 
-checkpoint = 'transfo-xl-wt103'
+checkpoint = 'transfo-xl/transfo-xl-wt103'
 revision = '40a186da79458c9f9de846edfaea79c412137f97'
 
 tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)

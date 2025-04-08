@@ -12,16 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VisionTextDualEncoder model configuration"""
-
+"""VisionTextDualEncoder model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
+from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
 from ..clip.configuration_clip import CLIPVisionConfig
+from ..siglip.configuration_siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+VISION_MODEL_CONFIGS = {
+    "clip_vision_model": CLIPVisionConfig,
+    "chinese_clip_vision_model": ChineseCLIPVisionConfig,
+    "siglip_vision_model": SiglipVisionConfig,
+}
 
 
 class VisionTextDualEncoderConfig(PretrainedConfig):
@@ -35,9 +42,9 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     Args:
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -68,6 +75,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "vision-text-dual-encoder"
+    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
     is_composition = True
 
     def __init__(self, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):
@@ -85,12 +93,13 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         vision_model_type = vision_config.pop("model_type")
         text_model_type = text_config.pop("model_type")
 
-        if vision_model_type == "clip":
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
-        elif vision_model_type == "clip_vision_model":
-            self.vision_config = CLIPVisionConfig(**vision_config)
+        vision_config_class = VISION_MODEL_CONFIGS.get(vision_model_type)
+        if vision_config_class is not None:
+            self.vision_config = vision_config_class(**vision_config)
         else:
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
+            if hasattr(self.vision_config, "vision_config"):
+                self.vision_config = self.vision_config.vision_config
 
         self.text_config = AutoConfig.for_model(text_model_type, **text_config)
 
@@ -108,3 +117,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
+
+
+__all__ = ["VisionTextDualEncoderConfig"]

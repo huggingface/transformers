@@ -25,15 +25,13 @@ from .tensor_utils import batched_gather
 
 
 @overload
-def pseudo_beta_fn(aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: None) -> torch.Tensor:
-    ...
+def pseudo_beta_fn(aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: None) -> torch.Tensor: ...
 
 
 @overload
 def pseudo_beta_fn(
     aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    ...
+) -> Tuple[torch.Tensor, torch.Tensor]: ...
 
 
 def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):

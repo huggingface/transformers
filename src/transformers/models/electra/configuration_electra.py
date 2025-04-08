@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ELECTRA model configuration"""
+"""ELECTRA model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -24,21 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/config.json",
-    "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/config.json",
-    "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/config.json",
-    "google/electra-small-discriminator": (
-        "https://huggingface.co/google/electra-small-discriminator/resolve/main/config.json"
-    ),
-    "google/electra-base-discriminator": (
-        "https://huggingface.co/google/electra-base-discriminator/resolve/main/config.json"
-    ),
-    "google/electra-large-discriminator": (
-        "https://huggingface.co/google/electra-large-discriminator/resolve/main/config.json"
-    ),
-}
 
 
 class ElectraConfig(PretrainedConfig):
@@ -197,3 +182,6 @@ class ElectraOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["ElectraConfig", "ElectraOnnxConfig"]

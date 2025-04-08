@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model T5."""
-
+"""Tokenization class for model T5."""
 
 import os
 import re
@@ -35,32 +34,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/tokenizer.json",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/tokenizer.json",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/tokenizer.json",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/tokenizer.json",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/tokenizer.json",
-    },
-}
-
 
 # TODO(PVP) - this should be removed in Transformers v5
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
-}
 
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
@@ -96,11 +71,13 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
+        from_slow (`book`, *optional*, defaults to `False`):
+            Whether or not the tokenizer should be converted from a slow one. If `add_prefix_space` is set, this will be set to `True`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = T5Tokenizer
 
@@ -115,6 +92,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
+        add_prefix_space=None,
         **kwargs,
     ):
         # Add extra_ids to the special token list
@@ -132,14 +110,21 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
             additional_special_tokens = extra_tokens
 
+        if add_prefix_space is not None:
+            logger.warning_once(
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+            )
+            kwargs["from_slow"] = True
+
         super().__init__(
-            vocab_file,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -247,3 +232,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def get_sentinel_token_ids(self):
         return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+
+
+__all__ = ["T5TokenizerFast"]

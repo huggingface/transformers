@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Decision Transformer model configuration"""
+"""Decision Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "edbeeching/decision-transformer-gym-hopper-medium": (
-        "https://huggingface.co/edbeeching/decision-transformer-gym-hopper-medium/resolve/main/config.json"
-    ),
-    # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
-}
 
 
 class DecisionTransformerConfig(PretrainedConfig):
@@ -159,3 +152,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+__all__ = ["DecisionTransformerConfig"]

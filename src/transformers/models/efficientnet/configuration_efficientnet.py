@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" EfficientNet model configuration"""
+"""EfficientNet model configuration"""
 
 from collections import OrderedDict
 from typing import List, Mapping
@@ -25,10 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/efficientnet-b7": "https://huggingface.co/google/efficientnet-b7/resolve/main/config.json",
-}
 
 
 class EfficientNetConfig(PretrainedConfig):
@@ -168,3 +164,6 @@ class EfficientNetOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+
+__all__ = ["EfficientNetConfig", "EfficientNetOnnxConfig"]

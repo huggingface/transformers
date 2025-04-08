@@ -30,6 +30,6 @@ python run_summarization_flax.py \
 	--push_to_hub
 ```
 
-This should finish in 37min, with validation loss and ROUGE2 score of 1.7785 and 17.01 respectively after 6 epochs. training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/OcPfOIgXRMSJqYB4RdK2tA/#scalars).
+This should finish in 37min, with validation loss and ROUGE2 score of 1.7785 and 17.01 respectively after 6 epochs. training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/OcPfOIgXRMSJqYB4RdK2tA/#scalars).
 
 > Note that here we used default `generate` arguments, using arguments specific for `xsum` dataset should give better ROUGE scores.  

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Sequence feature extraction class for common feature extractors to preprocess sequences.
+Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
-from typing import Dict, List, Optional, Union
+
+from typing import Optional, Union
 
 import numpy as np
 
@@ -53,10 +53,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         self,
         processed_features: Union[
             BatchFeature,
-            List[BatchFeature],
-            Dict[str, BatchFeature],
-            Dict[str, List[BatchFeature]],
-            List[Dict[str, BatchFeature]],
+            list[BatchFeature],
+            dict[str, BatchFeature],
+            dict[str, list[BatchFeature]],
+            list[dict[str, BatchFeature]],
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
@@ -225,7 +225,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _pad(
         self,
-        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
+        processed_features: Union[dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -297,7 +297,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _truncate(
         self,
-        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
+        processed_features: Union[dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         truncation: Optional[bool] = None,

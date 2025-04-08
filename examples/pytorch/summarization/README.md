@@ -18,7 +18,7 @@ limitations under the License.
 
 This directory contains examples for finetuning and evaluating transformers on summarization  tasks.
 Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For deprecated `bertabs` instructions, see https://github.com/huggingface/transformers-research-projects/blob/main/bertabs/README.md.
 For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/main/examples/legacy/seq2seq).
 
 ### Supported Architectures
@@ -41,7 +41,7 @@ and you also will find examples of these below.
 Here is an example on a summarization task:
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -54,9 +54,9 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-Only T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "summarize: "`.
+Only T5 models `google-t5/t5-small`, `google-t5/t5-base`, `google-t5/t5-large`, `google-t5/t5-3b` and `google-t5/t5-11b` must use an additional argument: `--source_prefix "summarize: "`.
 
-We used CNN/DailyMail dataset in this example as `t5-small` was trained on it and one can get good scores even when pre-training with a very small sample.
+We used CNN/DailyMail dataset in this example as `google-t5/t5-small` was trained on it and one can get good scores even when pre-training with a very small sample.
 
 Extreme Summarization (XSum) Dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name cnn_dailymail --dataset_config "3.0.0"` with  `--dataset_name xsum`.
 
@@ -65,7 +65,7 @@ And here is how you would use it on your own files, after adjusting the values f
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -156,7 +156,7 @@ then
 
 ```bash
 python run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -179,7 +179,7 @@ that will check everything is ready for training. Finally, you can launch traini
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \

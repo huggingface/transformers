@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +41,7 @@ else:
     FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
 
 
-class FlavaImageProcessingTester(unittest.TestCase):
+class FlavaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -175,6 +174,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     maxDiff = None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = FlavaImageProcessingTester(self)
 
     @property

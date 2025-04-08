@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
-import json
 import re
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
@@ -30,7 +28,6 @@ if TYPE_CHECKING:
     if is_tf_available():
         import tensorflow as tf
 
-from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -40,24 +37,6 @@ from .tokenization_codegen import CodeGenTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "Salesforce/codegen-350M-mono": "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "Salesforce/codegen-350M-mono": "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "Salesforce/codegen-350M-mono": (
-            "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "Salesforce/codegen-350M-mono": 2048,
-}
 
 
 class CodeGenTokenizerFast(PreTrainedTokenizerFast):
@@ -109,11 +88,11 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
+        return_token_type_ids (`bool`, *optional*, defaults to `False`):
+            Whether to return token type IDs.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = CodeGenTokenizer
 
@@ -126,8 +105,13 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
+        return_token_type_ids=False,
         **kwargs,
     ):
+        self.return_token_type_ids = return_token_type_ids
+        if self.return_token_type_ids:
+            self.model_input_names.append("token_type_ids")
+
         super().__init__(
             vocab_file,
             merges_file,
@@ -136,6 +120,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
+            return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
 
@@ -149,14 +134,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
                 "This issue will be fixed soon, see: https://github.com/huggingface/tokenizers/pull/1005."
                 " so that the fast tokenizer works correctly."
             )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
@@ -177,6 +154,36 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
+    # Copied from transformers.models.codegen.tokenization_codegen.CodeGenTokenizer.create_token_type_ids_from_sequences
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A sequence
+        pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id] if self.sep_token_id is not None else []
+        cls = [self.cls_token_id] if self.sep_token_id is not None else []
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
@@ -185,7 +192,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         truncate_before_pattern: Optional[List[str]] = None,
         **kwargs,
     ) -> str:
@@ -253,3 +260,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             return completion[: min(terminals_pos)]
         else:
             return completion
+
+
+__all__ = ["CodeGenTokenizerFast"]

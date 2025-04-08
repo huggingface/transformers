@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BigBirdPegasus model configuration"""
+"""BigBirdPegasus model configuration"""
 
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -25,19 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": (
-        "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-pubmed": (
-        "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-bigpatent": (
-        "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json"
-    ),
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-}
 
 
 class BigBirdPegasusConfig(PretrainedConfig):
@@ -420,3 +407,6 @@ class BigBirdPegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+
+__all__ = ["BigBirdPegasusConfig", "BigBirdPegasusOnnxConfig"]

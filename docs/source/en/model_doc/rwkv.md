@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # RWKV
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The RWKV model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
@@ -89,7 +93,7 @@ In a traditional auto-regressive Transformer, attention is written as
 
 $$O = \hbox{softmax}(QK^{T} / \sqrt{d}) V$$
 
-with \\(Q\\), \\(K\\) and \\(V\\) are matrices of shape `seq_len x hidden_size` named query, key and value (they are actually bigger matrices with a batch dimension and an attention head dimension but we're only interested in the last two, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product \\(QK^{T}\\) then has shape `seq_len x seq_len` and we can take the maxtrix product with \\(V\\) to get the output \\(O\\) of the same shape as the others.  
+with \\(Q\\), \\(K\\) and \\(V\\) are matrices of shape `seq_len x hidden_size` named query, key and value (they are actually bigger matrices with a batch dimension and an attention head dimension but we're only interested in the last two, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product \\(QK^{T}\\) then has shape `seq_len x seq_len` and we can take the matrix product with \\(V\\) to get the output \\(O\\) of the same shape as the others.  
 
 Replacing the softmax by its value gives:
 
@@ -109,7 +113,7 @@ with \\(u\\) and \\(w\\) learnable parameters called in the code `time_first` an
 
 $$N_{i} = e^{u + K_{i}} V_{i} + \hat{N}_{i} \hbox{  where  } \hat{N}_{i} = e^{K_{i-1}} V_{i-1} + e^{w + K_{i-2}} V_{i-2} \cdots + e^{(i-2)w + K_{1}} V_{1}$$
 
-so \\(\hat{N}_{i}\\) (called `numerator_state` in the code) satistfies
+so \\(\hat{N}_{i}\\) (called `numerator_state` in the code) satisfies
 
 $$\hat{N}_{0} = 0 \hbox{  and  } \hat{N}_{j+1} = e^{K_{j}} V_{j} + e^{w} \hat{N}_{j}$$
 
@@ -117,7 +121,7 @@ and
 
 $$D_{i} = e^{u + K_{i}} + \hat{D}_{i} \hbox{  where  } \hat{D}_{i} = e^{K_{i-1}} + e^{w + K_{i-2}} \cdots + e^{(i-2)w + K_{1}}$$
 
-so \\(\hat{D}_{i}\\) (called `denominator_state` in the code) satistfies
+so \\(\hat{D}_{i}\\) (called `denominator_state` in the code) satisfies
 
 $$\hat{D}_{0} = 0 \hbox{  and  } \hat{D}_{j+1} = e^{K_{j}} + e^{w} \hat{D}_{j}$$
 

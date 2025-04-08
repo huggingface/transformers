@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for RemBERT model."""
-
+"""Tokenization classes for RemBERT model."""
 
 import os
 from shutil import copyfile
@@ -32,18 +31,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
-    },
-    "tokenizer_file": {
-        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/rembert": 256,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -96,8 +83,6 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = RemBertTokenizer
 
     def __init__(
@@ -242,3 +227,6 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["RemBertTokenizerFast"]

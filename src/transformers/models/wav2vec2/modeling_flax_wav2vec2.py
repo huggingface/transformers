@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Wav2Vec2 model."""
+"""Flax Wav2Vec2 model."""
 
 from functools import partial
 from typing import Optional, Tuple, Union
@@ -212,7 +212,7 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
     return sampled_negative_indices
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
+WAV2VEC2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
     Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
     Auli.
@@ -251,7 +251,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 """
 
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
@@ -885,7 +885,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_values,
@@ -1050,7 +1050,7 @@ class FlaxWav2Vec2Module(nn.Module):
 
 @add_start_docstrings(
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2Module
@@ -1088,7 +1088,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2Model,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2Model, output_type=FlaxWav2Vec2BaseModelOutput, config_class=Wav2Vec2Config
@@ -1168,7 +1168,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
 @add_start_docstrings(
     "Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForCTCModule
@@ -1211,7 +1211,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2ForCTC,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
 )
 append_replace_return_docstrings(FlaxWav2Vec2ForCTC, output_type=FlaxCausalLMOutput, config_class=Wav2Vec2Config)
 
@@ -1315,11 +1315,11 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         return input_lengths
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV2VEC2_START_DOCSTRING)
 class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForPreTrainingModule
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     # overwrite since has `gumbel_temperature` input
     def __call__(
         self,
@@ -1418,8 +1418,11 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2ForPreTraining,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config
 )
+
+
+__all__ = ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]

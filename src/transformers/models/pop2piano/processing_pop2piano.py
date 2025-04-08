@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Processor class for Pop2Piano."""
+"""Processor class for Pop2Piano."""
 
 import os
 from typing import List, Optional, Union
@@ -137,3 +137,6 @@ class Pop2PianoProcessor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(*args)
+
+
+__all__ = ["Pop2PianoProcessor"]

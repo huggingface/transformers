@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow RegNet model. """
+"""Testing suite for the TensorFlow RegNet model."""
 
 from __future__ import annotations
 
 import inspect
 import unittest
-from typing import List, Tuple
 
 from transformers import RegNetConfig
 from transformers.testing_utils import require_tf, require_vision, slow
@@ -32,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST, TFRegNetForImageClassification, TFRegNetModel
+    from transformers import TFRegNetForImageClassification, TFRegNetModel
 
 
 if is_vision_available():
@@ -211,7 +209,7 @@ class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
             def recursive_check(tuple_object, dict_object):
-                if isinstance(tuple_object, (List, Tuple)):
+                if isinstance(tuple_object, (list, tuple)):
                     for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                         recursive_check(tuple_iterable_value, dict_iterable_value)
                 elif tuple_object is None:
@@ -252,9 +250,9 @@ class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRegNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/regnet-y-040"
+        model = TFRegNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -268,15 +266,11 @@ def prepare_img():
 class RegNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/regnet-y-040") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFRegNetForImageClassification.from_pretrained(TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFRegNetForImageClassification.from_pretrained("facebook/regnet-y-040")
 
         image_processor = self.default_image_processor
         image = prepare_img()

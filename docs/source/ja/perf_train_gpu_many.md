@@ -131,12 +131,12 @@ DPとDDPの他にも違いがありますが、この議論には関係ありま
 `NCCL_P2P_DISABLE=1`を使用して、対応するベンチマークでNVLink機能を無効にしました。
 
 
-```
+```bash
 
 # DP
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
@@ -144,7 +144,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 # DDP w/ NVlink
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
@@ -152,7 +152,7 @@ torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 # DDP w/o NVlink
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
@@ -360,7 +360,7 @@ by [@anton-l](https://github.com/anton-l)。
 SageMakerは、より効率的な処理のためにTPとDPを組み合わせて使用します。
 
 代替名：
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
 
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。
@@ -384,7 +384,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも4つのGPUが必要です。
 
 実装例:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -403,7 +403,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも8つのGPUが必要です。
 
 実装例:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,19 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch M2M100 model. """
-
+"""Testing suite for the PyTorch M2M100 model."""
 
 import copy
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import M2M100Config, is_torch_available
 from transformers.testing_utils import (
+    require_flash_attn,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
     require_torch_fp16,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -237,10 +239,8 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": M2M100ForConditionalGeneration,
             "feature-extraction": M2M100Model,
             "summarization": M2M100ForConditionalGeneration,
             "text2text-generation": M2M100ForConditionalGeneration,
@@ -256,9 +256,16 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "TranslationPipelineTests":
+        if pipeline_test_case_name == "TranslationPipelineTests":
             # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
             # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
             return True
@@ -329,6 +336,12 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip(
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
@@ -359,7 +372,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.7780, -0.1676, 0.1038], [-6.7556, -1.3992, 0.0567], [-7.5383, -0.5920, -0.2779]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_inference_head(self):
         model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
@@ -376,10 +389,59 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-1.0448, -1.0411, 3.7992], [-3.2191, -3.2386, -1.3451], [-3.6210, -3.5993, 0.4925]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
+        tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
+
+        src_fr = [
+            "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
+            "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
+            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
+            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+        ]
+
+        # The below article tests that we don't add any hypotheses outside of the top n_beams
+        dct = tokenizer(src_fr, padding=True, return_tensors="pt")
+
+        hypotheses_batch = model.generate(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=5,
+            forced_bos_token_id=tokenizer.get_lang_id("en"),
+        )
+
+        expected_en = [
+            "</s> __en__ "
+            "The NSA case highlights the total absence of intelligence debate"
+            "</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+            "</s> __en__ "
+            "I think there are two levels of response from the French government."
+            "</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+            "</s> __en__ "
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
+            " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
+            " communications in France."
+            "</s>",
+        ]
+
+        generated = tokenizer.batch_decode(hypotheses_batch)
+        assert generated == expected_en
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_seq_to_seq_generation(self):
+        """
+        Overwriting the common test as the test is flaky on tiny models
+        """
+        model = M2M100ForConditionalGeneration.from_pretrained(
+            "facebook/m2m100_418M", attn_implementation="flash_attention_2"
+        ).to(torch_device)
+
         tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
 
         src_fr = [

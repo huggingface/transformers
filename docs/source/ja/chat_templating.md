@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Templates for Chat Models
+# Chat Templates
 
 ## Introduction
 
@@ -85,7 +85,7 @@ LLM（Language Model）のますます一般的な使用事例の1つは「チ�
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.default_chat_template
+>>> tokenizer.chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
@@ -180,8 +180,8 @@ tokenizer.chat_template = template  # Set the new template
 tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 ```
 
-[`~PreTrainedTokenizer.apply_chat_template`] メソッドは、あなたのチャットテンプレートを使用するために [`ConversationalPipeline`] クラスによって呼び出されます。
-したがって、正しいチャットテンプレートを設定すると、あなたのモデルは自動的に [`ConversationalPipeline`] と互換性があるようになります。
+[`~PreTrainedTokenizer.apply_chat_template`] メソッドは、あなたのチャットテンプレートを使用するために `TextGenerationPipeline` クラスによって呼び出されます。
+したがって、正しいチャットテンプレートを設定すると、あなたのモデルは自動的に [`TextGenerationPipeline`] と互換性があるようになります。
 
 
 ## What are "default" templates?
@@ -189,7 +189,7 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 チャットテンプレートの導入前に、チャットの処理はモデルクラスレベルでハードコードされていました。
 後方互換性のために、このクラス固有の処理をデフォルトテンプレートとして保持し、クラスレベルで設定されています。
 モデルにチャットテンプレートが設定されていない場合、ただしモデルクラスのデフォルトテンプレートがある場合、
-`ConversationalPipeline`クラスや`apply_chat_template`などのメソッドはクラステンプレートを使用します。
+`TextGenerationPipeline`クラスや`apply_chat_template`などのメソッドはクラステンプレートを使用します。
 トークナイザのデフォルトのチャットテンプレートを確認するには、`tokenizer.default_chat_template`属性をチェックしてください。
 
 これは、後方互換性のために純粋に行っていることで、既存のワークフローを壊さないようにしています。
@@ -205,7 +205,7 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 
 一方、ゼロからモデルをトレーニングするか、チャットのためにベース言語モデルをファインチューニングする場合、適切なテンプレートを選択する自由度があります。
 LLM（Language Model）はさまざまな入力形式を処理できるほどスマートです。クラス固有のテンプレートがないモデル用のデフォルトテンプレートは、一般的なユースケースに対して良い柔軟な選択肢です。
-これは、[ChatMLフォーマット](https://github.com/openai/openai-python/blob/main/chatml.md)に従ったもので、多くのユースケースに適しています。次のようになります：
+これは、`ChatMLフォーマット`に従ったもので、多くのユースケースに適しています。次のようになります：
 
 ```
 {% for message in messages %}
@@ -215,7 +215,7 @@ LLM（Language Model）はさまざまな入力形式を処理できるほどス
 
 If you like this one, here it is in one-liner form, ready to copy into your code:
 
-```
+```python
 tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
 ```
 
@@ -233,7 +233,7 @@ I'm doing great!<|im_end|>
 ```
 
 「ユーザー」、「システム」、および「アシスタント」の役割は、チャットの標準です。
-特に、[`ConversationalPipeline`]との連携をスムーズに行う場合には、これらの役割を使用することをお勧めします。ただし、これらの役割に制約はありません。テンプレートは非常に柔軟で、任意の文字列を役割として使用できます。
+特に、`TextGenerationPipeline`との連携をスムーズに行う場合には、これらの役割を使用することをお勧めします。ただし、これらの役割に制約はありません。テンプレートは非常に柔軟で、任意の文字列を役割として使用できます。
 
 ## I want to use chat templates! How should I get started?
 
@@ -242,7 +242,7 @@ I'm doing great!<|im_end|>
 この属性を適切に設定できるように[プルリクエスト](https://huggingface.co/docs/hub/repositories-pull-requests-discussions)を開いてください。
 
 一度属性が設定されれば、それで完了です！ `tokenizer.apply_chat_template`は、そのモデルに対して正しく動作するようになります。これは、
-`ConversationalPipeline`などの場所でも自動的にサポートされます。
+`TextGenerationPipeline` などの場所でも自動的にサポートされます。
 
 モデルがこの属性を持つことを確認することで、オープンソースモデルの全コミュニティがそのフルパワーを使用できるようになります。
 フォーマットの不一致はこの分野に悩み続け、パフォーマンスに黙って影響を与えてきました。それを終わらせる時が来ました！

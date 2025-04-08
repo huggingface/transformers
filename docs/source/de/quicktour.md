@@ -89,7 +89,7 @@ Importieren sie die [`pipeline`] und spezifizieren sie die Aufgabe, welche sie l
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell] (https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
+Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -109,7 +109,7 @@ label: NEGATIVE, with score: 0.5309
 Die [`pipeline`] kann auch über einen ganzen Datensatz iterieren. Starten wir mit der Installation der [🤗 Datasets](https://huggingface.co/docs/datasets/) Bibliothek:
 
 ```bash
-pip install datasets 
+pip install datasets
 ```
 
 Erstellen wir eine [`pipeline`] mit der Aufgabe die wir lösen und dem Modell welches wir nutzen möchten.
@@ -148,7 +148,7 @@ Bei einem größeren Datensatz mit vielen Eingaben (wie bei Sprache oder Bildver
 
 ### Ein anderes Modell und einen anderen Tokenizer in der Pipeline verwenden
 
-Die [`pipeline`] kann jedes Modell aus dem [Model Hub] (https://huggingface.co/models) verwenden, wodurch es einfach ist, die [`pipeline`] für andere Anwendungsfälle anzupassen. Wenn Sie beispielsweise ein Modell wünschen, das französischen Text verarbeiten kann, verwenden Sie die Tags im Model Hub, um nach einem geeigneten Modell zu filtern. Das oberste gefilterte Ergebnis liefert ein mehrsprachiges [BERT-Modell](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment), das auf die Stimmungsanalyse abgestimmt ist. Großartig, verwenden wir dieses Modell!
+Die [`pipeline`] kann jedes Modell aus dem [Model Hub](https://huggingface.co/models) verwenden, wodurch es einfach ist, die [`pipeline`] für andere Anwendungsfälle anzupassen. Wenn Sie beispielsweise ein Modell wünschen, das französischen Text verarbeiten kann, verwenden Sie die Tags im Model Hub, um nach einem geeigneten Modell zu filtern. Das oberste gefilterte Ergebnis liefert ein mehrsprachiges [BERT-Modell](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment), das auf die Stimmungsanalyse abgestimmt ist. Großartig, verwenden wir dieses Modell!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
@@ -156,7 +156,7 @@ Die [`pipeline`] kann jedes Modell aus dem [Model Hub] (https://huggingface.co/m
 
 <frameworkcontent>
 <pt>
-Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `AutoClass` below):
+Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and its associated tokenizer (more on an `AutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -166,7 +166,7 @@ Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the
 ```
 </pt>
 <tf>
-Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` below):
+Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and its associated tokenizer (more on an `TFAutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
@@ -191,7 +191,7 @@ Wenn Sie kein Modell für Ihren Anwendungsfall finden können, müssen Sie ein v
 
 <Youtube id="AhChOFRegn4"/>
 
-Unter der Haube arbeiten die Klassen [`AutoModelForSequenceClassification`] und [`AutoTokenizer`] zusammen, um die [`pipeline`] zu betreiben. Eine [`AutoClass`](./model_doc/auto) ist eine Abkürzung, die automatisch die Architektur eines trainierten Modells aus dessen Namen oder Pfad abruft. Sie müssen nur die passende `AutoClass` für Ihre Aufgabe und den zugehörigen Tokenizer mit [`AutoTokenizer`] auswählen. 
+Unter der Haube arbeiten die Klassen [`AutoModelForSequenceClassification`] und [`AutoTokenizer`] zusammen, um die [`pipeline`] zu betreiben. Eine [`AutoClass`](./model_doc/auto) ist eine Abkürzung, die automatisch die Architektur eines trainierten Modells aus dessen Namen oder Pfad abruft. Sie müssen nur die passende `AutoClass` für Ihre Aufgabe und den zugehörigen Tokenizer mit [`AutoTokenizer`] auswählen.
 
 Kehren wir zu unserem Beispiel zurück und sehen wir uns an, wie Sie die `AutoClass` verwenden können, um die Ergebnisse der [`pipeline`] zu replizieren.
 
@@ -222,7 +222,7 @@ Anschließend wandelt der Tokenizer die Token in Zahlen um, um einen Tensor als 
 Der Tokenizer gibt ein Wörterbuch zurück, das Folgendes enthält:
 
 * [input_ids](./glossary#input-ids): numerische Repräsentationen Ihrer Token.
-* [atttention_mask](.glossary#attention-mask): gibt an, welche Token beachtet werden sollen.
+* [attention_mask](.glossary#attention-mask): gibt an, welche Token beachtet werden sollen.
 
 Genau wie die [`pipeline`] akzeptiert der Tokenizer eine Liste von Eingaben. Darüber hinaus kann der Tokenizer den Text auch auffüllen und kürzen, um einen Stapel mit einheitlicher Länge zurückzugeben:
 
@@ -281,7 +281,7 @@ Jetzt können Sie Ihren vorverarbeiteten Stapel von Eingaben direkt an das Model
 ```
 
 Das Modell gibt die endgültigen Aktivierungen in dem Attribut "logits" aus. Wenden Sie die Softmax-Funktion auf die "logits" an, um die Wahrscheinlichkeiten zu erhalten:
-  
+
 ```py
 >>> from torch import nn
 
@@ -308,7 +308,7 @@ In der [Aufgabenzusammenfassung](./task_summary) steht, welche [AutoModel]-Klass
 </Tip>
 
 Jetzt können Sie Ihren vorverarbeiteten Stapel von Eingaben direkt an das Modell übergeben, indem Sie die Wörterbuchschlüssel direkt an die Tensoren übergeben:
-  
+
 ```py
 >>> tf_outputs = tf_model(tf_batch)
 ```
@@ -383,8 +383,8 @@ Ein besonders cooles 🤗 Transformers-Feature ist die Möglichkeit, ein Modell 
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </pt>
 <tf>
@@ -392,8 +392,8 @@ Ein besonders cooles 🤗 Transformers-Feature ist die Möglichkeit, ein Modell 
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>
@@ -407,7 +407,7 @@ Beginnen Sie mit dem Import von [`AutoConfig`] und laden Sie dann das trainierte
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>

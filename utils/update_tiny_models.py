@@ -20,7 +20,6 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 `transformers` so the pipeline testing will use the latest created/updated tiny models.
 """
 
-
 import argparse
 import copy
 import json
@@ -95,7 +94,7 @@ def get_tiny_model_summary_from_hub(output_path):
     )
     _models = set()
     for x in models:
-        model = x.modelId
+        model = x.id
         org, model = model.split("/")
         if not model.startswith("tiny-random-"):
             continue

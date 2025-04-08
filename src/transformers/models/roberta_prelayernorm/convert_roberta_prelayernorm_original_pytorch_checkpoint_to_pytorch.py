@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert RoBERTa-PreLayerNorm checkpoint."""
 
-
 import argparse
 
 import torch

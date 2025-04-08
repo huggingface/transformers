@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax whisper model."""
+"""Flax whisper model."""
 
 import math
 import random
@@ -1670,7 +1670,7 @@ FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     >>> model = FlaxWhisperForAudioClassification.from_pretrained(
     ...     "sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True
     ... )
-    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
+    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True, trust_remote_code=True)
 
     >>> sample = next(iter(ds))
 
@@ -1694,3 +1694,11 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWhisperForAudioClassification, output_type=FlaxSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
 )
+
+
+__all__ = [
+    "FlaxWhisperForConditionalGeneration",
+    "FlaxWhisperModel",
+    "FlaxWhisperPreTrainedModel",
+    "FlaxWhisperForAudioClassification",
+]

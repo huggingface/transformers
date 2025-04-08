@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SegFormer model configuration"""
+"""SegFormer model configuration"""
 
 import warnings
 from collections import OrderedDict
@@ -26,13 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/segformer-b0-finetuned-ade-512-512": (
-        "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json"
-    ),
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-}
 
 
 class SegformerConfig(PretrainedConfig):
@@ -173,3 +166,6 @@ class SegformerOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["SegformerConfig", "SegformerOnnxConfig"]

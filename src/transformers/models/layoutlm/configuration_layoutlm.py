@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LayoutLM model configuration"""
+"""LayoutLM model configuration"""
+
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -22,15 +23,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/layoutlm-base-uncased": (
-        "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/config.json"
-    ),
-    "microsoft/layoutlm-large-uncased": (
-        "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/config.json"
-    ),
-}
 
 
 class LayoutLMConfig(PretrainedConfig):
@@ -202,3 +194,6 @@ class LayoutLMOnnxConfig(OnnxConfig):
         batch_size, seq_length = input_dict["input_ids"].shape
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
+
+
+__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]

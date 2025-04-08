@@ -22,9 +22,6 @@ The `.optimization` module provides:
 - several schedules in the form of schedule objects that inherit from `_LRSchedule`:
 - a gradient accumulation class to accumulate the gradients of multiple batches
 
-## AdamW (PyTorch)
-
-[[autodoc]] AdamW
 
 ## AdaFactor (PyTorch)
 
@@ -38,7 +35,7 @@ The `.optimization` module provides:
 
 ## Schedules
 
-### Learning Rate Schedules (Pytorch)
+### Learning Rate Schedules (PyTorch)
 
 [[autodoc]] SchedulerType
 
@@ -65,6 +62,8 @@ The `.optimization` module provides:
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
 
 [[autodoc]] get_inverse_sqrt_schedule
+
+[[autodoc]] get_wsd_schedule
 
 ### Warmup (TensorFlow)
 

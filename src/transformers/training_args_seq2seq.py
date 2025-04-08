@@ -30,12 +30,6 @@ logger = logging.getLogger(__name__)
 class Seq2SeqTrainingArguments(TrainingArguments):
     """
     Args:
-        sortish_sampler (`bool`, *optional*, defaults to `False`):
-            Whether to use a *sortish sampler* or not. Only possible if the underlying datasets are *Seq2SeqDataset*
-            for now but will become generally available in the near future.
-
-            It sorts the inputs according to lengths in order to minimize the padding size, with a bit of randomness
-            for the training set.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether to use generate to calculate generative metrics (ROUGE, BLEU).
         generation_max_length (`int`, *optional*):
@@ -48,8 +42,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             Allows to load a [`~generation.GenerationConfig`] from the `from_pretrained` method. This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
-              under a user or organization name, like `dbmdz/bert-base-german-cased`.
+              huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
               [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
             - a [`~generation.GenerationConfig`] object.

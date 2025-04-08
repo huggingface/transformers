@@ -16,7 +16,6 @@
 Speech processor class for Whisper
 """
 
-
 from ...processing_utils import ProcessorMixin
 
 
@@ -49,7 +48,7 @@ class WhisperProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] and the `text`
-        argument to [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        argument to [`~WhisperTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
         # For backward compatibility
@@ -96,3 +95,6 @@ class WhisperProcessor(ProcessorMixin):
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
+
+
+__all__ = ["WhisperProcessor"]

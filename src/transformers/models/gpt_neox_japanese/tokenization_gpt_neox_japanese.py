@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GPTNeoXJapanese."""
+
 import collections
 import json
 import os
 import re
+import sys
 from typing import Optional, Tuple
 
 import numpy as np
@@ -28,19 +30,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "emoji_file": "emoji.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/vocab.txt",
-    },
-    "emoji_file": {
-        "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/emoji.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "abeja/gpt-neox-japanese-2.7b": 2048,
-}
 
 
 def load_vocab_and_emoji(vocab_file, emoji_file):
@@ -112,8 +101,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -175,24 +162,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    @property
-    def default_chat_template(self):
-        """
-        A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return (
-            "{% for message in messages %}"
-            "{{ bos_token + eos_token + message.content + eos_token }}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
-        )
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
@@ -224,7 +193,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
 
-class SubWordJapaneseTokenizer(object):
+class SubWordJapaneseTokenizer:
     """
     https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
     original repository.
@@ -262,12 +231,26 @@ class SubWordJapaneseTokenizer(object):
         self.content_repatter5 = re.compile(
             r"(明治|大正|昭和|平成|令和|㍾|㍽|㍼|㍻|\u32ff)\d{1,2}年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )
-        self.content_repatter6 = re.compile(
-            r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*億)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*万)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*千)*(0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*(千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+(\(税込\)|\(税抜\)|\+tax)*"
-        )
+        # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
+        # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
+        # different regex that should generally have the same behaviour in most non-pathological cases.
+        if sys.version_info >= (3, 11):
+            self.content_repatter6 = re.compile(
+                r"(?:\d,\d{3}|[\d億])*+"
+                r"(?:\d,\d{3}|[\d万])*+"
+                r"(?:\d,\d{3}|[\d千])*+"
+                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+                r"(?:\(税込\)|\(税抜\)|\+tax)*"
+            )
+        else:
+            self.content_repatter6 = re.compile(
+                r"(?:\d,\d{3}|[\d億万千])*"
+                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+                r"(?:\(税込\)|\(税抜\)|\+tax)*"
+            )
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
-        self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
+        self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
 
     def __len__(self):
         return len(self.ids_to_tokens)
@@ -381,3 +364,6 @@ class SubWordJapaneseTokenizer(object):
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
+
+
+__all__ = ["GPTNeoXJapaneseTokenizer"]

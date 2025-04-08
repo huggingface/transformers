@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Conditional DETR checkpoints."""
 
-
 import argparse
 import json
 from collections import OrderedDict

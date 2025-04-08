@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Funnel checkpoint."""
 
-
 import argparse
 
 import torch
@@ -63,3 +62,6 @@ if __name__ == "__main__":
     convert_tf_checkpoint_to_pytorch(
         args.tf_checkpoint_path, args.config_file, args.pytorch_dump_path, args.base_model
     )
+
+
+__all__ = []

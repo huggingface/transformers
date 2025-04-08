@@ -218,8 +218,8 @@ class BeamSearchScorer(BeamScorer):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
@@ -245,8 +245,10 @@ class BeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
 
         for batch_idx in range(batch_size):
             batch_group_idx = batch_idx * self.num_beam_groups + group_index
@@ -322,15 +324,17 @@ class BeamSearchScorer(BeamScorer):
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_group_idx, beam_hyp in enumerate(self._beam_hyps):
@@ -513,8 +517,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         scores_for_all_vocab: torch.FloatTensor,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.Tensor]:
@@ -578,8 +582,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -606,7 +612,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     if is_beam_token_worse_than_top_num_beams:
                         continue
 
-                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].cpu().tolist())
+                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].tolist())
                     if completes_constraint:
                         if beam_indices is not None:
                             beam_index = beam_indices[batch_beam_idx]
@@ -712,19 +718,19 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             # hypotheses.
 
             topk_state = topk_contraint_states[seq_idx]
-            topk_state.reset(full_hypotheses[seq_idx].cpu().tolist())
+            topk_state.reset(full_hypotheses[seq_idx].tolist())
 
             advance_state = advance_constraint_states[seq_idx]
-            advance_state.reset(pre_seq.cpu().tolist())
+            advance_state.reset(pre_seq.tolist())
 
             if not advance_state.completed:
-                advance_tokens = torch.LongTensor(advance_state.advance()).to(device)
+                advance_tokens = torch.tensor(advance_state.advance(), dtype=torch.long, device=device)
                 for advance_token in advance_tokens:
                     # since adding each `advance_token` leads to a different hypothesis, create new state instance.
                     new_state = advance_state.copy(stateful=True)
-                    new_state.add(advance_token.cpu().tolist())
+                    new_state.add(advance_token.tolist())
 
-                    advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).cpu().tolist()
+                    advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).tolist()
                     if advance_seq not in track_new["new_seqs"]:
                         # prevent duplicates, which are basically bound to happen in this process.
                         track_new["new_seqs"].append(advance_seq)
@@ -757,7 +763,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
                 advance_state = advance_constraint_states[seq_idx]
 
-                advance_seq = advance_seq.cpu().tolist()
+                advance_seq = advance_seq.tolist()
 
                 advance_state.reset(advance_seq)
                 if advance_seq not in track_new["new_seqs"]:
@@ -769,14 +775,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     track_new["new_states"].append(advance_state)
 
         if len(track_new["new_indices"]) > 0:
-            new_indices = torch.tensor(track_new["new_indices"]).to(device)
+            new_indices = torch.tensor(track_new["new_indices"], device=device)
             new_tokens = torch.stack(track_new["new_tokens"]).to(device)
             new_scores = torch.stack(track_new["new_scores"]).to(device)
 
             all_states = topk_contraint_states + track_new["new_states"]
             all_tokens = torch.cat((sent_beam_tokens, new_tokens), -1)
             all_scores = torch.cat((sent_beam_scores, new_scores), -1)
-            all_banks = torch.tensor([one.get_bank() for one in all_states]).to(device)
+            all_banks = torch.tensor([one.get_bank() for one in all_states], device=device)
 
             zipped = all_banks * 100 + all_scores
             indices = zipped.sort(descending=True).indices
@@ -811,15 +817,17 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
@@ -835,7 +843,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
 
-                completes_constraint = self.check_completes_constraints(final_tokens.cpu().tolist())
+                completes_constraint = self.check_completes_constraints(final_tokens.tolist())
                 if completes_constraint:
                     beam_index = beam_indices[batch_beam_idx] if beam_indices is not None else None
                     generated_len = final_tokens.shape[-1] - decoder_prompt_len

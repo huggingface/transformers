@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LongT5 model configuration"""
+"""LongT5 model configuration"""
+
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -21,13 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/long-t5-local-base": "https://huggingface.co/google/long-t5-local-base/blob/main/config.json",
-    "google/long-t5-local-large": "https://huggingface.co/google/long-t5-local-large/blob/main/config.json",
-    "google/long-t5-tglobal-base": "https://huggingface.co/google/long-t5-tglobal-base/blob/main/config.json",
-    "google/long-t5-tglobal-large": "https://huggingface.co/google/long-t5-tglobal-large/blob/main/config.json",
-}
 
 
 class LongT5Config(PretrainedConfig):
@@ -85,7 +79,12 @@ class LongT5Config(PretrainedConfig):
 
     model_type = "longt5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "d_kv",
+    }
 
     def __init__(
         self,
@@ -176,3 +175,6 @@ class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["LongT5Config", "LongT5OnnxConfig"]

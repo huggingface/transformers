@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VisionTextDualEncoder model."""
-
+"""PyTorch VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple, Union
 
@@ -162,6 +161,8 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -195,6 +196,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.vision_config._attn_implementation = self.vision_model.config._attn_implementation
+        self.config.text_config._attn_implementation = self.text_model.config._attn_implementation
         self.vision_model.config = self.config.vision_config
         self.text_model.config = self.config.text_config
 
@@ -319,11 +322,11 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     AutoTokenizer,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
         >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
 
         >>> # contrastive training
@@ -405,17 +408,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         )
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
-
-    @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: str = None,
-        text_model_name_or_path: str = None,
+        vision_model_name_or_path: Optional[str] = None,
+        text_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -425,8 +421,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -438,8 +432,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -467,7 +459,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
@@ -535,3 +527,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         )
 
         return model
+
+
+__all__ = ["VisionTextDualEncoderModel"]

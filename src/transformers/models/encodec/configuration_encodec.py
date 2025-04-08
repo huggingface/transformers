@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" EnCodec model configuration"""
-
+"""EnCodec model configuration"""
 
 import math
 from typing import Optional
@@ -25,11 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/encodec_24khz": "https://huggingface.co/facebook/encodec_24khz/resolve/main/config.json",
-    "facebook/encodec_48khz": "https://huggingface.co/facebook/encodec_48khz/resolve/main/config.json",
-}
 
 
 class EncodecConfig(PretrainedConfig):
@@ -193,3 +187,6 @@ class EncodecConfig(PretrainedConfig):
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+
+
+__all__ = ["EncodecConfig"]

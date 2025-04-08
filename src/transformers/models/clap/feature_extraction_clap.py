@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for CLAP."""
 
-
 import copy
 from typing import Any, Dict, List, Optional, Union
 
@@ -93,7 +92,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 0,
         frequency_max: float = 14_000,
-        top_db: int = None,
+        top_db: Optional[int] = None,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs,
@@ -259,7 +258,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: str = None,
+        truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
@@ -309,7 +308,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -361,3 +360,6 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             input_features = input_features.convert_to_tensors(return_tensors)
 
         return input_features
+
+
+__all__ = ["ClapFeatureExtractor"]

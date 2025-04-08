@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
+
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -24,15 +25,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/tokenizer.json",
-    },
-}
 
 
 class CpmTokenizerFast(PreTrainedTokenizerFast):
@@ -244,3 +236,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
         text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
+
+
+__all__ = ["CpmTokenizerFast"]

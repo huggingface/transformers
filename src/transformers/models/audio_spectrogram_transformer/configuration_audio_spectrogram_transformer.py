@@ -12,20 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Audio Spectogram Transformer (AST) model configuration"""
+"""Audio Spectogram Transformer (AST) model configuration"""
 
+from typing import Any, Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MIT/ast-finetuned-audioset-10-10-0.4593": (
-        "https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593/resolve/main/config.json"
-    ),
-}
 
 
 class ASTConfig(PretrainedConfig):
@@ -125,3 +120,12 @@ class ASTConfig(PretrainedConfig):
         self.time_stride = time_stride
         self.max_length = max_length
         self.num_mel_bins = num_mel_bins
+
+    # Overwritten from the parent class: AST is not compatible with `generate`, but has a config parameter sharing the
+    # same name (`max_length`). Sharing the same name triggers checks regarding the config -> generation_config
+    # generative parameters deprecation cycle, overwriting this function prevents this from happening.
+    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+        return {}
+
+
+__all__ = ["ASTConfig"]

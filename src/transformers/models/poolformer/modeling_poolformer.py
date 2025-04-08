@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PoolFormer model."""
-
+"""PyTorch PoolFormer model."""
 
 import collections.abc
 from typing import Optional, Tuple, Union
@@ -42,11 +41,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sail/poolformer_s12",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -270,6 +264,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
+    _no_split_modules = ["PoolFormerLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -277,9 +272,13 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, PoolFormerLayer):
+            if hasattr(module, "layer_scale_1"):
+                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
 
 
 POOLFORMER_START_DOCSTRING = r"""
@@ -448,3 +447,6 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["PoolFormerForImageClassification", "PoolFormerModel", "PoolFormerPreTrainedModel"]

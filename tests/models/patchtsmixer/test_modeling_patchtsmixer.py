@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 IBM and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PatchTSMixer model. """
+"""Testing suite for the PyTorch PatchTSMixer model."""
 
 import inspect
 import itertools
 import random
 import tempfile
 import unittest
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -191,11 +190,8 @@ class PatchTSMixerModelTester:
         # [bs x context_length x n_vars]
         past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
 
-        future_values = floats_tensor([self.batch_size, config.prediction_length, self.num_input_channels])
-
         inputs_dict = {
             "past_values": past_values,
-            "future_values": future_values,
         }
         return inputs_dict
 
@@ -222,9 +218,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (PatchTSMixerForPrediction, PatchTSMixerForPretraining) if is_torch_available() else ()
-    )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
@@ -232,7 +225,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
@@ -256,21 +248,25 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # if classification model:
-        if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
+        if model_class == PatchTSMixerForPrediction:
+            rng = random.Random(self.model_tester.seed_number)
+            labels = floats_tensor(
+                [
+                    self.model_tester.batch_size,
+                    self.model_tester.prediction_length,
+                    self.model_tester.num_input_channels,
+                ],
+                rng=rng,
+            )
+            inputs_dict["future_values"] = labels
+        elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
-            # inputs_dict["labels"] = labels
-            inputs_dict["future_values"] = labels
-            # inputs_dict.pop("future_values")
+            inputs_dict["target_values"] = labels
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
-            # inputs_dict["labels"] = labels
-            inputs_dict["future_values"] = labels
-            # inputs_dict.pop("future_values")
-        elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
-            inputs_dict.pop("future_values")
+            inputs_dict["target_values"] = labels
 
         inputs_dict["output_hidden_states"] = True
         return inputs_dict
@@ -317,7 +313,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip("No tokens embeddings")
+    @unittest.skip(reason="No tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -336,10 +332,10 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 dict_output = tuple(attributes_.values())
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -409,28 +405,37 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names_with_target = [
-                "past_values",
-                "observed_mask",
-                "future_values",
-                "output_hidden_states",
-                "return_loss",
-            ]
-            expected_arg_names_without_target = [
-                "past_values",
-                "observed_mask",
-                "output_hidden_states",
-            ]
-
-            expected_arg_names = expected_arg_names_with_target
             if model_class == PatchTSMixerForPretraining:
-                expected_arg_names = expected_arg_names_without_target + ["return_loss"]
-            if model_class == PatchTSMixerModel:
-                expected_arg_names = expected_arg_names_without_target
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
+            elif model_class == PatchTSMixerModel:
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "output_hidden_states",
+                ]
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
-                expected_arg_names.remove("observed_mask")
+                expected_arg_names = [
+                    "past_values",
+                    "target_values",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
+            else:
+                # PatchTSMixerForPrediction
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "future_values",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -438,11 +443,15 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_batch.pt"):
     # TODO: Make repo public
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
@@ -470,7 +479,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor([[[[-0.9106]],[[1.5326]],[[-0.8245]],[[0.7439]],[[-0.7830]],[[2.6256]],[[-0.6485]],]],device=torch_device)  # fmt: skip
-        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_forecasting_head(self):
         model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
@@ -491,7 +500,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             [[0.2471, 0.5036, 0.3596, 0.5401, -0.0985, 0.3423, -0.8439]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_prediction_generation(self):
         model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-generate").to(torch_device)
@@ -513,7 +522,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
 
         mean_prediction = outputs.sequences.mean(dim=1)
 
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
 
 @require_torch
@@ -686,20 +695,27 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             else:
                 target_output = target_input
             ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
-
+            ground_truth_arg = "future_values"
+            output_predictions_arg = "prediction_outputs"
         elif task == "classification":
             mdl = PatchTSMixerForTimeSeriesClassification(config)
             target_input = self.__class__.correct_classification_classes
             target_output = self.__class__.correct_classification_output
+            ground_truth_arg = "target_values"
+            output_predictions_arg = "prediction_outputs"
         elif task == "regression":
             mdl = PatchTSMixerForRegression(config)
             target_input = self.__class__.correct_regression_output
             target_output = self.__class__.correct_regression_output
             ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1)
+            ground_truth_arg = "target_values"
+            output_predictions_arg = "regression_outputs"
         elif task == "pretrain":
             mdl = PatchTSMixerForPretraining(config)
             target_input = None
             target_output = self.__class__.correct_pretrain_output
+            ground_truth_arg = None
+            output_predictions_arg = "prediction_outputs"
         else:
             print("invalid task")
 
@@ -710,15 +726,18 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         else:
             output = mdl(
                 self.__class__.data,
-                future_values=target_input,
-                output_hidden_states=output_hidden_states,
+                **{
+                    ground_truth_arg: target_input,
+                    "output_hidden_states": output_hidden_states,
+                },
             )
 
-        if isinstance(output.prediction_outputs, tuple):
-            for t in output.prediction_outputs:
+        prediction_outputs = getattr(output, output_predictions_arg)
+        if isinstance(prediction_outputs, tuple):
+            for t in prediction_outputs:
                 self.assertEqual(t.shape, target_output.shape)
         else:
-            self.assertEqual(output.prediction_outputs.shape, target_output.shape)
+            self.assertEqual(prediction_outputs.shape, target_output.shape)
 
         self.assertEqual(output.last_hidden_state.shape, enc_output.shape)
 
@@ -980,7 +999,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         mdl = PatchTSMixerForTimeSeriesClassification(config)
         output = mdl(
             self.__class__.data,
-            future_values=self.__class__.correct_classification_classes,
+            target_values=self.__class__.correct_classification_classes,
         )
         self.assertEqual(
             output.prediction_outputs.shape,
@@ -994,7 +1013,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         mdl = PatchTSMixerForTimeSeriesClassification(config)
         output = mdl(
             self.__class__.data,
-            future_values=self.__class__.correct_classification_classes,
+            target_values=self.__class__.correct_classification_classes,
             return_dict=False,
         )
         if isinstance(output, tuple):
@@ -1017,9 +1036,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_regression_full(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
         self.assertEqual(
-            output.prediction_outputs.shape,
+            output.regression_outputs.shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
@@ -1030,13 +1049,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         mdl = PatchTSMixerForRegression(config)
         output = mdl(
             self.__class__.data,
-            future_values=self.__class__.correct_regression_output,
+            target_values=self.__class__.correct_regression_output,
             return_dict=False,
         )
         if isinstance(output, tuple):
             output = PatchTSMixerForRegressionOutput(*output)
         self.assertEqual(
-            output.prediction_outputs.shape,
+            output.regression_outputs.shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
@@ -1049,13 +1068,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         config = PatchTSMixerConfig(**params)
 
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
         self.assertEqual(
-            output.prediction_outputs[0].shape,
+            output.regression_outputs[0].shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(
-            output.prediction_outputs[1].shape,
+            output.regression_outputs[1].shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
@@ -1075,13 +1094,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         config = PatchTSMixerConfig(**params)
 
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
         self.assertEqual(
-            output.prediction_outputs[0].shape,
+            output.regression_outputs[0].shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(
-            output.prediction_outputs[1].shape,
+            output.regression_outputs[1].shape,
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -182,7 +181,6 @@ class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFPegasusForConditionalGeneration,
             "feature-extraction": TFPegasusModel,
             "summarization": TFPegasusForConditionalGeneration,
             "text2text-generation": TFPegasusForConditionalGeneration,

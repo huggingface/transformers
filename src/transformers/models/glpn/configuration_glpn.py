@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLPN model configuration"""
+"""GLPN model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/glpn-kitti/resolve/main/config.json",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-}
 
 
 class GLPNConfig(PretrainedConfig):
@@ -135,3 +130,6 @@ class GLPNConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
         self.head_in_index = head_in_index
+
+
+__all__ = ["GLPNConfig"]

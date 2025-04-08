@@ -17,12 +17,7 @@ rendered properly in your Markdown viewer.
 # Reformer
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=reformer">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/reformer-crime-and-punishment">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
@@ -54,7 +49,7 @@ found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 
 Axial Positional Encodings were first implemented in Google's [trax library](https://github.com/google/trax/blob/4d99ad4965bab1deba227539758d59f0df0fef48/trax/layers/research/position_encodings.py#L29)
 and developed by the authors of this model's paper. In models that are treating very long input sequences, the
-conventional position id encodings store an embedings vector of size \\(d\\) being the `config.hidden_size` for
+conventional position id encodings store an embeddings vector of size \\(d\\) being the `config.hidden_size` for
 every position \\(i, \ldots, n_s\\), with \\(n_s\\) being `config.max_embedding_size`. This means that having
 a sequence length of \\(n_s = 2^{19} \approx 0.5M\\) and a `config.hidden_size` of \\(d = 2^{10} \approx 1000\\)
 would result in a position encoding matrix:

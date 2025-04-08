@@ -15,6 +15,7 @@
 """
 Speech processor class for Speech2Text
 """
+
 import warnings
 from contextlib import contextmanager
 
@@ -50,7 +51,7 @@ class Speech2TextProcessor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to Speech2TextFeatureExtractor's
         [`~Speech2TextFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Speech2TextProcessor.as_target_processor`] this method forwards all its arguments to Speech2TextTokenizer's
-        [`~Speech2TextTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        [`~Speech2TextTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
         # For backward compatibility
@@ -114,3 +115,6 @@ class Speech2TextProcessor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+
+__all__ = ["Speech2TextProcessor"]

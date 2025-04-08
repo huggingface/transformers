@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pvt model configuration"""
+"""Pvt model configuration"""
 
 from collections import OrderedDict
 from typing import Callable, List, Mapping
@@ -27,11 +27,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt-tiny-224": "https://huggingface.co/Zetatech/pvt-tiny-224",
-    # See all PVT models at https://huggingface.co/models?filter=pvt
-}
 
 
 class PvtConfig(PretrainedConfig):
@@ -162,3 +157,6 @@ class PvtOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["PvtConfig", "PvtOnnxConfig"]

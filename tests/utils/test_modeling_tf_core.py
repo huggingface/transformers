@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,7 @@ from math import isnan
 
 from transformers import is_tf_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from ..test_modeling_tf_common import ids_tensor
 
@@ -46,20 +45,7 @@ if is_tf_available():
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TFSharedEmbeddings,
     )
-
-    if _tf_gpu_memory_limit is not None:
-        gpus = tf.config.list_physical_devices("GPU")
-        for gpu in gpus:
-            # Restrict TensorFlow to only allocate x GB of memory on the GPUs
-            try:
-                tf.config.set_logical_device_configuration(
-                    gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
-                )
-                logical_gpus = tf.config.list_logical_devices("GPU")
-                print("Logical GPUs", logical_gpus)
-            except RuntimeError as e:
-                # Virtual devices must be set before GPUs have been initialized
-                print(e)
+    from transformers.modeling_tf_utils import keras
 
 
 @require_tf
@@ -169,7 +155,7 @@ class TFCoreModelTesterMixin:
                 self.assertGreater(len(inputs_minus_labels), 0)
 
                 # Make sure it works with XLA!
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), jit_compile=True)
+                model.compile(optimizer=keras.optimizers.SGD(0.0), jit_compile=True)
                 # Make sure the model fits without crashing regardless of where we pass the labels
                 history = model.fit(
                     prepared_for_class,
@@ -186,7 +172,7 @@ class TFCoreModelTesterMixin:
 
                 # Now test it with separate labels, to make sure that path works in XLA too.
                 model = model_class(config)
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), jit_compile=True)
+                model.compile(optimizer=keras.optimizers.SGD(0.0), jit_compile=True)
                 history = model.fit(
                     inputs_minus_labels,
                     labels,
@@ -234,7 +220,7 @@ class TFCoreModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model = keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
@@ -264,7 +250,7 @@ class TFCoreModelTesterMixin:
 
     @slow
     def test_mixed_precision(self):
-        tf.keras.mixed_precision.set_global_policy("mixed_float16")
+        keras.mixed_precision.set_global_policy("mixed_float16")
 
         # try/finally block to ensure subsequent tests run in float32
         try:
@@ -276,7 +262,7 @@ class TFCoreModelTesterMixin:
 
                 self.assertIsNotNone(outputs)
         finally:
-            tf.keras.mixed_precision.set_global_policy("float32")
+            keras.mixed_precision.set_global_policy("float32")
 
     @slow
     def test_train_pipeline_custom_model(self):
@@ -296,7 +282,7 @@ class TFCoreModelTesterMixin:
             if module_member_name.endswith("MainLayer")
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
+            and keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         }
 
@@ -311,7 +297,7 @@ class TFCoreModelTesterMixin:
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
             if hasattr(self.model_tester, "num_labels"):
@@ -324,8 +310,8 @@ class TFCoreModelTesterMixin:
             ).batch(1)
 
             hidden_states = main_layer(symbolic_inputs)[0]
-            outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
-            model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
+            outputs = keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
+            model = keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
 
             model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"])
             model.fit(X, epochs=1)
@@ -334,7 +320,7 @@ class TFCoreModelTesterMixin:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
                 if "T5" in main_layer_class.__name__:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath,
                         custom_objects={
                             main_layer_class.__name__: main_layer_class,
@@ -342,10 +328,10 @@ class TFCoreModelTesterMixin:
                         },
                     )
                 else:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                     )
-                assert isinstance(model, tf.keras.Model)
+                assert isinstance(model, keras.Model)
                 model(inputs_dict)
 
     @slow

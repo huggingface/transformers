@@ -43,7 +43,7 @@ Folglich können Sie eine bestimmte Modellversion mit dem Parameter "Revision" l
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 
@@ -229,4 +229,4 @@ Um sicherzustellen, dass die Benutzer die Fähigkeiten, Grenzen, möglichen Verz
 * Manuelles Erstellen und Hochladen einer "README.md"-Datei.
 * Klicken Sie auf die Schaltfläche **Modellkarte bearbeiten** in Ihrem Modell-Repository.
 
-Werfen Sie einen Blick auf die DistilBert [model card](https://huggingface.co/distilbert-base-uncased) als gutes Beispiel für die Art von Informationen, die eine Modellkarte enthalten sollte. Weitere Details über andere Optionen, die Sie in der Datei "README.md" einstellen können, wie z.B. den Kohlenstoff-Fußabdruck eines Modells oder Beispiele für Widgets, finden Sie in der Dokumentation [hier](https://huggingface.co/docs/hub/models-cards).
+Werfen Sie einen Blick auf die DistilBert [model card](https://huggingface.co/distilbert/distilbert-base-uncased) als gutes Beispiel für die Art von Informationen, die eine Modellkarte enthalten sollte. Weitere Details über andere Optionen, die Sie in der Datei "README.md" einstellen können, wie z.B. den Kohlenstoff-Fußabdruck eines Modells oder Beispiele für Widgets, finden Sie in der Dokumentation [hier](https://huggingface.co/docs/hub/models-cards).

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,11 +24,13 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/xlm-mlm-en-2048"
     tokenizer_class = XLMTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -58,11 +59,11 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(self.merges_file, "w") as fp:
+        with open(cls.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
     def get_input_output_texts(self, tokenizer):
@@ -85,7 +86,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
+        tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-mlm-en-2048")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)

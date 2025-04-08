@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SegFormer model."""
-
+"""PyTorch SegFormer model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -51,11 +50,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/segformer-b0-finetuned-ade-512-512",
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-]
-
 
 class SegFormerImageClassifierOutput(ImageClassifierOutput):
     """
@@ -79,7 +73,7 @@ class SegFormerImageClassifierOutput(ImageClassifierOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -469,7 +463,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -790,6 +784,9 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        if labels is not None and self.config.num_labels < 1:
+            raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
+
         outputs = self.segformer(
             pixel_values,
             output_attentions=output_attentions,
@@ -815,8 +812,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss(reduction="none")
                 loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
                 loss = (loss * valid_mask).mean()
-            else:
-                raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         if not return_dict:
             if output_hidden_states:
@@ -831,3 +826,13 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "SegformerDecodeHead",
+    "SegformerForImageClassification",
+    "SegformerForSemanticSegmentation",
+    "SegformerLayer",
+    "SegformerModel",
+    "SegformerPreTrainedModel",
+]

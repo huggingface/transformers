@@ -15,10 +15,11 @@
 """
 Fast tokenizer class for Nougat.
 """
+
 import re
 from functools import partial
 from multiprocessing import Pool
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
@@ -49,14 +50,7 @@ INIT_TOKENIZER_DOCSTRING += """
 """
 
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "tokenizer_file": {
-        "facebook/nougat-base": "https://huggingface.co/facebook/nougat-base/tokenizer/blob/main/tokenizer.json",
-    },
-}
-
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/nougat-base": 3584}
 
 
 def markdown_compatible(text: str) -> str:
@@ -119,26 +113,17 @@ def normalize_list_like_lines(generation):
         normalization adjusts the bullet point style and nesting levels based on the captured patterns.
     """
 
-    # This matches lines starting with - or *, not followed by - or * (lists)
-    # that are then numbered by digits \d or roman numerals (one or more)
-    # and then, optional additional numbering of this line is captured
-    # this is then fed to re.finditer.
-    pattern = r"(?:^)(-|\*)?(?!-|\*) ?((?:\d|[ixv])+ )?.+? (-|\*) (((?:\d|[ixv])+)\.(\d|[ixv]) )?.*(?:$)"
-
-    for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M))):
-        start, stop = match.span()
-        delim = match.group(3) + " "
-        splits = match.group(0).split(delim)
+    lines = generation.split("\n")
+    output_lines = []
+    for line_no, line in enumerate(lines):
+        match = re.search(r". ([-*]) ", line)
+        if not match or line[0] not in ("-", "*"):
+            output_lines.append(line)
+            continue  # Doesn't fit the pattern we want, no changes
+        delim = match.group(1) + " "
+        splits = line.split(delim)[1:]
         replacement = ""
-
-        if match.group(1) is not None:
-            splits = splits[1:]
-            delim1 = match.group(1) + " "
-        else:
-            delim1 = ""
-            continue  # Skip false positives
-
-        pre, post = generation[:start], generation[stop:]
+        delim1 = line[0] + " "
 
         for i, item in enumerate(splits):
             level = 0
@@ -150,15 +135,15 @@ def normalize_list_like_lines(generation):
                 level = potential_numeral.count(".")
 
             replacement += (
-                ("\n" if i > 0 else "") + ("\t" * level) + (delim if i > 0 or start == 0 else delim1) + item.strip()
+                ("\n" if i > 0 else "") + ("\t" * level) + (delim if i > 0 or line_no == 0 else delim1) + item.strip()
             )
 
-        if post == "":
-            post = "\n"
+        if line_no == len(lines) - 1:  # If this is the last line in the generation
+            replacement += "\n"  # Add an empty line to the end of the generation
 
-        generation = pre + replacement + post
+        output_lines.append(replacement)
 
-    return generation
+    return "\n".join(output_lines)
 
 
 def find_next_punctuation(text: str, start_idx=0):
@@ -409,8 +394,6 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
 
@@ -522,7 +505,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\n* [leftmargin=*]\n", "\n")
         # Remove lines with markdown headings starting with #, with numerals,
         # and possibly roman numerals with trailing spaces and newlines
-        generation = re.sub(r"^#+ (?:\.?(?:\d|[ixv])+)*\s*(?:$|\n\s*)", "", generation, flags=re.M)
+        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.M)
         # most likely hallucinated titles
         lines = generation.split("\n")
         if lines[-1].startswith("#") and lines[-1].lstrip("#").startswith(" ") and len(lines) > 1:
@@ -601,7 +584,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         self,
         generation: Union[str, List[str]],
         fix_markdown: bool = True,
-        num_workers: int = None,
+        num_workers: Optional[int] = None,
     ) -> Union[str, List[str]]:
         """
         Postprocess a generated text or a list of generated texts.
@@ -632,3 +615,6 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 return [self.post_process_single(s, fix_markdown=fix_markdown) for s in generation]
         else:
             return self.post_process_single(generation, fix_markdown=fix_markdown)
+
+
+__all__ = ["NougatTokenizerFast"]

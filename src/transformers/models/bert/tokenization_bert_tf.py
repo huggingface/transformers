@@ -1,14 +1,15 @@
 import os
-from typing import List, Union
+from typing import List, Optional, Union
 
 import tensorflow as tf
 from tensorflow_text import BertTokenizer as BertTokenizerLayer
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
+from ...modeling_tf_utils import keras
 from .tokenization_bert import BertTokenizer
 
 
-class TFBertTokenizer(tf.keras.layers.Layer):
+class TFBertTokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
     `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings
@@ -57,13 +58,13 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         self,
         vocab_list: List,
         do_lower_case: bool,
-        cls_token_id: int = None,
-        sep_token_id: int = None,
-        pad_token_id: int = None,
+        cls_token_id: Optional[int] = None,
+        sep_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
         padding: str = "longest",
         truncation: bool = True,
         max_length: int = 512,
-        pad_to_multiple_of: int = None,
+        pad_to_multiple_of: Optional[int] = None,
         return_token_type_ids: bool = True,
         return_attention_mask: bool = True,
         use_fast_bert_tokenizer: bool = True,
@@ -90,9 +91,9 @@ class TFBertTokenizer(tf.keras.layers.Layer):
 
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
-        self.cls_token_id = cls_token_id or vocab_list.index("[CLS]")
-        self.sep_token_id = sep_token_id or vocab_list.index("[SEP]")
-        self.pad_token_id = pad_token_id or vocab_list.index("[PAD]")
+        self.cls_token_id = vocab_list.index("[CLS]") if cls_token_id is None else cls_token_id
+        self.sep_token_id = vocab_list.index("[SEP]") if sep_token_id is None else sep_token_id
+        self.pad_token_id = vocab_list.index("[PAD]") if pad_token_id is None else pad_token_id
         self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3, axis=1)  # Allow room for special tokens
         self.max_length = max_length
         self.padding = padding
@@ -115,7 +116,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import AutoTokenizer, TFBertTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
         ```
         """
@@ -154,7 +155,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import TFBertTokenizer
 
-        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
+        tf_tokenizer = TFBertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         ```
         """
         try:
@@ -251,3 +252,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             "sep_token_id": self.sep_token_id,
             "pad_token_id": self.pad_token_id,
         }
+
+
+__all__ = ["TFBertTokenizer"]

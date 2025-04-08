@@ -34,7 +34,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+    torch_int,
+)
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -43,12 +49,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "BridgeTowerConfig"
 _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
-
-BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "BridgeTower/bridgetower-base",
-    "BridgeTower/bridgetower-base-itm-mlm",
-    # See all bridgetower models at https://huggingface.co/BridgeTower
-]
 
 
 BRIDGETOWER_START_DOCSTRING = r"""
@@ -117,6 +117,8 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -147,9 +149,9 @@ class BridgeTowerModelOutput(ModelOutput):
             heads.
     """
 
-    text_features: torch.FloatTensor = None
-    image_features: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    text_features: Optional[torch.FloatTensor] = None
+    image_features: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -180,7 +182,7 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     text_embeds: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[Tuple[torch.FloatTensor]] = None
     cross_embeds: Optional[Tuple[torch.FloatTensor]] = None
@@ -223,7 +225,7 @@ class BridgeTowerResidualAttention(nn.Module):
             key_padding_mask=attention_mask,
         )[0]
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
         for _, layer in self.mlp.items():
@@ -282,15 +284,63 @@ class BridgeTowerVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -308,8 +358,13 @@ class BridgeTowerVisionTransformer(nn.Module):
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
-    def forward(self, pixel_values: torch.Tensor, attention_mask):
-        hidden_states = self.embeddings(pixel_values)
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        attention_mask,
+        interpolate_pos_encoding: bool = False,
+    ):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -330,8 +385,12 @@ class BridgeTowerVisionTransformer(nn.Module):
             hidden_states = torch.stack(hidden_states_stack, dim=0)
         return hidden_states
 
-    def forward_pre(self, pixel_values: torch.Tensor):
-        hidden_states = self.embeddings(pixel_values)
+    def forward_pre(
+        self,
+        pixel_values: torch.Tensor,
+        interpolate_pos_encoding: bool = False,
+    ):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -565,11 +624,18 @@ class BridgeTowerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower
+BRIDGE_TOWER_SELF_ATTENTION_CLASSES = {
+    "eager": BridgeTowerSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BridgeTowerSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = BRIDGE_TOWER_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = BridgeTowerSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1014,8 +1080,8 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     def dtype(self):
         return self.visual.embeddings.patch_embedding.weight.dtype
 
-    def forward(self, image, image_mask=None):
-        return self.visual(image.type(self.dtype), image_mask)
+    def forward(self, image, image_mask=None, interpolate_pos_encoding=False):
+        return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding)
 
 
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
@@ -1062,7 +1128,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1279,6 +1345,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         output_hidden_states (`bool`, *optional*):
@@ -1321,6 +1388,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        if inputs_embeds is not None and input_ids is None:
+            raise NotImplementedError(
+                "BridgeTowerModel does not use `inputs_embeds`.  Make sure to pass in `input_ids` instead."
+            )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
         input_shape = input_ids.size()
@@ -1346,7 +1418,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 all_hidden_states_text += (text_embeds,)
 
         if image_embeds is None:
-            image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
+            image_embeds = self.vision_model.visual.forward_pre(
+                pixel_values.type(self.vision_model.dtype), interpolate_pos_encoding=interpolate_pos_encoding
+            )
         else:
             # Permute as BridgeTowerResidualAttention has batch_first=True
             image_embeds = image_embeds.permute(1, 0, 2)
@@ -1899,3 +1973,12 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BridgeTowerForContrastiveLearning",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForMaskedLM",
+    "BridgeTowerModel",
+    "BridgeTowerPreTrainedModel",
+]

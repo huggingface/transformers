@@ -32,7 +32,7 @@ python finetune_trainer.py \
     --max_source_length $MAX_LEN --max_target_length $MAX_LEN \
     --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN \
     --do_train --do_eval --do_predict \
-    --evaluation_strategy steps \
+    --eval_strategy steps \
     --predict_with_generate --logging_first_step \
     --task translation --label_smoothing_factor 0.1 \
     "$@"

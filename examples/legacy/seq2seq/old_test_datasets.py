@@ -28,7 +28,7 @@ from transformers.testing_utils import TestCasePlus, slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
 
-BERT_BASE_CASED = "bert-base-cased"
+BERT_BASE_CASED = "google-bert/bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]

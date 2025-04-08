@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Time Series Transformer model configuration"""
+"""Time Series Transformer model configuration"""
 
 from typing import List, Optional, Union
 
@@ -21,13 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": (
-        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
-    ),
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
-}
 
 
 class TimeSeriesTransformerConfig(PretrainedConfig):
@@ -231,3 +224,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             + self.num_static_real_features
             + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
+
+
+__all__ = ["TimeSeriesTransformerConfig"]

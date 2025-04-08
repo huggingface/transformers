@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for BERTweet"""
-
+"""Tokenization classes for BERTweet"""
 
 import html
 import os
@@ -33,19 +32,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.txt",
     "merges_file": "bpe.codes",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/vocab.txt",
-    },
-    "merges_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/bpe.codes",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "vinai/bertweet-base": 128,
 }
 
 
@@ -117,8 +103,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -780,3 +764,6 @@ def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=Fa
 
 
 ###############################################################################
+
+
+__all__ = ["BertweetTokenizer"]

@@ -5,12 +5,11 @@ import numpy as np
 
 from ..utils import (
     add_end_docstrings,
-    is_tensorflow_probability_available,
     is_tf_available,
     is_torch_available,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, PipelineException
+from .base import ArgumentHandler, Dataset, Pipeline, PipelineException, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -21,9 +20,8 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     )
 
-if is_tf_available() and is_tensorflow_probability_available():
+if is_tf_available():
     import tensorflow as tf
-    import tensorflow_probability as tfp
 
     from ..models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
@@ -84,7 +82,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
         return tqa_pipeline_inputs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TableQuestionAnsweringPipeline(Pipeline):
     """
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
@@ -249,8 +247,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 all_logits.append(logits)
 
-                dist_per_token = tfp.distributions.Bernoulli(logits=logits)
-                probabilities = dist_per_token.probs_parameter() * tf.cast(attention_mask_example, tf.float32)
+                probabilities = tf.math.sigmoid(tf.cast(logits, tf.float32)) * tf.cast(
+                    attention_mask_example, tf.float32
+                )
 
                 coords_to_probs = collections.defaultdict(list)
                 token_type_ids_example = token_type_ids_example
@@ -359,6 +358,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         forward_params = {}
         if sequential is not None:
             forward_params["sequential"] = sequential
+
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
     def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
@@ -377,7 +383,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         inputs["table"] = table
         return inputs
 
-    def _forward(self, model_inputs, sequential=False):
+    def _forward(self, model_inputs, sequential=False, **generate_kwargs):
         table = model_inputs.pop("table")
 
         if self.type == "tapas":
@@ -386,7 +392,11 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
-            outputs = self.model.generate(**model_inputs)
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
+            outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs
 

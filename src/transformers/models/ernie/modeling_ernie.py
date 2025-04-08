@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch ERNIE model."""
 
-
 import math
 import warnings
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -54,21 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
-
-
-ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nghuyong/ernie-1.0-base-zh",
-    "nghuyong/ernie-2.0-base-en",
-    "nghuyong/ernie-2.0-large-en",
-    "nghuyong/ernie-3.0-base-zh",
-    "nghuyong/ernie-3.0-medium-zh",
-    "nghuyong/ernie-3.0-mini-zh",
-    "nghuyong/ernie-3.0-micro-zh",
-    "nghuyong/ernie-3.0-nano-zh",
-    "nghuyong/ernie-gram-zh",
-    "nghuyong/ernie-health-zh",
-    # See all ERNIE models at https://huggingface.co/models?filter=ernie
-]
 
 
 class ErnieEmbeddings(nn.Module):
@@ -297,11 +282,18 @@ class ErnieSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie
+ERNIE_SELF_ATTENTION_CLASSES = {
+    "eager": ErnieSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie,BERT->ERNIE
 class ErnieAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ErnieSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ERNIE_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ErnieSelfOutput(config)
         self.pruned_heads = set()
 
@@ -608,6 +600,9 @@ class ErnieLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -705,8 +700,8 @@ class ErnieForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -799,7 +794,7 @@ class ErnieModel(ErniePreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Ernie
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Ernie
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -995,6 +990,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=ErnieForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1024,7 +1020,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 
                 - 0 indicates sequence B is a continuation of sequence A,
                 - 1 indicates sequence B is a random sequence.
-            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
                 Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -1086,7 +1082,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 @add_start_docstrings(
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
-class ErnieForCausalLM(ErniePreTrainedModel):
+class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->ErnieForCausalLM,Bert->Ernie,bert->ernie
@@ -1109,6 +1105,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1133,6 +1130,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1184,11 +1182,12 @@ class ErnieForCausalLM(ErniePreTrainedModel):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1202,35 +1201,6 @@ class ErnieForCausalLM(ErniePreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
-    ):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
@@ -1269,6 +1239,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1353,6 +1324,14 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: ErnieForMaskedLM can't call `generate()` from GenerationMixin.
+        Remove after v4.50, when we stop making `PreTrainedModel` inherit from `GenerationMixin`.
+        """
+        return False
 
 
 @add_start_docstrings(
@@ -1830,3 +1809,17 @@ class ErnieForQuestionAnswering(ErniePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "ErnieForCausalLM",
+    "ErnieForMaskedLM",
+    "ErnieForMultipleChoice",
+    "ErnieForNextSentencePrediction",
+    "ErnieForPreTraining",
+    "ErnieForQuestionAnswering",
+    "ErnieForSequenceClassification",
+    "ErnieForTokenClassification",
+    "ErnieModel",
+    "ErniePreTrainedModel",
+]

@@ -351,13 +351,14 @@ Nel caso speciale in cui stiate aggiungendo un modello, la cui architettura sia 
 dovrete solo aggiugnere uno script di conversione, come descritto [qui](#write-a-conversion-script).
 In questo caso, potete riutilizzare l'intera architettura del modello gia esistente.
 
-Se questo non é il caso, cominciamo con il generare un nuovo modello. Avrete due opzioni:
+Se questo non é il caso, cominciamo con il generare un nuovo modello. Ti consigliamo di utilizzare il seguente script per aggiungere un modello a partire da
+un modello esistente:
 
-- `transformers-cli add-new-model-like` per aggiungere un nuovo modello come uno che gia esiste
-- `transformers-cli add-new-model` per aggiungere un nuovo modello da un nostro template (questo assomigliera a BERT o Bart, in base al modello che selezionerete)
+```bash
+transformers-cli add-new-model-like
+```
 
-In entrambi i casi, l'output vi darà un questionario da riempire con informazioni basi sul modello. Il secondo comando richiede di installare
-un `cookiecutter` - maggiori informazioni [qui](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+Ti verrà richiesto con un questionario di compilare le informazioni di base del tuo modello.
 
 **Aprire una Pull Request in main huggingface/transformers repo**
 
@@ -583,7 +584,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implementare il forward pass**
 
 Una volta che i weights pretrained sono stati correttamente caricati in 🤗 Transformers, dovrete assicurarvi che il forward pass 
-sia correttamente implementato. [Qui](#provare-un-pretrained-checkpoint-usando-la-repo-originale), avete give creato e provato
+sia correttamente implementato. [Qui](#3-4-provare-un-pretrained-checkpoint-usando-la-repo-originale), avete give creato e provato
 uno script che testi il forward pass del modello usando la repo originaria. Ora dovrete fare lo stesso con uno script analogo 
 usando l'implementazione in 🤗 Transformers anziché l'originale. Piu o meno lo script dovrebbe essere:
 

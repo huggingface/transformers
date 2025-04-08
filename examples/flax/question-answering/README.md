@@ -29,7 +29,7 @@ The following example fine-tunes BERT on SQuAD:
 
 ```bash
 python run_qa.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name squad \
   --do_train   \
   --do_eval   \
@@ -67,7 +67,7 @@ Here is an example training on 4 TITAN RTX GPUs and Bert Whole Word Masking unca
 ```bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 python run_qa.py   \
---model_name_or_path bert-large-uncased-whole-word-masking   \
+--model_name_or_path google-bert/bert-large-uncased-whole-word-masking   \
 --dataset_name squad   \
 --do_train   \
 --do_eval   \

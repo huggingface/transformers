@@ -1,0 +1,5 @@
+albumentations >= 1.4.16
+timm
+datasets
+torchmetrics
+pycocotools

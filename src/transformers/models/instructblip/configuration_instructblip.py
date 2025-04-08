@@ -12,22 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" InstructBLIP model configuration"""
-
-import os
-from typing import Union
+"""InstructBLIP model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
-
-INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/instruct-blip-flan-t5": "https://huggingface.co/Salesforce/instruct-blip-flan-t5/resolve/main/config.json",
-}
 
 
 class InstructBlipVisionConfig(PretrainedConfig):
@@ -55,7 +48,7 @@ class InstructBlipVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. to 1e-5): The epsilon used by the layer
+            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported. to 1e-5): The epsilon used by the layer
             normalization layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
@@ -82,6 +75,7 @@ class InstructBlipVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -111,24 +105,6 @@ class InstructBlipVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.qkv_bias = qkv_bias
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from InstructBlipConfig
-        if config_dict.get("model_type") == "instructblip":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class InstructBlipQFormerConfig(PretrainedConfig):
@@ -168,6 +144,8 @@ class InstructBlipQFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Token id used for padding sequences.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -194,6 +172,7 @@ class InstructBlipQFormerConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip_qformer"
+    base_config_key = "qformer_config"
 
     def __init__(
         self,
@@ -231,24 +210,6 @@ class InstructBlipQFormerConfig(PretrainedConfig):
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the qformer config dict if we are loading from InstructBlipConfig
-        if config_dict.get("model_type") == "instructblip":
-            config_dict = config_dict["qformer_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class InstructBlipConfig(PretrainedConfig):
     r"""
@@ -271,6 +232,8 @@ class InstructBlipConfig(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
+        image_token_index (`int`, *optional*):
+            Token index of special image token.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -305,8 +268,21 @@ class InstructBlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "qformer_config": InstructBlipQFormerConfig,
+        "vision_config": InstructBlipVisionConfig,
+    }
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        text_config=None,
+        num_query_tokens=32,
+        image_token_index=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -326,10 +302,8 @@ class InstructBlipConfig(PretrainedConfig):
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
-
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
@@ -357,3 +331,6 @@ class InstructBlipConfig(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["InstructBlipConfig", "InstructBlipQFormerConfig", "InstructBlipVisionConfig"]

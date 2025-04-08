@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 OpenAI GPT-2 model."""
+"""TF 2.0 OpenAI GPT-2 model."""
 
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSequenceSummary,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -54,20 +55,11 @@ from .configuration_gpt2 import GPT2Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gpt2"
+_CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
-TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gpt2",
-    "gpt2-medium",
-    "gpt2-large",
-    "gpt2-xl",
-    "distilgpt2",
-    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
-]
 
-
-class TFAttention(tf.keras.layers.Layer):
+class TFAttention(keras.layers.Layer):
     def __init__(self, nx, config, scale=False, is_cross_attention=False, **kwargs):
         super().__init__(**kwargs)
 
@@ -88,8 +80,8 @@ class TFAttention(tf.keras.layers.Layer):
             self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
 
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
-        self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
-        self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.attn_dropout = keras.layers.Dropout(config.attn_pdrop)
+        self.resid_dropout = keras.layers.Dropout(config.resid_pdrop)
         self.pruned_heads = set()
         self.embed_dim = n_state
 
@@ -222,14 +214,14 @@ class TFAttention(tf.keras.layers.Layer):
                 self.q_attn.build([None, None, self.embed_dim])
 
 
-class TFMLP(tf.keras.layers.Layer):
+class TFMLP(keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation(config.activation_function)
-        self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.dropout = keras.layers.Dropout(config.resid_pdrop)
         self.intermediate_size = n_state
         self.embed_dim = nx
 
@@ -251,18 +243,18 @@ class TFMLP(tf.keras.layers.Layer):
                 self.c_proj.build([None, None, self.embed_dim])
 
 
-class TFBlock(tf.keras.layers.Layer):
+class TFBlock(keras.layers.Layer):
     def __init__(self, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         inner_dim = config.n_inner if config.n_inner is not None else 4 * nx
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.ln_1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFAttention(nx, config, scale, name="attn")
-        self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
+        self.ln_2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
         if config.add_cross_attention:
             self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
-            self.ln_cross_attn = tf.keras.layers.LayerNormalization(
+            self.ln_cross_attn = keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
             )
 
@@ -354,7 +346,7 @@ class TFBlock(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFGPT2MainLayer(tf.keras.layers.Layer):
+class TFGPT2MainLayer(keras.layers.Layer):
     config_class = GPT2Config
 
     def __init__(self, config, *inputs, **kwargs):
@@ -371,21 +363,21 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
 
-        self.wte = tf.keras.layers.Embedding(
+        self.wte = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="wte",
         )
-        self.wpe = tf.keras.layers.Embedding(
+        self.wpe = keras.layers.Embedding(
             input_dim=config.n_positions,
             output_dim=config.n_embd,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="wpe",
         )
-        self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.drop = keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
-        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.ln_f = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
         self.embed_dim = config.hidden_size
 
     def get_input_embeddings(self):
@@ -636,8 +628,8 @@ class TFGPT2DoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
-    mc_logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    mc_logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -649,7 +641,7 @@ GPT2_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1025,8 +1017,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFGPT2DoubleHeadsModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFGPT2DoubleHeadsModel.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = TFGPT2DoubleHeadsModel.from_pretrained("openai-community/gpt2")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
@@ -1134,7 +1126,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.score = tf.keras.layers.Dense(
+        self.score = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="score",
@@ -1185,39 +1177,33 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             return_dict=return_dict,
             training=training,
         )
-
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
         logits_shape = shape_list(logits)
-        in_logits = None
+        batch_size = logits_shape[0]
+
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
-                    - 1
-                )
-                sequence_lengths = tf.where(sequence_lengths >= 0, sequence_lengths, input_ids.shape[-1] - 1)
-                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
+                token_indices = tf.range(shape_list(input_ids)[-1])
+                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
+                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
             else:
-                sequence_lengths = -1
-                logger.warning(
+                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
+        pooled_logits = tf.gather(logits, last_non_pad_token, batch_dims=1, axis=1)
+
         if labels is not None:
-            assert (
-                self.config.pad_token_id is not None or logits_shape[0] == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and logits_shape[0] != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
-            if not tf.is_tensor(sequence_lengths):
-                in_logits = logits[0 : logits_shape[0], sequence_lengths]
-
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
-        pooled_logits = in_logits if in_logits is not None else logits
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1241,3 +1227,13 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
+
+
+__all__ = [
+    "TFGPT2DoubleHeadsModel",
+    "TFGPT2ForSequenceClassification",
+    "TFGPT2LMHeadModel",
+    "TFGPT2MainLayer",
+    "TFGPT2Model",
+    "TFGPT2PreTrainedModel",
+]

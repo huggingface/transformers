@@ -14,11 +14,13 @@
 
 from .data_collator import (
     DataCollatorForLanguageModeling,
+    DataCollatorForMultipleChoice,
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForSeq2Seq,
     DataCollatorForSOP,
     DataCollatorForTokenClassification,
     DataCollatorForWholeWordMask,
+    DataCollatorWithFlattening,
     DataCollatorWithPadding,
     DefaultDataCollator,
     default_data_collator,

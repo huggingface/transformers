@@ -15,6 +15,7 @@
 Integration with Deepspeed
 """
 
+import copy
 import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
@@ -26,8 +27,8 @@ from ..utils import is_accelerate_available, is_torch_available, logging
 
 if is_torch_available():
     import torch
+    from torch import nn
 
-    from ..optimization import get_scheduler
 
 logger = logging.get_logger(__name__)
 
@@ -129,7 +130,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     fill_only = partialmethod(fill_match, must_match=False)
 
-    def trainer_config_process(self, args):
+    def trainer_config_process(self, args, auto_find_batch_size=False):
         """
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
@@ -138,14 +139,30 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
         self.fill_match(
-            "train_micro_batch_size_per_gpu", args.per_device_train_batch_size, "per_device_train_batch_size"
+            "train_micro_batch_size_per_gpu",
+            args.per_device_train_batch_size,
+            "per_device_train_batch_size",
+            not auto_find_batch_size,
         )
-        self.fill_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
-        self.fill_match("train_batch_size", train_batch_size, "train_batch_size (calculated)")
+        self.fill_match(
+            "gradient_accumulation_steps",
+            args.gradient_accumulation_steps,
+            "gradient_accumulation_steps",
+        )
+        self.fill_match(
+            "train_batch_size",
+            train_batch_size,
+            "train_batch_size (calculated)",
+            not auto_find_batch_size,
+        )
         self.fill_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
 
         self.fill_match("optimizer.params.lr", args.learning_rate, "learning_rate")
-        self.fill_match("optimizer.params.betas", [args.adam_beta1, args.adam_beta2], "adam_beta1+adam_beta2")
+        self.fill_match(
+            "optimizer.params.betas",
+            [args.adam_beta1, args.adam_beta2],
+            "adam_beta1+adam_beta2",
+        )
         self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
         self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
 
@@ -209,6 +226,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             elif hasattr(model.config, "hidden_sizes"):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.hidden_sizes)
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                hidden_size = model.config.text_config.hidden_size
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                # if there are many hidden sizes pick the largest one
+                hidden_size = max(model.config.text_config.hidden_sizes)
             else:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
@@ -220,12 +242,26 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
             if self.is_zero3():
                 # automatically assign the optimal config values based on model config
-                self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-                self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
+                self.fill_only(
+                    "zero_optimization.stage3_prefetch_bucket_size",
+                    int(0.9 * hidden_size * hidden_size),
+                )
+                self.fill_only(
+                    "zero_optimization.stage3_param_persistence_threshold",
+                    10 * hidden_size,
+                )
 
         # scheduler
-        self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
-        self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
+        self.fill_match(
+            "scheduler.params.total_num_steps",
+            num_training_steps,
+            "num_training_steps (calculated)",
+        )
+        self.fill_match(
+            "scheduler.params.warmup_num_steps",
+            args.get_warmup_steps(num_training_steps),
+            "warmup_steps",
+        )
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
@@ -267,6 +303,54 @@ def deepspeed_config():
         return None
 
 
+def _load_state_dict_into_zero3_model(model_to_load, state_dict):
+    """
+    Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
+    tensor parallelism API.
+
+    Nearly identical code to PyTorch's `_load_from_state_dict`
+    """
+    # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
+    metadata = getattr(state_dict, "_metadata", None)
+    state_dict = state_dict.copy()
+    if metadata is not None:
+        state_dict._metadata = metadata
+
+    error_msgs = []
+
+    # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+    # so we need to apply the function recursively.
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
+        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
+
+        args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
+        # Parameters of module and children will start with prefix. We can exit early if there are none in this
+        # state_dict
+        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
+            import deepspeed
+
+            # In sharded models, each shard has only part of the full state_dict, so only gather
+            # parameters that are in the current state_dict.
+            named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
+            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+            if len(params_to_gather) > 0:
+                # because zero3 puts placeholders in model params, this context
+                # manager gathers (unpartitions) the params of the current layer, then loads from
+                # the state dict and then re-partitions them again
+                with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        module._load_from_state_dict(*args)
+
+        for name, child in module._modules.items():
+            if child is not None:
+                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
+
+    load(model_to_load, state_dict, assign_to_params_buffers=False)
+
+    return error_msgs
+
+
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
     """
     A convenience wrapper that deals with optimizer and lr scheduler configuration.
@@ -275,14 +359,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     config = hf_deepspeed_config.config
 
-    # Optimizer + Scheduler
-    # Currently supported combos:
-    # 1. DS scheduler + DS optimizer: Yes
-    # 2. HF scheduler + HF optimizer: Yes
-    # 3. DS scheduler + HF optimizer: Yes
-    # 4. HF scheduler + DS optimizer: No
-    #
-    # Unless Offload is enabled in which case it's:
+    # Mixing and matching DS schedulers and optimizers is supported unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
@@ -318,12 +395,15 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         if isinstance(optimizer, DummyOptim):
 
             def _lr_scheduler_callable(optimizer):
-                return get_scheduler(
-                    trainer.args.lr_scheduler_type,
-                    optimizer=optimizer,
-                    num_warmup_steps=trainer.args.get_warmup_steps(num_training_steps),
-                    num_training_steps=num_training_steps,
+                # create a shallow copy first, so later modifications do not affect original trainer
+                trainer_copy = copy.copy(trainer)
+                # at the time _lr_scheduler_callable is called, trainer.lr_scheduler has been set
+                # update it to None so that we can re-create a new scheduler
+                trainer_copy.lr_scheduler = None
+                lr_scheduler = trainer_copy.create_scheduler(
+                    num_training_steps=num_training_steps, optimizer=optimizer
                 )
+                return lr_scheduler
 
             lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
         else:
@@ -343,12 +423,14 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         num_training_steps: per single gpu
         resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
         inference: launch in inference mode (no optimizer and no lr scheduler)
+        auto_find_batch_size: whether to ignore the `train_micro_batch_size_per_gpu` argument as it's being
+            set automatically by the auto batch size finder
 
     Returns: optimizer, lr_scheduler
 
     We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
-    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
-    can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
+    https://github.com/deepspeedai/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
+    can't resume from a checkpoint after it did some stepping https://github.com/deepspeedai/DeepSpeed/issues/1612
 
     """
     from deepspeed.utils import logger as ds_logger
@@ -376,6 +458,11 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
+        tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 0)
+        if tp_size > 1:
+            import deepspeed
+
+            model = deepspeed.tp_model_init(model=model, tp_size=tp_size, dtype=hf_deepspeed_config.dtype())
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters
@@ -387,7 +474,7 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     return optimizer, lr_scheduler
 
 
-def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
+def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_strict=True):
     # it's possible that the user is trying to resume from model_path, which doesn't necessarily
     # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
     # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
@@ -400,7 +487,10 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
         logger.info(f"Attempting to resume from {checkpoint_path}")
         # this magically updates self.optimizer and self.lr_scheduler
         load_path, _ = deepspeed_engine.load_checkpoint(
-            checkpoint_path, load_optimizer_states=True, load_lr_scheduler_states=True
+            checkpoint_path,
+            load_module_strict=load_module_strict,
+            load_optimizer_states=True,
+            load_lr_scheduler_states=True,
         )
         if load_path is None:
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")

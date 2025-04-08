@@ -133,12 +133,12 @@ DP와 DDP 사이에는 다른 차이점이 있지만, 이 토론과는 관련이
 
 해당 벤치마크에서 `NCCL_P2P_DISABLE=1`을 사용하여 NVLink 기능을 비활성화했습니다.
 
-```
+```bash
 
 # DP
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
@@ -146,7 +146,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 # DDP w/ NVlink
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
@@ -154,7 +154,7 @@ torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 # DDP w/o NVlink
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
+--model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
 {'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
@@ -386,7 +386,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 각 차원마다 적어도 2개의 GPU가 필요하므로 최소한 4개의 GPU가 필요합니다.
 
 구현:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -405,7 +405,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 각 차원마다 적어도 2개의 GPU가 필요하므로 최소한 8개의 GPU가 필요합니다.
 
 구현:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +40,15 @@ def parse_args():
     )
     parser.add_argument(
         "--dataset_config", type=str, default="wikitext-103-raw-v1", help="Configuration name of the dataset."
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--tokenizer_name_or_path",
@@ -105,7 +113,9 @@ def get_serialized_examples(tokenized_data):
 
 
 def main(args):
-    dataset = datasets.load_dataset(args.dataset_name, args.dataset_config, split=args.split)
+    dataset = datasets.load_dataset(
+        args.dataset_name, args.dataset_config, split=args.split, trust_remote_code=args.trust_remote_code
+    )
 
     if args.limit is not None:
         max_samples = min(len(dataset), args.limit)
@@ -167,7 +177,7 @@ def main(args):
             for i in range(len(serialized_examples)):
                 example = serialized_examples[i]
                 out_file.write(example)
-            print("Wrote file {} containing {} records".format(filename, records_containing))
+            print(f"Wrote file {filename} containing {records_containing} records")
 
         shard_count += 1
         total_records += records_containing

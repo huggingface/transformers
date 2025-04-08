@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNextV2 model."""
-
+"""PyTorch ConvNextV2 model."""
 
 from typing import Optional, Tuple, Union
 
@@ -53,11 +52,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnextv2-tiny-1k-224",
-    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
-]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -106,7 +100,7 @@ class ConvNextV2GRN(nn.Module):
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
-        global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
+        global_features = torch.linalg.norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
         hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
@@ -293,7 +287,6 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -303,6 +296,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ConvNextV2Layer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -312,9 +306,12 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ConvNextV2GRN):
+            module.weight.data.zero_()
+            module.bias.data.zero_()
 
 
 CONVNEXTV2_START_DOCSTRING = r"""
@@ -370,7 +367,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -437,7 +434,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -574,3 +571,6 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
             hidden_states=hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["ConvNextV2ForImageClassification", "ConvNextV2Model", "ConvNextV2PreTrainedModel", "ConvNextV2Backbone"]

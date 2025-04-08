@@ -20,7 +20,6 @@ import time
 import warnings
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
 
 import torch
 from tqdm import tqdm
@@ -36,7 +35,7 @@ DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def generate_summaries_or_translations(
-    examples: List[str],
+    examples: list[str],
     out_file: str,
     model_name: str,
     batch_size: int = 8,
@@ -45,7 +44,7 @@ def generate_summaries_or_translations(
     task="summarization",
     prefix=None,
     **generate_kwargs,
-) -> Dict:
+) -> dict:
     """Save model.generate results to <out_file>, and return how long it took."""
     fout = Path(out_file).open("w", encoding="utf-8")
     model_name = str(model_name)
@@ -100,14 +99,14 @@ def run_generate(verbose=True):
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
+    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,google-t5/t5-base, etc.")
     parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
     parser.add_argument("save_path", type=str, help="where to save summaries")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")

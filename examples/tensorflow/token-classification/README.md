@@ -27,7 +27,7 @@ The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner
 ```
@@ -36,7 +36,7 @@ To run on your own training and validation files, use the following command:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --train_file path_to_train_file \
   --validation_file path_to_validation_file \
   --output_dir /tmp/test-ner

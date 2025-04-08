@@ -43,7 +43,7 @@ Model Hubの組み込みバージョニングはgitおよび[git-lfs](https://gi
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # タグ名、またはブランチ名、またはコミットハッシュ
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # タグ名、またはブランチ名、またはコミットハッシュ
 ... )
 ```
 
@@ -254,7 +254,7 @@ Hugging Faceプロフィールに移動すると、新しく作成したモデ�
 * 手動で`README.md`ファイルを作成およびアップロードする。
 * モデルリポジトリ内の**Edit model card**ボタンをクリックする。
 
-モデルカードに含めるべき情報の例については、DistilBert [モデルカード](https://huggingface.co/distilbert-base-uncased)をご覧ください。`README.md`ファイルで制御できる他のオプション、例えばモデルの炭素フットプリントやウィジェットの例などについての詳細は、[こちらのドキュメンテーション](https://huggingface.co/docs/hub/models-cards)を参照してください。
+モデルカードに含めるべき情報の例については、DistilBert [モデルカード](https://huggingface.co/distilbert/distilbert-base-uncased)をご覧ください。`README.md`ファイルで制御できる他のオプション、例えばモデルの炭素フットプリントやウィジェットの例などについての詳細は、[こちらのドキュメンテーション](https://huggingface.co/docs/hub/models-cards)を参照してください。
 
 
 

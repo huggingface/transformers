@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Longformer configuration"""
+"""Longformer configuration"""
+
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
@@ -27,20 +28,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/config.json",
-    "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/config.json",
-    "allenai/longformer-large-4096-finetuned-triviaqa": (
-        "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/config.json"
-    ),
-    "allenai/longformer-base-4096-extra.pos.embd.only": (
-        "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/config.json"
-    ),
-    "allenai/longformer-large-4096-extra.pos.embd.only": (
-        "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/config.json"
-    ),
-}
 
 
 class LongformerConfig(PretrainedConfig):
@@ -212,3 +199,6 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs["global_attention_mask"][:, ::2] = 1
 
         return inputs
+
+
+__all__ = ["LongformerConfig", "LongformerOnnxConfig"]

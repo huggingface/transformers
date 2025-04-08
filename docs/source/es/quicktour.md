@@ -220,7 +220,7 @@ Pasa tu texto al tokenizador:
 El tokenizador devolverá un diccionario conteniendo:
 
 * [input_ids](./glossary#input-ids): representaciones numéricas de los tokens.
-* [atttention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
+* [attention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
 
 Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, el tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
 
@@ -385,8 +385,8 @@ Una característica particularmente interesante de 🤗 Transformers es la habil
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </pt>
 <tf>
@@ -394,8 +394,8 @@ Una característica particularmente interesante de 🤗 Transformers es la habil
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>

@@ -28,29 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/vocab.txt",
-        "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/vocab.txt",
-        "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/vocab.txt",
-        "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "tau/splinter-base": 512,
-    "tau/splinter-base-qass": 512,
-    "tau/splinter-large": 512,
-    "tau/splinter-large-qass": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "tau/splinter-base": {"do_lower_case": False},
-    "tau/splinter-base-qass": {"do_lower_case": False},
-    "tau/splinter-large": {"do_lower_case": False},
-    "tau/splinter-large-qass": {"do_lower_case": False},
-}
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -117,9 +94,6 @@ class SplinterTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -163,6 +137,7 @@ class SplinterTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            question_token=question_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             **kwargs,
@@ -323,7 +298,7 @@ class SplinterTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -472,7 +447,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -527,3 +502,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["SplinterTokenizer"]

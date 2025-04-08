@@ -231,9 +231,9 @@ def main():
 
     # set decoder_start_token_id for MBart
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (
-            data_args.tgt_lang is not None and data_args.src_lang is not None
-        ), "mBart requires --tgt_lang and --src_lang"
+        assert data_args.tgt_lang is not None and data_args.src_lang is not None, (
+            "mBart requires --tgt_lang and --src_lang"
+        )
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
         else:
@@ -271,7 +271,7 @@ def main():
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
-        if training_args.do_eval or training_args.evaluation_strategy != EvaluationStrategy.NO
+        if training_args.do_eval or training_args.eval_strategy != EvaluationStrategy.NO
         else None
     )
     test_dataset = (
@@ -302,7 +302,7 @@ def main():
             tokenizer, data_args, model.config.decoder_start_token_id, training_args.tpu_num_cores
         ),
         compute_metrics=compute_metrics_fn,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
 
     all_metrics = {}

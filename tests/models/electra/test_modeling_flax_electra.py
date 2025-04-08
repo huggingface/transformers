@@ -21,7 +21,7 @@ if is_flax_available():
     )
 
 
-class FlaxElectraModelTester(unittest.TestCase):
+class FlaxElectraModelTester:
     def __init__(
         self,
         parent,

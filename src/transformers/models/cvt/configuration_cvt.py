@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CvT model configuration"""
+"""CvT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/cvt-13": "https://huggingface.co/microsoft/cvt-13/resolve/main/config.json",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-}
 
 
 class CvtConfig(PretrainedConfig):
@@ -146,3 +141,6 @@ class CvtConfig(PretrainedConfig):
         self.stride_q = stride_q
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+
+
+__all__ = ["CvtConfig"]

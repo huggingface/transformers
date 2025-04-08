@@ -18,7 +18,7 @@ limitations under the License.
 
 This directory contains examples for finetuning and evaluating transformers on translation tasks.
 Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For deprecated `bertabs` instructions, see https://github.com/huggingface/transformers-research-projects/blob/main/bertabs/README.md.
 For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/main/examples/legacy/seq2seq).
 
 ### Supported Architectures
@@ -59,11 +59,11 @@ python examples/pytorch/translation/run_translation.py \
 
 MBart and some T5 models require special handling.
 
-T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
+T5 models `google-t5/t5-small`, `google-t5/t5-base`, `google-t5/t5-large`, `google-t5/t5-3b` and `google-t5/t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
 
 ```bash
 python examples/pytorch/translation/run_translation.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --source_lang en \
@@ -105,7 +105,7 @@ values for the arguments `--train_file`, `--validation_file` to match your setup
 
 ```bash
 python examples/pytorch/translation/run_translation.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --source_lang en \
@@ -134,7 +134,7 @@ If you want to use a pre-processed dataset that leads to high BLEU scores, but f
 
 ```bash
 python examples/pytorch/translation/run_translation.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --source_lang en \

@@ -32,21 +32,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 # See all LED models at https://huggingface.co/models?filter=LED
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/led-base-16384": 16384,
-}
 
 
 @lru_cache()
@@ -169,8 +154,6 @@ class LEDTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.__init__
@@ -429,6 +412,7 @@ class LEDTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         encoded_inputs = super()._pad(
@@ -436,6 +420,7 @@ class LEDTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             padding_strategy=padding_strategy,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 
@@ -464,3 +449,6 @@ class LEDTokenizer(PreTrainedTokenizer):
                     raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["LEDTokenizer"]

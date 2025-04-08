@@ -12,16 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" NLLB-MoE model configuration"""
+"""NLLB-MoE model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/nllb-moe-54B": "https://huggingface.co/facebook/nllb-moe-54b/resolve/main/config.json",
-}
 
 
 class NllbMoeConfig(PretrainedConfig):
@@ -103,7 +100,7 @@ class NllbMoeConfig(PretrainedConfig):
             experts.
         router_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the classifier of the router should have a bias.
-        moe_token_dropout (`float`, *optional*, defualt ot 0.2):
+        moe_token_dropout (`float`, *optional*, default to 0.2):
             Masking rate for MoE expert output masking (EOM), which is implemented via a Dropout2d on the expert
             outputs.
         output_router_logits (`bool`, *optional*, defaults to `False`):
@@ -217,3 +214,6 @@ class NllbMoeConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+
+__all__ = ["NllbMoeConfig"]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CPMAnt"""
-
+"""PyTorch CPMAnt"""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -25,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -35,11 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
 _CONFIG_FOR_DOC = "CpmAntConfig"
-
-CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openbmb/cpm-ant-10b",
-    # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
-]
 
 
 class CpmAntLayerNorm(nn.Module):
@@ -742,7 +737,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """,
     CPMANT_START_DOCSTRING,
 )
-class CpmAntForCausalLM(CpmAntPreTrainedModel):
+class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: CpmAntConfig):
@@ -854,21 +849,12 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        input_ids = input_ids.int()
-        # save the memory usage of dummy attention mask
-        if "attention_mask" in kwargs:
-            kwargs["attention_mask"] = torch.zeros(1, 1)
-
-        return {
-            "input_ids": input_ids,
-            "use_cache": kwargs["use_cache"],
-            "past_key_values": kwargs.get("past_key_values", None),
-        }
-
     def _reorder_cache(self, past_key_values, beam_idx):
         past_key_values = [list(each) if each is not None else each for each in past_key_values]
         for key_value_layer in past_key_values:
             key_value_layer[0] = key_value_layer[0][beam_idx]
             key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
+
+
+__all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

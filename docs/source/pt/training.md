@@ -58,7 +58,7 @@ todo o dataset.
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 
 >>> def tokenize_function(examples):
@@ -93,7 +93,7 @@ sabemos ter 5 labels usamos o seguinte código:
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -146,13 +146,13 @@ todos os modelos de 🤗 Transformers retornam logits).
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `evaluation_strategy`
+Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `eval_strategy`
 nos seus argumentos de treinamento para que o modelo considere a métrica de avaliação ao final de cada época:
 
 ```py
 >>> from transformers import TrainingArguments
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer
@@ -232,7 +232,7 @@ Carregue um modelo do TensorFlow com o número esperado de rótulos:
 >>> import tensorflow as tf
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 A seguir, compile e ajuste o fine-tuning a seu modelo com [`fit`](https://keras.io/api/models/model_training_apis/) como
@@ -311,7 +311,7 @@ Carregue seu modelo com o número de labels esperados:
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### Otimização e configuração do Learning Rate

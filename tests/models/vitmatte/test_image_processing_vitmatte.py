@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 
 
 import unittest
+import warnings
 
 import numpy as np
 
@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers import VitMatteImageProcessor
 
 
-class VitMatteImageProcessingTester(unittest.TestCase):
+class VitMatteImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -94,6 +94,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VitMatteImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VitMatteImageProcessingTester(self)
 
     @property
@@ -192,3 +193,24 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.random.randn(3, 249, 491)
         images = image_processing.pad_image(image)
         assert images.shape == (3, 256, 512)
+
+        image = np.random.randn(3, 249, 512)
+        images = image_processing.pad_image(image)
+        assert images.shape == (3, 256, 512)
+
+    def test_image_processor_preprocess_arguments(self):
+        # vitmatte require additional trimap input for image_processor
+        # that is why we override original common test
+
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            image = self.image_processor_tester.prepare_image_inputs()[0]
+            trimap = np.random.randint(0, 3, size=image.size[::-1])
+
+            with warnings.catch_warnings(record=True) as raised_warnings:
+                warnings.simplefilter("always")
+                image_processor(image, trimaps=trimap, extra_argument=True)
+
+            messages = " ".join([str(w.message) for w in raised_warnings])
+            self.assertGreaterEqual(len(raised_warnings), 1)
+            self.assertIn("extra_argument", messages)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Hubert model configuration"""
+"""Hubert model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hubert-base-ls960": "https://huggingface.co/facebook/hubert-base-ls960/resolve/main/config.json",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-}
 
 
 class HubertConfig(PretrainedConfig):
@@ -63,7 +58,7 @@ class HubertConfig(PretrainedConfig):
         attention_dropout(`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for the final projection layer of [`Wav2Vec2ForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2ForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
@@ -99,6 +94,8 @@ class HubertConfig(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
+        conv_pos_batch_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use batch norm instead of weight norm in conv_pos
         do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether do apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
             True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
@@ -187,6 +184,7 @@ class HubertConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
+        conv_pos_batch_norm=False,
         do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
@@ -214,6 +212,7 @@ class HubertConfig(PretrainedConfig):
         self.conv_bias = conv_bias
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.conv_pos_batch_norm = conv_pos_batch_norm
         self.num_feat_extract_layers = len(self.conv_dim)
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -261,3 +260,6 @@ class HubertConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["HubertConfig"]

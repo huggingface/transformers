@@ -37,27 +37,23 @@ like token streaming.
 	- from_pretrained
 	- from_model_config
 	- save_pretrained
+	- update
+	- validate
+	- get_generation_mode
 
 ## GenerationMixin
 
-[[autodoc]] generation.GenerationMixin
+[[autodoc]] GenerationMixin
 	- generate
 	- compute_transition_scores
-	- greedy_search
-	- sample
-	- beam_search
-	- beam_sample
-	- contrastive_search
-	- group_beam_search
-	- constrained_beam_search
 
 ## TFGenerationMixin
 
-[[autodoc]] generation.TFGenerationMixin
+[[autodoc]] TFGenerationMixin
 	- generate
 	- compute_transition_scores
 
 ## FlaxGenerationMixin
 
-[[autodoc]] generation.FlaxGenerationMixin
+[[autodoc]] FlaxGenerationMixin
 	- generate

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch EnCodec model."""
+"""PyTorch EnCodec model."""
 
 import math
 from dataclasses import dataclass
@@ -40,39 +40,32 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
-ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/encodec_24khz",
-    "facebook/encodec_48khz",
-    # See all EnCodec models at https://huggingface.co/models?filter=encodec
-]
-
-
 @dataclass
 class EncodecOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_codes: torch.FloatTensor = None
-    audio_values: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 @dataclass
 class EncodecEncoderOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
-    audio_codes: torch.FloatTensor = None
-    audio_scales: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_scales: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -83,7 +76,7 @@ class EncodecDecoderOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class EncodecConv1d(nn.Module):
@@ -110,19 +103,36 @@ class EncodecConv1d(nn.Module):
             )
 
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if self.norm_type == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
+            self.conv = weight_norm(self.conv)
         elif self.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
-    @staticmethod
+        kernel_size = self.conv.kernel_size[0]
+        stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
+        dilation = self.conv.dilation[0]
+
+        # Effective kernel size with dilations.
+        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
+
+        self.register_buffer("stride", stride, persistent=False)
+        self.register_buffer("kernel_size", kernel_size, persistent=False)
+        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+
     def _get_extra_padding_for_conv1d(
-        hidden_states: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0
-    ) -> int:
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
-        n_frames = (length - kernel_size + padding_total) / stride + 1
-        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+        n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+
         return ideal_length - length
 
     @staticmethod
@@ -145,20 +155,15 @@ class EncodecConv1d(nn.Module):
         return padded[..., :end]
 
     def forward(self, hidden_states):
-        kernel_size = self.conv.kernel_size[0]
-        stride = self.conv.stride[0]
-        dilation = self.conv.dilation[0]
-        kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
-        padding_total = kernel_size - stride
-        extra_padding = self._get_extra_padding_for_conv1d(hidden_states, kernel_size, stride, padding_total)
+        extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
         if self.causal:
             # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (padding_total, extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
-            padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
+            padding_right = self.padding_total // 2
+            padding_left = self.padding_total - padding_right
             hidden_states = self._pad1d(
                 hidden_states, (padding_left, padding_right + extra_padding), mode=self.pad_mode
             )
@@ -185,8 +190,13 @@ class EncodecConvTranspose1d(nn.Module):
             )
 
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
+
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if config.norm_type == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
+            self.conv = weight_norm(self.conv)
         elif config.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
@@ -514,7 +524,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             `bandwidth == 6.0`
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input.
@@ -566,7 +576,7 @@ class EncodecModel(EncodecPreTrainedModel):
         scale = None
         if self.config.normalize:
             # if the padding is non zero
-            input_values = input_values * padding_mask
+            input_values = input_values * padding_mask.unsqueeze(1)
             mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
             scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
@@ -579,7 +589,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        padding_mask: torch.Tensor = None,
+        padding_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
@@ -607,8 +617,7 @@ class EncodecModel(EncodecPreTrainedModel):
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
             raise ValueError(
-                f"This model doesn't support the bandwidth {bandwidth}. "
-                f"Select one of {self.config.target_bandwidths}."
+                f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}."
             )
 
         _, channels, input_length = input_values.shape
@@ -718,7 +727,7 @@ class EncodecModel(EncodecPreTrainedModel):
         trimmed.
 
         Args:
-            audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
                 Discret code embeddings computed using `model.encode`.
             audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
                 Scaling factor for each `audio_codes` input.
@@ -728,7 +737,7 @@ class EncodecModel(EncodecPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         """
-        return_dict = return_dict or self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         chunk_length = self.config.chunk_length
         if chunk_length is None:
@@ -772,7 +781,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, EncodecModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model_id = "facebook/encodec_24khz"
@@ -785,7 +794,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
-        return_dict = return_dict or self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
@@ -804,3 +813,6 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_codes, audio_values)
 
         return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
+
+
+__all__ = ["EncodecModel", "EncodecPreTrainedModel"]

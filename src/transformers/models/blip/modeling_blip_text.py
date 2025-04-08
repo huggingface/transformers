@@ -23,6 +23,7 @@ from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -81,7 +82,6 @@ class BlipTextEmbeddings(nn.Module):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
-            input_ids = input_ids.to(self.word_embeddings.weight.device)
             inputs_embeds = self.word_embeddings(input_ids)
 
         embeddings = inputs_embeds
@@ -523,6 +523,9 @@ class BlipTextLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -549,6 +552,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
 
     config_class = BlipTextConfig
     base_model_prefix = "bert"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -804,18 +808,26 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
-class BlipTextLMHeadModel(BlipTextPreTrainedModel):
+class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 
         self.bert = BlipTextModel(config, add_pooling_layer=False)
         self.cls = BlipTextOnlyMLMHead(config)
+        self.label_smoothing = config.label_smoothing
+
+    def get_input_embeddings(self):
+        return self.bert.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        self.bert.set_input_embeddings(new_embeddings)
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     def forward(
         self,
@@ -889,7 +901,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
-            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.1)
+            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=self.label_smoothing)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
@@ -908,6 +920,8 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+        # Overwrite -- hardcoded key return (`is_decoder=True`)
+
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:

@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ResNet model."""
+"""PyTorch ResNet model."""
 
+import math
 from typing import Optional
 
 import torch
@@ -52,11 +53,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/resnet-50",
-    # See all resnet models at https://huggingface.co/models?filter=resnet
-]
 
 
 class ResNetConvLayer(nn.Module):
@@ -274,10 +270,18 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config_class = ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
+        elif isinstance(module, nn.Linear):
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
@@ -511,3 +515,6 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["ResNetForImageClassification", "ResNetModel", "ResNetPreTrainedModel", "ResNetBackbone"]

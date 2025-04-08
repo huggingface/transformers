@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecText configuration"""
+"""Data2VecText configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,10 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-text-base": "https://huggingface.co/data2vec/resolve/main/config.json",
-}
 
 
 class Data2VecTextConfig(PretrainedConfig):
@@ -152,3 +149,6 @@ class Data2VecTextOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["Data2VecTextConfig", "Data2VecTextOnnxConfig"]

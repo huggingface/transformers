@@ -11,7 +11,7 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
+from .base import ArgumentHandler, ChunkPipeline, Dataset, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -19,6 +19,8 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 
 
@@ -59,7 +61,7 @@ class AggregationStrategy(ExplicitEnum):
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         ignore_labels (`List[str]`, defaults to `["O"]`):
             A list of labels to ignore.
@@ -90,8 +92,7 @@ class AggregationStrategy(ExplicitEnum):
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
                 - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
-                  end up with different tags. Word entity will simply be the token with the maximum score.
-    """,
+                  end up with different tags. Word entity will simply be the token with the maximum score.""",
 )
 class TokenClassificationPipeline(ChunkPipeline):
     """
@@ -300,7 +301,11 @@ class TokenClassificationPipeline(ChunkPipeline):
             ignore_labels = ["O"]
         all_entities = []
         for model_outputs in all_outputs:
-            logits = model_outputs["logits"][0].numpy()
+            if self.framework == "pt" and model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
+                logits = model_outputs["logits"][0].to(torch.float32).numpy()
+            else:
+                logits = model_outputs["logits"][0].numpy()
+
             sentence = all_outputs[0]["sentence"]
             input_ids = model_outputs["input_ids"][0]
             offset_mapping = (

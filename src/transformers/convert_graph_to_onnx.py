@@ -16,7 +16,7 @@ import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from packaging.version import Version, parse
 
@@ -61,9 +61,9 @@ class OnnxConverterArgumentParser(ArgumentParser):
             "--model",
             type=str,
             required=True,
-            help="Model's id or path (ex: bert-base-cased)",
+            help="Model's id or path (ex: google-bert/bert-base-cased)",
         )
-        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
+        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: google-bert/bert-base-cased)")
         self.add_argument(
             "--framework",
             type=str,
@@ -159,7 +159,7 @@ def ensure_valid_input(model, tokens, input_names):
     return ordered_input_names, tuple(model_args)
 
 
-def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
+def infer_shapes(nlp: Pipeline, framework: str) -> tuple[list[str], list[str], dict, BatchEncoding]:
     """
     Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model
 
@@ -189,7 +189,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
                     raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
             else:
                 seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
-                axes.update({dim: "sequence" for dim in seq_axes})
+                axes.update(dict.fromkeys(seq_axes, "sequence"))
 
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
         return axes
@@ -273,40 +273,22 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
-    from transformers.pytorch_utils import is_torch_less_than_1_11
-
     print(f"Using framework PyTorch: {torch.__version__}")
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
-        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-        # so we check the torch version for backwards compatibility
-        if is_torch_less_than_1_11:
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                use_external_data_format=use_external_format,
-                enable_onnx_checker=True,
-                opset_version=opset,
-            )
-        else:
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                opset_version=opset,
-            )
+        export(
+            nlp.model,
+            model_args,
+            f=output.as_posix(),
+            input_names=ordered_input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            do_constant_folding=True,
+            opset_version=opset,
+        )
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
@@ -418,7 +400,7 @@ def optimize(onnx_model_path: Path) -> Path:
     sess_option.optimized_model_filepath = opt_model_path.as_posix()
     _ = InferenceSession(onnx_model_path.as_posix(), sess_option)
 
-    print(f"Optimized model has been written at {opt_model_path}: \N{heavy check mark}")
+    print(f"Optimized model has been written at {opt_model_path}: \N{HEAVY CHECK MARK}")
     print("/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\")
 
     return opt_model_path
@@ -493,7 +475,7 @@ def quantize(onnx_model_path: Path) -> Path:
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
-    print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    print(f"Quantized model has been written at {quantized_model_path}: \N{HEAVY CHECK MARK}")
     onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
@@ -507,9 +489,9 @@ def verify(path: Path):
     try:
         onnx_options = SessionOptions()
         _ = InferenceSession(path.as_posix(), onnx_options, providers=["CPUExecutionProvider"])
-        print(f"Model {path} correctly loaded: \N{heavy check mark}")
+        print(f"Model {path} correctly loaded: \N{HEAVY CHECK MARK}")
     except RuntimeException as re:
-        print(f"Error while loading the model {re}: \N{heavy ballot x}")
+        print(f"Error while loading the model {re}: \N{HEAVY BALLOT X}")
 
 
 if __name__ == "__main__":

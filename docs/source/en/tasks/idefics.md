@@ -36,13 +36,13 @@ being a large model means it requires significant computational resources and in
 this approach suits your use case better than fine-tuning specialized models for each individual task. 
 
 In this guide, you'll learn how to: 
-- [Load IDEFICS](#loading-the-model) and [load the quantized version of the model](#loading-the-quantized-version-of-the-model)
+- [Load IDEFICS](#loading-the-model) and [load the quantized version of the model](#quantized-model)
 - Use IDEFICS for: 
   - [Image captioning](#image-captioning)
   - [Prompted image captioning](#prompted-image-captioning)
   - [Few-shot prompting](#few-shot-prompting)
   - [Visual question answering](#visual-question-answering)
-  - [Image classificaiton](#image-classification)
+  - [Image classification](#image-classification)
   - [Image-guided text generation](#image-guided-text-generation)
 - [Run inference in batch mode](#running-inference-in-batch-mode)
 - [Run IDEFICS instruct for conversational use](#idefics-instruct-for-conversational-use)
@@ -386,9 +386,9 @@ The use and prompting for the conversational use is very similar to using the ba
 ```py
 >>> import torch
 >>> from transformers import IdeficsForVisionText2Text, AutoProcessor
+>>> from accelerate.test_utils.testing import get_backend
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
 >>> processor = AutoProcessor.from_pretrained(checkpoint)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The SqueezeBert authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SqueezeBertForMaskedLM,
         SqueezeBertForMultipleChoice,
         SqueezeBertForQuestionAnswering,
@@ -38,7 +36,7 @@ if is_torch_available():
     )
 
 
-class SqueezeBertModelTester(object):
+class SqueezeBertModelTester:
     def __init__(
         self,
         parent,
@@ -277,9 +275,9 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SqueezeBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "squeezebert/squeezebert-uncased"
+        model = SqueezeBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_sentencepiece
@@ -295,4 +293,4 @@ class SqueezeBertModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 3))
         self.assertEqual(output.shape, expected_shape)
         expected_tensor = torch.tensor([[0.6401, -0.0349, -0.6041]])
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+        torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)

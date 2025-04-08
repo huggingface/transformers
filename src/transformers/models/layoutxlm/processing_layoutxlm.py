@@ -15,6 +15,7 @@
 """
 Processor class for LayoutXLM.
 """
+
 import warnings
 from typing import List, Optional, Union
 
@@ -100,8 +101,7 @@ class LayoutXLMProcessor(ProcessorMixin):
         # verify input
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
-                "You cannot provide bounding boxes "
-                "if you initialized the image processor with apply_ocr set to True."
+                "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
             )
 
         if self.image_processor.apply_ocr and (word_labels is not None):
@@ -198,3 +198,6 @@ class LayoutXLMProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+
+__all__ = ["LayoutXLMProcessor"]

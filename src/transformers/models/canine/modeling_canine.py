@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CANINE model."""
-
+"""PyTorch CANINE model."""
 
 import copy
 import math
@@ -52,11 +51,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/canine-s"
 _CONFIG_FOR_DOC = "CanineConfig"
 
-CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/canine-s",
-    "google/canine-r",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-]
 
 # Support up to 16 hash functions.
 _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
@@ -91,8 +85,8 @@ class CanineModelOutputWithPooling(ModelOutput):
             attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -610,7 +604,7 @@ class CanineAttention(nn.Module):
                 chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
                 from_chunks.append((chunk_start, chunk_end))
 
-            # Determine the chunks (windows) that will will attend *to*.
+            # Determine the chunks (windows) that will attend *to*.
             to_chunks = []
             if self.first_position_attends_to_all:
                 to_chunks.append((0, to_seq_length))
@@ -1062,7 +1056,7 @@ class CanineModel(CaninePreTrainedModel):
 
         return molecule_attention_mask
 
-    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: torch.Tensor) -> torch.Tensor:
+    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
 
         rate = self.config.downsampling_rate
@@ -1076,7 +1070,7 @@ class CanineModel(CaninePreTrainedModel):
         # n elements (n < `downsampling_rate`), i.e. the remainder of floor
         # division. We do this by repeating the last molecule a few extra times.
         last_molecule = molecules[:, -1:, :]
-        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).item()
+        remainder_length = char_seq_length % rate
         remainder_repeated = torch.repeat_interleave(
             last_molecule,
             # +1 molecule to compensate for truncation.
@@ -1645,3 +1639,15 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "CanineForMultipleChoice",
+    "CanineForQuestionAnswering",
+    "CanineForSequenceClassification",
+    "CanineForTokenClassification",
+    "CanineLayer",
+    "CanineModel",
+    "CaninePreTrainedModel",
+    "load_tf_weights_in_canine",
+]

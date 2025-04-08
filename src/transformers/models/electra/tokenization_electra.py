@@ -26,46 +26,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/electra-small-generator": (
-            "https://huggingface.co/google/electra-small-generator/resolve/main/vocab.txt"
-        ),
-        "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/vocab.txt",
-        "google/electra-large-generator": (
-            "https://huggingface.co/google/electra-large-generator/resolve/main/vocab.txt"
-        ),
-        "google/electra-small-discriminator": (
-            "https://huggingface.co/google/electra-small-discriminator/resolve/main/vocab.txt"
-        ),
-        "google/electra-base-discriminator": (
-            "https://huggingface.co/google/electra-base-discriminator/resolve/main/vocab.txt"
-        ),
-        "google/electra-large-discriminator": (
-            "https://huggingface.co/google/electra-large-discriminator/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/electra-small-generator": 512,
-    "google/electra-base-generator": 512,
-    "google/electra-large-generator": 512,
-    "google/electra-small-discriminator": 512,
-    "google/electra-base-discriminator": 512,
-    "google/electra-large-discriminator": 512,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/electra-small-generator": {"do_lower_case": True},
-    "google/electra-base-generator": {"do_lower_case": True},
-    "google/electra-large-generator": {"do_lower_case": True},
-    "google/electra-small-discriminator": {"do_lower_case": True},
-    "google/electra-base-discriminator": {"do_lower_case": True},
-    "google/electra-large-discriminator": {"do_lower_case": True},
-}
-
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
@@ -130,12 +90,12 @@ class ElectraTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original Electra).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -150,6 +110,7 @@ class ElectraTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         if not os.path.isfile(vocab_file):
@@ -181,6 +142,7 @@ class ElectraTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -327,7 +289,7 @@ class ElectraTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -489,7 +451,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -544,3 +506,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["ElectraTokenizer"]

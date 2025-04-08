@@ -50,9 +50,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
 
-        if config.backbone not in timm.list_models():
-            raise ValueError(f"backbone {config.backbone} is not supported by timm.")
-
         if hasattr(config, "out_features") and config.out_features is not None:
             raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
 
@@ -63,12 +60,13 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         # We just take the final layer by default. This matches the default for the transformers models.
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
 
+        in_chans = kwargs.pop("in_chans", config.num_channels)
         self._backbone = timm.create_model(
             config.backbone,
             pretrained=pretrained,
             # This is currently not possible for transformer architectures.
             features_only=config.features_only,
-            in_chans=config.num_channels,
+            in_chans=in_chans,
             out_indices=out_indices,
             **kwargs,
         )
@@ -79,7 +77,9 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
         # These are used to control the output of the model when called. If output_hidden_states is True, then
         # return_layers is modified to include all layers.
-        self._return_layers = self._backbone.return_layers
+        self._return_layers = {
+            layer["module"]: str(layer["index"]) for layer in self._backbone.feature_info.get_dicts()
+        }
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
@@ -108,10 +108,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         return super()._from_config(config, **kwargs)
 
     def freeze_batch_norm_2d(self):
-        timm.layers.freeze_batch_norm_2d(self._backbone)
+        timm.utils.model.freeze_batch_norm_2d(self._backbone)
 
     def unfreeze_batch_norm_2d(self):
-        timm.layers.unfreeze_batch_norm_2d(self._backbone)
+        timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
     def _init_weights(self, module):
         """
@@ -156,3 +156,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             return output
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
+
+
+__all__ = ["TimmBackbone"]

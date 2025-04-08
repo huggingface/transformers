@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert RemBERT checkpoint."""
 
-
 import argparse
 
 import torch

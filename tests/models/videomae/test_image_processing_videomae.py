@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ if is_vision_available():
     from transformers import VideoMAEImageProcessor
 
 
-class VideoMAEImageProcessingTester(unittest.TestCase):
+class VideoMAEImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -99,6 +98,7 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VideoMAEImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VideoMAEImageProcessingTester(self)
 
     @property

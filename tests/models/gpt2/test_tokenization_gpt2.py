@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,24 +16,27 @@
 import json
 import os
 import unittest
+from functools import lru_cache
 
 from transformers import AutoTokenizer, GPT2Tokenizer, GPT2TokenizerFast
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_jinja, require_tiktoken, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_tokenizers
 class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai-community/gpt2"
     tokenizer_class = GPT2Tokenizer
     rust_tokenizer_class = GPT2TokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -62,22 +64,30 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return GPT2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return GPT2Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return GPT2TokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return GPT2TokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -97,7 +107,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
@@ -125,6 +135,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @unittest.skip
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
         # And get both GPT2 and Roberta to work at the same time (mostly an issue of adding a space before the string)
@@ -133,7 +144,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 # Simple input
                 s = "This is a simple input"
@@ -246,7 +257,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(decode_s.startswith(bos_token))
         self.assertTrue(all(d.startswith(bos_token) for d in decode_s2))
 
-    # tokenizer has no padding token
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 
@@ -278,6 +289,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname)
+        tokenizer.chat_template = "{% for message in messages %}{{ message.content }}{{ eos_token }}{% endfor %}"
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
             [
@@ -295,6 +307,23 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
+
+    @require_tiktoken
+    def test_tokenization_tiktoken(self):
+        from tiktoken import encoding_name_for_model
+
+        from transformers.integrations.tiktoken import convert_tiktoken_to_fast
+
+        encoding = encoding_name_for_model("gpt2")
+        convert_tiktoken_to_fast(encoding, self.tmpdirname)
+
+        tiktoken_fast_tokenizer = GPT2TokenizerFast.from_pretrained(self.tmpdirname)
+        rust_tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        sequence = "lower newer"
+        self.assertEqual(
+            rust_tokenizer.decode(rust_tokenizer.encode(sequence)),
+            tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)),
+        )
 
 
 @require_tokenizers
@@ -330,7 +359,7 @@ class OPTTokenizationTest(unittest.TestCase):
         # Same as above
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
 
-    @unittest.skip("This test is failing because of a bug in the fast tokenizer")
+    @unittest.skip(reason="This test is failing because of a bug in the fast tokenizer")
     def test_users_can_modify_bos(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
 

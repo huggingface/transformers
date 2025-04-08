@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "configuration_phi": ["PhiConfig"],
 }
 
 try:
@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_phi"] = [
-        "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PhiPreTrainedModel",
         "PhiModel",
         "PhiForCausalLM",
@@ -45,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .configuration_phi import PhiConfig
 
     try:
         if not is_torch_available():
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_phi import (
-            PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
             PhiForCausalLM,
             PhiForSequenceClassification,
             PhiForTokenClassification,

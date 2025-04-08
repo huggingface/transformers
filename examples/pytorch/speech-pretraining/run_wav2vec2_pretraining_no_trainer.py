@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,27 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
+"""Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
 
 import argparse
 import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import datasets
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
-    AdamW,
     SchedulerType,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
@@ -70,6 +68,15 @@ def parse_args():
         type=str,
         required=True,
         help="The names of the training data set splits to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -287,7 +294,7 @@ class DataCollatorForWav2Vec2Pretraining:
             The Wav2Vec2 model used for pretraining. The data collator needs to have access
             to config and ``_get_feat_extract_output_lengths`` function for correct padding.
         feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -320,7 +327,7 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -423,15 +430,20 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
     # 1. Download and create train, validation dataset
-    # We load all dataset configuration and datset split pairs passed in
+    # We load all dataset configuration and dataset split pairs passed in
     # ``args.dataset_config_names`` and ``args.dataset_split_names``
     datasets_splits = []
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
@@ -441,6 +453,7 @@ def main():
             dataset_config_name,
             split=train_split_name,
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
         datasets_splits.append(dataset_split)
 
@@ -568,7 +581,7 @@ def main():
     )
 
     # Optimizer
-    optimizer = AdamW(
+    optimizer = torch.optim.AdamW(
         list(model.parameters()),
         lr=args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],
@@ -702,7 +715,7 @@ def main():
                 }
                 log_str = ""
                 for k, v in train_logs.items():
-                    log_str += "| {}: {:.3e}".format(k, v.item())
+                    log_str += f"| {k}: {v.item():.3e}"
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
@@ -719,10 +732,12 @@ def main():
                     )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(
-                        commit_message=f"Training in progress step {completed_steps}",
-                        blocking=False,
-                        auto_lfs_prune=True,
+                    api.upload_folder(
+                        commit_message=f"Training in progress epoch {epoch}",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
                     )
 
             # if completed steps > `args.max_train_steps` stop
@@ -757,7 +772,7 @@ def main():
 
         log_str = ""
         for k, v in val_logs.items():
-            log_str += "| {}: {:.3e}".format(k, v.item())
+            log_str += f"| {k}: {v.item():.3e}"
 
         if accelerator.is_local_main_process:
             progress_bar.write(log_str)
@@ -772,7 +787,13 @@ def main():
             )
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                    api.upload_folder(
+                        commit_message="End of training",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
+                    )
 
 
 if __name__ == "__main__":

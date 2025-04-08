@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for Funnel Transformer."""
+"""Tokenization class for Funnel Transformer."""
 
 import collections
 import os
@@ -39,31 +39,6 @@ _model_names = [
     "xlarge",
     "xlarge-base",
 ]
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/vocab.txt",
-        "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/vocab.txt",
-        "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/vocab.txt",
-        "funnel-transformer/medium-base": (
-            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate": (
-            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate-base": (
-            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/vocab.txt",
-        "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge-base": (
-            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/vocab.txt"
-        ),
-    }
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
-PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case": True} for name in _model_names}
 
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
@@ -132,12 +107,12 @@ class FunnelTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     cls_token_type_id: int = 2
 
     def __init__(
@@ -155,6 +130,7 @@ class FunnelTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         if not os.path.isfile(vocab_file):
@@ -187,6 +163,7 @@ class FunnelTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -343,7 +320,7 @@ class FunnelTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -505,7 +482,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -560,3 +537,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["FunnelTokenizer"]

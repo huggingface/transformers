@@ -13,7 +13,7 @@ The following is the recipe on how to effectively debug `bitsandbytes` integrati
 
 The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100, A6000 should be supported. 
 
-## Virutal envs
+## Virtual envs
 
 ```bash
 conda create --name int8-testing python==3.8
@@ -22,7 +22,7 @@ pip install accelerate>=0.12.0
 pip install transformers>=4.23.0
 ```
 if `transformers>=4.23.0` is not released yet, then use:
-```
+```bash
 pip install git+https://github.com/huggingface/transformers.git
 ```
 
@@ -61,7 +61,7 @@ This happens when some Linear weights are set to the CPU when using `accelerate`
 
 Use the latest version of `accelerate` with a command such as: `pip install -U accelerate` and the problem should be solved.
 
-### `Parameter has no attribue .CB` 
+### `Parameter has no attribute .CB` 
 
 Same solution as above.
 
@@ -71,16 +71,16 @@ Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe a
 
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 
-Check the CUDA verisons with:
-```
+Check the CUDA versions with:
+```bash
 nvcc --version
 ```
 and confirm it is the same version as the one detected by `bitsandbytes`. If not, run:
-```
+```bash
 ls -l $CONDA_PREFIX/lib/libcudart.so
 ```
 or 
-```
+```bash
 ls -l $LD_LIBRARY_PATH
 ```
 Check if `libcudart.so` has a correct symlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the symlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 

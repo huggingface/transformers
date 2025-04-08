@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Bloom configuration"""
+"""Bloom configuration"""
+
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
@@ -28,15 +29,6 @@ from ...utils import is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
-    "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/config.json",
-    "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
-    "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/config.json",
-    "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/config.json",
-    "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/config.json",
-}
 
 
 class BloomConfig(PretrainedConfig):
@@ -240,3 +232,6 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["BloomConfig", "BloomOnnxConfig"]

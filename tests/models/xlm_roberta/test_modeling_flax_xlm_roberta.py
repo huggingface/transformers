@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,8 +31,8 @@ if is_flax_available():
 class FlaxXLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_flax_xlm_roberta_base(self):
-        model = FlaxXLMRobertaModel.from_pretrained("xlm-roberta-base")
-        tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        model = FlaxXLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base")
+        tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
         text = "The dog is cute and lives in the garden house"
         input_ids = jnp.array([tokenizer.encode(text)])
 

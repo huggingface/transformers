@@ -1,12 +1,20 @@
 from typing import Dict
 
-from .base import GenericTensor, Pipeline
+from ..utils import add_end_docstrings
+from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
-# Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
+@add_end_docstrings(
+    build_pipeline_init_args(has_tokenizer=True, supports_binary_output=False),
+    r"""
+        tokenize_kwargs (`dict`, *optional*):
+                Additional dictionary of keyword arguments passed along to the tokenizer.
+        return_tensors (`bool`, *optional*):
+            If `True`, returns a tensor according to the specified framework, otherwise returns a list.""",
+)
 class FeatureExtractionPipeline(Pipeline):
     """
-    Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
+    Feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
     Example:
@@ -14,9 +22,9 @@ class FeatureExtractionPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> extractor = pipeline(model="bert-base-uncased", task="feature-extraction")
+    >>> extractor = pipeline(model="google-bert/bert-base-uncased", task="feature-extraction")
     >>> result = extractor("This is a simple test.", return_tensors=True)
-    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input string.
+    >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input string.
     torch.Size([1, 8, 768])
     ```
 
@@ -27,34 +35,6 @@ class FeatureExtractionPipeline(Pipeline):
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).
-
-    Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed.
-
-            If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
-            provided.
-        return_tensors (`bool`, *optional*):
-            If `True`, returns a tensor according to the specified framework, otherwise returns a list.
-        task (`str`, defaults to `""`):
-            A task-identifier for the pipeline.
-        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
-            Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
-        tokenize_kwargs (`dict`, *optional*):
-            Additional dictionary of keyword arguments passed along to the tokenizer.
     """
 
     def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):

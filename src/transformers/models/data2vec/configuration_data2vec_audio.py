@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecText configuration"""
+"""Data2VecText configuration"""
 
 import math
 
@@ -21,11 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-base-960h": "https://huggingface.co/facebook/data2vec-audio-base-960h/resolve/main/config.json",
-    # See all Data2VecAudio models at https://huggingface.co/models?filter=data2vec-audio
-}
 
 
 class Data2VecAudioConfig(PretrainedConfig):
@@ -288,3 +283,6 @@ class Data2VecAudioConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return math.prod(self.conv_stride)
+
+
+__all__ = ["Data2VecAudioConfig"]

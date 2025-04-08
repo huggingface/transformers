@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import os
 import tempfile
 import unittest
 
-from transformers.modelcard import ModelCard
+from transformers.modelcard import ModelCard, TrainingSummary
 
 
 class ModelCardTester(unittest.TestCase):
@@ -82,3 +81,8 @@ class ModelCardTester(unittest.TestCase):
             model_card_second = ModelCard.from_pretrained(tmpdirname)
 
         self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
+
+    def test_model_summary_modelcard_base_metadata(self):
+        metadata = TrainingSummary("Model name").create_metadata()
+        self.assertTrue("library_name" in metadata)
+        self.assertTrue(metadata["library_name"] == "transformers")

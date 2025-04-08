@@ -22,24 +22,7 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-
 from ...configuration_utils import PretrainedConfig
-
-
-TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/tapas-base-finetuned-sqa": (
-        "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/config.json"
-    ),
-    "google/tapas-base-finetuned-wtq": (
-        "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/config.json"
-    ),
-    "google/tapas-base-finetuned-wikisql-supervised": (
-        "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json"
-    ),
-    "google/tapas-base-finetuned-tabfact": (
-        "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/config.json"
-    ),
-}
 
 
 class TapasConfig(PretrainedConfig):
@@ -241,3 +224,6 @@ class TapasConfig(PretrainedConfig):
 
         if isinstance(self.aggregation_labels, dict):
             self.aggregation_labels = {int(k): v for k, v in aggregation_labels.items()}
+
+
+__all__ = ["TapasConfig"]

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flaubert configuration"""
+"""Flaubert configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,13 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/config.json",
-    "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/config.json",
-    "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/config.json",
-    "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/config.json",
-}
 
 
 class FlaubertConfig(PretrainedConfig):
@@ -236,3 +230,6 @@ class FlaubertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["FlaubertConfig", "FlaubertOnnxConfig"]

@@ -22,12 +22,13 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union, get_args, get_origin
 
 import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
+from transformers.testing_utils import require_torch
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
@@ -92,21 +93,21 @@ class OptionalExample:
     foo: Optional[int] = None
     bar: Optional[float] = field(default=None, metadata={"help": "help message"})
     baz: Optional[str] = None
-    ces: Optional[List[str]] = list_field(default=[])
-    des: Optional[List[int]] = list_field(default=[])
+    ces: Optional[list[str]] = list_field(default=[])
+    des: Optional[list[int]] = list_field(default=[])
 
 
 @dataclass
 class ListExample:
-    foo_int: List[int] = list_field(default=[])
-    bar_int: List[int] = list_field(default=[1, 2, 3])
-    foo_str: List[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
-    foo_float: List[float] = list_field(default=[0.1, 0.2, 0.3])
+    foo_int: list[int] = list_field(default=[])
+    bar_int: list[int] = list_field(default=[1, 2, 3])
+    foo_str: list[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
+    foo_float: list[float] = list_field(default=[0.1, 0.2, 0.3])
 
 
 @dataclass
 class RequiredExample:
-    required_list: List[int] = field()
+    required_list: list[int] = field()
     required_str: str = field()
     required_enum: BasicEnum = field()
 
@@ -187,7 +188,7 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--baz", type=string_to_bool, default=True, const=True, nargs="?")
         # A boolean no_* argument always has to come after its "default: True" regular counter-part
         # and its default must be set to False
-        expected.add_argument("--no_baz", action="store_false", default=False, dest="baz")
+        expected.add_argument("--no_baz", "--no-baz", action="store_false", default=False, dest="baz")
         expected.add_argument("--opt", type=string_to_bool, default=None)
 
         dataclass_types = [WithDefaultBoolExample]
@@ -202,6 +203,9 @@ class HfArgumentParserTest(unittest.TestCase):
             self.assertEqual(args, Namespace(foo=False, baz=True, opt=None))
 
             args = parser.parse_args(["--foo", "--no_baz"])
+            self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
+
+            args = parser.parse_args(["--foo", "--no-baz"])
             self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
 
             args = parser.parse_args(["--foo", "--baz"])
@@ -269,10 +273,10 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(ListExample)
 
         expected = argparse.ArgumentParser()
-        expected.add_argument("--foo_int", nargs="+", default=[], type=int)
-        expected.add_argument("--bar_int", nargs="+", default=[1, 2, 3], type=int)
-        expected.add_argument("--foo_str", nargs="+", default=["Hallo", "Bonjour", "Hello"], type=str)
-        expected.add_argument("--foo_float", nargs="+", default=[0.1, 0.2, 0.3], type=float)
+        expected.add_argument("--foo_int", "--foo-int", nargs="+", default=[], type=int)
+        expected.add_argument("--bar_int", "--bar-int", nargs="+", default=[1, 2, 3], type=int)
+        expected.add_argument("--foo_str", "--foo-str", nargs="+", default=["Hallo", "Bonjour", "Hello"], type=str)
+        expected.add_argument("--foo_float", "--foo-float", nargs="+", default=[0.1, 0.2, 0.3], type=float)
 
         self.argparsersEqual(parser, expected)
 
@@ -283,6 +287,9 @@ class HfArgumentParserTest(unittest.TestCase):
         )
 
         args = parser.parse_args("--foo_int 1 --bar_int 2 3 --foo_str a b c --foo_float 0.1 0.7".split())
+        self.assertEqual(args, Namespace(foo_int=[1], bar_int=[2, 3], foo_str=["a", "b", "c"], foo_float=[0.1, 0.7]))
+
+        args = parser.parse_args("--foo-int 1 --bar-int 2 3 --foo-str a b c --foo-float 0.1 0.7".split())
         self.assertEqual(args, Namespace(foo_int=[1], bar_int=[2, 3], foo_str=["a", "b", "c"], foo_float=[0.1, 0.7]))
 
     def test_with_optional(self):
@@ -312,10 +319,11 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(RequiredExample)
 
         expected = argparse.ArgumentParser()
-        expected.add_argument("--required_list", nargs="+", type=int, required=True)
-        expected.add_argument("--required_str", type=str, required=True)
+        expected.add_argument("--required_list", "--required-list", nargs="+", type=int, required=True)
+        expected.add_argument("--required_str", "--required-str", type=str, required=True)
         expected.add_argument(
             "--required_enum",
+            "--required-enum",
             type=make_choice_type_function(["titi", "toto"]),
             choices=["titi", "toto"],
             required=True,
@@ -329,13 +337,14 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--foo", type=int, required=True)
         expected.add_argument(
             "--required_enum",
+            "--required-enum",
             type=make_choice_type_function(["titi", "toto"]),
             choices=["titi", "toto"],
             required=True,
         )
         expected.add_argument("--opt", type=string_to_bool, default=None)
         expected.add_argument("--baz", default="toto", type=str, help="help message")
-        expected.add_argument("--foo_str", nargs="+", default=["Hallo", "Bonjour", "Hello"], type=str)
+        expected.add_argument("--foo_str", "--foo-str", nargs="+", default=["Hallo", "Bonjour", "Hello"], type=str)
         self.argparsersEqual(parser, expected)
 
     def test_parse_dict(self):
@@ -379,7 +388,7 @@ class HfArgumentParserTest(unittest.TestCase):
             os.mkdir(temp_local_path)
             with open(temp_local_path + ".json", "w+") as f:
                 json.dump(args_dict_for_json, f)
-            parsed_args = parser.parse_yaml_file(Path(temp_local_path + ".json"))[0]
+            parsed_args = parser.parse_json_file(Path(temp_local_path + ".json"))[0]
 
         args = BasicExample(**args_dict_for_json)
         self.assertEqual(parsed_args, args)
@@ -402,6 +411,72 @@ class HfArgumentParserTest(unittest.TestCase):
         args = BasicExample(**args_dict_for_yaml)
         self.assertEqual(parsed_args, args)
 
-    def test_integration_training_args(self):
+    def test_z_integration_training_args(self):
+        # make sure that this test executes last in the test suite
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)
+
+    def test_valid_dict_annotation(self):
+        """
+        Tests to make sure that `dict` based annotations
+        are correctly made in the `TrainingArguments`.
+
+        If this fails, a type annotation change is
+        needed on a new input
+        """
+        base_list = TrainingArguments._VALID_DICT_FIELDS.copy()
+        args = TrainingArguments
+
+        # First find any annotations that contain `dict`
+        fields = args.__dataclass_fields__
+
+        raw_dict_fields = []
+        optional_dict_fields = []
+
+        for field in fields.values():
+            # First verify raw dict
+            if field.type in (dict, dict):
+                raw_dict_fields.append(field)
+            # Next check for `Union` or `Optional`
+            elif get_origin(field.type) == Union:
+                if any(arg in (dict, dict) for arg in get_args(field.type)):
+                    optional_dict_fields.append(field)
+
+        # First check: anything in `raw_dict_fields` is very bad
+        self.assertEqual(
+            len(raw_dict_fields),
+            0,
+            "Found invalid raw `dict` types in the `TrainingArgument` typings. "
+            "This leads to issues with the CLI. Please turn this into `typing.Optional[dict,str]`",
+        )
+
+        # Next check raw annotations
+        for field in optional_dict_fields:
+            args = get_args(field.type)
+            # These should be returned as `dict`, `str`, ...
+            # we only care about the first two
+            self.assertIn(args[0], (dict, dict))
+            self.assertEqual(
+                str(args[1]),
+                "<class 'str'>",
+                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, "
+                "but `str` not found. Please fix this.",
+            )
+
+        # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
+        for field in optional_dict_fields:
+            self.assertIn(
+                field.name,
+                base_list,
+                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
+            )
+
+    @require_torch
+    def test_valid_dict_input_parsing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config='{"split_batches": "True", "gradient_accumulation_kwargs": {"num_steps": 2}}',
+            )
+            self.assertEqual(args.accelerator_config.split_batches, True)
+            self.assertEqual(args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)

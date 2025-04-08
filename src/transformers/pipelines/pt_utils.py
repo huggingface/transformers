@@ -31,7 +31,7 @@ class PipelineIterator(IterableDataset):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -73,7 +73,7 @@ class PipelineIterator(IterableDataset):
         """
         if isinstance(self._loader_batch_data, torch.Tensor):
             # Batch data is simple tensor, just fetch the slice
-            result = self._loader_batch_data[self._loader_batch_index]
+            result = self._loader_batch_data[self._loader_batch_index].unsqueeze(0)
         else:
             # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}
@@ -128,9 +128,12 @@ class PipelineIterator(IterableDataset):
             # Try to infer the size of the batch
             if isinstance(processed, torch.Tensor):
                 first_tensor = processed
+            elif isinstance(processed, tuple):
+                first_tensor = processed[0]
             else:
                 key = list(processed.keys())[0]
                 first_tensor = processed[key]
+
             if isinstance(first_tensor, list):
                 observed_batch_size = len(first_tensor)
             else:
@@ -140,7 +143,7 @@ class PipelineIterator(IterableDataset):
                 # elements.
                 self.loader_batch_size = observed_batch_size
             # Setting internal index to unwrap the batch
-            self._loader_batch_data = processed
+            self._loader_batch_data = processed[0] if isinstance(processed, tuple) else processed
             self._loader_batch_index = 0
             return self.loader_batch_item()
         else:
@@ -160,7 +163,7 @@ class PipelineChunkIterator(PipelineIterator):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -221,7 +224,7 @@ class PipelinePackIterator(PipelineIterator):
     ```
 
         Arguments:
-            loader (`torch.utils.data.DataLoader` or any iterator):
+            loader (`torch.utils.data.DataLoader` or `Iterable`):
                 The iterator that will be used to apply `infer` on.
             infer (any function):
                 The function to apply of each element of `loader`.

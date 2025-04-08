@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model BertGeneration."""
-
+"""Tokenization class for model BertGeneration."""
 
 import os
 from shutil import copyfile
@@ -28,16 +27,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "bert_for_seq_generation": (
-            "https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder/resolve/main/spiece.model"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"bert_for_seq_generation": 512}
 
 
 class BertGenerationTokenizer(PreTrainedTokenizer):
@@ -82,8 +71,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     prefix_tokens: List[int] = []
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -183,3 +170,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["BertGenerationTokenizer"]

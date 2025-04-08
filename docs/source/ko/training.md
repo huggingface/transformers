@@ -48,7 +48,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 
 >>> def tokenize_function(examples):
@@ -84,7 +84,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -129,12 +129,12 @@ rendered properly in your Markdown viewer.
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-미세 튜닝 중에 평가 지표를 모니터링하려면 훈련 인수에 `evaluation_strategy` 파라미터를 지정하여 각 에폭이 끝날 때 평가 지표를 확인할 수 있습니다:
+미세 튜닝 중에 평가 지표를 모니터링하려면 훈련 인수에 `eval_strategy` 파라미터를 지정하여 각 에폭이 끝날 때 평가 지표를 확인할 수 있습니다:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### 훈련 하기[[trainer]]
@@ -187,7 +187,7 @@ dataset = dataset["train"]  # Just take the training split for now
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
 # Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
 tokenized_data = dict(tokenized_data)
@@ -202,7 +202,7 @@ from transformers import TFAutoModelForSequenceClassification
 from tensorflow.keras.optimizers import Adam
 
 # Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
 # Lower learning rates are often better for fine-tuning transformers
 model.compile(optimizer=Adam(3e-5))
 
@@ -329,7 +329,7 @@ torch.cuda.empty_cache()
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### 옵티마이저 및 학습 속도 스케줄러[[optimizer-and-learning-rate-scheduler]]

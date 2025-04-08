@@ -5,7 +5,7 @@ from typing import Dict
 import numpy as np
 
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
-from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
+from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -32,7 +32,7 @@ class ClassificationFunction(ExplicitEnum):
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         return_all_scores (`bool`, *optional*, defaults to `False`):
             Whether to return all prediction scores or just the one of the predicted class.
@@ -40,11 +40,11 @@ class ClassificationFunction(ExplicitEnum):
             The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
 
             - `"default"`: if the model has a single label, will apply the sigmoid function on the output. If the model
-              has several labels, will apply the softmax function on the output.
+              has several labels, will apply the softmax function on the output. In case of regression tasks, will not
+              apply any function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
-            - `"none"`: Does not apply any function on the output.
-    """,
+            - `"none"`: Does not apply any function on the output.""",
 )
 class TextClassificationPipeline(Pipeline):
     """
@@ -56,7 +56,7 @@ class TextClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
+    >>> classifier = pipeline(model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
     >>> classifier("This movie is disgustingly good !")
     [{'label': 'POSITIVE', 'score': 1.0}]
 
@@ -70,7 +70,8 @@ class TextClassificationPipeline(Pipeline):
     `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).
 
     If multiple classification labels are available (`model.config.num_labels >= 2`), the pipeline will run a softmax
-    over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+    over the results. If there is a single label, the pipeline will run a sigmoid over the result. In case of regression
+    tasks (`model.config.problem_type == "regression"`), will not apply any function on the output.
 
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
     the up-to-date list of available models on
@@ -119,12 +120,12 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, inputs, **kwargs):
         """
         Classify the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+            inputs (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
@@ -136,6 +137,7 @@ class TextClassificationPipeline(Pipeline):
                 If this argument is not specified, then it will apply the following functions according to the number
                 of labels:
 
+                - If problem type is regression, will not apply any function on the output.
                 - If the model has a single label, will apply the sigmoid function on the output.
                 - If the model has several labels, will apply the softmax function on the output.
 
@@ -153,10 +155,11 @@ class TextClassificationPipeline(Pipeline):
 
             If `top_k` is used, one such dictionary is returned per label.
         """
-        result = super().__call__(*args, **kwargs)
+        inputs = (inputs,)
+        result = super().__call__(*inputs, **kwargs)
         # TODO try and retrieve it in a nicer way from _sanitize_parameters.
         _legacy = "top_k" not in kwargs
-        if isinstance(args[0], str) and _legacy:
+        if isinstance(inputs[0], str) and _legacy:
             # This pipeline is odd, and return a list when single item is run
             return [result]
         else:
@@ -192,7 +195,9 @@ class TextClassificationPipeline(Pipeline):
         # the more natural result containing the list.
         # Default value before `set_parameters`
         if function_to_apply is None:
-            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "regression":
+                function_to_apply = ClassificationFunction.NONE
+            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
             elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
@@ -202,7 +207,12 @@ class TextClassificationPipeline(Pipeline):
                 function_to_apply = ClassificationFunction.NONE
 
         outputs = model_outputs["logits"][0]
-        outputs = outputs.numpy()
+
+        if self.framework == "pt":
+            # To enable using fp16 and bf16
+            outputs = outputs.float().numpy()
+        else:
+            outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)

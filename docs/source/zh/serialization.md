@@ -56,10 +56,10 @@ pip install optimum[exporters]
 optimum-cli export onnx --help
 ```
 
-运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `distilbert-base-uncased-distilled-squad` 为例：
+运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `distilbert/distilbert-base-uncased-distilled-squad` 为例：
 
 ```bash
-optimum-cli export onnx --model distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
 ```
 
 你应该能在日志中看到导出进度以及生成的 `model.onnx` 文件的保存位置，如下所示：
@@ -128,11 +128,11 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 
 <Tip warning={true}>
 
-`tranformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
+`transformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
 
 </Tip>
 
-要使用 `tranformers.onnx` 将 🤗 Transformers 模型导出为 ONNX，请安装额外的依赖项：
+要使用 `transformers.onnx` 将 🤗 Transformers 模型导出为 ONNX，请安装额外的依赖项：
 
 ```bash
 pip install transformers[onnx]
@@ -141,7 +141,7 @@ pip install transformers[onnx]
 将 `transformers.onnx` 包作为 Python 模块使用，以使用现成的配置导出检查点：
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ```
 
 以上代码将导出由 `--model` 参数定义的检查点的 ONNX 图。传入任何 🤗 Hub 上或者存储与本地的检查点。生成的 `model.onnx` 文件可以在支持 ONNX 标准的众多加速引擎上运行。例如，使用 ONNX Runtime 加载并运行模型，如下所示：
@@ -150,7 +150,7 @@ python -m transformers.onnx --model=distilbert-base-uncased onnx/
 >>> from transformers import AutoTokenizer
 >>> from onnxruntime import InferenceSession
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
 >>> # ONNX Runtime expects NumPy arrays as input
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")

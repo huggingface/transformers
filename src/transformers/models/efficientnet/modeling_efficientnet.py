@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch EfficientNet model."""
-
+"""PyTorch EfficientNet model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -51,11 +50,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/efficientnet-b7"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/efficientnet-b7",
-    # See all EfficientNet models at https://huggingface.co/models?filter=efficientnet
-]
 
 
 EFFICIENTNET_START_DOCSTRING = r"""
@@ -486,6 +480,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -532,7 +527,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -596,7 +591,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -647,3 +642,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+__all__ = ["EfficientNetForImageClassification", "EfficientNetModel", "EfficientNetPreTrainedModel"]

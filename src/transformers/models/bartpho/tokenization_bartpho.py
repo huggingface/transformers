@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for BARTpho-syllable model."""
-
+"""Tokenization classes for BARTpho-syllable model."""
 
 import os
 from shutil import copyfile
@@ -30,17 +29,6 @@ logger = logging.get_logger(__name__)
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
-    },
-    "monolingual_vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/dict.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
 
 
 class BartphoTokenizer(PreTrainedTokenizer):
@@ -114,8 +102,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -325,3 +311,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
                         fp.write(f"{str(token)} \n")
 
         return out_vocab_file, out_monolingual_vocab_file
+
+
+__all__ = ["BartphoTokenizer"]

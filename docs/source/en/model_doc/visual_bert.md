@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # VisualBERT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The VisualBERT model was proposed in [VisualBERT: A Simple and Performant Baseline for Vision and Language](https://arxiv.org/pdf/1908.03557) by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
@@ -60,7 +64,7 @@ appropriately for the textual and visual parts.
 The [`BertTokenizer`] is used to encode the text. A custom detector/image processor must be used
 to get the visual embeddings. The following example notebooks show how to use VisualBERT with Detectron-like models:
 
-- [VisualBERT VQA demo notebook](https://github.com/huggingface/transformers/tree/main/examples/research_projects/visual_bert) : This notebook
+- [VisualBERT VQA demo notebook](https://github.com/huggingface/transformers-research-projects/tree/main/visual_bert) : This notebook
   contains an example on VisualBERT VQA.
 
 - [Generate Embeddings for VisualBERT (Colab Notebook)](https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing) : This notebook contains
@@ -73,7 +77,7 @@ The following example shows how to get the last hidden state using [`VisualBertM
 >>> from transformers import BertTokenizer, VisualBertModel
 
 >>> model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
 >>> # this is a custom function that returns the visual embeddings given the image path

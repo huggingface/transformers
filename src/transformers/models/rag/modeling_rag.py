@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import BeamSearchScorer, GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -112,22 +112,22 @@ class RetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -202,22 +202,22 @@ class RetrievAugLMOutput(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class RagPreTrainedModel(PreTrainedModel):
@@ -232,19 +232,14 @@ class RagPreTrainedModel(PreTrainedModel):
 
     config_class = RagConfig
     base_model_prefix = "rag"
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: str = None,
-        generator_pretrained_model_name_or_path: str = None,
+        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        generator_pretrained_model_name_or_path: Optional[str] = None,
         retriever: RagRetriever = None,
         **kwargs,
     ) -> PreTrainedModel:
@@ -260,8 +255,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -273,8 +266,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -304,7 +295,7 @@ class RagPreTrainedModel(PreTrainedModel):
 
         >>> # initialize a RAG from two pretrained models.
         >>> model = RagModel.from_pretrained_question_encoder_generator(
-        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ...     "facebook/dpr-question_encoder-single-nq-base", "google-t5/t5-small"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./rag")
@@ -496,9 +487,9 @@ class RagModel(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an question_encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an question_encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -519,9 +510,9 @@ class RagModel(RagPreTrainedModel):
 
         self.retriever = retriever
         if self.retriever is not None:
-            assert isinstance(
-                retriever, RagRetriever
-            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            assert isinstance(retriever, RagRetriever), (
+                f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            )
             self.retriever = retriever
 
         self.question_encoder = question_encoder
@@ -592,7 +583,7 @@ class RagModel(RagPreTrainedModel):
 
                 retriever_outputs = self.retriever(
                     input_ids,
-                    question_encoder_last_hidden_state.cpu().detach().to(torch.float32).numpy(),
+                    question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
                     prefix=self.generator.config.prefix,
                     n_docs=n_docs,
                     return_tensors="pt",
@@ -662,9 +653,9 @@ class RagModel(RagPreTrainedModel):
                     " retriever using the `set_retriever(...)` function."
                 )
 
-        assert (
-            doc_scores is not None
-        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        assert doc_scores is not None, (
+            "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        )
 
         assert (doc_scores.shape[1] % n_docs) == 0, (
             f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
@@ -742,9 +733,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -792,7 +783,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
              Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -975,15 +966,15 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        assert (
-            input_ids is not None or context_input_ids is not None
-        ), " At least one of input_ids or context_input_ids must be given"
+        assert input_ids is not None or context_input_ids is not None, (
+            " At least one of input_ids or context_input_ids must be given"
+        )
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=n_docs,
                 return_tensors="pt",
@@ -1140,9 +1131,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -1172,6 +1163,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs=None,
         **kwargs,
     ):
+        # Overwritten -- `do_marginalize` is explicitly set in the output
+
         if past_key_values is not None:
             # if past is defined use only last decoder_input_ids
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1261,7 +1254,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1458,6 +1451,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
+
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
@@ -1466,7 +1462,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             out = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=n_docs,
                 return_tensors="pt",
@@ -1535,6 +1531,11 @@ class RagTokenForGeneration(RagPreTrainedModel):
             encoder_input_ids=context_input_ids,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            device=input_ids.device,
+        )
+
+        prepared_stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
         )
 
         if generation_config.num_beams == 1:
@@ -1543,33 +1544,24 @@ class RagTokenForGeneration(RagPreTrainedModel):
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
-            return self.greedy_search(
+            return self._sample(
                 input_ids,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=False,
+                streamer=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=self.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                max_length=generation_config.max_length,
-            )
-            return self.beam_search(
+            return self._beam_search(
                 input_ids,
-                beam_scorer,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=False,
                 **model_kwargs,
             )
         else:
@@ -1630,3 +1622,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
         eps_i = epsilon / rag_logprobs.size(-1)
         loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
         return loss
+
+
+__all__ = ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]

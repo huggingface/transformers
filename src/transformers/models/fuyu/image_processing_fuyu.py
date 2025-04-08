@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     pad,
     resize,
@@ -35,9 +35,11 @@ from ...image_utils import (
     is_valid_image,
     make_list_of_images,
     to_numpy_array,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
+    filter_out_non_signature_kwargs,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -357,6 +359,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images,
@@ -446,19 +449,22 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         batch_images = make_list_of_list_of_images(images)
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and image_mean is None or image_std is None:
-            raise ValueError("image_mean and image_std must be specified if do_normalize is True.")
-
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
-        if is_scaled_image(batch_images[0][0]) and do_rescale:
+        if do_rescale and is_scaled_image(batch_images[0][0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -469,6 +475,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
         original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        size = get_size_dict(size)  # for BC
 
         if do_resize:
             batch_images = [
@@ -684,8 +691,8 @@ class FuyuImageProcessor(BaseImageProcessor):
                 # Indices of image patches.
                 patches_mask = subseq_image_input_ids == image_placeholder_id
                 num_patches = torch.count_nonzero(patches_mask)
-                indices = torch.arange(
-                    num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device
+                indices = torch.arange(num_patches, dtype=torch.int64, device=subseq_image_input_ids.device).type_as(
+                    subseq_image_input_ids
                 )
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
@@ -712,3 +719,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                 "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
             }
         )
+
+
+__all__ = ["FuyuImageProcessor"]

@@ -15,6 +15,10 @@ specific language governing permissions and limitations under the License. -->
 
 # TrOCR
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained

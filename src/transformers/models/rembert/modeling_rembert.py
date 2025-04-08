@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch RemBERT model."""
-
+"""PyTorch RemBERT model."""
 
 import math
 import os
@@ -25,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -51,11 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 _CHECKPOINT_FOR_DOC = "google/rembert"
-
-REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-]
 
 
 def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
@@ -781,7 +776,7 @@ class RemBertModel(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -936,7 +931,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1008,7 +1003,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 @add_start_docstrings(
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
 )
-class RemBertForCausalLM(RemBertPreTrainedModel):
+class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
     def __init__(self, config):
@@ -1033,7 +1028,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1047,6 +1042,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1112,11 +1108,12 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1130,28 +1127,6 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
@@ -1189,7 +1164,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1285,7 +1260,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1377,7 +1352,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1455,7 +1430,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1526,3 +1501,17 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "RemBertForCausalLM",
+    "RemBertForMaskedLM",
+    "RemBertForMultipleChoice",
+    "RemBertForQuestionAnswering",
+    "RemBertForSequenceClassification",
+    "RemBertForTokenClassification",
+    "RemBertLayer",
+    "RemBertModel",
+    "RemBertPreTrainedModel",
+    "load_tf_weights_in_rembert",
+]

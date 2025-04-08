@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for Big Bird model."""
-
+"""Tokenization classes for Big Bird model."""
 
 import os
 from shutil import copyfile
@@ -31,35 +30,6 @@ else:
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
-        "google/bigbird-roberta-large": (
-            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
-        ),
-        "google/bigbird-base-trivia-itc": (
-            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model"
-        ),
-    },
-    "tokenizer_file": {
-        "google/bigbird-roberta-base": (
-            "https://huggingface.co/google/bigbird-roberta-base/resolve/main/tokenizer.json"
-        ),
-        "google/bigbird-roberta-large": (
-            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/tokenizer.json"
-        ),
-        "google/bigbird-base-trivia-itc": (
-            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/bigbird-roberta-base": 4096,
-    "google/bigbird-roberta-large": 4096,
-    "google/bigbird-base-trivia-itc": 4096,
-}
 
 
 SPIECE_UNDERLINE = "▁"
@@ -107,8 +77,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BigBirdTokenizer
     model_input_names = ["input_ids", "attention_mask"]
     prefix_tokens: List[int] = []
@@ -259,3 +227,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["BigBirdTokenizerFast"]

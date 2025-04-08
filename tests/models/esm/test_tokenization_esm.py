@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,31 +16,39 @@
 import os
 import tempfile
 import unittest
-from typing import List
+from functools import lru_cache
 
 from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
+from ...test_tokenization_common import use_cache_if_possible
+
 
 @require_tokenizers
 class ESMTokenizationTest(unittest.TestCase):
     tokenizer_class = EsmTokenizer
 
-    def setUp(self):
-        super().setUp()
-        self.tmpdirname = tempfile.mkdtemp()
-        vocab_tokens: List[str] = ["<cls>", "<pad>", "<eos>", "<unk>", "L", "A", "G", "V", "S", "E", "R", "T", "I", "D", "P", "K", "Q", "N", "F", "Y", "M", "H", "W", "C", "X", "B", "U", "Z", "O", ".", "-", "<null_1>", "<mask>"]  # fmt: skip
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.tmpdirname = tempfile.mkdtemp()
+        vocab_tokens: list[str] = ["<cls>", "<pad>", "<eos>", "<unk>", "L", "A", "G", "V", "S", "E", "R", "T", "I", "D", "P", "K", "Q", "N", "F", "Y", "M", "H", "W", "C", "X", "B", "U", "Z", "O", ".", "-", "<null_1>", "<mask>"]  # fmt: skip
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs)]
+    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs)]
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def test_tokenizer_single_example(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
@@ -87,3 +94,25 @@ class ESMTokenizationTest(unittest.TestCase):
                 self.assertEqual(len(token_2), 1)
                 self.assertEqual(token_1[0], SPECIAL_TOKEN_1)
                 self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
+
+    def test_add_tokens(self):
+        tokenizer = self.tokenizer_class(self.vocab_file)
+
+        vocab_size = len(tokenizer)
+        self.assertEqual(tokenizer.add_tokens(""), 0)
+        self.assertEqual(tokenizer.add_tokens("testoken"), 1)
+        self.assertEqual(tokenizer.add_tokens(["testoken1", "testtoken2"]), 2)
+        self.assertEqual(len(tokenizer), vocab_size + 3)
+
+        self.assertEqual(tokenizer.add_special_tokens({}), 0)
+        self.assertEqual(tokenizer.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
+        self.assertRaises(AssertionError, tokenizer.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
+        self.assertEqual(tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
+        self.assertEqual(
+            tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
+        )
+        self.assertIn("<testtoken3>", tokenizer.special_tokens_map["additional_special_tokens"])
+        self.assertIsInstance(tokenizer.special_tokens_map["additional_special_tokens"], list)
+        self.assertGreaterEqual(len(tokenizer.special_tokens_map["additional_special_tokens"]), 2)
+
+        self.assertEqual(len(tokenizer), vocab_size + 8)

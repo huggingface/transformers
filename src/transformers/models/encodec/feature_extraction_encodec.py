@@ -57,8 +57,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        chunk_length_s: float = None,
-        overlap: float = None,
+        chunk_length_s: Optional[float] = None,
+        overlap: Optional[float] = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -132,7 +132,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -204,3 +204,6 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["EncodecFeatureExtractor"]

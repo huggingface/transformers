@@ -16,11 +16,17 @@ rendered properly in your Markdown viewer.
 
 # CamemBERT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The CamemBERT model was proposed in [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by
-Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la
-Clergerie, Djamé Seddah, and Benoît Sagot. It is based on Facebook's RoBERTa model released in 2019. It is a model
+[Louis Martin](https://huggingface.co/louismartin), [Benjamin Muller](https://huggingface.co/benjamin-mlr), [Pedro Javier Ortiz Suárez](https://huggingface.co/pjox), Yoann Dupont, Laurent Romary, Éric Villemonte de la
+Clergerie, [Djamé Seddah](https://huggingface.co/Djame), and [Benoît Sagot](https://huggingface.co/sagot). It is based on Facebook's RoBERTa model released in 2019. It is a model
 trained on 138GB of French text.
 
 The abstract from the paper is the following:
@@ -34,7 +40,7 @@ dependency parsing, named-entity recognition, and natural language inference. Ca
 for most of the tasks considered. We release the pretrained model for CamemBERT hoping to foster research and
 downstream applications for French NLP.*
 
-This model was contributed by [camembert](https://huggingface.co/camembert). The original code can be found [here](https://camembert-model.fr/).
+This model was contributed by [the ALMAnaCH team (Inria)](https://huggingface.co/almanach). The original code can be found [here](https://camembert-model.fr/).
 
 <Tip>
 
@@ -106,7 +112,7 @@ as the information relative to the inputs and outputs.
 
 [[autodoc]] TFCamembertModel
 
-## TFCamembertForCasualLM
+## TFCamembertForCausalLM
 
 [[autodoc]] TFCamembertForCausalLM
 

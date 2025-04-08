@@ -45,7 +45,7 @@ Laden Sie einen vortrainierten Tokenizer mit [`AutoTokenizer.from_pretrained`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
 Dann übergeben Sie Ihren Satz an den Tokenizer:
@@ -248,7 +248,7 @@ Der Datensatz [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) hat zum
  'sampling_rate': 8000}
 ```
 
-1. Verwenden Sie die Methode [~datasets.Dataset.cast_column] von 🤗 Datasets, um die Abtastrate auf 16kHz zu erhöhen:
+1. Verwenden Sie die Methode [`~datasets.Dataset.cast_column`] von 🤗 Datasets, um die Abtastrate auf 16kHz zu erhöhen:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
@@ -344,7 +344,7 @@ Laden wir den [food101](https://huggingface.co/datasets/food101) Datensatz für 
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild] (https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) an:
+Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) an:
 
 ```py
 >>> dataset[0]["image"]
@@ -476,7 +476,7 @@ Erinnern Sie sich an den früheren Abschnitt über die Verarbeitung von Audiodat
 
 ### Prozessor
 
-Ein Processor kombiniert einen Feature-Extraktor und einen Tokenizer. Laden Sie einen Processor mit [`AutoProcessor.from_pretrained]:
+Ein Processor kombiniert einen Feature-Extraktor und einen Tokenizer. Laden Sie einen Processor mit [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor

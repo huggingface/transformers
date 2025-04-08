@@ -42,7 +42,7 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 ### Image Classification with ViT
 
-```
+```python
 from PIL import Image
 import requests
 import numpy as np
@@ -316,7 +316,7 @@ with torch.no_grad():
 | Object Detection/DETR | 4 | 269.615 | 204.785 |
 | Object Detection/DETR | 16 | OOM | OOM   |
 
-### V100
+### V100
 
 | **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|

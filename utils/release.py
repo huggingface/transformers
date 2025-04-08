@@ -41,15 +41,18 @@ python release.py --post_release
 
 or use `make post-release`.
 """
+
 import argparse
 import os
 import re
+from pathlib import Path
 
 import packaging.version
 
 
 # All paths are defined with the intent that this script should be run from the root of the repo.
 PATH_TO_EXAMPLES = "examples/"
+PATH_TO_MODELS = "src/transformers/models"
 # This maps a type of file to the pattern to look for when searching where the version is defined, as well as the
 # template to follow when replacing it with the new version.
 REPLACE_PATTERNS = {
@@ -92,8 +95,6 @@ def update_version_in_examples(version: str):
     """
     for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
-        if "research_projects" in directories:
-            directories.remove("research_projects")
         if "legacy" in directories:
             directories.remove("legacy")
         for fname in fnames:
@@ -116,34 +117,15 @@ def global_version_update(version: str, patch: bool = False):
         update_version_in_examples(version)
 
 
-def clean_main_ref_in_model_list():
+def remove_conversion_scripts():
     """
-    Replace the links from main doc to stable doc in the model list of the README.
+    Delete the scripts that convert models from older, unsupported formats. We don't want to include these
+    in release wheels because they often have to open insecure file types (pickle, Torch .bin models). This results in
+    vulnerability scanners flagging us and can cause compliance issues for users with strict security policies.
     """
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    _start_prompt = "🤗 Transformers currently provides the following architectures"
-    _end_prompt = "1. Want to contribute a new model?"
-    with open(README_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-
-    # Find the start of the list.
-    start_index = 0
-    while not lines[start_index].startswith(_start_prompt):
-        start_index += 1
-    start_index += 1
-
-    index = start_index
-    # Update the lines in the model list.
-    while not lines[index].startswith(_end_prompt):
-        if lines[index].startswith("1."):
-            lines[index] = lines[index].replace(
-                "https://huggingface.co/docs/transformers/main/model_doc",
-                "https://huggingface.co/docs/transformers/model_doc",
-            )
-        index += 1
-
-    with open(README_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.writelines(lines)
+    model_dir = Path(PATH_TO_MODELS)
+    for conversion_script in list(model_dir.glob("**/convert*.py")):
+        conversion_script.unlink()
 
 
 def get_version() -> packaging.version.Version:
@@ -160,7 +142,7 @@ def pre_release_work(patch: bool = False):
     """
     Do all the necessary pre-release steps:
     - figure out the next minor release version and ask confirmation
-    - update the version eveywhere
+    - update the version everywhere
     - clean-up the model list in the main README
 
     Args:
@@ -184,16 +166,15 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    if not patch:
-        print("Cleaning main README, don't forget to run `make fix-copies`.")
-        clean_main_ref_in_model_list()
+    print("Deleting conversion scripts.")
+    remove_conversion_scripts()
 
 
 def post_release_work():
     """
-    Do all the necesarry post-release steps:
+    Do all the necessary post-release steps:
     - figure out the next dev version and ask confirmation
-    - update the version eveywhere
+    - update the version everywhere
     - clean-up the model list in the main README
     """
     # First let's get the current version
@@ -208,8 +189,6 @@ def post_release_work():
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-    print("Cleaning main README, don't forget to run `make fix-copies`.")
-    clean_main_ref_in_model_list()
 
 
 if __name__ == "__main__":

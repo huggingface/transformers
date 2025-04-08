@@ -1718,7 +1718,7 @@
         "model_classes": [
             "EfficientNetForImageClassification"
         ],
-        "sha": "6ed195ee636d2c0b885139da8c7b45d57ebaeee0"
+        "sha": "993d088cf937b8a90b61f68677cd8f261321c745"
     },
     "EfficientNetModel": {
         "tokenizer_classes": [],
@@ -2896,7 +2896,7 @@
         "model_classes": [
             "IdeficsForVisionText2Text"
         ],
-        "sha": "2c2f2e2cd6b02a77d0cdd8c3767ba9a6267dbd20"
+        "sha": "a6be81294ff7a3d44f3aef0ed18e42b97c426831"
     },
     "IdeficsModel": {
         "tokenizer_classes": [
@@ -4916,50 +4916,6 @@
             "PersimmonModel"
         ],
         "sha": "b8c8d479e29e9ee048e2d0b05b001ac835ad8859"
-    },
-    "PhiForCausalLM": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForCausalLM"
-        ],
-        "sha": "3fecc0109a4a3a230e3a5509eaf47a26eba85d79"
-    },
-    "PhiForSequenceClassification": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForSequenceClassification"
-        ],
-        "sha": "e1c9f8ebf1317516acc1cd6338de71a53e770245"
-    },
-    "PhiForTokenClassification": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForTokenClassification"
-        ],
-        "sha": "d3a8054903753b5c96c05eaf9877905a116a1d5e"
-    },
-    "PhiModel": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiModel"
-        ],
-        "sha": "99c38d5ce7ace35127d00ed3eeb3561308ea6b21"
     },
     "Pix2StructForConditionalGeneration": {
         "tokenizer_classes": [

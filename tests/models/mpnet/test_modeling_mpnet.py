@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team, Microsoft Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -246,7 +245,7 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_question_answering(*config_and_inputs)
 
-    @unittest.skip("TFMPNet adds poolers to all models, unlike the PT model class.")
+    @unittest.skip(reason="TFMPNet adds poolers to all models, unlike the PT model class.")
     def test_tf_from_pt_safetensors(self):
         return
 
@@ -264,4 +263,4 @@ class MPNetModelIntegrationTest(unittest.TestCase):
             [[[-0.0550, 0.1943, -0.0740], [-0.0562, 0.2211, -0.0579], [-0.0437, 0.3337, -0.0641]]]
         )
         # compare the actual values for a slice.
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

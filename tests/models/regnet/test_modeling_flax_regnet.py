@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +35,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class FlaxRegNetModelTester(unittest.TestCase):
+class FlaxRegNetModelTester:
     def __init__(
         self,
         parent,

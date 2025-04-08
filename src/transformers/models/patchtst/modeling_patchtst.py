@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTST model."""
+"""PyTorch PatchTST model."""
 
 import math
 from dataclasses import dataclass
@@ -32,11 +32,6 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
@@ -289,7 +284,7 @@ def forecast_masking(
 
     Parameters:
         inputs (`torch.Tensor`):
-            Input of shape `(bs, num_channels, num_patch, patch_len)`
+            Input of shape `(bs, num_channels, num_patch, patch_length)`
         num_forecast_mask_patches (`list`):
             Number of patches to be masked at the end of each batch sample. e.g. 4 or [3, 5].
         unmasked_channel_indices (`list`, *optional*):
@@ -818,13 +813,13 @@ class PatchTSTModelOutput(ModelOutput):
             Patched input to the Transformer
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    mask: torch.FloatTensor = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
-    patch_input: torch.FloatTensor = None
+    mask: Optional[torch.FloatTensor] = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
+    patch_input: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -851,7 +846,7 @@ class PatchTSTForPretrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_output: torch.FloatTensor = None
+    prediction_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -880,7 +875,7 @@ class PatchTSTForRegressionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    regression_outputs: torch.FloatTensor = None
+    regression_outputs: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -913,11 +908,11 @@ class PatchTSTForPredictionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_outputs: torch.FloatTensor = None
+    prediction_outputs: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -945,7 +940,7 @@ class PatchTSTForClassificationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -961,7 +956,7 @@ class SamplePatchTSTOutput(ModelOutput):
                 Sampled values from the chosen distribution.
     """
 
-    sequences: torch.FloatTensor = None
+    sequences: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
@@ -1100,7 +1095,7 @@ class PatchTSTNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
+        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -1267,7 +1262,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
         self.linear = nn.Linear(config.d_model, config.patch_length)
         self.use_cls_token = config.use_cls_token
 
@@ -1430,7 +1425,7 @@ class PatchTSTClassificationHead(nn.Module):
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
             # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.max(dim=2)
+            pooled_embedding = embedding.max(dim=2).values
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # pooled_embedding: bs x num_channels * d_model
@@ -1462,7 +1457,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        target_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1602,7 +1597,7 @@ class PatchTSTPredictionHead(nn.Module):
                 pooled_embedding = embedding.mean(dim=2)
             elif self.pooling_type == "max":
                 # pooled_embedding: [bs x num_channels x d_model]
-                pooled_embedding = embedding.max(dim=2)
+                pooled_embedding = embedding.max(dim=2).values
             else:
                 # pooled_embedding: [bs x num_channels x num_patches x d_model]
                 pooled_embedding = embedding
@@ -1866,7 +1861,7 @@ class PatchTSTRegressionHead(nn.Module):
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
             # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.max(dim=2)
+            pooled_embedding = embedding.max(dim=2).values
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # flatten the input
@@ -1899,11 +1894,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             self.distribution_output = None
         else:
             if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = StudentTOutput(dim=config.num_targets)
             elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NormalOutput(dim=config.num_targets)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NegativeBinomialOutput(dim=config.num_targets)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -1915,7 +1910,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        target_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1974,6 +1969,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         if target_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
+                # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
+                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
                 loss = nll(distribution, target_values)
                 # take average of the loss
                 loss = weighted_average(loss)
@@ -1982,6 +1979,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 loss = loss(y_hat, target_values)
 
         if not return_dict:
+            # hidden_states, attentions, mask
             outputs = (y_hat,) + model_output[1:-3]
             outputs = (loss,) + outputs if loss is not None else outputs
             return outputs
@@ -2030,5 +2028,15 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # get samples: list of [bs x num_targets]
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # samples: [bs x num_samples x num_targets]
-        samples = torch.stack(samples, dim=1)
+        samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSTOutput(sequences=samples)
+
+
+__all__ = [
+    "PatchTSTModel",
+    "PatchTSTPreTrainedModel",
+    "PatchTSTForPrediction",
+    "PatchTSTForPretraining",
+    "PatchTSTForRegression",
+    "PatchTSTForClassification",
+]

@@ -43,13 +43,6 @@ rendered properly in your Markdown viewer.
 [[autodoc]] generation.GenerationMixin
 	- generate
 	- compute_transition_scores
-	- greedy_search
-	- sample
-	- beam_search
-	- beam_sample
-	- contrastive_search
-	- group_beam_search
-	- constrained_beam_search
 
 ## TFGenerationMixin
 

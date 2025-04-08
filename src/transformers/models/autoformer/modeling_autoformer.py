@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Autoformer model."""
+"""PyTorch Autoformer model."""
 
 import math
 from dataclasses import dataclass
@@ -85,8 +85,8 @@ class AutoFormerDecoderOutput(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    trend: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    trend: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -153,8 +153,8 @@ class AutoformerModelOutput(ModelOutput):
             Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    trend: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    trend: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -165,12 +165,6 @@ class AutoformerModelOutput(ModelOutput):
     loc: Optional[torch.FloatTensor] = None
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
-
-
-AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/autoformer-tourism-monthly",
-    # See all Autoformer models at https://huggingface.co/models?filter=autoformer
-]
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Autoformer
@@ -311,7 +305,7 @@ class AutoformerNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
+        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -366,24 +360,21 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
 
-    @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+    def _init_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
         """
-        n_pos, dim = out.shape
+        n_pos, dim = self.weight.shape
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        out = torch.empty(n_pos, dim, dtype=self.weight.dtype, requires_grad=False)
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
+        self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
@@ -910,7 +901,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AutoformerSinusoidalPositionalEmbedding):
-            pass
+            module._init_weight()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1853,7 +1844,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ...     past_time_features=batch["past_time_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
         ...     future_values=batch["future_values"],
         ...     future_time_features=batch["future_time_features"],
         ... )
@@ -1869,12 +1859,54 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ...     past_time_features=batch["past_time_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
         ...     future_time_features=batch["future_time_features"],
         ... )
 
         >>> mean_prediction = outputs.sequences.mean(dim=1)
-        ```"""
+        ```
+
+        <Tip>
+
+        The AutoformerForPrediction can also use static_real_features. To do so, set num_static_real_features in
+        AutoformerConfig based on number of such features in the dataset (in case of tourism_monthly dataset it
+        is equal to 1), initialize the model and call as shown below:
+
+        ```
+        >>> from huggingface_hub import hf_hub_download
+        >>> import torch
+        >>> from transformers import AutoformerConfig, AutoformerForPrediction
+
+        >>> file = hf_hub_download(
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ... )
+        >>> batch = torch.load(file)
+
+        >>> # check number of static real features
+        >>> num_static_real_features = batch["static_real_features"].shape[-1]
+
+        >>> # load configuration of pretrained model and override num_static_real_features
+        >>> configuration = AutoformerConfig.from_pretrained(
+        ...     "huggingface/autoformer-tourism-monthly",
+        ...     num_static_real_features=num_static_real_features,
+        ... )
+        >>> # we also need to update feature_size as it is not recalculated
+        >>> configuration.feature_size += num_static_real_features
+
+        >>> model = AutoformerForPrediction(configuration)
+
+        >>> outputs = model(
+        ...     past_values=batch["past_values"],
+        ...     past_time_features=batch["past_time_features"],
+        ...     past_observed_mask=batch["past_observed_mask"],
+        ...     static_categorical_features=batch["static_categorical_features"],
+        ...     static_real_features=batch["static_real_features"],
+        ...     future_values=batch["future_values"],
+        ...     future_time_features=batch["future_time_features"],
+        ... )
+        ```
+
+        </Tip>
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if future_values is not None:

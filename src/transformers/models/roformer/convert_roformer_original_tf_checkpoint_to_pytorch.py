@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert RoFormer checkpoint."""
 
-
 import argparse
 
 import torch

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Whisper model configuration"""
+"""Whisper model configuration"""
 
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -29,9 +29,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/config.json",
-}
 
 # fmt: off
 NON_SPEECH_TOKENS = [
@@ -192,7 +189,11 @@ class WhisperConfig(PretrainedConfig):
 
     model_type = "whisper"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_key_value_heads": "encoder_attention_heads",
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+    }
 
     def __init__(
         self,
@@ -341,3 +342,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+
+__all__ = ["WhisperConfig", "WhisperOnnxConfig"]

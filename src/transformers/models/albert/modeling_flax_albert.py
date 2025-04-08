@@ -47,7 +47,7 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert-base-v2"
+_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
@@ -754,8 +754,8 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxAlbertForPreTraining
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)
@@ -1087,7 +1087,7 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -1119,3 +1119,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxAlbertPreTrainedModel",
+    "FlaxAlbertModel",
+    "FlaxAlbertForPreTraining",
+    "FlaxAlbertForMaskedLM",
+    "FlaxAlbertForSequenceClassification",
+    "FlaxAlbertForMultipleChoice",
+    "FlaxAlbertForTokenClassification",
+    "FlaxAlbertForQuestionAnswering",
+]

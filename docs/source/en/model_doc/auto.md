@@ -25,7 +25,7 @@ Instantiating one of [`AutoConfig`], [`AutoModel`], and
 
 
 ```python
-model = AutoModel.from_pretrained("bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
 will create a model that is an instance of [`BertModel`].
@@ -250,6 +250,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForVideoClassification
 
+### AutoModelForKeypointDetection
+
+[[autodoc]] AutoModelForKeypointDetection
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
@@ -377,3 +381,7 @@ The following auto classes are available for the following multimodal tasks.
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+### AutoModelForImageTextToText
+
+[[autodoc]] AutoModelForImageTextToText

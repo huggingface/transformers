@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RAG."""
+
 import os
 import warnings
 from typing import List, Optional
@@ -80,7 +81,7 @@ class RagTokenizer:
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
         padding: str = "longest",
-        return_tensors: str = None,
+        return_tensors: Optional[str] = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
@@ -118,3 +119,6 @@ class RagTokenizer:
         )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+__all__ = ["RagTokenizer"]

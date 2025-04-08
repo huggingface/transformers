@@ -343,7 +343,7 @@ class Rotation:
         Returns:
             The indexed rotation
         """
-        if type(index) != tuple:
+        if type(index) is not tuple:
             index = (index,)
 
         if self._rot_mats is not None:
@@ -827,7 +827,7 @@ class Rigid:
         Returns:
             The indexed tensor
         """
-        if type(index) != tuple:
+        if type(index) is not tuple:
             index = (index,)
 
         return Rigid(
@@ -989,10 +989,10 @@ class Rigid:
 
     def to_tensor_4x4(self) -> torch.Tensor:
         """
-        Converts a transformation to a homogenous transformation tensor.
+        Converts a transformation to a homogeneous transformation tensor.
 
         Returns:
-            A [*, 4, 4] homogenous transformation tensor
+            A [*, 4, 4] homogeneous transformation tensor
         """
         tensor = self._trans.new_zeros((*self.shape, 4, 4))
         tensor[..., :3, :3] = self._rots.get_rot_mats()
@@ -1003,10 +1003,10 @@ class Rigid:
     @staticmethod
     def from_tensor_4x4(t: torch.Tensor) -> Rigid:
         """
-        Constructs a transformation from a homogenous transformation tensor.
+        Constructs a transformation from a homogeneous transformation tensor.
 
         Args:
-            t: [*, 4, 4] homogenous transformation tensor
+            t: [*, 4, 4] homogeneous transformation tensor
         Returns:
             T object with shape [*]
         """

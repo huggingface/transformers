@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # BertGeneration
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using
@@ -44,15 +48,15 @@ subsequent fine-tuning:
 ```python
 >>> # leverage checkpoints for Bert2Bert model...
 >>> # use BERT's cls token as BOS token and sep token as EOS token
->>> encoder = BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102)
+>>> encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)
 >>> # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
 >>> decoder = BertGenerationDecoder.from_pretrained(
-...     "bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
+...     "google-bert/bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
 ... )
 >>> bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
 
 >>> # create tokenizer...
->>> tokenizer = BertTokenizer.from_pretrained("bert-large-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
 
 >>> input_ids = tokenizer(
 ...     "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"

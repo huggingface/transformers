@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Blenderbot model configuration"""
+"""Blenderbot model configuration"""
 
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -26,11 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/config.json",
-    # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
-}
 
 
 class BlenderbotConfig(PretrainedConfig):
@@ -395,3 +390,6 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+
+__all__ = ["BlenderbotConfig", "BlenderbotOnnxConfig"]

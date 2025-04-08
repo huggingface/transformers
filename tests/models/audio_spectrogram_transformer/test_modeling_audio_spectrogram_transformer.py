@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Audio Spectrogram Transformer (AST) model. """
+"""Testing suite for the PyTorch Audio Spectrogram Transformer (AST) model."""
 
 import inspect
 import unittest
@@ -33,9 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ASTForAudioClassification, ASTModel
-    from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer import (
-        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 if is_torchaudio_available():
@@ -66,6 +62,7 @@ class ASTModelTester:
         scope=None,
         frequency_stride=2,
         time_stride=2,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +83,7 @@ class ASTModelTester:
         self.scope = scope
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
+        self.attn_implementation = attn_implementation
 
         # in AST, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         frequency_out_dimension = (self.num_mel_bins - self.patch_size) // self.frequency_stride + 1
@@ -120,6 +118,7 @@ class ASTModelTester:
             initializer_range=self.initializer_range,
             frequency_stride=self.frequency_stride,
             time_stride=self.time_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, input_values, labels):
@@ -167,9 +166,16 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "AudioClassificationPipelineTests":
+        if pipeline_test_case_name == "AudioClassificationPipelineTests":
             return True
 
         return False
@@ -185,7 +191,7 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -212,9 +218,9 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ASTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MIT/ast-finetuned-audioset-10-10-0.4593"
+        model = ASTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on some audio from AudioSet
@@ -259,4 +265,4 @@ class ASTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

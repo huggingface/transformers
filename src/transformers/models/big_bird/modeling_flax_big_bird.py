@@ -284,7 +284,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
@@ -412,7 +412,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
 
 class FlaxBigBirdBlockSparseAttention(nn.Module):
     config: BigBirdConfig
-    block_sparse_seed: int = None
+    block_sparse_seed: Optional[int] = None
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -1262,7 +1262,7 @@ class FlaxBigBirdSelfOutput(nn.Module):
 
 class FlaxBigBirdAttention(nn.Module):
     config: BigBirdConfig
-    layer_id: int = None
+    layer_id: Optional[int] = None
     causal: bool = False
     dtype: jnp.dtype = jnp.float32
 
@@ -1362,7 +1362,7 @@ class FlaxBigBirdOutput(nn.Module):
 
 class FlaxBigBirdLayer(nn.Module):
     config: BigBirdConfig
-    layer_id: int = None
+    layer_id: Optional[int] = None
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -2407,7 +2407,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
             # removing question tokens from the competition
             logits = logits - logits_mask * 1e6
 
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -2633,3 +2633,16 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxBigBirdForCausalLM",
+    "FlaxBigBirdForMaskedLM",
+    "FlaxBigBirdForMultipleChoice",
+    "FlaxBigBirdForPreTraining",
+    "FlaxBigBirdForQuestionAnswering",
+    "FlaxBigBirdForSequenceClassification",
+    "FlaxBigBirdForTokenClassification",
+    "FlaxBigBirdModel",
+    "FlaxBigBirdPreTrainedModel",
+]

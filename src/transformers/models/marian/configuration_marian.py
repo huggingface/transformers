@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Marian model configuration"""
+"""Marian model configuration"""
+
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -24,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/config.json",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-}
 
 
 class MarianConfig(PretrainedConfig):
@@ -393,3 +389,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["MarianConfig", "MarianOnnxConfig"]

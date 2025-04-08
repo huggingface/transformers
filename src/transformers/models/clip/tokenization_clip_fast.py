@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers
@@ -27,24 +26,6 @@ from .tokenization_clip import CLIPTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "openai/clip-vit-base-patch32": (
-            "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai/clip-vit-base-patch32": 77,
-}
 
 
 class CLIPTokenizerFast(PreTrainedTokenizerFast):
@@ -74,8 +55,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = CLIPTokenizer
 
@@ -110,16 +89,19 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
                 " to use your existing tokenizer, you will have to revert to a version prior to 4.17.0 of"
                 " transformers."
             )
-
         self._wrap_decode_method_backend_tokenizer()
 
     # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
     def _wrap_decode_method_backend_tokenizer(self):
         orig_decode_method = self.backend_tokenizer.decode
 
+        ## define this as a local variable to avoid circular reference
+        ## See: https://github.com/huggingface/transformers/issues/30930
+        end_of_word_suffix = self.backend_tokenizer.model.end_of_word_suffix
+
         def new_decode_method(*args, **kwargs):
             text = orig_decode_method(*args, **kwargs)
-            text = text.replace(self.backend_tokenizer.model.end_of_word_suffix, " ").strip()
+            text = text.replace(end_of_word_suffix, " ").strip()
             return text
 
         self.backend_tokenizer.decode = new_decode_method
@@ -177,3 +159,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["CLIPTokenizerFast"]

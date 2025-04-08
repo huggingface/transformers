@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Feature extractor class for Pop2Piano"""
+"""Feature extractor class for Pop2Piano"""
 
 import warnings
 from typing import List, Optional, Union
@@ -448,3 +448,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         )
 
         return output
+
+
+__all__ = ["Pop2PianoFeatureExtractor"]

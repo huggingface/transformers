@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FocalNet model."""
-
+"""PyTorch FocalNet model."""
 
 import collections.abc
 import math
@@ -54,12 +53,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/focalnet-tiny"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/focalnet-tiny",
-    # See all FocalNet models at https://huggingface.co/models?filter=focalnet
-]
-
-
 @dataclass
 class FocalNetEncoderOutput(ModelOutput):
     """
@@ -82,7 +75,7 @@ class FocalNetEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -110,7 +103,7 @@ class FocalNetModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -140,7 +133,7 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    reconstruction: torch.FloatTensor = None
+    reconstruction: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -169,7 +162,7 @@ class FocalNetImageClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -365,23 +358,23 @@ class FocalNetModulation(nn.Module):
 
         # pre linear projection
         x = self.projection_in(hidden_state).permute(0, 3, 1, 2).contiguous()
-        q, ctx, self.gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
+        q, ctx, gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
         # context aggreation
         ctx_all = 0
         for level in range(self.focal_level):
             ctx = self.focal_layers[level](ctx)
-            ctx_all = ctx_all + ctx * self.gates[:, level : level + 1]
+            ctx_all = ctx_all + ctx * gates[:, level : level + 1]
         ctx_global = self.activation(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
-        ctx_all = ctx_all + ctx_global * self.gates[:, self.focal_level :]
+        ctx_all = ctx_all + ctx_global * gates[:, self.focal_level :]
 
         # normalize context
         if self.normalize_modulator:
             ctx_all = ctx_all / (self.focal_level + 1)
 
         # focal modulation
-        self.modulator = self.projection_context(ctx_all)
-        x_out = q * self.modulator
+        modulator = self.projection_context(ctx_all)
+        x_out = q * modulator
         x_out = x_out.permute(0, 2, 3, 1).contiguous()
         if self.use_post_layernorm_in_modulation:
             x_out = self.layernorm(x_out)
@@ -628,7 +621,6 @@ class FocalNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
 class FocalNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -639,6 +631,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["FocalNetStage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -651,6 +644,13 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, FocalNetEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+        elif isinstance(module, FocalNetLayer):
+            if self.config.use_layerscale:
+                module.gamma_1.data.fill_(self.config.layerscale_value)
+                module.gamma_2.data.fill_(self.config.layerscale_value)
 
 
 FOCALNET_START_DOCSTRING = r"""
@@ -1033,3 +1033,12 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "FocalNetForImageClassification",
+    "FocalNetForMaskedImageModeling",
+    "FocalNetBackbone",
+    "FocalNetModel",
+    "FocalNetPreTrainedModel",
+]

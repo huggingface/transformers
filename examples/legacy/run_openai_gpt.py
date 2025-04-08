@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -20,7 +19,7 @@
 
     This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
         python run_openai_gpt.py \
-          --model_name openai-gpt \
+          --model_name openai-community/openai-gpt \
           --do_train \
           --do_eval \
           --train_dataset "$ROC_STORIES_DIR/cloze_test_val__spring2016 - cloze_test_ALL_val.csv" \
@@ -28,6 +27,7 @@
           --output_dir ../log \
           --train_batch_size 16 \
 """
+
 import argparse
 import csv
 import logging
@@ -42,7 +42,6 @@ from tqdm import tqdm, trange
 from transformers import (
     CONFIG_NAME,
     WEIGHTS_NAME,
-    AdamW,
     OpenAIGPTDoubleHeadsModel,
     OpenAIGPTTokenizer,
     get_linear_schedule_with_warmup,
@@ -104,7 +103,7 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="openai-gpt", help="pretrained model name")
+    parser.add_argument("--model_name", type=str, default="openai-community/openai-gpt", help="pretrained model name")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
     parser.add_argument(
@@ -163,7 +162,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {}, n_gpu {}".format(device, n_gpu))
+    logger.info(f"device: {device}, n_gpu {n_gpu}")
 
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
@@ -235,7 +234,7 @@ def main():
             },
             {"params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
         )
@@ -261,7 +260,7 @@ def main():
                     loss.item() if exp_average_loss is None else 0.7 * exp_average_loss + 0.3 * loss.item()
                 )
                 nb_tr_steps += 1
-                tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, scheduler.get_lr()[0])
+                tqdm_bar.desc = f"Training loss: {exp_average_loss:.2e} lr: {scheduler.get_lr()[0]:.2e}"
 
     # Save a trained model
     if args.do_train:
@@ -313,7 +312,7 @@ def main():
             logger.info("***** Eval results *****")
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+                writer.write("{} = {}\n".format(key, str(result[key])))
 
 
 if __name__ == "__main__":

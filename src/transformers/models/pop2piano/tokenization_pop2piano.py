@@ -35,12 +35,6 @@ VOCAB_FILES_NAMES = {
     "vocab": "vocab.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab.json",
-    },
-}
-
 
 def token_time_to_note(number, cutoff_time_idx, current_idx):
     current_idx += number
@@ -79,11 +73,20 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             Determines the default velocity to be used while creating midi Notes.
         num_bars (`int`, *optional*, defaults to 2):
             Determines cutoff_time_idx in for each token.
+        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"-1"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to 1):
+            The end of sequence token.
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to 0):
+             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+            attention mechanisms or loss computation.
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to 2):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
     """
 
     model_input_names = ["token_ids", "attention_mask"]
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     def __init__(
         self,
@@ -242,7 +245,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
+    def relative_tokens_ids_to_notes(
+        self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: Optional[float] = None
+    ):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 
@@ -711,3 +716,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return BatchEncoding({"notes": notes_list, "pretty_midi_objects": pretty_midi_objects_list})
 
         return BatchEncoding({"notes": notes_list})
+
+
+__all__ = ["Pop2PianoTokenizer"]

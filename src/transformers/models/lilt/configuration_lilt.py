@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LiLT configuration"""
+"""LiLT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "SCUT-DLVCLab/lilt-roberta-en-base": (
-        "https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base/resolve/main/config.json"
-    ),
-}
 
 
 class LiltConfig(PretrainedConfig):
@@ -132,3 +126,6 @@ class LiltConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+
+__all__ = ["LiltConfig"]

@@ -113,22 +113,22 @@ def convert_state_dict(orig_state_dict, model):
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
-                ] = val[dim : dim * 2, :]
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = (
+                    val[dim : dim * 2, :]
+                )
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
-                ] = val[:dim]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
-                ] = val[dim : dim * 2]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
-                ] = val[-dim:]
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = (
+                    val[:dim]
+                )
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = (
+                    val[dim : dim * 2]
+                )
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = (
+                    val[-dim:]
+                )
         elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
             # HuggingFace implementation doesn't use attn_mask buffer
             # and model doesn't use final LayerNorms for the encoder

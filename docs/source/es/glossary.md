@@ -33,7 +33,7 @@ Por ejemplo, considera estas dos secuencias:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
 >>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -145,7 +145,7 @@ El proceso de seleccionar y transformar datos crudos en un conjunto de caracter�
 
 ### feed forward chunking
 
-En cada bloque de atención residual en los transformadores, la capa de autoatención suele ir seguida de 2 capas de avance. El tamaño de embedding intermedio de las capas de avance suele ser mayor que el tamaño oculto del modelo (por ejemplo, para `bert-base-uncased`).
+En cada bloque de atención residual en los transformadores, la capa de autoatención suele ir seguida de 2 capas de avance. El tamaño de embedding intermedio de las capas de avance suele ser mayor que el tamaño oculto del modelo (por ejemplo, para `google-bert/bert-base-uncased`).
 
 Para una entrada de tamaño `[batch_size, sequence_length]`, la memoria requerida para almacenar los embeddings intermedios de avance `[batch_size, sequence_length, config.intermediate_size]` puede representar una gran fracción del uso de memoria. Los autores de [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) observaron que, dado que el cálculo es independiente de la dimensión `sequence_length`, es matemáticamente equivalente calcular los embeddings de salida de ambas capas de avance  `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n` individualmente y concatenarlos después a `[batch_size, sequence_length, config.hidden_size]` con `n = sequence_length`, lo que intercambia el aumento del tiempo de cálculo por una reducción en el uso de memoria, pero produce un resultado matemáticamente **equivalente**.
 
@@ -165,7 +165,7 @@ La cabecera del modelo se refiere a la última capa de una red neuronal que acep
 
   * [`GPT2ForSequenceClassification`] es una cabecera de clasificación de secuencias, es decir, una capa lineal, encima del modelo base [`GPT2Model`].
   * [`ViTForImageClassification`] es una cabecera de clasificación de imágenes, es decir, una capa lineal encima del estado oculto final del token `CLS`, encima del modelo base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] es una cabecera de modelado de lenguaje con [CTC](#connectionist-temporal-classification-(CTC)) encima del modelo base [`Wav2Vec2Model`].
+  * [`Wav2Vec2ForCTC`] es una cabecera de modelado de lenguaje con [CTC](#connectionist-temporal-classification-ctc) encima del modelo base [`Wav2Vec2Model`].
 
 ## I
 
@@ -188,7 +188,7 @@ Cada tokenizador funciona de manera diferente, pero el mecanismo subyacente sigu
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
@@ -376,7 +376,7 @@ Modelos que generan una nueva secuencia a partir de una entrada, como modelos de
 
 ### Sharded DDP
 
-Otro nombre para el concepto fundamental de [ZeRO](#zero-redundancy-optimizer--zero-) utilizado por varias otras implementaciones de ZeRO.
+Otro nombre para el concepto fundamental de [ZeRO](#zero-redundancy-optimizer-zero) utilizado por varias otras implementaciones de ZeRO.
 
 ### stride
 
@@ -415,7 +415,7 @@ Podemos utilizar nuestro tokenizador para generar automáticamente una oración 
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 

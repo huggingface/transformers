@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ViViT model configuration"""
+"""ViViT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vivit-b-16x2-kinetics400": (
-        "https://huggingface.co/google/vivit-b-16x2-kinetics400/resolve/main/config.json"
-    ),
-    # See all Vivit models at https://huggingface.co/models?filter=vivit
-}
 
 
 class VivitConfig(PretrainedConfig):
@@ -121,3 +114,6 @@ class VivitConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
         super().__init__(**kwargs)
+
+
+__all__ = ["VivitConfig"]

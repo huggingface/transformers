@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python 3.8
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           # Semantic version range syntax or exact version of a Python version
           python-version: '3.8'
@@ -36,7 +36,7 @@ jobs:
           pip install --upgrade pip
           python -m pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video,tf-cpu]
           pip install tensorflow_probability
-          python -m pip install -U natten
+          python -m pip install -U 'natten<0.15.0'
 
       - name: Create all tiny models (locally)
         run: |
@@ -44,7 +44,7 @@ jobs:
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
           path: tiny_local_models/reports
@@ -56,13 +56,13 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
           path: reports/tests_pipelines
 
       - name: Create + Upload tiny models for new model architecture(s)
-        run: | 
+        run: |
           python utils/update_tiny_models.py --num_workers 2
 
       - name: Full report
@@ -76,7 +76,7 @@ jobs:
 
       - name: New tiny model creation reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_model_creation_reports
           path: tiny_models/reports

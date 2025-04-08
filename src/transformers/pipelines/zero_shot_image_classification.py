@@ -1,3 +1,4 @@
+import warnings
 from collections import UserDict
 from typing import List, Union
 
@@ -9,7 +10,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -18,6 +19,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_tf_available():
@@ -27,7 +30,7 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ZeroShotImageClassificationPipeline(Pipeline):
     """
     Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
@@ -38,7 +41,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
+    >>> classifier = pipeline(model="google/siglip-so400m-patch14-384")
     >>> classifier(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["animals", "humans", "landscape"],
@@ -71,12 +74,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
-    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):
+    def __call__(self, image: Union[str, List[str], "Image", List["Image"]] = None, **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -84,27 +87,32 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 - An image loaded in PIL directly
 
             candidate_labels (`List[str]`):
-                The candidate labels for this image
+                The candidate labels for this image. They will be formatted using *hypothesis_template*.
 
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
-                The sentence used in cunjunction with *candidate_labels* to attempt the image classification by
-                replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
-                logits_per_image
+                The format used in conjunction with *candidate_labels* to attempt the image classification by
+                replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
+                already formatted.
 
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
 
         Return:
-            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
+            A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
-
-            - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
-            - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
+            - **label** (`str`) -- One of the suggested *candidate_labels*.
+            - **score** (`float`) -- The score attributed by the model to that label. It is a value between
+                0 and 1, computed as the `softmax` of `logits_per_image`.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `image`
+        if "images" in kwargs:
+            image = kwargs.pop("images")
+        if image is None:
+            raise ValueError("Cannot call the zero-shot-image-classification pipeline without an images argument!")
+        return super().__call__(image, **kwargs)
 
-    def _sanitize_parameters(self, **kwargs):
+    def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
         preprocess_params = {}
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
@@ -112,15 +120,36 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
+        if tokenizer_kwargs is not None:
+            warnings.warn(
+                "The `tokenizer_kwargs` argument is deprecated and will be removed in version 5 of Transformers",
+                FutureWarning,
+            )
+            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}.", timeout=None):
+    def preprocess(
+        self,
+        image,
+        candidate_labels=None,
+        hypothesis_template="This is a photo of {}.",
+        timeout=None,
+        tokenizer_kwargs=None,
+    ):
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
+        if self.framework == "pt":
+            inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        tokenizer_default_kwargs = {"padding": True}
+        if "siglip" in self.model.config.model_type:
+            tokenizer_default_kwargs.update(padding="max_length", max_length=64, truncation=True)
+        tokenizer_default_kwargs.update(tokenizer_kwargs)
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, **tokenizer_default_kwargs)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -144,7 +173,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
-        if self.framework == "pt":
+        if self.framework == "pt" and "siglip" in self.model.config.model_type:
+            probs = torch.sigmoid(logits).squeeze(-1)
+            scores = probs.tolist()
+            if not isinstance(scores, list):
+                scores = [scores]
+        elif self.framework == "pt":
             probs = logits.softmax(dim=-1).squeeze(-1)
             scores = probs.tolist()
             if not isinstance(scores, list):

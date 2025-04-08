@@ -17,12 +17,7 @@ rendered properly in your Markdown viewer.
 # UMT5
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=umt5">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/mt5-small-finetuned-arxiv-cs-finetuned-arxiv-cs-full">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
@@ -47,7 +42,7 @@ found [here](https://github.com/google-research/t5x).
 
 - UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
-- Since umT5 was pre-trained in an unsupervise manner, there's no real advantage to using a task prefix during single-task
+- Since umT5 was pre-trained in an unsupervised manner, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 ## Differences with mT5?
@@ -98,6 +93,11 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 ## UMT5ForSequenceClassification
 
 [[autodoc]] UMT5ForSequenceClassification
+    - forward
+
+## UMT5ForTokenClassification
+
+[[autodoc]] UMT5ForTokenClassification
     - forward
 
 ## UMT5ForQuestionAnswering

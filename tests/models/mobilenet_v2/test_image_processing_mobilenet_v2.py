@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_vision_available():
     from transformers import MobileNetV2ImageProcessor
 
 
-class MobileNetV2ImageProcessingTester(unittest.TestCase):
+class MobileNetV2ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -82,6 +81,7 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = MobileNetV2ImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = MobileNetV2ImageProcessingTester(self)
 
     @property

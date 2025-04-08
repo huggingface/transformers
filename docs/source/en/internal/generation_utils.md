@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Generation
 
-This page lists all the utility functions used by [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], and
-[`~generation.GenerationMixin.constrained_beam_search`].
-
-Most of those are only useful if you are studying the code of the generate methods in the library.
+This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
 ## Generate Outputs
 
@@ -38,14 +29,14 @@ Here's an example:
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-The `generation_output` object is a [`~generation.GreedySearchDecoderOnlyOutput`], as we can
+The `generation_output` object is a [`~generation.GenerateDecoderOnlyOutput`], as we can
 see in the documentation of that class below, it means it has the following attributes:
 
 - `sequences`: the generated sequences of tokens
@@ -77,25 +68,13 @@ We document here all output types.
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.GenerateDecoderOnlyOutput
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateEncoderDecoderOutput
 
-[[autodoc]] generation.SampleEncoderDecoderOutput
+[[autodoc]] generation.GenerateBeamDecoderOnlyOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
 ### TensorFlow
 
@@ -161,9 +140,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
@@ -179,13 +155,13 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
-[[autodoc]] LogitsWarper
-    - __call__
-
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
 [[autodoc]] MinNewTokensLengthLogitsProcessor
+    - __call__
+
+[[autodoc]] MinPLogitsWarper
     - __call__
 
 [[autodoc]] NoBadWordsLogitsProcessor
@@ -209,6 +185,9 @@ generation.
 [[autodoc]] SuppressTokensLogitsProcessor
     - __call__
 
+[[autodoc]] SynthIDTextWatermarkLogitsProcessor
+    - __call__
+
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 
@@ -226,6 +205,10 @@ generation.
 
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
+
+[[autodoc]] WatermarkLogitsProcessor
+    - __call__
+
 
 ### TensorFlow
 
@@ -317,7 +300,7 @@ generation.
 
 ## StoppingCriteria
 
-A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusivelly available to our PyTorch implementations.
+A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] StoppingCriteria
     - __call__
@@ -331,9 +314,15 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] MaxTimeCriteria
     - __call__
 
+[[autodoc]] StopStringCriteria
+    - __call__
+
+[[autodoc]] EosTokenCriteria
+    - __call__
+
 ## Constraints
 
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusivelly available to our PyTorch implementations.
+A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] Constraint
 
@@ -357,22 +346,24 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - process
     - finalize
 
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
-
 ## Streamers
 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
 
+[[autodoc]] AsyncTextIteratorStreamer
+
 ## Caches
 
 [[autodoc]] Cache
     - update
+
+[[autodoc]] CacheConfig
+	- update
+
+[[autodoc]] QuantizedCacheConfig
+	- validate
 
 [[autodoc]] DynamicCache
     - update
@@ -381,7 +372,75 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - to_legacy_cache
     - from_legacy_cache
 
+[[autodoc]] QuantizedCache
+    - update
+    - get_seq_length
+
+[[autodoc]] QuantoQuantizedCache
+
+[[autodoc]] HQQQuantizedCache
+
 [[autodoc]] SinkCache
     - update
     - get_seq_length
     - reorder_cache
+
+[[autodoc]] OffloadedCache
+    - update
+    - prefetch_layer
+    - evict_previous_layer
+
+[[autodoc]] StaticCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] OffloadedStaticCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] HybridCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] SlidingWindowCache
+    - update
+    - reset
+
+[[autodoc]] EncoderDecoderCache
+    - get_seq_length
+    - to_legacy_cache
+    - from_legacy_cache
+    - reset
+    - reorder_cache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
+
+## Watermark Utils
+
+[[autodoc]] WatermarkingConfig
+    - __call__
+
+[[autodoc]] WatermarkDetector
+    - __call__
+
+[[autodoc]] BayesianDetectorConfig
+
+[[autodoc]] BayesianDetectorModel
+    - forward
+
+[[autodoc]] SynthIDTextWatermarkingConfig
+
+[[autodoc]] SynthIDTextWatermarkDetector
+    - __call__
+
+## Compile Utils
+
+[[autodoc]] CompileConfig
+    - __call__
+
