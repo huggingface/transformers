@@ -730,7 +730,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    @torch.compiler.disable(recursive=False)     # the operations in this method are not compilable
+    @torch.compiler.disable(recursive=False)  # the operations in this method are not compilable
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
