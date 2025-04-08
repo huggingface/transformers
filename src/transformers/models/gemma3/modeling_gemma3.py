@@ -1105,6 +1105,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1116,46 +1117,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
-
-        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
-
-        >>> messages = [
-        ...     {
-        ...         "role": "system",
-        ...         "content": [
-        ...             {"type": "text", "text": "You are a helpful assistant."}
-        ...         ]
-        ...     },
-        ...     {
-        ...         "role": "user", "content": [
-        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        ...             {"type": "text", "text": "Where is the cat standing?"},
-        ...         ]
-        ...     },
-        ... ]
-
-        >>> inputs = processor.apply_chat_template(
-        ...     messages,
-        ...     tokenizer=True,
-        ...     return_dict=True,
-        ...     return_tensors="pt",
-        ...     add_generation_prompt=True
-        ... )
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
-        ```
         """
 
         if (input_ids is None) ^ (inputs_embeds is not None):

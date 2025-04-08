@@ -6,7 +6,12 @@ from typing import List, Optional, Tuple, Union, get_args
 
 import regex as re
 
-from .doc import PT_SAMPLE_DOCSTRINGS, _prepare_output_docstrings
+from .doc import (
+    MODELS_TO_PIPELINE,
+    PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS,
+    PT_SAMPLE_DOCSTRINGS,
+    _prepare_output_docstrings,
+)
 from .generic import ModelOutput
 
 
@@ -33,6 +38,8 @@ UNROLL_KWARGS_METHODS = {
 UNROLL_KWARGS_CLASSES = {
     "ImageProcessorFast",
 }
+
+_re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 class ImageProcessorArgs:
@@ -435,7 +442,8 @@ def parse_docstring(docstring):
     args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
-    args_section = args_match.group(2).lstrip("\n") if args_match else None
+    # still try to find args description in the docstring, if args are not preceded by "Args:"
+    args_section = args_match.group(2).lstrip("\n") if args_match else docstring
 
     params = {}
     if args_section:
@@ -489,22 +497,16 @@ def get_model_name(obj):
         return "model"
 
 
-def format_args_docstring(args, model_name):
+def get_placeholders_dict(placeholders: List, model_name: str) -> dict:
     """
-    Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
-    deducted from the model name and the auto modules.
+    Get the dictionary of placeholders for the given model name.
     """
     # import here to avoid circular import
     from transformers.models import auto as auto_module
 
-    # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
-    if not placeholders:
-        return args
-
-    # Infer placeholders from the model name and the auto modules
     placeholders_dict = {}
     for placeholder in placeholders:
+        # Infer placeholders from the model name and the auto modules
         if placeholder in PLACEHOLDER_TO_AUTO_MODULE:
             place_holder_value = getattr(
                 getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
@@ -513,6 +515,22 @@ def format_args_docstring(args, model_name):
             if isinstance(place_holder_value, (list, tuple)):
                 place_holder_value = place_holder_value[0]
             placeholders_dict[placeholder] = place_holder_value
+
+    return placeholders_dict
+
+
+def format_args_docstring(args, model_name):
+    """
+    Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
+    deducted from the model name and the auto modules.
+    """
+    # first check if there are any placeholders in the args, if not return them as is
+    placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
+    if not placeholders:
+        return args
+
+    # get the placeholders dictionary for the given model name
+    placeholders_dict = get_placeholders_dict(placeholders, model_name)
 
     # replace the placeholders in the args with the values from the placeholders_dict
     for arg in args:
@@ -525,13 +543,6 @@ def format_args_docstring(args, model_name):
     return args
 
 
-def auto_docstring(obj):
-    if len(obj.__qualname__.split(".")) > 1:
-        return auto_method_docstring(obj)
-    else:
-        return auto_class_docstring(obj)
-
-
 def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
@@ -541,33 +552,33 @@ def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
     return args_classes.__dict__
 
 
-def auto_method_docstring(func, parent_class=None):
-    """
-    Wrapper that automatically generates docstring using ARG_TO_DOC.
-    """
-    # import here to avoid circular import
-    from transformers.models import auto as auto_module
+def get_checkpoint_from_config_class(config_class):
+    checkpoint = None
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
+    # source code of `config_class`
+    config_source = inspect.getsource(config_class)
+    checkpoints = _re_checkpoint.findall(config_source)
 
-    # Use inspect to retrieve the function's signature
-    sig = inspect.signature(func)
-    indent_level = get_indent_level(func)
-    if parent_class is not None:
-        model_name_lowercase = get_model_name(parent_class)
-    else:
-        model_name_lowercase = get_model_name(func)
-    class_name = func.__qualname__.split(".")[0]
-    config_class = getattr(
-        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
-        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
-    )[model_name_lowercase]
+    # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+    # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
+    for ckpt_name, ckpt_link in checkpoints:
+        # allow the link to end with `/`
+        if ckpt_link.endswith("/"):
+            ckpt_link = ckpt_link[:-1]
 
-    docstring = ""
+        # verify the checkpoint name corresponds to the checkpoint link
+        ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
+        if ckpt_link == ckpt_link_from_name:
+            checkpoint = ckpt_name
+            break
+
+    return checkpoint
+
+
+def add_intro_docstring(func, class_name, parent_class=None, indent_level=0):
+    intro_docstring = ""
     if func.__name__ == "forward":
-        docstring_forward = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
+        intro_docstring = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
 
         <Tip>
 
@@ -578,17 +589,51 @@ def auto_method_docstring(func, parent_class=None):
         </Tip>
 
         """
+        intro_docstring = equalize_indent(intro_docstring, indent_level + 4)
 
-        docstring += equalize_indent(docstring_forward, indent_level + 4)
+    return intro_docstring
 
-    # Build the docstring dynamically
+
+def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint=None):
+    """
+    Wrapper that automatically generates docstring using ARG_TO_DOC.
+    """
+    # import here to avoid circular import
+    from transformers.models import auto as auto_module
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    # Use inspect to retrieve the method's signature
+    sig = inspect.signature(func)
+    indent_level = get_indent_level(func)
+
+    # Get other info on the method
+    if parent_class is not None:
+        model_name_lowercase = get_model_name(parent_class)
+    else:
+        model_name_lowercase = get_model_name(func)
+    class_name = func.__qualname__.split(".")[0]
+    config_class = getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    )[model_name_lowercase]
+    func_documentation = func.__doc__
+
+    # Add intro to the docstring before args description if needed
+    if custom_intro is not None:
+        intro_docstring = set_min_indent(custom_intro, indent_level + 4)
+    else:
+        intro_docstring = add_intro_docstring(
+            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
+        )
+    docstring = intro_docstring
+
     docstring += set_min_indent("Args:\n", indent_level + 4)
-    # Adding description for each parameter from ARG_TO_DOC
     undocumented_parameters = []
     documented_params = {}
     documented_kwargs = {}
-
-    func_documentation = func.__doc__
 
     # ------ Args section ------
 
@@ -696,30 +741,66 @@ def auto_method_docstring(func, parent_class=None):
     if sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
         return_docstring = _prepare_output_docstrings(return_annotation, config_class, add_intro=add_intro)
+        return_docstring = return_docstring.replace("typing.", "")
         docstring += set_min_indent(return_docstring, indent_level + 4)
 
     # ------ Example section ------
 
-    task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
-    model_task = re.search(task, class_name)
-    example_annotation = ""
-    if model_task is not None:
-        task = model_task.group()
-        example_annotation = PT_SAMPLE_DOCSTRINGS[task]
-
-    docstring += example_annotation
+    if func_documentation is not None and "Example" in func_documentation:
+        docstring += func_documentation
+    # No examples for __init__ methods
+    elif parent_class is None:
+        task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
+        model_task = re.search(task, class_name)
+        CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
+        checkpoint_example = (
+            get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
+            if checkpoint is None
+            else checkpoint
+        )
+        if model_task is not None:
+            if checkpoint_example is not None:
+                example_annotation = ""
+                task = model_task.group()
+                example_annotation = PT_SAMPLE_DOCSTRINGS[task].format(
+                    model_class=class_name,
+                    checkpoint=checkpoint_example,
+                    expected_output="...",
+                    expected_loss="...",
+                    qa_target_start_index=14,
+                    qa_target_end_index=15,
+                )
+                docstring += set_min_indent(example_annotation, indent_level + 4)
+            else:
+                print(
+                    f"🚨 No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
+                )
+        else:
+            # Check if the model is in a pipeline to get an example
+            for name_model_list_for_task in MODELS_TO_PIPELINE:
+                model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                if class_name in model_list_for_task.values():
+                    pipeline_name = MODELS_TO_PIPELINE[name_model_list_for_task]
+                    example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[pipeline_name].format(
+                        model_class=class_name,
+                        checkpoint=checkpoint_example,
+                        expected_output="...",
+                        expected_loss="...",
+                        qa_target_start_index=14,
+                        qa_target_end_index=15,
+                    )
+                    docstring += set_min_indent(example_annotation, indent_level + 4)
+                    break
 
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
-    if func_documentation is not None:
-        docstring += func_documentation
 
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring
     return wrapper
 
 
-def auto_class_docstring(cls):
+def auto_class_docstring(cls, custom_intro=None):
     """
     Wrapper that automatically generates a docstring for classes based on their attributes and methods.
     """
@@ -729,7 +810,7 @@ def auto_class_docstring(cls):
     model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")])
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)
-    if name == [] and cls.__doc__ is None:
+    if name == [] and cls.__doc__ is None and custom_intro is None:
         raise ValueError(
             f"`{cls.__name__}` is not part of the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}"
         )
@@ -759,6 +840,8 @@ def auto_class_docstring(cls):
         if len(attr_docs.replace(" ", "")):
             docstring += set_min_indent("\nAttributes:\n", indent_level)
             docstring += set_min_indent(attr_docs, indent_level + 4)
+    elif custom_intro is not None:
+        docstring = set_min_indent(custom_intro, indent_level)
     else:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
@@ -769,3 +852,39 @@ def auto_class_docstring(cls):
     cls.__doc__ = docstring
 
     return cls
+
+
+def auto_docstring(obj=None, *, custom_intro=None, checkpoint=None):
+    """
+    Automatically generates docstrings for classes and methods in the Transformers library.
+
+    This decorator can be used in the following forms:
+    @auto_docstring
+    def my_function(...):
+        ...
+    or
+    @auto_docstring()
+    def my_function(...):
+        ...
+    or
+    @auto_docstring(custom_intro="Custom intro", ...)
+    def my_function(...):
+        ...
+
+    Args:
+        custom_intro (str, optional): Custom introduction text to add to the docstring. This will replace the default
+            introduction text generated by the decorator before the Args section.
+        checkpoint (str, optional): Checkpoint name to use in the docstring. This should be automatically inferred from the
+            model configuration class, but can be overridden if needed.
+    """
+
+    def auto_docstring_decorator(obj):
+        if len(obj.__qualname__.split(".")) > 1:
+            return auto_method_docstring(obj, custom_intro=custom_intro, checkpoint=checkpoint)
+        else:
+            return auto_class_docstring(obj, custom_intro=custom_intro)
+
+    if obj:
+        return auto_docstring_decorator(obj)
+
+    return auto_docstring_decorator

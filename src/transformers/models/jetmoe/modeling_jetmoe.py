@@ -828,11 +828,6 @@ class JetMoeBlock(nn.Module):
 
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
