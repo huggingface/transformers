@@ -99,9 +99,12 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
             processor.save_pretrained(tmpdir)
 
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
-            feature_extractor_add_kwargs.processor_class = "Wav2Vec2BertProcessor"
+            tokenizer_add_kwargs = Wav2Vec2CTCTokenizer.from_pretrained(
+                tmpdir, **(self.add_kwargs_tokens_map | {"bos_token": "(BOS)", "eos_token": "(EOS)"})
+            )
+            feature_extractor_add_kwargs = SeamlessM4TFeatureExtractor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
             processor = Wav2Vec2BertProcessor.from_pretrained(
                 tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0

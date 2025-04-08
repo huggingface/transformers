@@ -111,8 +111,10 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
             processor.save_pretrained(tmpdir)
 
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = CLIPTokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = CLIPImageProcessor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
             processor = CLIPProcessor.from_pretrained(
                 tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0

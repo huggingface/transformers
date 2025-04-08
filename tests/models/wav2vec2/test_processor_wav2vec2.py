@@ -98,8 +98,12 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
             processor.save_pretrained(tmpdir)
 
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = Wav2Vec2CTCTokenizer.from_pretrained(
+                tmpdir, **(self.add_kwargs_tokens_map | {"bos_token": "(BOS)", "eos_token": "(EOS)"})
+            )
+            feature_extractor_add_kwargs = Wav2Vec2FeatureExtractor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
             processor = Wav2Vec2Processor.from_pretrained(
                 tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
