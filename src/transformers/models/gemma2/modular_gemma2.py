@@ -30,7 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging, is_torch_flex_attn_available
+from ...utils import is_torch_flex_attn_available, logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -261,7 +261,7 @@ class Gemma2Attention(GemmaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -412,7 +412,7 @@ class Gemma2Model(GemmaModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -542,7 +542,7 @@ class Gemma2Model(GemmaModel):
     @torch.no_grad()
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: HybridCache,
@@ -558,7 +558,9 @@ class Gemma2Model(GemmaModel):
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             else:
-                assert isinstance(attention_mask, BlockMask), f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
+                assert isinstance(attention_mask, BlockMask), (
+                    f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
+                )
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -590,7 +592,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

@@ -10,7 +10,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging, is_torch_flex_attn_available
+from ...utils import is_torch_flex_attn_available, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -57,7 +57,7 @@ class MistralAttention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -120,7 +120,7 @@ class MistralModel(LlamaModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -142,7 +142,9 @@ class MistralModel(LlamaModel):
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             else:
-                assert isinstance(attention_mask, BlockMask), f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
+                assert isinstance(attention_mask, BlockMask), (
+                    f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
+                )
             return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
@@ -306,7 +308,7 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
