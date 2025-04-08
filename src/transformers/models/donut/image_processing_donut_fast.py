@@ -109,6 +109,11 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutFastImageProcessorKwargs]) -> BatchFeature:
+        if "size" in kwargs:
+            size = kwargs.pop("size")
+            if isinstance(size, (tuple, list)):
+                size = size[::-1]
+            kwargs["size"] = size
         return super().preprocess(images, **kwargs)
 
     def align_long_axis(
