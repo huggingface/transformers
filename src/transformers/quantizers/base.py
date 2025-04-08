@@ -220,7 +220,6 @@ class HfQuantizer(ABC):
         """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
-        print("self.pre_quantized", self.pre_quantized)
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         return self._process_model_before_weight_loading(model, **kwargs)
