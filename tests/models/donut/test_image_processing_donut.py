@@ -133,7 +133,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Previous config had dimensions in (width, height) order
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
-    
+
     def test_image_processor_preprocess_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
