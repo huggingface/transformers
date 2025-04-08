@@ -179,13 +179,14 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        image_processor = DPTImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
-        image = np.zeros((489, 640, 3))
+            image = np.zeros((489, 640, 3))
 
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
+            self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
 
     # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_call_segmentation_maps
     def test_call_segmentation_maps(self):
