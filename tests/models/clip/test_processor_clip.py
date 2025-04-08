@@ -86,13 +86,14 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+            processor_slow.save_pretrained(tmpdir)
+            processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+            processor_fast.save_pretrained(tmpdir)
+            processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -106,15 +107,16 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.image_processor, CLIPImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = CLIPProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = CLIPProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)

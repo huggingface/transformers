@@ -83,27 +83,28 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Pop2PianoProcessor(
-            tokenizer=self.get_tokenizer(),
-            feature_extractor=self.get_feature_extractor(),
-        )
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = Pop2PianoProcessor(
+                tokenizer=self.get_tokenizer(),
+                feature_extractor=self.get_feature_extractor(),
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(
-            unk_token="-1",
-            eos_token="1",
-            pad_token="0",
-            bos_token="2",
-        )
-        feature_extractor_add_kwargs = self.get_feature_extractor()
+            tokenizer_add_kwargs = self.get_tokenizer(
+                unk_token="-1",
+                eos_token="1",
+                pad_token="0",
+                bos_token="2",
+            )
+            feature_extractor_add_kwargs = self.get_feature_extractor()
 
-        processor = Pop2PianoProcessor.from_pretrained(
-            self.tmpdirname,
-            unk_token="-1",
-            eos_token="1",
-            pad_token="0",
-            bos_token="2",
-        )
+            processor = Pop2PianoProcessor.from_pretrained(
+                tmpdir,
+                unk_token="-1",
+                eos_token="1",
+                pad_token="0",
+                bos_token="2",
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, Pop2PianoTokenizer)

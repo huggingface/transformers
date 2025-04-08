@@ -93,8 +93,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-            processor.save_pretrained(self.tmpdirname)
-            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                processor.save_pretrained(tmpdir)
+                processor = LayoutXLMProcessor.from_pretrained(tmpdir)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
@@ -103,21 +104,22 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+            processor.save_pretrained(tmpdir)
 
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+            # slow tokenizer
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
-        processor = LayoutXLMProcessor.from_pretrained(
-            self.tmpdirname,
-            use_fast=False,
-            bos_token="(BOS)",
-            eos_token="(EOS)",
-            do_resize=False,
-            size=30,
-        )
+            processor = LayoutXLMProcessor.from_pretrained(
+                tmpdir,
+                use_fast=False,
+                bos_token="(BOS)",
+                eos_token="(EOS)",
+                do_resize=False,
+                size=30,
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)

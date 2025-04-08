@@ -104,13 +104,14 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+            processor_slow.save_pretrained(tmpdir)
+            processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+            processor_fast.save_pretrained(tmpdir)
+            processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -124,15 +125,18 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = ChineseCLIPProcessor(
+                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
+            tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
 
-        processor = ChineseCLIPProcessor.from_pretrained(
-            self.tmpdirname, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
-        )
+            processor = ChineseCLIPProcessor.from_pretrained(
+                tmpdir, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)

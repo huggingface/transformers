@@ -52,12 +52,13 @@ class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            image_processor = self.get_image_processor()
+            tokenizer = self.get_tokenizer()
+            processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = TrOCRProcessor.from_pretrained(self.tmpdirname)
+            processor.save_pretrained(tmpdir)
+            processor = TrOCRProcessor.from_pretrained(tmpdir)
 
         self.assertIsInstance(processor.tokenizer, XLMRobertaTokenizerFast)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
@@ -65,14 +66,15 @@ class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
 
     def test_save_load_pretrained_additional_features(self):
-        processor = TrOCRProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = TrOCRProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = TrOCRProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = TrOCRProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertIsInstance(processor.tokenizer, XLMRobertaTokenizerFast)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())

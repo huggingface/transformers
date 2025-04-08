@@ -83,8 +83,9 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Qwen2AudioProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            processor = Qwen2AudioProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())

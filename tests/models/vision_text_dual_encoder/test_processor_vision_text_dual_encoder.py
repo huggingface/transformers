@@ -79,9 +79,9 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
         image_processor = self.get_image_processor()
 
         processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        processor.save_pretrained(self.tmpdirname)
-        processor = VisionTextDualEncoderProcessor.from_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            processor = VisionTextDualEncoderProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, (BertTokenizer, BertTokenizerFast))
@@ -90,17 +90,18 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
         self.assertIsInstance(processor.image_processor, (ViTImageProcessor, ViTImageProcessorFast))
 
     def test_save_load_pretrained_additional_features(self):
-        processor = VisionTextDualEncoderProcessor(
-            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
-        )
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = VisionTextDualEncoderProcessor(
+                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = VisionTextDualEncoderProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = VisionTextDualEncoderProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, (BertTokenizer, BertTokenizerFast))

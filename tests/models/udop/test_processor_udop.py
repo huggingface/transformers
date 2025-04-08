@@ -100,9 +100,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
-            processor.save_pretrained(self.tmpdirname)
-            processor = UdopProcessor.from_pretrained(self.tmpdirname)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                processor.save_pretrained(tmpdir)
+                processor = UdopProcessor.from_pretrained(tmpdir)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (UdopTokenizer, UdopTokenizerFast))
@@ -111,21 +111,22 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+            processor.save_pretrained(tmpdir)
 
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+            # slow tokenizer
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
-        processor = UdopProcessor.from_pretrained(
-            self.tmpdirname,
-            use_fast=False,
-            bos_token="(BOS)",
-            eos_token="(EOS)",
-            do_resize=False,
-            size=30,
-        )
+            processor = UdopProcessor.from_pretrained(
+                tmpdir,
+                use_fast=False,
+                bos_token="(BOS)",
+                eos_token="(EOS)",
+                do_resize=False,
+                size=30,
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, UdopTokenizer)

@@ -82,8 +82,9 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = Wav2Vec2BertProcessor.from_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            processor = Wav2Vec2BertProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
@@ -92,17 +93,18 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Wav2Vec2BertProcessor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = Wav2Vec2BertProcessor(
+                tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = Wav2Vec2BertProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = Wav2Vec2BertProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
