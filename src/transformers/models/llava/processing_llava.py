@@ -173,17 +173,10 @@ class LlavaProcessor(ProcessorMixin):
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                 prompt_strings.append(sample)
 
-            text_kwargs = output_kwargs["text_kwargs"]
-            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + num_image_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{num_image_tokens} placeholder tokens."
-                )
-
-        print(len(prompt_strings[0]), len(prompt_strings[-1]), output_kwargs["text_kwargs"])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

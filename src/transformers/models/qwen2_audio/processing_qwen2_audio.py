@@ -80,6 +80,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         if chat_template is None:
             chat_template = self.default_chat_template
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -149,7 +150,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
             expanded_text = []
             audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
-            max_num_audio_tokens = 0
 
             for sample in text:
                 replace_str = []
@@ -157,7 +157,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     audio_length = audio_lengths.pop(0)
                     input_length = (audio_length - 1) // 2 + 1
                     num_audio_tokens = (input_length - 2) // 2 + 1
-                    max_num_audio_tokens = max(max_num_audio_tokens, num_audio_tokens + 2)  # 2 for bos and eos
 
                     expanded_audio_token = self.audio_token * num_audio_tokens
 
@@ -185,19 +184,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 expanded_text.append(sample)
             text = expanded_text
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_audio_tokens
-            logger.warning_once(
-                "Processor got truncation with `max_length` which may truncate special audio placeholder tokens. "
-                f"The `max_length` will be updated to include +{max_num_audio_tokens} placeholder tokens."
-            )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, inputs, modalities=["audio"])
 
         if audio is not None:
             inputs.update(audio_inputs)
 
-        return BatchFeature(data={**inputs})
+        return BatchFeature(data={**inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

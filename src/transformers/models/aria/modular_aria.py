@@ -915,6 +915,8 @@ class AriaProcessor(ProcessorMixin):
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
 
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token
 
@@ -974,20 +976,15 @@ class AriaProcessor(ProcessorMixin):
                 sample = sample.replace(self.tokenizer.image_token, self.tokenizer.image_token * num_crops)
                 prompt_strings.append(sample)
 
-            text_kwargs = output_kwargs["text_kwargs"]
-            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + num_crops
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{num_crops} placeholder tokens."
-                )
-
         else:
             image_inputs = {}
             prompt_strings = text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

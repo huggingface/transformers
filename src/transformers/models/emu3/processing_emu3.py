@@ -79,6 +79,7 @@ class Emu3Processor(ProcessorMixin):
         **kwargs,
     ):
         self.image_token = tokenizer.image_token  # image_token as placeholder to be replaced by vq-vae tokens
+        self.image_token_id = tokenizer.image_token_id
         self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
         self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
@@ -159,7 +160,6 @@ class Emu3Processor(ProcessorMixin):
             image_sizes = iter(image_features.image_sizes)
 
             prompt_strings = []
-            max_num_vision_tokens = 0
             for sample in text:
                 while self.image_token in sample:
                     image_size = next(image_sizes)
@@ -167,25 +167,12 @@ class Emu3Processor(ProcessorMixin):
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
                     image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
-                    max_num_vision_tokens = max(max_num_vision_tokens, image_seq_length)
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
                     sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
-
-            text_kwargs = output_kwargs["text_kwargs"]
-            if (
-                "max_length" in text_kwargs
-                and text_kwargs.get("truncation", None) is not None
-                and max_num_vision_tokens
-            ):
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-                )
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
         elif return_for_image_generation:
@@ -195,10 +182,13 @@ class Emu3Processor(ProcessorMixin):
             image_features["image_sizes"] = [[height, width]] * len(text)
 
         # else just generate from text-only input, and we do no special treatment for text
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         data = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, data, modalities=["image"])
+
         data.update(**image_features)
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None))
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

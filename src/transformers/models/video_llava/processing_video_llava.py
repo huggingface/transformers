@@ -87,6 +87,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -160,7 +162,6 @@ class VideoLlavaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = text
-        max_num_vision_tokens = 0
 
         if encoded_images is not None:
             if "pixel_values_images" in encoded_images.keys():
@@ -187,7 +188,6 @@ class VideoLlavaProcessor(ProcessorMixin):
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
-            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens, num_image_tokens)
 
             prompt_strings = []
             for sample in text:
@@ -195,23 +195,18 @@ class VideoLlavaProcessor(ProcessorMixin):
                 sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
                 prompt_strings.append(sample)
 
-            if max_length is not None and truncation is not None:
-                max_length = max_length + max_num_vision_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-                )
-
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=return_tensors,
+            return_tensors=None,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
+
         data.update(text_inputs)
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

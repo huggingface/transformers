@@ -928,8 +928,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         if not isinstance(text, list):
             text = [text]
 
-        max_num_vision_tokens = 0
-
+        text = text.copy()  # below lines change text in-place
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
@@ -937,7 +936,6 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                 while self.image_token in text[i]:
                     num_image_tokens = image_grid_thw[index].prod() // merge_length
                     text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
@@ -948,22 +946,14 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                 while self.video_token in text[i]:
                     num_video_tokens = video_grid_thw[index].prod() // merge_length
                     text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
-                    max_num_vision_tokens = max(
-                        max_num_vision_tokens,
-                    )
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None and max_num_vision_tokens:
-            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
-            logger.warning_once(
-                "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-            )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 
 __all__ = [

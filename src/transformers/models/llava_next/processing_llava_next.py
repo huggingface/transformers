@@ -157,7 +157,6 @@ class LlavaNextProcessor(ProcessorMixin):
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
             prompt_strings = []
-            max_num_image_tokens = 0
             for sample in text:
                 while self.image_token in sample:
                     image_size = next(image_sizes)
@@ -166,24 +165,17 @@ class LlavaNextProcessor(ProcessorMixin):
                         image_size = image_size.tolist()
                     orig_height, orig_width = image_size
                     num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                    max_num_image_tokens = max(max_num_image_tokens, num_image_tokens)
                     if self.vision_feature_select_strategy == "default":
                         num_image_tokens -= 1
                     sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
                 prompt_strings.append(sample)
             prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
-            text_kwargs = output_kwargs["text_kwargs"]
-            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_image_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{max_num_image_tokens} placeholder tokens."
-                )
-
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints

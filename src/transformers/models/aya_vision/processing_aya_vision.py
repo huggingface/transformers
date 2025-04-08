@@ -125,6 +125,7 @@ class AyaVisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
 
@@ -217,13 +218,11 @@ class AyaVisionProcessor(ProcessorMixin):
             num_patches = image_inputs.pop("num_patches")
             image_index = 0
             processed_text = []
-            max_num_vision_tokens = 0
             for prompt in text:
                 new_prompt = prompt
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
                     image_tokens, num_image_token = self._prompt_split_image(num_patches[image_index])
-                    max_num_vision_tokens = max(max_num_vision_tokens, num_image_token)
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
                     image_index += 1
                 processed_text.append(new_prompt)
@@ -231,19 +230,13 @@ class AyaVisionProcessor(ProcessorMixin):
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
 
-            text_kwargs = output_kwargs["text_kwargs"]
-            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-                )
-
             text = processed_text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

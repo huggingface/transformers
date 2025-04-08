@@ -159,6 +159,7 @@ class Idefics3Processor(ProcessorMixin):
             ]
         }
         tokenizer.add_special_tokens(tokens_to_add)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -243,7 +244,7 @@ class Idefics3Processor(ProcessorMixin):
 
         n_images_in_text = []
         n_images_in_images = []
-        inputs = BatchFeature()
+        inputs = {}
 
         if text is not None:
             if isinstance(text, str):
@@ -285,7 +286,6 @@ class Idefics3Processor(ProcessorMixin):
 
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
-            max_num_vision_tokens = self.image_seq_len
 
             if text is not None:
                 if n_images_in_images != n_images_in_text:
@@ -325,19 +325,9 @@ class Idefics3Processor(ProcessorMixin):
                         sample += image_prompt_string + split_sample[i + 1]
                     prompt_strings.append(sample)
 
-                if not (n_rows == 0 and n_cols == 0):
-                    num_image_tokens = self.image_seq_len + self.image_seq_len * n_rows * n_cols
-                    max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
-
-                text_kwargs = output_kwargs["text_kwargs"]
-                if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                    output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + num_image_tokens
-                    logger.warning_once(
-                        "Processor got truncation with `max_length` which may truncate special multimodal placeholder tokens. "
-                        f"The `max_length` will be updated to include +{num_image_tokens} placeholder tokens."
-                    )
-
-                text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
+                return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+                text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+                self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
                 inputs.update(text_inputs)
 
         elif text is not None:
@@ -348,7 +338,7 @@ class Idefics3Processor(ProcessorMixin):
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
-        return inputs
+        return BatchFeature(inputs, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

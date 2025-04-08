@@ -443,17 +443,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2)
         image_input = self.prepare_image_inputs(batch_size=2)
-        input_str = [f"<image>{sample}" for sample in input_str]
-        inputs_truncated = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            truncation=True,
-            padding=True,
-            max_length=20,
-        )
+        input_str = [f"<|image_pad|>{sample}" for sample in input_str]
 
-        inputs = processor(
+        _ = processor(
             text=input_str,
             images=image_input,
             return_tensors="pt",
@@ -461,6 +453,12 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             padding=True,
         )
 
-        self.assertListEqual(
-            list(inputs_truncated[self.text_input_name].shape), list(inputs[self.text_input_name].shape)
-        )
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=20,
+            )

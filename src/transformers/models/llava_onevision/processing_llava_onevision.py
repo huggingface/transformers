@@ -163,7 +163,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
         image_inputs = video_inputs = {}
 
-        max_num_vision_tokens = 0
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
@@ -173,7 +172,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
             text, num_image_tokens = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
-            max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -188,19 +186,13 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             patches_height_width = int(math.sqrt(self.num_image_tokens))
             pooled_height_width = math.ceil(patches_height_width / 2)
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
-            max_num_vision_tokens = max(max_num_vision_tokens, num_video_tokens)
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None and max_num_vision_tokens:
-            output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
-            logger.warning_once(
-                "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-            )
-
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs}, tensor_type=return_tensors)
 
     def _expand_image_tokens(
         self,

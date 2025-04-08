@@ -250,17 +250,11 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
 
-            text_kwargs = output_kwargs["text_kwargs"]
-            max_num_vision_tokens = num_image_tokens * num_patches + 10  # 10 special tokens above
-            if "max_length" in text_kwargs and text_kwargs.get("truncation", None) is not None:
-                output_kwargs["text_kwargs"]["max_length"] = text_kwargs["max_length"] + max_num_vision_tokens
-                logger.warning_once(
-                    "Processor got truncation with `max_length` which may truncate special vision placeholder tokens. "
-                    f"The `max_length` will be updated to include +{max_num_vision_tokens} placeholder tokens."
-                )
-
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
