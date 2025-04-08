@@ -16,18 +16,21 @@ Callbacks to use with the Trainer class and customize the training loop.
 """
 
 import dataclasses
+import datetime
 import json
 import math
+import os
+import time
 from dataclasses import dataclass
-from typing import Optional, Union
-
+from typing import Optional, Union, List, Callable
 import numpy as np
+import torch
+from torch.profiler import profile, record_function, ProfilerActivity, ProfilerAction
 from tqdm.auto import tqdm
 
 from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -783,3 +786,372 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "early_stopping_patience_counter": self.early_stopping_patience_counter,
             },
         }
+class ProfilerCallback(TrainerCallback):
+    """
+    A callback that profiles the training process using PyTorch Profiler.
+    Supports both step-level and epoch-level profiling.
+    """
+
+    def __init__(
+            self,
+            profile_steps=10,
+            warmup_steps=3,
+            wait_steps=1,
+            log_dir="./profiler_logs",
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+            with_flops=True,
+            export_chrome_trace=True,
+            profile_level="step",  # New parameter: "step" or "epoch"
+            profile_epochs=1,      # New parameter: number of epochs to profile
+            warmup_epochs=0        # New parameter: number of epochs to warmup
+    ):
+        """
+        Initialize the ProfilerCallback.
+
+        Args:
+            profile_steps (int): Number of steps to profile after warmup
+            warmup_steps (int): Number of warmup steps before profiling
+            wait_steps (int): Number of steps to wait before profiling
+            log_dir (str): Directory to save profiler logs
+            activities (list): List of activities to profile
+            record_shapes (bool): Whether to record tensor shapes
+            profile_memory (bool): Whether to profile memory usage
+            with_stack (bool): Whether to record stack traces
+            with_flops (bool): Whether to attempt to record FLOPs
+            export_chrome_trace (bool): Whether to export a Chrome trace file
+            profile_level (str): Level of profiling - "step" or "epoch"
+            profile_epochs (int): Number of epochs to profile (when profile_level="epoch")
+            warmup_epochs (int): Number of epochs to warmup before profiling (when profile_level="epoch")
+        """
+        self.profile_steps = profile_steps
+        self.warmup_steps = warmup_steps
+        self.wait_steps = wait_steps
+        self.log_dir = log_dir
+        self.activities = activities
+        self.record_shapes = record_shapes
+        self.profile_memory = profile_memory
+        self.with_stack = with_stack
+        self.with_flops = with_flops
+        self.export_chrome_trace = export_chrome_trace
+        
+        # New parameters for epoch-level profiling
+        self.profile_level = profile_level
+        self.profile_epochs = profile_epochs
+        self.warmup_epochs = warmup_epochs
+
+        self.profiler = None
+        self.step_count = 0
+        self.epoch_count = 0
+        self.is_profiling = False
+        self.start_time = None
+
+        # Create the log directory if it doesn't exist
+        os.makedirs(log_dir, exist_ok=True)
+
+        self.timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        """Called at the beginning of training."""
+        if self.profile_level == "step":
+            print(f"🔍 Step-level profiler initialized. Will profile after {self.warmup_steps} warmup steps for {self.profile_steps} steps.")
+            
+            # Set schedule for step-level profiling
+            schedule = torch.profiler.schedule(
+                wait=self.wait_steps,
+                warmup=self.warmup_steps,
+                active=self.profile_steps,
+                repeat=1
+            )
+            
+            # Start profiler immediately for step-level profiling
+            self._start_profiler(schedule)
+        else:
+            print(f"🔍 Epoch-level profiler initialized. Will profile after {self.warmup_epochs} warmup epochs for {self.profile_epochs} epochs.")
+            # For epoch-level profiling, we'll start the profiler in on_epoch_begin
+
+    def on_epoch_begin(self, args, state, control, **kwargs):
+        """Called at the beginning of each epoch."""
+        self.epoch_count += 1
+        
+        if self.profile_level == "epoch":
+            if self.epoch_count == self.warmup_epochs + 1:
+                print(f"📊 Starting epoch-level profiling at epoch {self.epoch_count}")
+                # For epoch-level profiling, we use a simple schedule that stays active
+                schedule = torch.profiler.schedule(
+                    wait=0,
+                    warmup=0,
+                    active=10000,  # Large number to ensure it stays active for the whole epoch
+                    repeat=1
+                )
+                self._start_profiler(schedule)
+                
+            if self.is_profiling:
+                with record_function(f"epoch_{self.epoch_count}"):
+                    print(f"📊 Profiling epoch {self.epoch_count}")
+
+    def on_epoch_end(self, args, state, control, **kwargs):
+        """Called at the end of each epoch."""
+        if self.profile_level == "epoch" and self.is_profiling:
+            if self.epoch_count >= self.warmup_epochs + self.profile_epochs:
+                print(f"📊 Completed profiling {self.profile_epochs} epochs")
+                self.stop_profiler(f"epoch_{self.epoch_count}")
+    
+    def _start_profiler(self, schedule):
+        """Start the profiler with the given schedule."""
+        # Prepare the profiler
+        tensorboard_log_path = os.path.join(self.log_dir, f"{self.profile_level}_profile_{self.timestamp}")
+        self.profiler = profile(
+            activities=self.activities,
+            schedule=schedule,
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(tensorboard_log_path),
+            record_shapes=self.record_shapes,
+            profile_memory=self.profile_memory,
+            with_stack=self.with_stack,
+            with_flops=self.with_flops
+        )
+
+        # Start the profiler
+        self.profiler.start()
+        self.start_time = time.time()
+        self.is_profiling = True
+
+    def on_step_begin(self, args, state, control, **kwargs):
+        """Called at the beginning of each step."""
+        if self.is_profiling and self.profile_level == "step":
+            self.step_count += 1
+            if self.step_count <= self.wait_steps:
+                print(f"⏳ Waiting: Step {self.step_count}/{self.wait_steps}")
+            elif self.step_count <= self.wait_steps + self.warmup_steps:
+                warmup_step = self.step_count - self.wait_steps
+                print(f"🔥 Warming up: Step {warmup_step}/{self.warmup_steps}")
+            elif self.step_count <= self.wait_steps + self.warmup_steps + self.profile_steps:
+                profile_step = self.step_count - self.wait_steps - self.warmup_steps
+                print(f"📊 Profiling: Step {profile_step}/{self.profile_steps}")
+
+            # Record the forward pass
+            with record_function(f"step_{self.step_count}"):
+                pass
+
+    def on_step_end(self, args, state, control, **kwargs):
+        """Called at the end of each step."""
+        if self.is_profiling:
+            # Step the profiler
+            try:
+                self.profiler.step()
+
+                # Check if we should stop profiling for step-level profiling
+                if self.profile_level == "step":
+                    total_profile_steps = self.wait_steps + self.warmup_steps + self.profile_steps
+                    if self.step_count >= total_profile_steps:
+                        self.stop_profiler(f"step_level_profile")
+            except Exception as e:
+                print(f"❌ Error in profiler step: {e}")
+                self.stop_profiler()
+
+    def stop_profiler(self, profile_name="profile"):
+        """Stop the profiler and record results."""
+        if self.is_profiling and self.profiler is not None:
+            # Record duration
+            duration = time.time() - self.start_time
+            print(f"⏱️ Profiling completed in {duration:.2f} seconds")
+
+            try:
+                # Stop the profiler
+                self.profiler.stop()
+
+                # Print summary
+                print(f"\n===== PROFILER SUMMARY ({profile_name}) =====")
+                print(self.profiler.key_averages().table(
+                    sort_by="cuda_time_total", row_limit=20))
+
+                # Export chrome trace if requested
+                if self.export_chrome_trace:
+                    trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
+                    self.profiler.export_chrome_trace(trace_path)
+                    print(f"🔍 Chrome trace exported to {trace_path}")
+
+                # Print optimization tips
+                self.print_optimization_tips()
+
+                print(f"\n📊 Profiler logs saved to {self.log_dir}")
+                print(f"📈 View results with: tensorboard --logdir={self.log_dir}")
+            except Exception as e:
+                print(f"❌ Error stopping profiler: {e}")
+
+            self.is_profiling = False
+
+    def print_optimization_tips(self):
+        """Print optimization tips based on profiling results."""
+        print("\n===== OPTIMIZATION TIPS =====")
+        # Get top operations by CUDA time
+        top_cuda_ops = self.profiler.key_averages().table(
+            sort_by="cuda_time_total", row_limit=5)
+
+        # Get top operations by CPU time
+        top_cpu_ops = self.profiler.key_averages().table(
+            sort_by="cpu_time_total", row_limit=5)
+
+        # Get top operations by memory
+        if self.profile_memory:
+            try:
+                top_memory_ops = self.profiler.key_averages().table(
+                    sort_by="self_cuda_memory_usage", row_limit=5)
+                print("💾 Check for memory-intensive operations in the trace")
+            except:
+                pass
+
+        print("⚡ Focus on optimizing the most time-consuming operations")
+        print("💡 Consider using torch.compile() for performance improvements")
+        print("🧠 Check for unnecessary CPU-GPU synchronization")
+        print("📏 Consider optimizing batch size for better GPU utilization")
+
+    def on_train_end(self, args, state, control, **kwargs):
+        """Called at the end of training."""
+        # Ensure profiler is stopped
+        self.stop_profiler()
+        print("✅ Profiling session completed")
+
+
+
+class SimpleProfilerCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that integrates PyTorch profiler into the training process.
+    This callback allows for profiling training steps without modifying the trainer code.
+
+    Args:
+        profiler_output_dir (`str`):
+            Directory where profiling results will be saved.
+        profiler_steps (`int`, *optional*, defaults to 1):
+            Number of steps to profile. If None, profiles all steps.
+        profiler_warmup_steps (`int`, *optional*, defaults to 1):
+            Number of warmup steps before starting to profile.
+        profiler_activities (`List[ProfilerActivity]`, *optional*, defaults to [ProfilerActivity.CPU, ProfilerActivity.CUDA]):
+            List of activities to profile.
+        profiler_schedule (`Callable`, *optional*):
+            A function that takes a step number and returns a ProfilerAction.
+        profiler_record_shapes (`bool`, *optional*, defaults to False):
+            Whether to record tensor shapes.
+        profiler_profile_memory (`bool`, *optional*, defaults to True):
+            Whether to profile memory usage.
+        profiler_with_stack (`bool`, *optional*, defaults to False):
+            Whether to record stack traces.
+        profiler_with_flops (`bool`, *optional*, defaults to True):
+            Whether to estimate FLOPs (floating point operations).
+    """
+
+    def __init__(
+        self,
+        profiler_output_dir: str,
+        profiler_steps: Optional[int] = 1,
+        profiler_warmup_steps: Optional[int] = 1,
+        profiler_activities: Optional[List[ProfilerActivity]] = None,
+        profiler_schedule: Optional[Callable] = None,
+        profiler_record_shapes: bool = False,
+        profiler_profile_memory: bool = True,
+        profiler_with_stack: bool = False,
+        profiler_with_flops: bool = True,
+    ):
+        self.profiler_output_dir = profiler_output_dir
+        self.profiler_steps = profiler_steps
+        self.profiler_warmup_steps = profiler_warmup_steps
+        self.profiler_activities = profiler_activities or [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+        self.profiler_schedule = profiler_schedule
+        self.profiler_record_shapes = profiler_record_shapes
+        self.profiler_profile_memory = profiler_profile_memory
+        self.profiler_with_stack = profiler_with_stack
+        self.profiler_with_flops = profiler_with_flops
+        
+        self.profiler = None
+        self.profiler_step = 0
+        self.profiler_start_step = 0
+        self.profiler_end_step = 0
+
+    def _create_profiler(self, args: TrainingArguments, state: TrainerState) -> Optional[profile]:
+        """Create a new profiler instance if needed."""
+        if self.profiler is not None:
+            return self.profiler
+
+        if not state.is_local_process_zero:
+            return None
+
+        # Calculate profiling steps
+        if self.profiler_steps is None:
+            self.profiler_start_step = 0
+            self.profiler_end_step = state.max_steps
+        else:
+            self.profiler_start_step = self.profiler_warmup_steps
+            self.profiler_end_step = self.profiler_start_step + self.profiler_steps
+
+        # Create output directory if it doesn't exist
+        os.makedirs(self.profiler_output_dir, exist_ok=True)
+
+        # Create profiler
+        self.profiler = profile(
+            activities=self.profiler_activities,
+            schedule=self.profiler_schedule or self._default_schedule,
+            on_trace_ready=self._on_trace_ready,
+            record_shapes=self.profiler_record_shapes,
+            profile_memory=self.profiler_profile_memory,
+            with_stack=self.profiler_with_stack,
+            with_flops=self.profiler_with_flops,
+        )
+        return self.profiler
+
+    def _default_schedule(self, step: int) -> ProfilerAction:
+        """Default schedule for profiling."""
+        if step < self.profiler_warmup_steps:
+            return ProfilerAction.NONE
+        if step < self.profiler_start_step:
+            return ProfilerAction.WARMUP
+        if step < self.profiler_end_step:
+            return ProfilerAction.RECORD
+        return ProfilerAction.NONE
+
+    def _on_trace_ready(self, prof: profile) -> None:
+        """Callback when a trace is ready to be saved."""
+        if not prof:
+            return
+
+        # Save trace with process-specific filename
+        process_suffix = f"_rank_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
+        trace_path = os.path.join(
+            self.profiler_output_dir,
+            f"trace_step_{self.profiler_step}{process_suffix}.json"
+        )
+        prof.export_chrome_trace(trace_path)
+        logger.info(f"Profiler trace saved to {trace_path}")
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Initialize profiler at the start of training."""
+        self._create_profiler(args, state)
+        if self.profiler:
+            self.profiler.start()
+            logger.info("Profiler started")
+
+    def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Step the profiler at the beginning of each step."""
+        if self.profiler:
+            self.profiler.step()
+            self.profiler_step = state.global_step
+
+    def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Stop and finalize profiler at the end of training."""
+        if self.profiler:
+            self.profiler.stop()
+            logger.info("Profiler stopped")
+
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Handle evaluation steps in profiling."""
+        if self.profiler:
+            # Pause profiling during evaluation
+            self.profiler.pause()
+            logger.info("Profiler paused during evaluation")
+
+    def on_evaluate_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Resume profiling after evaluation."""
+        if self.profiler:
+            self.profiler.resume()
+            logger.info("Profiler resumed after evaluation")
