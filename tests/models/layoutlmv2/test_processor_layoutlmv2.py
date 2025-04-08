@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
@@ -80,7 +79,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
     def get_image_processor(self, **kwargs):
