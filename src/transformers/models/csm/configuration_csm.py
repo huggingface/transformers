@@ -71,13 +71,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to None):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*, defaults to {"factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192, "rope_type": "llama3"}):
@@ -125,8 +118,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*, defaults to None):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-        attn_implementation (`str`, *optional*, defaults to "sdpa"):
-            The attention implementation to use.
 
     ```python
     >>> from transformers import CsmDepthDecoder, CsmDepthDecoderConfig
@@ -161,8 +152,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         pad_token_id=2050,
         bos_token_id=None,
         eos_token_id=None,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
         rope_theta=500000,
         rope_scaling={
             "factor": 32.0,
@@ -175,14 +164,13 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
+            tie_word_embeddings=False,
             **kwargs,
         )
         self.num_codebooks = num_codebooks
@@ -202,7 +190,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
@@ -230,7 +217,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
@@ -296,13 +282,6 @@ class CsmBackboneConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 128001):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*, defaults to `{"factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192, "rope_type": "llama3"}`):
@@ -350,9 +329,6 @@ class CsmBackboneConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*, defaults to None):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-        attn_implementation (`str`, *optional*, defaults to "sdpa"):
-            The attention implementation to use. Can be either "sdpa" for scaled dot product attention or "eager" for
-            the traditional attention implementation.
 
     ```python
     >>> from transformers import CsmBackboneModel, CsmBackboneConfig
@@ -391,8 +367,6 @@ class CsmBackboneConfig(PretrainedConfig):
         codebook_eos_token_id=0,
         bos_token_id=128000,
         eos_token_id=128001,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
         rope_theta=500000,
         rope_scaling={
             "factor": 32.0,
@@ -405,14 +379,13 @@ class CsmBackboneConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
+            tie_word_embeddings=False,
             **kwargs,
         )
         self.num_codebooks = num_codebooks
@@ -432,7 +405,6 @@ class CsmBackboneConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
@@ -462,7 +434,6 @@ class CsmBackboneConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
@@ -547,10 +518,7 @@ class CsmConfig(PretrainedConfig):
         self.hidden_size = self.backbone_config.hidden_size
         self.num_codebooks = self.backbone_config.num_codebooks
         self.initializer_range = self.backbone_config.initializer_range
-
-        # tie_word_embeddings does not apply here
-        kwargs["tie_word_embeddings"] = False
-        self.max_position_embeddings = 2048
+        self.max_position_embeddings = self.backbone_config.max_position_embeddings
 
         super().__init__(**kwargs)
 
