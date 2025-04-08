@@ -17,7 +17,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 
 RUN python3 -m pip uninstall -y pytest
 
-RUN python3 -m pip install --no-cache-dir pytest<8.0.0 
+RUN python3 -m pip install --no-cache-dir "pytest>=7.2.0,<8.0.0"
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
