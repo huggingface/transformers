@@ -159,22 +159,23 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 padded_image = image_processor.pad_image(image, size_divisor=4)
                 self.assertTrue(padded_image.shape[1] % 4 == 0)
                 self.assertTrue(padded_image.shape[2] % 4 == 0)
+                pixel_values = image_processor.preprocess(
+                    image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+                ).pixel_values
+                self.assertTrue(pixel_values.shape[2] % 4 == 0)
+                self.assertTrue(pixel_values.shape[3] % 4 == 0)
             else:
-                image_processing = image_processing_class(**self.image_processor_dict)
+                image_processor = image_processing_class(**self.image_processor_dict)
                 image = np.random.randn(3, 249, 491)
-
-                # test individual method
                 # TODO handle input data format and ouput data format
-                image = image_processing.pad_image(image, size_divisor=4)
+                image = image_processor.pad_image(image, size_divisor=4)
                 self.assertTrue(image.shape[1] % 4 == 0)
                 self.assertTrue(image.shape[2] % 4 == 0)
-
-            # # test by calling
-            # pixel_values = image_processing.preprocess(
-            #     image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
-            # ).pixel_values
-            # self.assertTrue(pixel_values.shape[2] % 4 == 0)
-            # self.assertTrue(pixel_values.shape[3] % 4 == 0)
+                pixel_values = image_processor.preprocess(
+                    image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+                ).pixel_values
+                self.assertTrue(pixel_values.shape[2] % 4 == 0)
+                self.assertTrue(pixel_values.shape[3] % 4 == 0)
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
