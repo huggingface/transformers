@@ -1611,9 +1611,10 @@ class EncoderDecoderCache(Cache):
 
 class HybridCache(Cache):
     """
-    Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
-    and global attention in every other layer. Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention
-    and ["StaticCache"] for global attention. For more information, see the documentation of each subcomponeent cache class.
+    Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
+    attention and global attention in every other layer (originally implemented for Gemma2).
+    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
+    for global attention.For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
         config (`PretrainedConfig):
@@ -1813,9 +1814,11 @@ class HybridCache(Cache):
 
 class HybridChunkedCache(Cache):
     """
-    Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
-    and global attention in every other layer. Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention
-    and ["StaticCache"] for global attention. For more information, see the documentation of each subcomponeent cache class.
+    Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
+    attention and global attention in every other layer, with support for chunked attention (originally implemented
+    for Llama4).
+    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
+    for global attention. For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
         config (`PretrainedConfig):
