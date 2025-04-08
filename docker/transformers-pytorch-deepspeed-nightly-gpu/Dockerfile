@@ -21,6 +21,8 @@ RUN python3 -m pip uninstall -y torch torchvision torchaudio
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
 RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
+RUN python3 -m pip uninstall --no-cache-dir pytest
+
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
