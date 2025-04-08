@@ -100,7 +100,7 @@ class ConvNextV2GRN(nn.Module):
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
-        global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
+        global_features = torch.linalg.norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
         hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
@@ -287,7 +287,6 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -307,9 +306,12 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ConvNextV2GRN):
+            module.weight.data.zero_()
+            module.bias.data.zero_()
 
 
 CONVNEXTV2_START_DOCSTRING = r"""
@@ -365,7 +367,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -432,7 +434,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

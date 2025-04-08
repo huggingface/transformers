@@ -679,7 +679,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[ZambaHybridDynamicCache] = None,
@@ -747,7 +747,7 @@ class ZambaHybridLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[ZambaHybridDynamicCache] = None,
@@ -1033,7 +1033,7 @@ class ZambaModel(ZambaPreTrainedModel):
     @add_start_docstrings_to_model_forward(ZAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[ZambaHybridDynamicCache] = None,
@@ -1212,7 +1212,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[ZambaHybridDynamicCache] = None,

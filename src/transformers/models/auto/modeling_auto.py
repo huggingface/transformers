@@ -17,7 +17,6 @@
 import warnings
 from collections import OrderedDict
 
-from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
@@ -88,6 +87,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
+        ("deepseek_v3", "DeepseekV3Model"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("depth_pro", "DepthProModel"),
@@ -160,6 +160,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitModel"),
         ("lilt", "LiltModel"),
         ("llama", "LlamaModel"),
+        ("llama4", "Llama4ForConditionalGeneration"),
         ("longformer", "LongformerModel"),
         ("longt5", "LongT5Model"),
         ("luke", "LukeModel"),
@@ -232,6 +233,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoeModel"),
         ("qwen2_vl", "Qwen2VLModel"),
+        ("qwen3", "Qwen3Model"),
+        ("qwen3_moe", "Qwen3MoeModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
@@ -246,6 +249,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
+        ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
         ("segformer", "SegformerModel"),
@@ -514,6 +518,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("dbrx", "DbrxForCausalLM"),
+        ("deepseek_v3", "DeepseekV3ForCausalLM"),
         ("diffllama", "DiffLlamaForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
@@ -542,6 +547,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),
+        ("llama4", "Llama4ForCausalLM"),
+        ("llama4_text", "Llama4ForCausalLM"),
         ("mamba", "MambaForCausalLM"),
         ("mamba2", "Mamba2ForCausalLM"),
         ("marian", "MarianForCausalLM"),
@@ -574,6 +581,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertLMHeadModel"),
         ("qwen2", "Qwen2ForCausalLM"),
         ("qwen2_moe", "Qwen2MoeForCausalLM"),
+        ("qwen3", "Qwen3ForCausalLM"),
+        ("qwen3_moe", "Qwen3MoeForCausalLM"),
         ("recurrent_gemma", "RecurrentGemmaForCausalLM"),
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForCausalLM"),
@@ -627,6 +636,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("ijepa", "IJepaModel"),
         ("imagegpt", "ImageGPTModel"),
         ("levit", "LevitModel"),
+        ("llama4", "Llama4VisionModel"),
         ("mllama", "MllamaVisionModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -842,6 +852,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("idefics3", "Idefics3ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
+        ("llama4", "Llama4ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
@@ -1070,6 +1081,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("qwen2", "Qwen2ForSequenceClassification"),
         ("qwen2_moe", "Qwen2MoeForSequenceClassification"),
+        ("qwen3", "Qwen3ForSequenceClassification"),
+        ("qwen3_moe", "Qwen3MoeForSequenceClassification"),
         ("reformer", "ReformerForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
         ("roberta", "RobertaForSequenceClassification"),
@@ -1151,6 +1164,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("qwen2", "Qwen2ForQuestionAnswering"),
         ("qwen2_moe", "Qwen2MoeForQuestionAnswering"),
+        ("qwen3", "Qwen3ForQuestionAnswering"),
+        ("qwen3_moe", "Qwen3MoeForQuestionAnswering"),
         ("reformer", "ReformerForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("roberta", "RobertaForQuestionAnswering"),
@@ -1255,6 +1270,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertForTokenClassification"),
         ("qwen2", "Qwen2ForTokenClassification"),
         ("qwen2_moe", "Qwen2MoeForTokenClassification"),
+        ("qwen3", "Qwen3ForTokenClassification"),
+        ("qwen3_moe", "Qwen3MoeForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
         ("roberta", "RobertaForTokenClassification"),
         ("roberta-prelayernorm", "RobertaPreLayerNormForTokenClassification"),
@@ -1479,6 +1496,7 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3TextModel"),
         ("flaubert", "FlaubertModel"),
         ("ibert", "IBertModel"),
+        ("llama4", "Llama4TextModel"),
         ("longformer", "LongformerModel"),
         ("mllama", "MllamaTextModel"),
         ("mobilebert", "MobileBertModel"),
@@ -1664,30 +1682,6 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-
-    @classmethod
-    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
-        """
-        Additional autoclass-specific config post-loading manipulation. In this specific autoclass, if the config has
-        a nested text decoder section, uses that section instead.
-
-        Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
-        config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
-        """
-        possible_text_config_names = ("decoder", "generator", "text_config")
-        text_config_names = []
-        for text_config_name in possible_text_config_names:
-            if hasattr(config, text_config_name):
-                text_config_names += [text_config_name]
-
-        text_config = config.get_text_config(decoder=True)
-        if text_config_names and type(text_config) in cls._model_mapping.keys():
-            warnings.warn(
-                "Loading a multimodal model with `AutoModelForCausalLM` is deprecated and will be removed in v5. "
-                "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",
-                FutureWarning,
-            )
-        return config
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")

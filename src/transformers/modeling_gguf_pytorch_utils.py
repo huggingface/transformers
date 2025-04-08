@@ -290,7 +290,7 @@ def get_gguf_hf_weights_map(
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
-    if model_type == "qwen2_moe":
+    elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
@@ -346,7 +346,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     Args:
         gguf_checkpoint_path (`str`):
             The path the to GGUF file to load
-        return_tensors (`bool`, defaults to `True`):
+        return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """

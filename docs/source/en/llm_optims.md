@@ -93,7 +93,7 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    batch_size=1,
+    max_batch_size=1,
     # If you plan to reuse the cache, make sure the cache length is large enough for all cases
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
     device=model.device,
@@ -159,7 +159,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
-        config=model.config, batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
     )
     cache_position = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(
