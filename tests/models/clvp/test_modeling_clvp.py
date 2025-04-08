@@ -558,22 +558,21 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 @slow
 @require_torch
 class ClvpIntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.text = "This is an example text."
+    def setUp(self):
+        self.text = "This is an example text."
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        _, cls.speech_samples, cls.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
-        cls.model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev").to(torch_device)
-        cls.model.eval()
+        self.model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev").to(torch_device)
+        self.model.eval()
         tokenizer = ClvpTokenizer.from_pretrained("susnato/clvp_dev")
         feature_extractor = ClvpFeatureExtractor.from_pretrained("susnato/clvp_dev")
 
-        tokenizer_output = tokenizer(cls.text, return_tensors="pt")
-        cls.text_tokens = tokenizer_output["input_ids"].to(torch_device)
-        cls.input_features = feature_extractor(
-            raw_speech=cls.speech_samples, sampling_rate=cls.sr, return_tensors="pt"
+        tokenizer_output = tokenizer(self.text, return_tensors="pt")
+        self.text_tokens = tokenizer_output["input_ids"].to(torch_device)
+        self.input_features = feature_extractor(
+            raw_speech=self.speech_samples, sampling_rate=self.sr, return_tensors="pt"
         )["input_features"].to(torch_device)
 
     def tearDown(self):
