@@ -4887,7 +4887,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for shard_file in checkpoint_files
         ]
 
-        mismatched_keys = []
         error_msgs = []
 
         # Use multiprocessing Pool for parallel execution, off by default
