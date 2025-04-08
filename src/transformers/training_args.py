@@ -608,7 +608,7 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
-        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"` (for torch>=2.8 `"adamw_torch_fused"`)):
             The optimizer to use, such as "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
@@ -1272,11 +1272,11 @@ class TrainingArguments:
     )
 
     default_optim = "adamw_torch"
-    # XXX: enable when pytorch==2.0.1 comes out - we want to give it time to get all the bugs sorted out
-    # if is_torch_available():
-    #     default_optim = "adamw_torch_fused"
-    # and update the doc above to:
-    # optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.1.0 `"adamw_torch"`):
+    if is_torch_available():
+        from .pytorch_utils import is_torch_greater_or_equal_than_2_8
+
+        if is_torch_greater_or_equal_than_2_8:
+            default_optim = "adamw_torch_fused"
     optim: Union[OptimizerNames, str] = field(
         default=default_optim,
         metadata={"help": "The optimizer to use."},
