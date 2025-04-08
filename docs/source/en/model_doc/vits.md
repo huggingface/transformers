@@ -24,7 +24,7 @@ You can find all the original VITS checkpoints under the [AI at Meta](https://hu
 > [!TIP]
 > Click on the VITS models in the right sidebar for more examples of how to apply VITS.
 
-The following examples show how easy it is to generate speech from text using `Pipeline` and `AutoModel`:
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
