@@ -58,7 +58,6 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
         image_processor = LayoutLMv3ImageProcessor(
             do_resize=True,
             size=224,
