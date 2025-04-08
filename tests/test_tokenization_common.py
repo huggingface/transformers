@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -124,11 +123,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: Dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
-    tokenizer_mapping: Dict["PretrainedConfig", Tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
-) -> Dict[
+    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    Tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -266,7 +265,7 @@ class TokenizerTesterMixin:
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
         toks = [
             (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
@@ -294,7 +293,7 @@ class TokenizerTesterMixin:
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
 
-    def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, fast=True, **kwargs) -> list[PreTrainedTokenizerBase]:
         if fast and self.test_rust_tokenizer and self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
         elif fast and self.test_rust_tokenizer:
@@ -320,11 +319,11 @@ class TokenizerTesterMixin:
 
     def tokenizer_integration_test_util(
         self,
-        expected_encoding: Dict,
+        expected_encoding: dict,
         model_name: str,
         revision: str = None,
-        sequences: List[str] = None,
-        decode_kwargs: Dict[str, Any] = None,
+        sequences: list[str] = None,
+        decode_kwargs: dict[str, Any] = None,
         padding: bool = True,
     ):
         """
@@ -4485,7 +4484,7 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
-                    except EnvironmentError as e:
+                    except OSError as e:
                         # Some tokenizer will raised an error before reaching the logged warning because there are no
                         # corresponding files to load
                         error_message = str(e)
