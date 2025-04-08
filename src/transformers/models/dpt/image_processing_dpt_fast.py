@@ -14,10 +14,20 @@
 # limitations under the License.
 """Fast Image processor class for DPT."""
 
+import math
+from typing import Optional, Union
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...utils import add_start_docstrings
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, infer_channel_dimension_format
+from ...utils import add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available
 
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 @add_start_docstrings(
     "Constructs a fast DPT image processor.",
@@ -54,5 +64,53 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     # crop_size = None
     # do_center_crop = None
     # do_convert_rgb = None
+
+    def pad_image(
+        self,
+        image: "torch.Tensor",
+        size_divisor: int,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> "torch.Tensor":
+        """
+        Center pad an image to be a multiple of `size_divisor`.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to pad.
+            size_divisor (`int`):
+                The width and height of the image will be padded to a multiple of this number.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+
+        def _get_pad(size, size_divisor):
+            new_size = math.ceil(size / size_divisor) * size_divisor
+            pad_size = new_size - size
+            pad_size_left = pad_size // 2
+            pad_size_right = pad_size - pad_size_left
+            return pad_size_left, pad_size_right
+        
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        # TODO reject if channels_last (torchvision only support channels_first )
+
+        height, width = get_image_size(image, input_data_format)
+
+        pad_top, pad_bottom = _get_pad(height, size_divisor)
+        pad_left, pad_right = _get_pad(width, size_divisor)
+
+        padding = (pad_left, pad_top, pad_right, pad_bottom)
+        return F.pad(image, padding)
 
 __all__ = ["DPTImageProcessorFast"]
