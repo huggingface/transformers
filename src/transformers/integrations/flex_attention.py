@@ -70,7 +70,7 @@ class WrappedFlexAttention:
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
             else:
-                self._compiled_flex_attention = torch.compile(flex_attention, fullgraph=True, mode="reduce-overhead")
+                self._compiled_flex_attention = torch.compile(flex_attention, mode="reduce-overhead")
             self._is_flex_compiled = True
 
     def __call__(self):
