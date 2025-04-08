@@ -189,6 +189,10 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     def setUp(self):
         self.model_tester = HGNetV2ModelTester(self)
 
+    @unittest.skip(reason="Does not work on the tiny model.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
     @unittest.skip(reason="HGNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
