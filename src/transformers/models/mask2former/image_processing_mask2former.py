@@ -728,6 +728,15 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
+        """
+        Supports batched (overlapping) segmentation maps. When passing
+        maps with a channel dimension, `input_data_format` must be explicitly
+        specified, which must align with the data format of the image.
+
+        For example, passing in a segmentation map of shape CxHxW is useful if
+        each pixel can have up to C segment labels. Pixels with fewer than C labels
+        can be padded with `ignore_index` so that those masks are not included.
+        """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
