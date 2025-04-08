@@ -1097,15 +1097,15 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.skipTest(reason="Model architecture does not support attentions")
 
         torch.compiler.reset()
-
-        valid_compute_capability = False
         if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
             compute_capability = torch.cuda.get_device_capability()
             major, _ = compute_capability
-            valid_compute_capability = major < 8
-
-        if not valid_compute_capability:
-            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+            if IS_CUDA_SYSTEM and major < 8:
+                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+            elif IS_ROCM_SYSTEM and major < 9:
+                self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
