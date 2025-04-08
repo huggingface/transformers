@@ -341,6 +341,7 @@ use_cpu: false
 ```
 
 </hfoption>
+</hfoptions>
 
 
 Run [accelerate_launch](https://hf.co/docs/accelerate/package_reference/cli#accelerate-launch) to start training with the configurations set in `config_file.yaml`. This file is saved to the Accelerate cache folder and automatically loaded when you run `accelerate_launch`.
