@@ -730,7 +730,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    @torch.compiler.disable  # the operations in this method are not compilable
+    @torch.compiler.disable(recursive=False)     # the operations in this method are not compilable
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -761,7 +761,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-
         # to avoid graph break, we introduce this hack
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
@@ -778,7 +777,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             else full_cache_length
         )
 
-        print(use_cache, full_cache_length, key_length, past_key_values)
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 offsets = (first_cache_position, max(last_cache_position - key_length, 0))
@@ -791,7 +789,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     key_length=full_cache_length,
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
-                print(attention_mask.shape, chunked_attention_mask.shape)
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
                 return attention_mask, chunked_attention_mask

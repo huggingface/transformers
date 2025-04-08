@@ -293,7 +293,7 @@ class Llama4TextConfig(PretrainedConfig):
         attn_temperature_tuning=4,
         floor_scale=8192,
         attn_scale=0.1,
-        cache_implementation = "hybrid",
+        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -396,7 +396,6 @@ class Llama4Config(PretrainedConfig):
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",
     }
-    
 
     def __init__(
         self,
@@ -419,7 +418,6 @@ class Llama4Config(PretrainedConfig):
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
-
         if text_config is None:
             self.text_config = Llama4TextConfig()
             logger.info("text_config is None, using default llama4 text config")
