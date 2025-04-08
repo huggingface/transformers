@@ -14,14 +14,17 @@
 # limitations under the License.
 """Fast Image processor class for DPT."""
 
+from collections.abc import Iterable
 import math
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import group_images_by_shape, reorder_images
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, infer_channel_dimension_format
+from transformers.image_transforms import get_resize_output_image_size, get_size_with_aspect_ratio, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format
 from ...utils import TensorType, add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available
+
+import numpy as np
 
 if is_torch_available():
     import torch
@@ -32,9 +35,64 @@ if is_torchvision_available():
     else:
         from torchvision.transforms import functional as F
 
+def get_output_image_size_for_ensure_multiple(
+    # TODO type should be torch.Tensor
+    input_image: np.ndarray,
+    output_size: Union[int, Iterable[int]],
+    keep_aspect_ratio: bool,
+    multiple: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> Tuple[int, int]:
+    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
+        x = round(val / multiple) * multiple
+
+        if max_val is not None and x > max_val:
+            x = math.floor(val / multiple) * multiple
+
+        if x < min_val:
+            x = math.ceil(val / multiple) * multiple
+
+        return x
+
+    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
+
+    input_height, input_width = get_image_size(input_image, input_data_format)
+    output_height, output_width = output_size
+
+    # determine new height and width
+    scale_height = output_height / input_height
+    scale_width = output_width / input_width
+
+    if keep_aspect_ratio:
+        # scale as little as possible
+        if abs(1 - scale_width) < abs(1 - scale_height):
+            # fit width
+            scale_height = scale_width
+        else:
+            # fit height
+            scale_width = scale_height
+
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
+
+    return (new_height, new_width)
+
+class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    size_divisor: Optional[int]
+    do_pad: Optional[bool]
+    ensure_multiple_of: Optional[int]
+    keep_aspect_ratio: Optional[bool]
+
+DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = f"""
+ Args:
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+    If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+    by `ensure_multiple_of` in `preprocess`.
+"""
 @add_start_docstrings(
     "Constructs a fast DPT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING
 )
 class DPTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
@@ -61,6 +119,9 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     # In BaseImageProcessorFast this is called size_divisibility (I think)
     size_divisor = None
+    ensure_multiple_of = 1
+
+    valid_kwargs = DPTFastImageProcessorKwargs
 
     # NOT SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT:
     # default_to_square = None (<-- this broke one of the tests as it override this value to None)
@@ -84,6 +145,8 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         size_divisor: Optional[int],
         do_pad: bool,
+        ensure_multiple_of: Optional[int],
+        keep_aspect_ratio: bool = False,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -91,7 +154,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -163,5 +226,63 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         padding = (pad_left, pad_top, pad_right, pad_bottom)
         return F.pad(image, padding)
+
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size: SizeDict,
+        interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
+        ensure_multiple_of: Optional[int] = None,
+        keep_aspect_ratio: bool = False,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image to `(size["height"], size["width"])`.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to resize.
+            size (`SizeDict`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing when resizing the image
+            ensure_multiple_of (`int`, *optional*):
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value
+            
+        Returns:
+            `torch.Tensor`: The resized image.
+        """
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        if size.shortest_edge and size.longest_edge:
+            # Resize the image so that the shortest edge or the longest edge is of the given size
+            # while maintaining the aspect ratio of the original image.
+            new_size = get_size_with_aspect_ratio(
+                image.size()[-2:],
+                size.shortest_edge,
+                size.longest_edge,
+            )
+        elif size.shortest_edge:
+            new_size = get_resize_output_image_size(
+                image,
+                size=size.shortest_edge,
+                default_to_square=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        elif size.max_height and size.max_width:
+            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
+        elif ensure_multiple_of > 1:
+            new_size = get_output_image_size_for_ensure_multiple(image, (size.height, size.width), keep_aspect_ratio=keep_aspect_ratio, multiple=ensure_multiple_of)
+        elif size.height and size.width:
+            new_size = (size.height, size.width)
+
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+                f" {size}."
+            )
+        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
 __all__ = ["DPTImageProcessorFast"]
