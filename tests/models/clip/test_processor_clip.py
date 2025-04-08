@@ -89,11 +89,11 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
             processor_slow.save_pretrained(tmpdir)
-            processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+            processor_slow = CLIPProcessor.from_pretrained(tmpdir, use_fast=False)
 
             processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
             processor_fast.save_pretrained(tmpdir)
-            processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = CLIPProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
