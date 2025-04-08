@@ -1857,7 +1857,7 @@ class HybridChunkedCache(Cache):
 
     # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
     # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1912,26 +1912,37 @@ class HybridChunkedCache(Cache):
         self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        cumulative_length = self.cumulative_length[layer_idx]
-        is_full = cumulative_length >= max_cache_len
-        if is_full:
-            full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
-            full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
-        elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
-            full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
-            full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
-        else:
-            self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-            self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
-            self.cumulative_length[layer_idx] += key_states.shape[-2]
-            return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        if cache_position.shape[0] > max_cache_len:
+            cache_position = cache_position.clamp(0, max_cache_len - 1)
+            k_out = key_states[:, :, -max_cache_len:, :]
+            v_out = value_states[:, :, -max_cache_len:, :]
+            # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
 
-        self.key_cache[layer_idx].copy_(full_key_states[:, :, -max_cache_len:, :])
-        self.value_cache[layer_idx].copy_(full_value_states[:, :, -max_cache_len:, :])
-        self.cumulative_length[layer_idx] += key_states.shape[-2]
-        # we should return the whole states instead of k_out, v_out to take the whole prompt
-        # into consideration when building kv cache instead of just throwing away tokens outside of the window
-        return full_key_states, full_value_states
+            self.key_cache[layer_idx] += k_out
+            self.value_cache[layer_idx] += v_out
+            # we should return the whole states instead of k_out, v_out to take the whole prompt
+            # into consideration when building kv cache instead of just throwing away tokens outside of the window
+            return key_states, value_states
+
+        # otherwise we are decoding. Most efficient way to cat 1 token
+        slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+        cache_position = cache_position.clamp(0, max_cache_len - 1)
+        to_shift = cache_position >= max_cache_len - 1
+        indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+        # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
+        self.key_cache[layer_idx].zero_()
+        self.value_cache[layer_idx].zero_()
+
+        self.key_cache[layer_idx] += k_out
+        self.value_cache[layer_idx] += v_out
+        return k_out, v_out
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         k_out[:, :, cache_position] = key_states
@@ -1952,13 +1963,6 @@ class HybridChunkedCache(Cache):
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         self.initialise_cache_layer(layer_idx, key_states)
-
-        # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
-        # when the cache is initialized in the forward pass (e.g. Gemma2)
-        if self.key_cache[layer_idx].device != key_states.device:
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
-        if self.value_cache[layer_idx].device != value_states.device:
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
 
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
