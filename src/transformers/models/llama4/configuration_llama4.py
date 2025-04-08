@@ -231,6 +231,7 @@ class Llama4TextConfig(PretrainedConfig):
         attn_temperature_tuning (`int`, *optional*, defaults to 4): TODO
         floor_scale (`int`, *optional*, defaults to 8192): TODO
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
+        cache_implementation (`<fill_type>`, *optional*, defaults to `"hybrid"`): <fill_docstring>
 
     Example:
     """
