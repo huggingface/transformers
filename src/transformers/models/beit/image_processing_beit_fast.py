@@ -76,11 +76,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = BeitFastImageProcessorKwargs
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
-    @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
-    def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
@@ -199,7 +194,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         # Prepare segmentation maps
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(expected_ndims=1)
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=1)
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
