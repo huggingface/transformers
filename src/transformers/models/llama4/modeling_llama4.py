@@ -761,18 +761,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        # to avoid graph break, we introduce this hack
-        cond1 = first_cache_position >= attention_chunk_size
-        cond2 = (first_cache_position < attention_chunk_size) & (
-            first_cache_position + sequence_length > attention_chunk_size
-        )
-
         key_length = (
-            torch.where(
-                cond1,
-                attention_chunk_size + sequence_length - 1,
-                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
-            )
+            sequence_length if sequence_length > attention_chunk_size else attention_chunk_size
             if use_cache
             else full_cache_length
         )
