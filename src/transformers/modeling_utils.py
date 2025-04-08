@@ -830,23 +830,18 @@ def resolve_state_dict_modules(model_to_load, state_dict, expected_keys):
 
     return state_dict_modules
 
-
 # This function is in global scope so it's picklable for multiprocessing
 def load_shard_file(args):
     (
-        state_dict,
         shard_file,
         disk_only_shard_files,
-        low_cpu_mem_usage,
+        is_hqq_or_bnb,
         is_quantized,
         device_map,
         hf_quantizer,
         key_renaming_mapping,
         weights_only,
         model_to_load,
-        ignore_mismatched_sizes,
-        prefix,
-        loading_base_model_from_task_state_dict,
         expected_keys,
         reverse_key_renaming_mapping,
         disk_offload_folder,
@@ -854,25 +849,32 @@ def load_shard_file(args):
         cpu_offload_folder,
         cpu_offload_index,
         is_offloaded_safetensors,
-        keep_in_fp32_modules,
+        keep_in_fp32_regex,
         unexpected_keys,
-        device_mesh,
-    ) = args
+        device_mesh
+    )   = args
+
     # Skip the load for shards that only contain disk-offloaded weights
     if shard_file in disk_only_shard_files:
-        return [], [], disk_offload_index, cpu_offload_index, {}
+        return [], disk_offload_index, cpu_offload_index, {}
 
     map_location = "cpu"
-    if low_cpu_mem_usage:
-        if shard_file.endswith(".safetensors") and not is_quantized:
-            map_location = "meta"
-        elif (
-            device_map is not None
-            and hf_quantizer is not None
-            and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-            and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-        ):
-            map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+    if (
+        shard_file.endswith(".safetensors")
+        and not is_hqq_or_bnb
+        and not (is_deepspeed_zero3_enabled() and not is_quantized)
+    ):
+        map_location = "meta"
+    elif (
+        device_map is not None
+        and hf_quantizer is not None
+        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+        and (
+            hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+            or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+        )
+    ):
+        map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -880,48 +882,32 @@ def load_shard_file(args):
             shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
         )
 
-    error_msgs = []
-    mismatched_keys = []
-
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-    # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
-    # matching the weights in the model.
-    mismatched_keys += _find_mismatched_keys(
-        model_to_load,
-        state_dict,
-        ignore_mismatched_sizes,
-        prefix if loading_base_model_from_task_state_dict else "",
-    )
+    error_msgs = []
 
-    if low_cpu_mem_usage:
-        # Skip it with fsdp on ranks other than 0
-        if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
-            disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
-                model_to_load,
-                state_dict,
-                shard_file,
-                expected_keys,
-                reverse_key_renaming_mapping,
-                device_map=device_map,
-                disk_offload_folder=disk_offload_folder,
-                disk_offload_index=disk_offload_index,
-                cpu_offload_folder=cpu_offload_folder,
-                cpu_offload_index=cpu_offload_index,
-                hf_quantizer=hf_quantizer,
-                is_safetensors=is_offloaded_safetensors,
-                keep_in_fp32_modules=keep_in_fp32_modules,
-                unexpected_keys=unexpected_keys,
-                device_mesh=device_mesh,
-            )
-    else:
-        assign_params = check_support_param_buffer_assignment(model_to_load, state_dict)
-        if is_deepspeed_zero3_enabled():
-            error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_params)
-        else:
-            model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
-
+    if is_deepspeed_zero3_enabled() and not is_quantized:
+        error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
+    # Skip it with fsdp on ranks other than 0
+    elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
+        disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
+            model_to_load,
+            state_dict,
+            shard_file,
+            expected_keys,
+            reverse_key_renaming_mapping,
+            device_map=device_map,
+            disk_offload_folder=disk_offload_folder,
+            disk_offload_index=disk_offload_index,
+            cpu_offload_folder=cpu_offload_folder,
+            cpu_offload_index=cpu_offload_index,
+            hf_quantizer=hf_quantizer,
+            is_safetensors=is_offloaded_safetensors,
+            keep_in_fp32_regex=keep_in_fp32_regex,
+            unexpected_keys=unexpected_keys,
+            device_mesh=device_mesh,
+        )
     # We now figure out what in the state dict changed and store the module used for each layer, this will contain the device
     # information we need in order to resolve all of the layers after multiprocessing which we write back to the original model_to_load meta model
     state_dict_modules = resolve_state_dict_modules(model_to_load, state_dict, expected_keys)
@@ -929,8 +915,7 @@ def load_shard_file(args):
     # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
     del state_dict
 
-    return mismatched_keys, error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules
-
+    return error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
@@ -4857,6 +4842,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             cpu_offload_folder = tempfile.mkdtemp()
             cpu_offload_index = {}
 
+        # For nice tqdm bars
+        if checkpoint_files is not None and len(checkpoint_files) > 1:
+            checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         elif state_dict is not None:
             checkpoint_files = [""]
@@ -4877,7 +4865,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 state_dict,
                 shard_file,
                 disk_only_shard_files,
-                low_cpu_mem_usage,
                 is_quantized,
                 device_map,
                 hf_quantizer,
@@ -4894,7 +4881,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 cpu_offload_folder,
                 cpu_offload_index,
                 is_offloaded_safetensors,
-                keep_in_fp32_modules,
                 unexpected_keys,
                 device_mesh,
             )
@@ -4926,14 +4912,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         # NOTE order does not matter, layers that changed per shard are unique and can be reassigned to the orignal meta model
                         for result in pool.imap_unordered(load_shard_file, args_list):
                             (
-                                _mismatched_keys,
                                 _error_msgs,
                                 disk_offload_index,
                                 cpu_offload_index,
                                 state_dict_modules,
                             ) = result
 
-                            mismatched_keys += _mismatched_keys
                             error_msgs += _error_msgs
 
                             state_dict_modules_list.append(state_dict_modules)
@@ -4964,11 +4948,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 args_list = logging.tqdm(args_list, desc="Loading checkpoint shards")
 
             for args in args_list:
-                _mismatched_keys, _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
+                _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
                     load_shard_file(args)
                 )
-
-                mismatched_keys += _mismatched_keys
                 error_msgs += _error_msgs
 
                 del state_dict_modules
