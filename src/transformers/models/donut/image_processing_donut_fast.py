@@ -90,10 +90,9 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[DonutFastImageProcessorKwargs]):
         size = kwargs.pop("size", None)
-        size = size if size is not None else {"height": 2560, "width": 1920}
         if isinstance(size, (tuple, list)):
             size = size[::-1]
-        self.size = get_size_dict(size)
+        kwargs["size"] = size
         super().__init__(**kwargs)
 
     @add_start_docstrings(
