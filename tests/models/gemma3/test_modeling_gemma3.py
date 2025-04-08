@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -344,7 +343,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     def test_automodelforcausallm(self):
         """
-        Regression test for #36741 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
+        Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
         `AutoModelForCausalLM.from_pretrained` pulls the text config before loading the model
         """
         config = self.model_tester.get_config()
@@ -352,7 +351,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
-            self.assertIsInstance(for_causal_lm, Gemma3ForCausalLM)
+            self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
 
 
 @slow

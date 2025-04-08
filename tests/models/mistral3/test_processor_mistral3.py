@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import unittest
 import requests
 
 from transformers import PixtralProcessor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_read_token, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -35,6 +34,7 @@ if is_vision_available():
 
 
 @require_vision
+@require_read_token
 class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 

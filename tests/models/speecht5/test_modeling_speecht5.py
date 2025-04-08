@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1893,14 +1892,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not output hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_batched_inputs_outputs(self):

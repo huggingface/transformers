@@ -68,7 +68,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
             The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     extracted_states: Tuple[torch.FloatTensor] = None
@@ -104,14 +104,14 @@ class OmDetTurboDecoderOutput(ModelOutput):
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_coords: torch.FloatTensor = None
-    decoder_classes: torch.FloatTensor = None
-    encoder_coord_logits: torch.FloatTensor = None
+    decoder_coords: Optional[torch.FloatTensor] = None
+    decoder_classes: Optional[torch.FloatTensor] = None
+    encoder_coord_logits: Optional[torch.FloatTensor] = None
     encoder_class_logits: Tuple[torch.FloatTensor] = None
-    init_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Tuple[Tuple[torch.FloatTensor]] = None
 
 
@@ -157,14 +157,14 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
             The number of queried classes for each image.
     """
 
-    loss: torch.FloatTensor = None
-    decoder_coord_logits: torch.FloatTensor = None
-    decoder_class_logits: torch.FloatTensor = None
-    init_reference_points: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    decoder_coord_logits: Optional[torch.FloatTensor] = None
+    decoder_class_logits: Optional[torch.FloatTensor] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_coord_logits: torch.FloatTensor = None
+    encoder_coord_logits: Optional[torch.FloatTensor] = None
     encoder_class_logits: Tuple[torch.FloatTensor] = None
-    encoder_extracted_states: torch.FloatTensor = None
+    encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -172,8 +172,8 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     classes_structure: Optional[torch.LongTensor] = None
 
 
-# Copied from models.deformable_detr.MultiScaleDeformableAttention
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttention
 class MultiScaleDeformableAttention(nn.Module):
     def forward(
         self,
@@ -187,10 +187,10 @@ class MultiScaleDeformableAttention(nn.Module):
     ):
         batch_size, _, num_heads, hidden_dim = value.shape
         _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-        value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
         sampling_grids = 2 * sampling_locations - 1
         sampling_value_list = []
-        for level_id, (height, width) in enumerate(value_spatial_shapes):
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
             # batch_size, height*width, num_heads, hidden_dim
             # -> batch_size, height*width, num_heads*hidden_dim
             # -> batch_size, num_heads*hidden_dim, height*width
@@ -579,7 +579,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         """
@@ -1315,7 +1315,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
 
         # [batch_size, height*width, channels]
         new_vision_features = torch.cat(new_vision_features, 1)
-        new_vision_shapes = torch.tensor(new_vision_shapes_list, dtype=torch.int64).to(vision_features[0].device)
+        new_vision_shapes = torch.tensor(new_vision_shapes_list, dtype=torch.int64, device=vision_features[0].device)
         level_start_index = torch.cat((new_vision_shapes.new_zeros((1,)), new_vision_shapes.prod(1).cumsum(0)[:-1]))
 
         return new_vision_features, new_vision_shapes, new_vision_shapes_list, level_start_index
@@ -1330,7 +1330,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         )
         predicted_class_features = self.encoder_vision_features(
             torch.where(
-                valid_mask, vision_features, torch.tensor(0.0, dtype=vision_features.dtype).to(vision_features.device)
+                valid_mask,
+                vision_features,
+                torch.tensor(0.0, dtype=vision_features.dtype, device=vision_features.device),
             )
         )
 

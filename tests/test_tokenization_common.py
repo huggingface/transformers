@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import functools
 import inspect
 import itertools
 import json
@@ -24,9 +25,10 @@ import tempfile
 import traceback
 import unittest
 from collections import OrderedDict
+from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -69,6 +71,38 @@ if TYPE_CHECKING:
     from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
 
 
+def use_cache_if_possible(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        use_cache = kwargs.pop("use_cache", True)
+
+        underline_func = func
+        if "functools" in str(func):
+            underline_func = func.__wrapped__
+
+        if not use_cache:
+            return underline_func(*args, **kwargs)
+        if any(not arg.__hash__ for arg in args):
+            return underline_func(*args, **kwargs)
+        elif any(not kwarg.__hash__ for kwarg in kwargs.values()):
+            return underline_func(*args, **kwargs)
+
+        cached = func(*args, **kwargs)
+        copied = copy.deepcopy(cached)
+
+        if hasattr(copied, "_tokenizer") and "tests.models.clip.test_tokenization_clip.CLIPTokenizationTest" in str(
+            args[0]
+        ):
+            copied._tokenizer = cached._tokenizer
+
+        if hasattr(copied, "sp_model"):
+            copied.sp_model = cached.sp_model
+
+        return copied
+
+    return wrapper
+
+
 logger = logging.get_logger(__name__)
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
@@ -89,11 +123,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: Dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
-    tokenizer_mapping: Dict["PretrainedConfig", Tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
-) -> Dict[
+    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    Tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -198,38 +232,40 @@ class TokenizerTesterMixin:
     # test_sentencepiece must also be set to True
     test_sentencepiece_ignore_case = False
 
-    def setUp(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
-        self.from_pretrained_id = (
-            [self.from_pretrained_id] if isinstance(self.from_pretrained_id, str) else self.from_pretrained_id
+        cls.from_pretrained_id = (
+            [cls.from_pretrained_id] if isinstance(cls.from_pretrained_id, str) else cls.from_pretrained_id
         )
 
-        self.tokenizers_list = []
-        if self.test_rust_tokenizer:
-            self.tokenizers_list = [
+        cls.tokenizers_list = []
+        if cls.test_rust_tokenizer:
+            cls.tokenizers_list = [
                 (
-                    self.rust_tokenizer_class,
+                    cls.rust_tokenizer_class,
                     pretrained_id,
-                    self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {},
+                    cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {},
                 )
-                for pretrained_id in self.from_pretrained_id
+                for pretrained_id in cls.from_pretrained_id
             ]
         else:
-            self.tokenizers_list = []
+            cls.tokenizers_list = []
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
-            self._data = f_data.read().replace("\n\n", "\n").strip()
+            cls._data = f_data.read().replace("\n\n", "\n").strip()
 
-        self.tmpdirname = tempfile.mkdtemp()
+        cls.tmpdirname = tempfile.mkdtemp()
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
         toks = [
             (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
@@ -257,7 +293,7 @@ class TokenizerTesterMixin:
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
 
-    def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, fast=True, **kwargs) -> list[PreTrainedTokenizerBase]:
         if fast and self.test_rust_tokenizer and self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
         elif fast and self.test_rust_tokenizer:
@@ -267,19 +303,27 @@ class TokenizerTesterMixin:
         else:
             raise ValueError("This tokenizer class has no tokenizer to be tested.")
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def tokenizer_integration_test_util(
         self,
-        expected_encoding: Dict,
+        expected_encoding: dict,
         model_name: str,
         revision: str = None,
-        sequences: List[str] = None,
-        decode_kwargs: Dict[str, Any] = None,
+        sequences: list[str] = None,
+        decode_kwargs: dict[str, Any] = None,
         padding: bool = True,
     ):
         """
@@ -1263,7 +1307,7 @@ class TokenizerTesterMixin:
                 if not self.test_rust_tokenizer:
                     self.skipTest(reason="No fast tokenizer defined")
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
                 self._check_no_pad_token_padding(tokenizer_r, conversations)
 
                 tokenizer_r.padding_side = "right"
@@ -1446,7 +1490,7 @@ class TokenizerTesterMixin:
                 if not self.test_rust_tokenizer:
                     self.skipTest(reason="No fast tokenizer defined")
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
 
                 # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the
                 # truncation to happen in the middle of the assistant content.
@@ -2050,11 +2094,9 @@ class TokenizerTesterMixin:
         if self.rust_tokenizer_class is not None:
             pretrained_name = self.from_pretrained_id
 
-            slow_tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, legacy=False)
+            slow_tokenizer = self.get_tokenizer(pretrained_name, legacy=False)
             with self.subTest(f"{pretrained_name}"):
-                rust_tokenizer = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, from_slow=True, legacy=False
-                )
+                rust_tokenizer = self.get_rust_tokenizer(pretrained_name, from_slow=True, legacy=False)
                 input_full_vocab_ids = list(
                     range(len(slow_tokenizer))
                 )  # TODO let's maybe shuffle this! And run it 4 times. This way we cover more cmbinations
@@ -2200,14 +2242,10 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, padding_side="left", **kwargs
-                    )
+                    tokenizer_r = self.get_rust_tokenizer(pretrained_name, padding_side="left", **kwargs)
                     self.assertEqual(tokenizer_r.padding_side, "left")
 
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, padding_side="right", **kwargs
-                    )
+                    tokenizer_r = self.get_rust_tokenizer(pretrained_name, padding_side="right", **kwargs)
                     self.assertEqual(tokenizer_r.padding_side, "right")
 
                     self.assertRaises(
@@ -2219,10 +2257,10 @@ class TokenizerTesterMixin:
                     )
 
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="left", **kwargs)
+                    tokenizer_p = self.get_tokenizer(pretrained_name, padding_side="left", **kwargs)
                     self.assertEqual(tokenizer_p.padding_side, "left")
 
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="right", **kwargs)
+                    tokenizer_p = self.get_tokenizer(pretrained_name, padding_side="right", **kwargs)
                     self.assertEqual(tokenizer_p.padding_side, "right")
 
                     self.assertRaises(
@@ -2237,14 +2275,10 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="left", **kwargs
-                    )
+                    tokenizer_r = self.get_rust_tokenizer(pretrained_name, truncation_side="left", **kwargs)
                     self.assertEqual(tokenizer_r.truncation_side, "left")
 
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="right", **kwargs
-                    )
+                    tokenizer_r = self.get_rust_tokenizer(pretrained_name, truncation_side="right", **kwargs)
                     self.assertEqual(tokenizer_r.truncation_side, "right")
 
                     self.assertRaises(
@@ -2256,14 +2290,10 @@ class TokenizerTesterMixin:
                     )
 
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="left", **kwargs
-                    )
+                    tokenizer_p = self.get_tokenizer(pretrained_name, truncation_side="left", **kwargs)
                     self.assertEqual(tokenizer_p.truncation_side, "left")
 
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="right", **kwargs
-                    )
+                    tokenizer_p = self.get_tokenizer(pretrained_name, truncation_side="right", **kwargs)
                     self.assertEqual(tokenizer_p.truncation_side, "right")
 
                     self.assertRaises(
@@ -3194,18 +3224,18 @@ class TokenizerTesterMixin:
     def test_is_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 # Check is_fast is set correctly
                 self.assertTrue(tokenizer_r.is_fast)
 
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                    tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                     self.assertFalse(tokenizer_p.is_fast)
 
     def test_fast_only_inputs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 # Ensure None raise an error
                 self.assertRaises(TypeError, tokenizer_r.tokenize, None)
@@ -3216,7 +3246,7 @@ class TokenizerTesterMixin:
     def test_alignement_methods(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
                 text = " ".join(words)
@@ -3446,8 +3476,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Ensure basic input match
                 input_p = tokenizer_p.encode_plus(self._data)
@@ -3487,8 +3517,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Check we have the same number of added_tokens for both pair and non-pair inputs.
                 self.assertEqual(
@@ -3505,8 +3535,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Check we have the correct max_length for both pair and non-pair inputs.
                 self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -3520,8 +3550,8 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # sometimes the tokenizer saved online is not the same
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Assert the set of special tokens match.
                 self.assertSequenceEqual(
@@ -3532,7 +3562,7 @@ class TokenizerTesterMixin:
     def test_add_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 vocab_size = len(tokenizer_r)
                 self.assertEqual(tokenizer_r.add_tokens(""), 0)
@@ -3558,7 +3588,7 @@ class TokenizerTesterMixin:
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 text = "Wonderful no inspiration example with subtoken"
                 pair = "Along with an awesome pair"
@@ -3601,7 +3631,7 @@ class TokenizerTesterMixin:
         This needs to be padded so that it can represented as a tensor
         """
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+            tokenizer = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
                 if is_torch_available():
@@ -3663,8 +3693,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 if hasattr(tokenizer_p, "add_prefix_space") and not tokenizer_p.add_prefix_space:
                     continue  # Too hard to test for now
@@ -3745,8 +3775,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 input_simple = [1, 2, 3]
                 input_pair = [1, 2, 3]
 
@@ -3767,8 +3797,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 # # Input string
                 # input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
                 # input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
@@ -3812,8 +3842,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -4038,8 +4068,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -4076,8 +4106,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -4151,8 +4181,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
                 tokens_r = tokenizer_r.encode_plus(
                     sentence,
@@ -4176,7 +4206,7 @@ class TokenizerTesterMixin:
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
                 # pair_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=True)
@@ -4219,8 +4249,8 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 string_sequence = "Asserting that both tokenizers are equal"
                 python_output = tokenizer_p.prepare_for_model(
                     tokenizer_p.encode(string_sequence, add_special_tokens=False)
@@ -4235,7 +4265,7 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -4246,12 +4276,10 @@ class TokenizerTesterMixin:
 
                 if self.test_slow_tokenizer:
                     # in rust fast, you lose the information of the AddedToken when initializing with `additional_special_tokens`
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_cr = self.get_rust_tokenizer(
                         pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                     )
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                    )
+                    tokenizer_p = self.get_tokenizer(pretrained_name, additional_special_tokens=added_tokens, **kwargs)
 
                     p_output = tokenizer_p.encode("Hey this is a <special> token")
 
@@ -4456,7 +4484,7 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
-                    except EnvironmentError as e:
+                    except OSError as e:
                         # Some tokenizer will raised an error before reaching the logged warning because there are no
                         # corresponding files to load
                         error_message = str(e)
@@ -4498,7 +4526,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     # Save the fast tokenizer files in a temporary directory
-                    tokenizer_old = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs, use_fast=True)
+                    tokenizer_old = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
                     tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
 
                     # Initialize toy model for the trainer
@@ -4532,13 +4560,11 @@ class TokenizerTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir_1:
                     # Here we check that even if we have initialized a fast tokenizer with a tokenizer_file we can
                     # still save only the slow version and use these saved files to rebuild a tokenizer
-                    tokenizer_fast_old_1 = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, **kwargs, use_fast=True
-                    )
+                    tokenizer_fast_old_1 = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
                     tokenizer_file = os.path.join(tmp_dir_1, "tokenizer.json")
                     tokenizer_fast_old_1.backend_tokenizer.save(tokenizer_file)
 
-                    tokenizer_fast_old_2 = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_fast_old_2 = self.get_rust_tokenizer(
                         pretrained_name, **kwargs, use_fast=True, tokenizer_file=tokenizer_file
                     )
 
@@ -4560,10 +4586,10 @@ class TokenizerTesterMixin:
             special_token = "<my_new_token>"
             special_sentence = f"Hey this is a {special_token} token"
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_rust = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
-                tokenizer_py = self.tokenizer_class.from_pretrained(
+                tokenizer_py = self.get_tokenizer(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
 
@@ -4622,7 +4648,7 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                tokenizer = self.get_tokenizer(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
                     self.assertEqual(tokenizer._special_tokens_map["eos_token"], new_eos)
@@ -4662,7 +4688,7 @@ class TokenizerTesterMixin:
 
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                        tokenizer_fast = self.get_rust_tokenizer(pretrained_name, eos_token=new_eos)
                         self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright

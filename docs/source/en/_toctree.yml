@@ -29,6 +29,8 @@
       title: The Transformer model family
     - local: attention
       title: Attention mechanisms
+    - local: attention_interface
+      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
@@ -413,6 +415,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
@@ -503,6 +507,8 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/llama4
+        title: Llama4
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -583,6 +589,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
       - local: model_doc/phimoe
         title: PhiMoE
       - local: model_doc/phobert
@@ -597,6 +605,10 @@
         title: Qwen2
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
