@@ -48,7 +48,7 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     config_class = HGNetV2Config
     base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
-    _no_split_modules = ["HGNetV2ConvLayer"]
+    _no_split_modules = ["HGNetV2BasicLayer"]
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
