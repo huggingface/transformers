@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, HybridChunkedCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -206,41 +206,18 @@ class Llama4TextRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+            freqs_cis = freqs_cis * self.attention_scaling
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        freqs_cis = freqs_cis * self.attention_scaling
         return freqs_cis
 
 
@@ -655,7 +632,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -667,7 +644,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask, chunk_causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions, use_cache=use_cache
         )
 
         hidden_states = inputs_embeds
@@ -730,7 +707,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    @torch.compiler.disable  # the operations in this method are not compilable
+    @torch.compiler.disable(recursive=False)  # the operations in this method are not compilable
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -739,6 +716,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
         chunked_attention_mask=None,
+        use_cache=True,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -755,22 +733,26 @@ class Llama4TextModel(Llama4PreTrainedModel):
         first_cache_position = cache_position[0]
         last_cache_position = cache_position[-1]
 
+        if past_key_values is not None:
+            full_cache_length = past_key_values.get_max_cache_shape() or sequence_length
+        else:
+            full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
+
         # to avoid graph break, we introduce this hack
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
             first_cache_position + sequence_length > attention_chunk_size
         )
 
-        key_length = torch.where(
-            cond1,
-            attention_chunk_size + sequence_length - 1,
-            torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+        key_length = (
+            torch.where(
+                cond1,
+                attention_chunk_size + sequence_length - 1,
+                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+            )
+            if use_cache
+            else full_cache_length
         )
-
-        if past_key_values is not None and past_key_values.is_compileable:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
@@ -781,7 +763,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
-                    key_length=target_length,
+                    key_length=full_cache_length,
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
@@ -793,13 +775,13 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=target_length,
+            target_length=full_cache_length,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        if target_length > self.config.attention_chunk_size:
+        if full_cache_length > self.config.attention_chunk_size:
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
                 start=first_cache_position,

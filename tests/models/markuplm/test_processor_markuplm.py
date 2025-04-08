@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import (
     MarkupLMProcessor,
@@ -75,7 +74,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
     def get_feature_extractor(self, **kwargs):
