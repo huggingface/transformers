@@ -154,11 +154,11 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             processor_slow = GroundingDinoProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
             processor_slow.save_pretrained(tmpdir)
-            processor_slow = GroundingDinoProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+            processor_slow = GroundingDinoProcessor.from_pretrained(tmpdir, use_fast=False)
 
             processor_fast = GroundingDinoProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
             processor_fast.save_pretrained(tmpdir)
-            processor_fast = GroundingDinoProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = GroundingDinoProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
