@@ -35,6 +35,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -143,7 +144,7 @@ class Llama4TextRMSNorm(nn.Module):
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
-
+@use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()

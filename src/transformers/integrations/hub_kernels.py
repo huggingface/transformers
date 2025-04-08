@@ -31,7 +31,21 @@ try:
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
             )
-        }
+        },
+        "Llama4TextMoe": {
+            "cuda": LayerRepository(
+                # Move to kernels-community/moe once we release.
+                repo_id="kernels-community/moe-new-models",
+                layer_name="Llama4TextMoe",
+            )
+        },
+        "Llama4TextFp8Moe": {
+            "cuda": LayerRepository(
+                # Move to kernels-community/moe once we release.
+                repo_id="kernels-community/moe",
+                layer_name="Llama4TextMoe",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)

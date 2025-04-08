@@ -14,7 +14,7 @@
 
 from ..activations import ACT2FN
 from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
-
+from ..integrations.hub_kernels import use_kernel_forward_from_hub
 
 if is_torch_available():
     import torch
@@ -67,7 +67,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         del x_quantized, x_scale
         return output
 
-
+@use_kernel_forward_from_hub("Llama4TextMoe")
 class FbgemmFp8Llama4TextExperts(nn.Module):
     def __init__(self, config, dtype=torch.float32):
         super().__init__()
