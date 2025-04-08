@@ -15,7 +15,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip uninstall -y pytest
+RUN pip install pipdeptree && pipdeptree --reverse --packages pytest
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
