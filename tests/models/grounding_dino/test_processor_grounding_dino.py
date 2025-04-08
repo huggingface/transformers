@@ -179,8 +179,10 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
             processor.save_pretrained(tmpdir)
 
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = BertTokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = GroundingDinoImageProcessor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
             processor = GroundingDinoProcessor.from_pretrained(
                 tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
