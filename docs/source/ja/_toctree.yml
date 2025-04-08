@@ -200,8 +200,6 @@
   title: コンセプチュアルガイド
 - sections:
   - sections:
-    - local: main_classes/agent
-      title: エージェントとツール
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback

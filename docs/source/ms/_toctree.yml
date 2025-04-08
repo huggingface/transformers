@@ -179,8 +179,6 @@
   title: Panduan konsep
 - sections:
     - sections:
-        - local: main_classes/agent
-          title: Ejen dan Alat
         - local: model_doc/auto
           title: Kelas Auto
         - local: main_classes/callback
