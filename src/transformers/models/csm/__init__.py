@@ -18,8 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_conversational_speech_model import *
-    from .modeling_conversational_speech_model import *
+    from .configuration_csm import *
+    from .modular_csm import *
+    # from .processing_csm import *
+    # from .audio_tokenization_csm import *
 else:
     import sys
 

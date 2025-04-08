@@ -20,8 +20,8 @@ import re
 import torch
 
 from transformers import (
-    ConversationalSpeechModelConfig,
-    ConversationalSpeechModelForCausalLM,
+    CsmConfig,
+    CsmForCausalLM,
 )
 from transformers.utils.hub import get_file_from_repo
 
@@ -78,7 +78,7 @@ def write_model(
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
 
-    config = ConversationalSpeechModelConfig()
+    config = CsmConfig()
     params = {
         "backbone": {
             "num_attention_heads": config.backbone_config.num_attention_heads,
@@ -142,7 +142,7 @@ def write_model(
     # load the weights and save
     # -------------------------
 
-    model = ConversationalSpeechModelForCausalLM(config)
+    model = CsmForCausalLM(config)
     model.load_state_dict(state_dict)
 
     print("Saving the model...")
@@ -151,12 +151,12 @@ def write_model(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert CSM weights to HuggingFace format")
+    parser = argparse.ArgumentParser(description="Convert Csm weights to HuggingFace format")
     parser.add_argument(
         "--input_path_or_repo",
         type=str,
         required=True,
-        help="Path or repo containing CSM weights",
+        help="Path or repo containing Csm weights",
     )
     parser.add_argument(
         "--model_name",
