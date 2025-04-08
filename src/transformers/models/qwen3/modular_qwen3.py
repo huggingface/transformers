@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -146,7 +146,7 @@ class Qwen3ForCausalLM(LlamaForCausalLM):
     def forward(
         self,
         **super_kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
