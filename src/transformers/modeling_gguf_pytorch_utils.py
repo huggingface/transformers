@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -15,7 +14,7 @@
 # limitations under the License.
 
 import re
-from typing import Dict, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -115,7 +114,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -291,7 +290,7 @@ def get_gguf_hf_weights_map(
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
-    if model_type == "qwen2_moe":
+    elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
@@ -347,7 +346,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     Args:
         gguf_checkpoint_path (`str`):
             The path the to GGUF file to load
-        return_tensors (`bool`, defaults to `True`):
+        return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """

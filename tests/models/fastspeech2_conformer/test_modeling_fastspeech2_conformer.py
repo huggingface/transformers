@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,7 +103,7 @@ class FastSpeech2ConformerModelTester:
         # check batch sizes match
         for value in result.values():
             self.parent.assertEqual(value.size(0), self.batch_size)
-        # check duration, pitch, and energy have the appopriate shapes
+        # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
         self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
         self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
@@ -527,7 +526,7 @@ class FastSpeech2ConformerWithHifiGanTester:
         # check batch sizes match
         for value in result.values():
             self.parent.assertEqual(value.size(0), self.batch_size)
-        # check duration, pitch, and energy have the appopriate shapes
+        # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
         self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
         self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)

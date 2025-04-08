@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,7 +178,10 @@ class EncoderDecoderMixin:
         **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+        with (
+            tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+            tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+        ):
             encoder_model.save_pretrained(encoder_tmp_dirname)
             decoder_model.save_pretrained(decoder_tmp_dirname)
             model_kwargs = {"encoder_hidden_dropout_prob": 0.0}
@@ -306,7 +308,10 @@ class EncoderDecoderMixin:
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with (
+                tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+                tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+            ):
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(

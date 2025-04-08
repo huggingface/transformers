@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -218,14 +217,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -509,19 +500,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
         In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
@@ -954,14 +937,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
         pass
@@ -970,7 +945,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
         In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
@@ -1245,14 +1220,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1419,14 +1386,6 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @unittest.skip(reason="Blip2VisionModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Blip2VisionModelWithProjection has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1647,7 +1606,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),

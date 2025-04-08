@@ -261,8 +261,8 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    attention_mask: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    attention_mask: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -407,8 +407,7 @@ class UdopPatchEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.proj(pixel_values)
         embeddings = embeddings.flatten(2).transpose(1, 2)
@@ -525,7 +524,7 @@ class UdopLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # Udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -1720,8 +1719,8 @@ class UdopModel(UdopPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
@@ -1896,8 +1895,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
@@ -2109,9 +2108,9 @@ class UdopEncoderModel(UdopPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithAttentionMask, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Tensor = None,
+        input_ids: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
-        attention_mask: Tensor = None,
+        attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
         head_mask: Optional[Tensor] = None,
