@@ -431,10 +431,6 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
-extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
-)
-
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
