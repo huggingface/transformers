@@ -13,6 +13,7 @@ RUN apt install -y libaio-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
+RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
 RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
