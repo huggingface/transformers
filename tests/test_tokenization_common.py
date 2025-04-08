@@ -259,7 +259,7 @@ class TokenizerTesterMixin:
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]
