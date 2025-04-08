@@ -37,13 +37,9 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_processor = GotOcr2ImageProcessor()
         tokenizer = PreTrainedTokenizerFast.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
-        processor_kwargs = cls.prepare_processor_dict()
+        processor_kwargs = {}
         processor = GotOcr2Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
-
-    @staticmethod
-    def prepare_processor_dict():
-        return {}
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
