@@ -15,7 +15,6 @@
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import (
     PreTrainedTokenizer,
@@ -83,7 +82,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
     def tearDown(self):

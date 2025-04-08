@@ -776,7 +776,7 @@ class RemBertModel(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -931,7 +931,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1028,7 +1028,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1164,7 +1164,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1260,7 +1260,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1352,7 +1352,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
@@ -1430,7 +1430,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.FloatTensor = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.FloatTensor] = None,
