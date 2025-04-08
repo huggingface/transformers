@@ -37,9 +37,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": [
         "attn_layer_indices",
     ],
-    "Llama4TextConfig": [
-        "cache_implementation"
-    ],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -247,6 +244,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "output_router_logits",
         "router_aux_loss_coef",
         "router_jitter_noise",
+        "cache_implementation"
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
