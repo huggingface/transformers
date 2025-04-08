@@ -777,7 +777,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     attention_mask,
                     query_length=sequence_length,
                     key_length=full_cache_length,
-                    offsets=None if sequence_length != 1 else (first_cache_position, 0),
+                    offsets=(first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
