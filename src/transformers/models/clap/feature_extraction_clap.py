@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import mel_filter_bank, spectrogram, spectrogram_batch, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -172,6 +172,21 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         )
         return log_mel_spectrogram.T
 
+    def _np_extract_fbank_features_batch(self, waveforms: List[np.array], mel_filters: Optional[np.array] = None) -> List[np.array]:
+        """
+        Batch version of `_np_extract_fbank_features`.
+        """
+        log_mel_spectrograms = spectrogram_batch(
+            waveforms,
+            window_function(self.fft_window_size, "hann"),
+            frame_length=self.fft_window_size,
+            hop_length=self.hop_length,
+            power=2.0,
+            mel_filters=mel_filters,
+            log_mel="dB",
+        )
+        return [log_mel_spectrogram.T for log_mel_spectrogram in log_mel_spectrograms]
+
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
         if len(ranges[1]) == 0:
@@ -254,6 +269,68 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
 
         return input_mel, longer
+
+    def _get_input_mel_batch(self, waveforms: List[np.array], max_length, truncation, padding) -> List[np.array]:
+        """Batch version of `_get_input_mel`."""
+        # Split waveforms into long and short
+        longer_data = [(idx, wave) for idx, wave in enumerate(waveforms) if wave.shape[0] > max_length]
+        shorter_data = [(idx, wave) for idx, wave in enumerate(waveforms) if wave.shape[0] <= max_length]
+        
+        longer_indices, longer_waves = zip(*longer_data) if longer_data else ([], [])
+        shorter_indices, shorter_waves = zip(*shorter_data) if shorter_data else ([], [])
+        
+        input_mels = [None] * len(waveforms)
+        is_longer = [False] * len(waveforms)
+        
+        if longer_waves:
+            if truncation == "rand_trunc":
+                cropped_waves = [
+                    wave[np.random.randint(0, len(wave) - max_length + 1) : np.random.randint(0, len(wave) - max_length + 1) + max_length]
+                    for wave in longer_waves
+                ]
+                mels = self._np_extract_fbank_features_batch(cropped_waves, self.mel_filters_slaney)
+                mels = [mel[None, :] for mel in mels]
+                
+                for idx, mel in zip(longer_indices, mels):
+                    input_mels[idx] = mel
+                    is_longer[idx] = True
+                    
+            elif truncation == "fusion":
+                mels = self._np_extract_fbank_features_batch(longer_waves, self.mel_filters)
+                chunk_frames = max_length // self.hop_length + 1
+                
+                for idx, mel in zip(longer_indices, mels):
+                    total_frames = mel.shape[0]
+                    if chunk_frames == total_frames:
+                        input_mels[idx] = np.stack([mel, mel, mel, mel], axis=0)
+                        is_longer[idx] = False
+                    else:
+                        input_mels[idx] = self._random_mel_fusion(mel, total_frames, chunk_frames)
+                        is_longer[idx] = True
+        
+        if shorter_waves:
+            padded_waves = [
+                np.pad(
+                    np.tile(wave, n_repeat) if padding == "repeatpad" else np.tile(wave, n_repeat + 1)[:max_length],
+                    (0, max_length - len(np.tile(wave, n_repeat)) if padding == "repeatpad" else 0),
+                    mode="constant",
+                    constant_values=0
+                )
+                for wave, n_repeat in [(wave, int(max_length / len(wave))) for wave in shorter_waves]
+            ]
+            
+            if truncation == "fusion":
+                mels = self._np_extract_fbank_features_batch(padded_waves, self.mel_filters)
+                mels = [np.stack([mel, mel, mel, mel], axis=0) for mel in mels]
+            else:
+                mels = self._np_extract_fbank_features_batch(padded_waves, self.mel_filters_slaney)
+                mels = [mel[None, :] for mel in mels]
+            
+            for idx, mel in zip(shorter_indices, mels):
+                input_mels[idx] = mel
+                is_longer[idx] = False
+        
+        return input_mels, is_longer
 
     def __call__(
         self,
