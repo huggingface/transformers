@@ -22,10 +22,7 @@ specific language governing permissions and limitations under the License.-->
 You can find all the original VITS checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mms-tts) organization.
 
 > [!TIP]
-> - VITS synthesizes speech non-deterministically. For consistent results, set a fixed random seed.
-> - For languages with non-Roman alphabets (e.g., Korean or Arabic), you might need the [`uroman`](https://github.com/isi-nlp/uroman) package.
-> - Check if your tokenizer requires uroman preprocessing by inspecting the `is_uroman` attribute.
-> - Click on the VITS models in the right sidebar for more examples and use-cases!
+> Click on the VITS models in the right sidebar for more examples of how to apply VITS.
 
 The following examples show how easy it is to generate speech from text using `Pipeline` and `AutoModel`:
 
