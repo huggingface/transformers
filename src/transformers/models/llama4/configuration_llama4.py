@@ -224,8 +224,13 @@ class Llama4TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
             <TODO>
             <TODO>
-        no_rope_layers (`int`, *optional*): TODO
-        no_rope_layer_interval (`int`, *optional*, defaults to 4): TODO
+        no_rope_layers (`List[int]`, *optional*):
+            List with at least the same length as the number of layers in the model.
+            A `1` at an index position indicates that the corresponding layer will use RoPE,
+            while a `0` indicates that it's a NoPE layer.
+        no_rope_layer_interval (`int`, *optional*, defaults to 4):
+            If `no_rope_layers` is `None`, it will be created using a NoPE layer every
+            `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
         attn_temperature_tuning (`int`, *optional*, defaults to 4): TODO
@@ -340,11 +345,11 @@ class Llama4TextConfig(PretrainedConfig):
         if no_rope_layers == []:
             no_rope_layers = None
 
-        self.no_rope_layers = (
-            no_rope_layers
-            if no_rope_layers is not None
-            else list(range(no_rope_layer_interval - 1, num_hidden_layers, no_rope_layer_interval))
-        )
+        default_no_rope_layers = [
+            int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+        ]
+
+        self.no_rope_layers = no_rope_layers if no_rope_layers else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
         self.moe_layers = (
