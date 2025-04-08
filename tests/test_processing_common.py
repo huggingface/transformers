@@ -763,7 +763,7 @@ class ProcessorTesterMixin:
             )
 
     def test_chat_template_save_loading(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         signature = inspect.signature(processor.__init__)
         if "chat_template" not in {*signature.parameters.keys()}:
             self.skipTest("Processor doesn't accept chat templates at input")
