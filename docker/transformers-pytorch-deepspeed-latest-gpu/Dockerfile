@@ -1,25 +1,21 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-11.html#rel-23-11
-FROM nvcr.io/nvidia/pytorch:25.03-py3
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-08.html
+FROM nvcr.io/nvidia/pytorch:24.08-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 ARG PYTORCH='2.6.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu121'
+ARG CUDA='cu126'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
-RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip uninstall -y pytest
-
-RUN python3 -m pip install --no-cache-dir "pytest>=7.2.0,<8.0.0"
-
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+# `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
+RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing] "pandas<2" "numpy<2"
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
