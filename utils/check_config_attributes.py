@@ -37,6 +37,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Llama4TextConfig": [
+        "cache_implementation"
+    ],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
