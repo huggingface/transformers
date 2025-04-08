@@ -646,9 +646,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "test-output.txt", "r") as f:
+                with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                with open(tmp_folder / "examples_test_list.txt") as f:
                     example_tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
@@ -687,9 +687,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt")
-                with open(tmp_folder / "test-output.txt", "r") as f:
+                with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                with open(tmp_folder / "examples_test_list.txt") as f:
                     example_tests_to_run = f.read()
 
             expected_tests = {
@@ -703,9 +703,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", filter_models=False)
-                with open(tmp_folder / "test-output.txt", "r") as f:
+                with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                with open(tmp_folder / "examples_test_list.txt") as f:
                     example_tests_to_run = f.read()
 
             expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
@@ -728,7 +728,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "test-output.txt", "r") as f:
+                with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
@@ -749,7 +749,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                with open(tmp_folder / "examples_test_list.txt") as f:
                     example_tests_to_run = f.read()
 
             assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
@@ -764,7 +764,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                with open(tmp_folder / "examples_test_list.txt") as f:
                     example_tests_to_run = f.read()
 
             assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
