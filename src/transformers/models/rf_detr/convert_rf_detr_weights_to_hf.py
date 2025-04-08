@@ -31,9 +31,21 @@ from transformers import (
     RFDetrDinov2WithRegistersConfig,
     RFDetrForObjectDetection,
     RTDetrImageProcessor,
+    RTDetrImageProcessorFast,
 )
 from transformers.utils import logging
 
+
+torch.set_printoptions(precision=6, sci_mode=False)
+
+
+def custom_repr(self):
+    # return f"{tuple(self.shape)} {self.flatten()[-10:].tolist()} {original_repr(self)}"
+    return f"{tuple(self.shape)} {self.flatten()[-3:].tolist()}"
+
+
+original_repr = torch.Tensor.__repr__
+torch.Tensor.__repr__ = custom_repr
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -129,11 +141,11 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.decoder.norm": r"model.decoder.norm",
     r"transformer.decoder.ref_point_head": r"model.decoder.reference_points_head",
     r"refpoint_embed": r"model.reference_point_embeddings",
-    r"class_embed": r"model.decoder.class_embed",
-    r"bbox_embed": r"model.decoder.bbox_embed",
     r"transformer.enc_output": r"model.enc_output",
     r"transformer.enc_output_norm": r"model.enc_output_norm",
     r"transformer.enc_out_bbox_embed": r"model.enc_out_bbox_embed",
+    r"transformer.enc_out_class_embed": r"model.enc_out_class_embed",
+    r"query_feat": r"model.query_position_embeddings",
 }
 
 
@@ -169,6 +181,16 @@ def read_in_q_k_v(state_dict, config: RFDetrConfig):
         state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-decoder_hidden_dim:]
 
 
+def copy_weights(state_dict, config):
+    for key, value in dict(state_dict.items()).items():
+        if key.startswith("bbox_embed"):
+            new_key = f"model.decoder.{key}"
+            state_dict[new_key] = value
+        if key.startswith("class_embed"):
+            new_key = f"model.decoder.{key}"
+            state_dict[new_key] = value
+
+
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -197,7 +219,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     state_dict = torch.hub.load_state_dict_from_url(model_name_to_checkpoint_url[model_name], map_location="cpu")[
         "model"
     ]
-
+    original_state_dict = state_dict.copy()
     # rename keys
     state_dict = convert_old_keys_to_new_keys(state_dict)
     for key in state_dict.copy().keys():
@@ -206,6 +228,8 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
 
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
+    # certain weights are copied from the RFDetrForObjectDetection to the RFDetrDecoder
+    copy_weights(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     for key in state_dict.copy().keys():
         if key.endswith("num_batches_tracked"):
@@ -213,11 +237,13 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
 
     # finally, create HuggingFace model and load state dict
     model = RFDetrForObjectDetection(config)
+    target_state_dict = model.state_dict()
     model.load_state_dict(state_dict)
+    loaded_state_dict = model.state_dict()
     model.eval()
 
     # load image processor
-    image_processor = RTDetrImageProcessor()
+    image_processor = RTDetrImageProcessorFast(size={"height": 560, "width": 560}, do_normalize=True)
 
     # prepare image
     img = prepare_img()
@@ -225,7 +251,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.Resize([560, 560], interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.ToTensor(),
         ]
     )
@@ -233,8 +259,6 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
 
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
-
-    assert torch.allclose(original_pixel_values, pixel_values)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)

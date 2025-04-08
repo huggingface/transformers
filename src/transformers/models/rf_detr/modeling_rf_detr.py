@@ -373,6 +373,7 @@ class RFDetrConvNormLayer(nn.Module):
         activation: str = None,
     ):
         super().__init__()
+        activation = config.projector_activation_function if activation is None else activation
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -406,12 +407,13 @@ class RFDetrCSPRepBottleneck(nn.Module):
 
         activation = config.projector_activation_function
         self.conv1 = RFDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1)
-        self.conv2 = RFDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1)
+        self.conv2 = RFDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
+    def forward(self, hidden_states):
+        output_states = self.conv1(hidden_states)
+        output_states = self.conv2(output_states)
+        return hidden_states + output_states
 
 
 class RFDetrCSPRepLayer(nn.Module):
@@ -424,27 +426,22 @@ class RFDetrCSPRepLayer(nn.Module):
 
         out_channels = config.d_model
         num_blocks = config.projector_num_blocks
-        activation = config.projector_activation_function
 
         self.hidden_channels = int(out_channels * config.csp_hidden_expansion)
-        self.conv1 = RFDetrConvNormLayer(config, in_channels, 2 * self.hidden_channels, 1, 1, activation=activation)
-        self.conv2 = RFDetrConvNormLayer(
-            config,
-            (2 + num_blocks) * self.hidden_channels,
-            out_channels,
-            1,
-            1,
-            activation=activation,
-        )
-        self.bottlenecks = nn.Sequential(
-            *[RFDetrCSPRepBottleneck(config, self.hidden_channels) for _ in range(num_blocks)]
+        self.conv1 = RFDetrConvNormLayer(config, in_channels, 2 * self.hidden_channels, 1, 1)
+        self.conv2 = RFDetrConvNormLayer(config, (2 + num_blocks) * self.hidden_channels, out_channels, 1, 1)
+        self.bottlenecks = nn.ModuleList(
+            [RFDetrCSPRepBottleneck(config, self.hidden_channels) for _ in range(num_blocks)]
         )
 
     def forward(self, hidden_states):
         hidden_states = self.conv1(hidden_states)
         all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         hidden_states = all_hidden_states[-1]
-        all_hidden_states.extend(bottleneck(hidden_states) for bottleneck in self.bottlenecks)
+        for bottleneck in self.bottlenecks:
+            new_hidden_states = bottleneck(hidden_states)
+            all_hidden_states.append(new_hidden_states)
+        # all_hidden_states.extend(bottleneck(hidden_states) for bottleneck in self.bottlenecks)
         hidden_states = torch.cat(all_hidden_states, 1)
         hidden_states = self.conv2(hidden_states)
         return hidden_states
@@ -460,7 +457,7 @@ class RFDetrScaleProjectorLayer(nn.Module):
         elif scale == 1.0:
             pass
         elif scale == 0.5:
-            layers.append(RFDetrConvNormLayer(config, in_channels, in_channels, 3, 2))
+            layers.append(RFDetrConvNormLayer(config, in_channels, in_channels, 3, 2, activation="relu"))
         else:
             raise NotImplementedError("Unsupported scale_factor:{}".format(scale))
         self.layers = nn.Sequential(*layers)
@@ -1546,23 +1543,20 @@ class RFDetrModel(RFDetrPreTrainedModel):
         position_embeddings = build_position_encoding(config)
         self.backbone = RFDetrConvModel(backbone, position_embeddings)
 
-        if not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(config.num_queries * config.num_groups, config.d_model)
+        self.query_position_embeddings = nn.Embedding(config.num_queries * config.num_groups, config.d_model)
 
         self.reference_point_embeddings = nn.Embedding(config.num_queries * config.num_groups, 4)
         nn.init.constant_(self.reference_point_embeddings.weight.data, 0)
 
         self.decoder = RFDetrDecoder(config)
 
-        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
-
         if config.two_stage:
             self.enc_output = nn.ModuleList(
                 [nn.Linear(config.d_model, config.d_model) for _ in range(config.num_groups)]
             )
             self.enc_output_norm = nn.ModuleList([nn.LayerNorm(config.d_model) for _ in range(config.num_groups)])
-            self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
-            self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
+            # self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
+            # self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
         else:
             self.reference_points = nn.Linear(config.d_model, 2)
 
@@ -1729,7 +1723,7 @@ class RFDetrModel(RFDetrPreTrainedModel):
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
         masks = []
-        for source, mask in enumerate(features):
+        for source, mask in features:
             sources.append(source)
             masks.append(mask)
             if mask is None:
