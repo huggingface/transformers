@@ -15,6 +15,8 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
+RUN python3 -m pip uninstall --no-cache-dir pytest
+
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 # Install latest release PyTorch
