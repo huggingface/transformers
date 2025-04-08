@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -328,7 +327,7 @@ class TFModelUtilsTest(unittest.TestCase):
                             self.assertEqual(len(state_file), 1)
 
                 # Check the index and the shard files found match
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
@@ -367,7 +366,7 @@ class TFModelUtilsTest(unittest.TestCase):
                 self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
                 # Check the index and the shard files found match
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
