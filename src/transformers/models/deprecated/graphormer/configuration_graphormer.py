@@ -14,6 +14,8 @@
 # limitations under the License.
 """Graphormer model configuration"""
 
+from typing import Optional
+
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
@@ -153,14 +155,14 @@ class GraphormerConfig(PretrainedConfig):
         pre_layernorm: bool = False,
         apply_graphormer_init: bool = False,
         activation_fn: str = "gelu",
-        embed_scale: float = None,
+        embed_scale: Optional[float] = None,
         freeze_embeddings: bool = False,
         num_trans_layers_to_freeze: int = 0,
         traceable: bool = False,
         q_noise: float = 0.0,
         qn_block_size: int = 8,
-        kdim: int = None,
-        vdim: int = None,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
         bias: bool = True,
         self_attention: bool = True,
         pad_token_id=0,

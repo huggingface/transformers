@@ -60,8 +60,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             plus the initial embedding outputs.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    cls_token_value: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cls_token_value: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -544,7 +544,7 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
                 module.cls_token.data = nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                    module.cls_token.data, mean=0.0, std=self.config.initializer_range
                 )
 
 

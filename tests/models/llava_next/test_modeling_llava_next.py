@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -174,39 +173,6 @@ class LlavaNextVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_next_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        model = LlavaNextForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_sizes=image_sizes,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_llava_next_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        config.torch_dtype = torch.float16
-        model = LlavaNextForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_sizes=image_sizes,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -298,7 +264,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
@@ -408,7 +374,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_input_ids.pt",
             repo_type="dataset",
         )
-        original_input_ids = torch.load(filepath, map_location="cpu")
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         # remove image token indices because HF impl expands image tokens `image_seq_length` times
         original_input_ids = original_input_ids[original_input_ids != -200]
@@ -420,7 +386,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_pixel_values.pt",
             repo_type="dataset",
         )
-        original_pixel_values = torch.load(filepath, map_location="cpu")
+        original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
         # verify generation

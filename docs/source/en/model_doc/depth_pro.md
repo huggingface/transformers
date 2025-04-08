@@ -90,7 +90,7 @@ The `DepthProEncoder` further uses two encoders:
 - `image_encoder`
    - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
 
-Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are seperate `Dinov2Model` by default.
+Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are separate `Dinov2Model` by default.
 
 Outputs from both encoders (`last_hidden_state`) and selected intermediate states (`hidden_states`) from **`patch_encoder`** are fused by a `DPT`-based `FeatureFusionStage` for depth estimation.
 

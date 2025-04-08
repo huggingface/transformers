@@ -22,14 +22,13 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Union, get_args, get_origin
+from typing import List, Literal, Optional, Union, get_args, get_origin
 
 import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
 from transformers.testing_utils import require_torch
-from transformers.training_args import _VALID_DICT_FIELDS
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
@@ -94,21 +93,21 @@ class OptionalExample:
     foo: Optional[int] = None
     bar: Optional[float] = field(default=None, metadata={"help": "help message"})
     baz: Optional[str] = None
-    ces: Optional[List[str]] = list_field(default=[])
-    des: Optional[List[int]] = list_field(default=[])
+    ces: Optional[list[str]] = list_field(default=[])
+    des: Optional[list[int]] = list_field(default=[])
 
 
 @dataclass
 class ListExample:
-    foo_int: List[int] = list_field(default=[])
-    bar_int: List[int] = list_field(default=[1, 2, 3])
-    foo_str: List[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
-    foo_float: List[float] = list_field(default=[0.1, 0.2, 0.3])
+    foo_int: list[int] = list_field(default=[])
+    bar_int: list[int] = list_field(default=[1, 2, 3])
+    foo_str: list[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
+    foo_float: list[float] = list_field(default=[0.1, 0.2, 0.3])
 
 
 @dataclass
 class RequiredExample:
-    required_list: List[int] = field()
+    required_list: list[int] = field()
     required_str: str = field()
     required_enum: BasicEnum = field()
 
@@ -412,7 +411,8 @@ class HfArgumentParserTest(unittest.TestCase):
         args = BasicExample(**args_dict_for_yaml)
         self.assertEqual(parsed_args, args)
 
-    def test_integration_training_args(self):
+    def test_z_integration_training_args(self):
+        # make sure that this test executes last in the test suite
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)
 
@@ -424,7 +424,7 @@ class HfArgumentParserTest(unittest.TestCase):
         If this fails, a type annotation change is
         needed on a new input
         """
-        base_list = _VALID_DICT_FIELDS.copy()
+        base_list = TrainingArguments._VALID_DICT_FIELDS.copy()
         args = TrainingArguments
 
         # First find any annotations that contain `dict`
@@ -435,11 +435,11 @@ class HfArgumentParserTest(unittest.TestCase):
 
         for field in fields.values():
             # First verify raw dict
-            if field.type in (dict, Dict):
+            if field.type in (dict, dict):
                 raw_dict_fields.append(field)
             # Next check for `Union` or `Optional`
             elif get_origin(field.type) == Union:
-                if any(arg in (dict, Dict) for arg in get_args(field.type)):
+                if any(arg in (dict, dict) for arg in get_args(field.type)):
                     optional_dict_fields.append(field)
 
         # First check: anything in `raw_dict_fields` is very bad
@@ -455,7 +455,7 @@ class HfArgumentParserTest(unittest.TestCase):
             args = get_args(field.type)
             # These should be returned as `dict`, `str`, ...
             # we only care about the first two
-            self.assertIn(args[0], (Dict, dict))
+            self.assertIn(args[0], (dict, dict))
             self.assertEqual(
                 str(args[1]),
                 "<class 'str'>",
@@ -468,7 +468,7 @@ class HfArgumentParserTest(unittest.TestCase):
             self.assertIn(
                 field.name,
                 base_list,
-                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `training_args._VALID_DICT_FIELDS`",
+                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
             )
 
     @require_torch

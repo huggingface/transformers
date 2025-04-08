@@ -496,7 +496,9 @@ def _validate_bnb_multi_backend_availability(raise_exception):
                 "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
             )
 
-        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
+        available_devices = frozenset(
+            [device for device in available_devices if device != "cpu"]
+        )  # Only Intel CPU is supported by BNB at the moment
 
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:

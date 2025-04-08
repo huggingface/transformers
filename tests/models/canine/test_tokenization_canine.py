@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +17,14 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -32,17 +32,22 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = CanineTokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def canine_tokenizer(self):
         return CanineTokenizer.from_pretrained("google/canine-s")
 
-    def get_tokenizer(self, **kwargs) -> CanineTokenizer:
-        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> CanineTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        tokenizer = cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
         tokenizer._unicode_vocab_size = 1024
         return tokenizer
 
@@ -64,7 +69,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_encoding_keys(self):
         tokenizer = self.canine_tokenizer
-        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
+        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Transformers."]
         batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids, attention_mask and token_type_ids are returned
         self.assertIn("input_ids", batch)

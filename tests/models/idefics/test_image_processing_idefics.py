@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    import torchvision.transforms as transforms
+    from torchvision import transforms
 
 if is_vision_available():
     from PIL import Image
