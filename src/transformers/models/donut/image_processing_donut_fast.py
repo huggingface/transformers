@@ -16,7 +16,6 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -24,7 +23,7 @@ from ...image_processing_utils_fast import (
     BatchFeature,
     DefaultFastImageProcessorKwargs,
 )
-from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
