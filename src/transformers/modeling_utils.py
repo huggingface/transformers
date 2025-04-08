@@ -834,6 +834,7 @@ def resolve_state_dict_modules(model_to_load, state_dict, expected_keys):
 def load_shard_file(args):
     (
         shard_file,
+        state_dict,
         disk_only_shard_files,
         is_hqq_or_bnb,
         is_quantized,
@@ -4863,6 +4864,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         args_list = [
             (
                 shard_file,
+                state_dict,
                 disk_only_shard_files,
                 is_hqq_or_bnb,
                 is_quantized,
