@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 from torchvision.transforms import functional as F
 
-from ...image_processing_utils import BatchFeature
+from ...image_processing_utils import BatchFeature, INIT_SERVICE_KWARGS
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
@@ -37,11 +37,13 @@ from ...image_utils import (
     is_torch_tensor,
     pil_torch_interpolation_mapping,
     validate_kwargs,
+    make_list_of_images,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,
+    filter_out_non_signature_kwargs
 )
 from ...utils.deprecation import deprecate_kwarg
 
@@ -197,12 +199,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         # Prepare segmentation maps
         if segmentation_maps is not None:
-            segmentation_maps = self._prepare_input_images(
-                images=segmentation_maps,
-                do_convert_rgb=do_convert_rgb,
-                input_data_format=input_data_format,
-                device=device,
-            )
+            segmentation_maps = make_list_of_images(expected_ndims=1)
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
