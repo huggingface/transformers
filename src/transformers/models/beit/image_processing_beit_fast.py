@@ -74,6 +74,8 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = BeitFastImageProcessorKwargs
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
+    @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
