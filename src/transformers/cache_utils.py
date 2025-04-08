@@ -1857,7 +1857,7 @@ class HybridChunkedCache(Cache):
 
     # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
     # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1911,6 +1911,7 @@ class HybridChunkedCache(Cache):
         self.key_cache.append(new_layer_key_cache)
         self.value_cache.append(new_layer_value_cache)
 
+    @torch.compiler.disable
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         cumulative_length = self.cumulative_length[layer_idx]
         is_full = cumulative_length >= max_cache_len
