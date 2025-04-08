@@ -686,10 +686,15 @@ class AssistantToTargetTranslator:
             The tokenizer used by the target (main) model.
         assistant_tokenizer (`PreTrainedTokenizerBase`):
             The tokenizer used by the assistant model.
-        assistant_model_device (`str`, defaults to "cpu"):
-            The device where the assistant model is located. Used for placing tensors.
-        target_vocab_size (`int`, *optional*):
+        target_vocab_size (`int`):
             The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
+        assistant_model_device (str, optional): The device on which the assistant model is loaded.
+                Defaults to "cpu".
+        assistant_model_device (`str`, defaults to "cpu"): The device where the assistant model is located. Used for placing tensors.
+        assistant_model (Optional[PreTrainedModel], optional): The assistant model to be used. Defaults to None for backward compatibility.
+        assistant_prune_lm_head (bool): Whether to prune the assistant model's language model
+            head to match the target vocabulary. This is only applicable if `assistant_model` is provided.
+            Defaults to False for backward compatibility.
     """
 
     FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
@@ -702,19 +707,21 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
         assistant_model_device: str = "cpu",
-        assistant_model: "PreTrainedModel",
-        assistant_prune_lm_head: Optional[bool] = True,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        assistant_prune_lm_head: bool = False,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
-        self._assistant_model_device: str = assistant_model.device or assistant_model_device
+        self._assistant_model_device: str = (
+            assistant_model_device if assistant_model is None else assistant_model.device
+        )
         self.target_vocab_size: int = target_vocab_size
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
             self._get_assistant_to_target_input_ids()
         )
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: Optional[LogitsProcessorList] = None
-        self.assistant_prune_lm_head = assistant_prune_lm_head
+        self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
             if self.assistant_prune_lm_head:
@@ -848,8 +855,8 @@ class AssistantVocabTranslatorCache:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,
         assistant_model_device: str = "cpu",
-        assistant_model: "PreTrainedModel",
-        assistant_prune_lm_head=True,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        assistant_prune_lm_head: bool = False,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
@@ -859,7 +866,12 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, target_vocab_size, assistant_model_device, assistant_model, assistant_prune_lm_head
+                target_tokenizer,
+                assistant_tokenizer,
+                target_vocab_size,
+                assistant_model_device,
+                assistant_model,
+                assistant_prune_lm_head,
             )
             assistant_dict[assistant_tokenizer] = mapping
 
