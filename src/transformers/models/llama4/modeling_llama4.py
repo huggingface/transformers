@@ -730,6 +730,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
+    @torch.compiler.disable  # the operations in this method are not compilable
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -767,7 +768,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
 
         if past_key_values is not None and past_key_values.is_compileable:
-            target_length = past_key_values.get_max_cache_shape
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
@@ -780,7 +781,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
-                    key_length=past_key_values.get_max_cache_shape(),
+                    key_length=target_length,
                     offsets=None if sequence_length != 1 else (first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask

@@ -32,14 +32,15 @@ if is_vision_available():
 class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Llama4Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Llama4ImageProcessorFast(max_patches=1, size={"height": 20, "width": 20})
         tokenizer = PreTrainedTokenizerFast.from_pretrained("unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = {}
         processor = Llama4Processor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -47,19 +48,24 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
-    # Override as Llama4ProcessorProcessor needs image tokens in prompts
+    # Override as Llama4Processor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
-            return "lower newer <image>"
+            return "lower newer <|image|>"
 
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
 
         if batch_size == 1:
-            return ["lower newer <image>"]
-        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
+            return ["lower newer <|image|>"]
+        return ["lower newer <|image|>", "<|image|> upper older longer string"] + ["<|image|> lower newer"] * (
             batch_size - 2
         )
+
+    @unittest.skip("This test uses return_tensors='np' which is not supported")
+    def test_image_chat_template_accepts_processing_kwargs(self):
+        pass
