@@ -254,6 +254,13 @@ class Emu3ImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class EvollaProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class FlavaFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
