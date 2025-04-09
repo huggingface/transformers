@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
+    AUTOROUND = "auto-round"
 
 
 class AWQLinearVersion(str, Enum):
@@ -203,6 +204,83 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
+
+@dataclass
+class AutoRoundConfig(QuantizationConfigMixin):
+    """This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded AutoRound quantization.
+
+    Args:
+        bits (`int`):
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+        tokenizer (`str` or `PreTrainedTokenizerBase`, *optional*):
+            The tokenizer used to process the dataset. You can pass either:
+                - A custom tokenizer object.
+                - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
+                    using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+    """
+
+    def __init__(
+            self,
+            bits: int = 4,
+            tokenizer: Any = None,
+            dataset: str = None,
+            group_size: int = 128,
+            sym: bool = False,
+            backend="auto",
+            layer_config: dict = None,
+            **kwargs,
+    ):
+
+        self.bits = bits
+        self.tokenizer = tokenizer
+        self.dataset = dataset
+        self.group_size = group_size
+        self.sym = sym
+        self.target_backend = "auto"
+        self.backend = backend
+        self.layer_config = layer_config
+        if kwargs is not None:
+            for key in kwargs.keys():
+                setattr(self, key, kwargs[key])
+        self.quant_method = QuantizationMethod.AUTOROUND
+        self.post_init()
+
+    def post_init(self):
+        r"""Safety checker that arguments are correct."""
+        if self.bits not in [2, 3, 4, 8]:
+            raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
+        if self.group_size != -1 and self.group_size <= 0:
+            raise ValueError("group_size must be greater than 0 or equal to -1")
+
+    def get_loading_attributes(self):
+        loading_attibutes_dict = {"target_backend": self.backend}
+        return loading_attibutes_dict
+
+    def to_dict(self):
+        config_dict = super().to_dict()
+        return config_dict
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        quant_method = config_dict["quant_method"]
+        if "auto-round" not in quant_method and "gptq" not in quant_method and "awq" not in quant_method:
+            raise NotImplementedError(
+                "Failed to convert to auto_round format. Only `gptqv1`, `awq`, and `auto-round` formats are supported."
+            )
+
+        if "gptq" in quant_method and "meta" in config_dict:
+            raise NotImplementedError(
+                "Failed to convert gptq format to auto_round format. Only supports `gptqv1`")
+
+        if "awq" in quant_method and config_dict.get("version", "gemm") != "gemm":
+            raise NotImplementedError(
+                "Failed to convert awq format to auto_round format. Only supports  awq format with gemm version")
+
+        if "auto-round" not in quant_method:
+            config_dict["backend"] = f"auto_round:{quant_method}"
+        return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
 @dataclass
 class HqqConfig(QuantizationConfigMixin):

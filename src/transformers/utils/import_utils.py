@@ -159,6 +159,7 @@ _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
+_auto_round_available = _is_package_available("auto_round")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
@@ -1120,6 +1121,8 @@ def is_optimum_available():
 def is_auto_awq_available():
     return _auto_awq_available
 
+def is_auto_round_available():
+    return _auto_round_available
 
 def is_optimum_quanto_available():
     # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
