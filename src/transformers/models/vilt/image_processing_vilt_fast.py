@@ -44,6 +44,10 @@ if is_torchvision_available():
     else:
         from torchvision.transforms import functional as F
 
+# Set maximum size based on the typical aspect ratio of the COCO dataset
+MAX_LONGER_EDGE = 1333
+MAX_SHORTER_EDGE = 800
+
 
 class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pad: Optional[bool]
@@ -109,7 +113,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             if do_resize:
                 # Resize with aspect ratio preservation
                 shorter = size.shortest_edge
-                longer = int(1333 / 800 * shorter)
+                longer = int(MAX_LONGER_EDGE / MAX_SHORTER_EDGE * shorter)
 
                 heights = stacked_images.shape[-2]
                 widths = stacked_images.shape[-1]
