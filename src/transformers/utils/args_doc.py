@@ -653,7 +653,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
             if "typing" in str(param_type):
                 param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
             else:
-                param_type = f"{param_type.__module__.replace('transformers.','~').replace('builtins','')}.{param.annotation.__name__}"
+                param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
             if "ForwardRef" in param_type:
                 param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
         else:
@@ -709,7 +709,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 if "typing" in param_type:
                     param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
                 else:
-                    param_type = f"{param_type.__module__.replace('transformers.','~').replace('builtins','').replace()}.{param_name}"
+                    param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '').replace()}.{param_name}"
                 if "ForwardRef" in param_type:
                     param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
                 # Check if the parameter has a default value (considered optional)
