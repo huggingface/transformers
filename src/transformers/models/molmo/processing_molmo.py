@@ -217,7 +217,10 @@ class MolmoProcessor(ProcessorMixin):
                 valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
                 image_token_mask = image_token_mask[sorted_patch_ixs_ex * valid]
                 image_token_mask = image_token_mask * valid - 100 * (1 - valid)
-                image_token_mask = np.reshape(image_token_mask, [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height],)
+                image_token_mask = np.reshape(
+                    image_token_mask,
+                    [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height],
+                )
                 image_inputs.setdefault("image_token_indices", []).append(image_token_mask)
 
                 # Replace the image token with the expanded image token sequence
@@ -230,10 +233,8 @@ class MolmoProcessor(ProcessorMixin):
         )
 
         # shift patch mapping after addition of bos token (don't touch padding)
-        all_masks = image_inputs['image_token_indices']
-        image_inputs['image_token_indices'] = [np.where(mask < 0, mask, mask + 1) for mask in all_masks]
-
-
+        all_masks = image_inputs["image_token_indices"]
+        image_inputs["image_token_indices"] = [np.where(mask < 0, mask, mask + 1) for mask in all_masks]
 
         if kwargs.get("device", None) is not None:
             text_inputs = text_inputs.to(device=kwargs.get("device"))

@@ -329,6 +329,11 @@ class MolmoTextConfig(PretrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -345,7 +350,7 @@ class MolmoTextConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_theta=1000000.0,
         rope_scaling=None,
         pad_token_id=None,
         bos_token_id=None,
