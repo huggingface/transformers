@@ -38,8 +38,9 @@ def str_to_hex(line: str, sep: str = " ") -> str:
 
 
 class TestByteRewriter(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tokenizer = MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tokenizer = MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
 
     def test_simple_decompose(self):
         decompose_rewriter = self.tokenizer.decompose_rewriter

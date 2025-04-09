@@ -35,17 +35,18 @@ if is_torch_available:
 class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaNextImageProcessor()
         video_processor = LlavaNextVideoImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
 
         processor = LlavaNextVideoProcessor(
             video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -56,7 +57,8 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
-    def prepare_processor_dict(self):
+    @classmethod
+    def prepare_processor_dict(cls):
         return {
             "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + ' '}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all video then #}{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}{{ '<video>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ '\n' + content['text'] }}{% endgeneration %}{% endfor %}{% endif %}{{'<|im_end|>'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
             "num_additional_image_tokens": 6,
@@ -85,8 +87,9 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
