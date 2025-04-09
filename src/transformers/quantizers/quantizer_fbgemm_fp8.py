@@ -242,7 +242,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
-        additional_text_plan = {
+        text_plan = {
             "layers.*.self_attn.q_proj.weight": "local_colwise",
             "layers.*.self_attn.q_proj.weight_scale": "local_colwise",
             "layers.*.self_attn.k_proj.weight": "local_colwise",
@@ -271,9 +271,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
             "layers.*.feed_forward.experts.down_proj": "local_colwise",
         }
-        if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
-            config.get_text_config().base_model_tp_plan = additional_text_plan
-
+        if config.get_text_config() is not None :
+            print("config.get_text_config(). ", config.get_text_config().base_model_tp_plan)
+            config.get_text_config().base_model_tp_plan = text_plan
+        else : 
+            print("config.base_model_tp_plan", config.base_model_tp_plan)
+            config.base_model_tp_plan = text_plan
         return config
 
     def is_serializable(self, safe_serialization=None):
