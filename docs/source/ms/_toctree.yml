@@ -21,8 +21,6 @@
       title: Sediakan latihan yang diedarkan dengan 🤗 Accelerate
     - local: model_sharing
       title: Kongsi model anda
-    - local: transformers_agents
-      title: Ejen
   title: Tutorials
 - sections:
     - sections:

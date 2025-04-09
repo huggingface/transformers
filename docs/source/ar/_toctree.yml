@@ -23,8 +23,6 @@
     title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
   - local: model_sharing
     title: مشاركة نموذجك
-  - local: agents
-    title: الوكلاء
   - local: llm_tutorial
     title: التوليد باستخدام LLMs
   - local: conversations

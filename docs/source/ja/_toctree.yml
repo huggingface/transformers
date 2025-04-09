@@ -23,8 +23,6 @@
     title: 🤗 PEFT を使用してアダプターをロードしてトレーニングする
   - local: model_sharing
     title: モデルを共有する
-  - local: transformers_agents
-    title: エージェント
   - local: llm_tutorial
     title: LLM を使用した生成
   title: Tutorials
@@ -119,8 +117,6 @@
     title: トーチスクリプトへのエクスポート
   - local: community
     title: コミュニティリソース
-  - local: custom_tools
-    title: カスタムツールとプロンプト
   - local: troubleshooting
     title: トラブルシューティング
   title: 開発者ガイド
