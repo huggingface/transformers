@@ -119,48 +119,6 @@ class GraniteSpeechEncoderProjector(nn.Module):
 
 
 ### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
-class GraniteSpeechCTCEncoder(nn.Module):
-    def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.config = config
-        self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
-        self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
-
-        self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
-        self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
-        self.num_layers = config.num_layers
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.input_linear(hidden_states)
-        for idx, layer in enumerate(self.layers, start=1):
-            hidden_states = layer(hidden_states)
-            if idx == self.num_layers // 2:
-                hidden_states_mid = hidden_states.clone()
-                hidden_states_mid = self.out(hidden_states_mid)
-                hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        return hidden_states
-
-
-class GraniteSpeechConformerBlock(nn.Module):
-    """Conformer block, consisting largely of linear layers, attention, and convolutional layers."""
-
-    def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.ff1 = GraniteSpeechConformerFeedForward(config)
-        self.attn = GraniteSpeechConformerAttention(config)
-        self.conv = GraniteSpeechConformerConvModule(config)
-        self.ff2 = GraniteSpeechConformerFeedForward(config)
-        self.post_norm = nn.LayerNorm(config.hidden_dim)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
-        hidden_states = self.attn(hidden_states) + hidden_states
-        hidden_states = self.conv(hidden_states) + hidden_states
-        hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
-        hidden_states = self.post_norm(hidden_states)
-        return hidden_states
-
-
 class GraniteSpeechConformerFeedForward(nn.Module):
     """Feedforward module for conformer encoder blocks."""
 
@@ -179,7 +137,6 @@ class GraniteSpeechConformerFeedForward(nn.Module):
         hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
-
 
 class GraniteSpeechConformerAttention(nn.Module):
     """Attention for conformer blocks using Shaw's relative positional embeddings.
@@ -246,6 +203,23 @@ class GraniteSpeechConformerAttention(nn.Module):
         return self.dropout(out)
 
 
+class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
+    """Wrapper for padded 1D pointwise convolution."""
+
+    def __init__(self, chan_in: int, chan_out: int, kernel_size: int):
+        super().__init__()
+        # Padding for the 1D conv is symmetric or close (i.e., offset by one).
+        pad = kernel_size // 2
+        pad_offset = (kernel_size + 1) % 2
+        self.padding = (pad, pad - pad_offset)
+
+        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, self.padding)
+        return self.conv(hidden_states)
+
+
 class GraniteSpeechConformerConvModule(nn.Module):
     """Conformer conv module consisting of several 1D/depthwise 1D convolutional layers."""
 
@@ -274,28 +248,46 @@ class GraniteSpeechConformerConvModule(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
-    @staticmethod
-    def calc_same_padding(kernel_size: int) -> Tuple[int, int]:
-        """Calculates symmetric padding for the depthwise 1D convolution."""
-        pad = kernel_size // 2
-        return (pad, pad - (kernel_size + 1) % 2)
+class GraniteSpeechConformerBlock(nn.Module):
+    """Conformer block, consisting largely of linear layers, attention, and convolutional layers."""
 
-
-class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
-    """Wrapper for padded 1D pointwise convolution."""
-
-    def __init__(self, chan_in: int, chan_out: int, kernel_size: int):
+    def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
-        # Padding for the 1D conv is symmetric or close (i.e., offset by one).
-        pad = kernel_size // 2
-        pad_offset = (kernel_size + 1) % 2
-        self.padding = (pad, pad - pad_offset)
-
-        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
+        self.ff1 = GraniteSpeechConformerFeedForward(config)
+        self.attn = GraniteSpeechConformerAttention(config)
+        self.conv = GraniteSpeechConformerConvModule(config)
+        self.ff2 = GraniteSpeechConformerFeedForward(config)
+        self.post_norm = nn.LayerNorm(config.hidden_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = F.pad(hidden_states, self.padding)
-        return self.conv(hidden_states)
+        hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
+        hidden_states = self.attn(hidden_states) + hidden_states
+        hidden_states = self.conv(hidden_states) + hidden_states
+        hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
+        hidden_states = self.post_norm(hidden_states)
+        return hidden_states
+
+
+class GraniteSpeechCTCEncoder(nn.Module):
+    def __init__(self, config: GraniteSpeechEncoderConfig):
+        super().__init__()
+        self.config = config
+        self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
+        self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
+
+        self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
+        self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
+        self.num_layers = config.num_layers
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.input_linear(hidden_states)
+        for idx, layer in enumerate(self.layers, start=1):
+            hidden_states = layer(hidden_states)
+            if idx == self.num_layers // 2:
+                hidden_states_mid = hidden_states.clone()
+                hidden_states_mid = self.out(hidden_states_mid)
+                hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
+        return hidden_states
 
 
 GRANITE_SPEECH_START_DOCSTRING = r"""
