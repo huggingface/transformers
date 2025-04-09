@@ -738,12 +738,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        # to avoid graph break, we introduce this hack
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
             first_cache_position + sequence_length > attention_chunk_size
         )
-
         key_length = (
             torch.where(
                 cond1,
@@ -764,7 +762,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     attention_mask,
                     query_length=sequence_length,
                     key_length=full_cache_length,
-                    offsets=None if sequence_length != 1 else (first_cache_position, 0),
+                    offsets=(first_cache_position, 0),
                 )
                 return attention_mask, chunked_attention_mask
             if isinstance(attention_mask, BlockMask):
@@ -775,28 +773,42 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=full_cache_length,
+            target_length=max(full_cache_length, attention_chunk_size),
             dtype=dtype,
             device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
         if full_cache_length > self.config.attention_chunk_size:
+            start_idx = max(last_cache_position - key_length, 0)
+            end_idx = last_cache_position + 1 if sequence_length > 1 else last_cache_position
+            # We always need a mask of at least attention_chunk_size, so we use the max here
+            end_idx = max(end_idx, start_idx + attention_chunk_size)
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
-                start=first_cache_position,
-                end=first_cache_position + key_length,
+                start=start_idx,  # same offset as with flex
+                end=end_idx,
                 device=device,
             )
-            chunked_attention_mask = chunked_attention_mask & attention_mask
-            if sequence_length == 1:
-                chunked_attention_mask = chunked_attention_mask[-1:]
-            if self.config._attn_implementation == "eager":
-                chunked_attention_mask = (
-                    chunked_attention_mask[None, None, :, :]
-                    .to(dtype)
-                    .masked_fill(chunked_attention_mask, torch.finfo(dtype).min)
+
+            local_attention_mask = attention_mask[:, start_idx:end_idx]  # offset here as well
+            # It may be smaller than attention_chunk_size -> pad it
+            requires_padding = local_attention_mask.shape[-1] < attention_chunk_size
+            if requires_padding:
+                local_attention_mask = nn.functional.pad(
+                    local_attention_mask, (0, attention_chunk_size - local_attention_mask.shape[-1])
                 )
+            # Depending on the padding, take the query tokens from the end or the cache_position
+            if not requires_padding:
+                chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
+            else:
+                chunked_attention_mask = chunked_attention_mask[None, None, cache_position, :]
+
+            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
+            chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
+            if self.config._attn_implementation == "eager":
+                min_dtype = torch.finfo(dtype).min
+                chunked_attention_mask = torch.where(chunked_attention_mask == 0, min_dtype, 0.0).to(dtype)
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -810,7 +822,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-            # chunked_attention_mask = AttentionMaskConverter._unmask_unattended(chunked_attention_mask, min_dtype)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and chunked_attention_mask is not None:
@@ -841,11 +852,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
         If the chunk size is 3.
         This can just be appplied over the already created attention mask
         """
+        arange_vector = torch.arange(start, end, device=device)
         block_pos = torch.abs(
-            (torch.arange(start, end).unsqueeze(0) // attention_chunk_size)
-            - (torch.arange(start, end).unsqueeze(1) // attention_chunk_size)
+            arange_vector.unsqueeze(0) // attention_chunk_size - arange_vector.unsqueeze(1) // attention_chunk_size
         )
-        token_pos = torch.arange(start, end).unsqueeze(0) - torch.arange(start, end).unsqueeze(1)
+        token_pos = arange_vector.unsqueeze(0) - arange_vector.unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
 
