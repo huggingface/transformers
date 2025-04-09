@@ -342,6 +342,10 @@ class SequentialLlama4TextExperts(ModuleList):
 MODULES_TO_PATCH_FOR_QUANTIZATION = {
     "Llama4TextExperts": {
         "module_name": SequentialLlama4TextExperts,
-        "quantization_methods": [QuantizationMethod.COMPRESSED_TENSORS, QuantizationMethod.BITS_AND_BYTES],
+        "quantization_methods": [
+            QuantizationMethod.COMPRESSED_TENSORS,
+            QuantizationMethod.BITS_AND_BYTES,
+            QuantizationMethod.FBGEMM_FP8,
+        ],
     }
 }

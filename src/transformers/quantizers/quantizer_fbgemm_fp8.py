@@ -241,6 +241,37 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
+    def update_tp_plan(self, config):
+        additional_text_plan = {
+            "layers.*.self_attn.q_proj.weight": "local_colwise",
+            "layers.*.self_attn.q_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.k_proj.weight": "local_colwise",
+            "layers.*.self_attn.k_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.v_proj.weight": "local_colwise",
+            "layers.*.self_attn.v_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.o_proj.weight": "local_rowwise",
+            "layers.*.self_attn": "gather",
+            "layers.*.input_layernorm.weight": "sequence_parallel",
+            "layers.*.post_attention_layernorm.weight": "sequence_parallel",
+            "norm.weight": "sequence_parallel",
+            "layers.*.feed_forward.shared_expert.gate_proj.weight": "local_colwise",
+            "layers.*.feed_forward.shared_expert.gate_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.shared_expert.up_proj.weight": "local_colwise",
+            "layers.*.feed_forward.shared_expert.up_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.shared_expert.down_proj.weight": "local_rowwise",
+            "layers.*.feed_forward.experts": "local",
+            "layers.*.feed_forward": "gather",
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+        }
+        if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
+            config.get_text_config().base_model_tp_plan = additional_text_plan
+
+        return config
+
     def is_serializable(self, safe_serialization=None):
         return True
 
