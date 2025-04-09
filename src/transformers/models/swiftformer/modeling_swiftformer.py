@@ -15,6 +15,8 @@
 """PyTorch SwiftFormer model."""
 
 import collections.abc
+import math
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -22,18 +24,21 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2CLS
+from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .configuration_swiftformer import SwiftFormerConfig
 
 
@@ -44,7 +49,7 @@ _CONFIG_FOR_DOC = "SwiftFormerConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "MBZUAI/swiftformer-xs"
-_EXPECTED_OUTPUT_SHAPE = [1, 220, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 384, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
@@ -74,20 +79,16 @@ class SwiftFormerPatchEmbedding(nn.Module):
             nn.ReLU(),
         )
 
-    def forward(self, x):
-        return self.patch_embedding(x)
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        return self.patch_embedding(pixel_values)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
+    Comment: From the official implementation:
+    https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -122,80 +123,60 @@ class SwiftFormerEmbeddings(nn.Module):
     Output: tensor of shape `[batch_size, channels, height/stride, width/stride]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, index: int):
+    def __init__(self, config: SwiftFormerConfig, in_chs: int, out_chs: int, patch_size: int, stride: int, padding: int):
         super().__init__()
+        self.embeddings = nn.Sequential(
+            nn.Conv2d(in_chs, out_chs, kernel_size=patch_size, stride=stride, padding=padding),
+            nn.BatchNorm2d(out_chs, eps=config.batch_norm_eps),
+            nn.ReLU(),
+        )
 
-        patch_size = config.down_patch_size
-        stride = config.down_stride
-        padding = config.down_pad
-        embed_dims = config.embed_dims
-
-        in_chans = embed_dims[index]
-        embed_dim = embed_dims[index + 1]
-
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
-        padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
-        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps)
-
-    def forward(self, x):
-        x = self.proj(x)
-        x = self.norm(x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.embeddings(hidden_states)
 
 
 class SwiftFormerConvEncoder(nn.Module):
     """
-    `SwiftFormerConvEncoder` with 3*3 and 1*1 convolutions.
+    Convolutional encoder layer for SwiftFormer.
 
     Input: tensor of shape `[batch_size, channels, height, width]`
 
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int):
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
         super().__init__()
-        hidden_dim = int(config.mlp_ratio * dim)
+        self.conv_encoder = nn.Sequential(
+            nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim),
+            nn.BatchNorm2d(dim, eps=config.batch_norm_eps),
+            nn.ReLU(),
+        )
+        self.drop_conv_encoder = nn.Dropout(config.drop_conv_encoder_rate)
 
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
-        self.act = nn.GELU()
-        self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
-        self.drop_path = nn.Dropout(p=config.drop_conv_encoder_rate)
-        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
-
-    def forward(self, x):
-        input = x
-        x = self.depth_wise_conv(x)
-        x = self.norm(x)
-        x = self.point_wise_conv1(x)
-        x = self.act(x)
-        x = self.point_wise_conv2(x)
-        x = input + self.drop_path(self.layer_scale * x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_encoder(hidden_states)
+        hidden_states = self.drop_conv_encoder(hidden_states)
+        return hidden_states
 
 
 class SwiftFormerMlp(nn.Module):
     """
-    MLP layer with 1*1 convolutions.
+    MLP layer for SwiftFormer.
 
     Input: tensor of shape `[batch_size, channels, height, width]`
 
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, in_features: int):
+    def __init__(self, config: SwiftFormerConfig, in_features: int, hidden_features: Optional[int] = None, out_features: Optional[int] = None):
         super().__init__()
-        hidden_features = int(in_features * config.mlp_ratio)
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
         self.norm1 = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
-        self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
-        act_layer = ACT2CLS[config.hidden_act]
-        self.act = act_layer()
-        self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
-        self.drop = nn.Dropout(p=config.drop_mlp_rate)
+        self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1)
+        self.act = nn.ReLU()
+        self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1)
+        self.drop = nn.Dropout(config.drop_mlp_rate)
 
     def forward(self, x):
         x = self.norm1(x)
@@ -222,7 +203,12 @@ class SwiftFormerEfficientAdditiveAttention(nn.Module):
         self.to_query = nn.Linear(dim, dim)
         self.to_key = nn.Linear(dim, dim)
 
-        self.w_g = nn.Parameter(torch.randn(dim, 1))
+        # Initialize w_g with zeros if layer_scale_init_value is very small (zero-init case)
+        # Otherwise initialize with random values
+        if hasattr(config, "layer_scale_init_value") and config.layer_scale_init_value <= 1e-9:
+            self.w_g = nn.Parameter(torch.zeros(dim, 1))
+        else:
+            self.w_g = nn.Parameter(torch.randn(dim, 1))
         self.scale_factor = dim**-0.5
         self.proj = nn.Linear(dim, dim)
         self.final = nn.Linear(dim, dim)
@@ -249,160 +235,160 @@ class SwiftFormerEfficientAdditiveAttention(nn.Module):
 
 class SwiftFormerLocalRepresentation(nn.Module):
     """
-    Local Representation module for SwiftFormer that is implemented by 3*3 depth-wise and point-wise convolutions.
+    Local Representation module for SwiftFormer.
 
     Input: tensor of shape `[batch_size, channels, height, width]`
 
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int):
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
         super().__init__()
-
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.point_wise_conv1 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.act = nn.GELU()
-        self.point_wise_conv2 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.drop_path = nn.Identity()
+        self.conv_encoder = SwiftFormerConvEncoder(config, dim)
         self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.layer_scale.data.fill_(config.layer_scale_init_value)
 
-    def forward(self, x):
-        input = x
-        x = self.depth_wise_conv(x)
-        x = self.norm(x)
-        x = self.point_wise_conv1(x)
-        x = self.act(x)
-        x = self.point_wise_conv2(x)
-        x = input + self.drop_path(self.layer_scale * x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states + self.layer_scale * self.conv_encoder(hidden_states)
+        return hidden_states
 
 
-class SwiftFormerEncoderBlock(nn.Module):
+class SwiftFormerGlobalRepresentation(nn.Module):
     """
-    SwiftFormer Encoder Block for SwiftFormer. It consists of (1) Local representation module, (2)
-    SwiftFormerEfficientAdditiveAttention, and (3) MLP block.
+    Global Representation module for SwiftFormer.
 
     Input: tensor of shape `[batch_size, channels, height, width]`
 
-    Output: tensor of shape `[batch_size, channels,height, width]`
+    Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0) -> None:
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
         super().__init__()
+        self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
+        self.attn = SwiftFormerEfficientAdditiveAttention(config, dim)
 
-        layer_scale_init_value = config.layer_scale_init_value
-        use_layer_scale = config.use_layer_scale
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.attn(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, channels, height, width)
+        return hidden_states
 
-        self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
-        self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
-        self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
-        self.use_layer_scale = use_layer_scale
-        if use_layer_scale:
+
+class SwiftFormerBlock(nn.Module):
+    """
+    SwiftFormer block.
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height, width]`
+    """
+
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
+        super().__init__()
+        self.local_representation = SwiftFormerLocalRepresentation(config, dim)
+        self.global_representation = SwiftFormerGlobalRepresentation(config, dim)
+        self.mlp = SwiftFormerMlp(config, dim, int(dim * config.mlp_ratio))
+
+        if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
-                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+                torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=config.use_layer_scale
             )
+            self.layer_scale_1.data.fill_(config.layer_scale_init_value)
             self.layer_scale_2 = nn.Parameter(
-                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+                torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=config.use_layer_scale
             )
-
-    def forward(self, x):
-        x = self.local_representation(x)
-        batch_size, channels, height, width = x.shape
-        res = self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
-        res = res.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
-        if self.use_layer_scale:
-            x = x + self.drop_path(self.layer_scale_1 * res)
-            x = x + self.drop_path(self.layer_scale_2 * self.linear(x))
+            self.layer_scale_2.data.fill_(config.layer_scale_init_value)
         else:
-            x = x + self.drop_path(res)
-            x = x + self.drop_path(self.linear(x))
-        return x
+            self.layer_scale_1 = 1.0
+            self.layer_scale_2 = 1.0
+
+        self.drop_path = SwiftFormerDropPath(config) if config.drop_path_rate > 0.0 else nn.Identity()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Local representation
+        hidden_states = self.local_representation(hidden_states)
+
+        # Global representation
+        batch_size, channels, height, width = hidden_states.shape
+        global_hidden_states = self.global_representation(hidden_states)
+        hidden_states = hidden_states + self.drop_path(self.layer_scale_1 * global_hidden_states)
+
+        # MLP
+        mlp_hidden_states = self.mlp(hidden_states)
+        hidden_states = hidden_states + self.drop_path(self.layer_scale_2 * mlp_hidden_states)
+
+        return hidden_states
 
 
 class SwiftFormerStage(nn.Module):
     """
-    A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
-    `SwiftFormerEncoderBlock`.
+    SwiftFormer stage.
 
-    Input: tensor in shape `[batch_size, channels, height, width]`
+    Input: tensor of shape `[batch_size, in_channels, height, width]`
 
-    Output: tensor in shape `[batch_size, channels, height, width]`
+    Output: tensor of shape `[batch_size, out_channels, height/stride, width/stride]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, index: int) -> None:
+    def __init__(
+        self,
+        config: SwiftFormerConfig,
+        in_chs: int,
+        out_chs: int,
+        depth: int,
+        downsample: bool = True,
+    ):
         super().__init__()
+        self.downsample = downsample
+        if self.downsample:
+            self.downsample_layers = SwiftFormerEmbeddings(
+                config, in_chs, out_chs, config.down_patch_size, config.down_stride, config.down_pad
+            )
+        self.blocks = nn.ModuleList([SwiftFormerBlock(config, out_chs) for _ in range(depth)])
 
-        layer_depths = config.depths
-        dim = config.embed_dims[index]
-        depth = layer_depths[index]
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.downsample:
+            hidden_states = self.downsample_layers(hidden_states)
 
-        blocks = []
-        for block_idx in range(depth):
-            block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
-
-            if depth - block_idx <= 1:
-                blocks.append(SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
-            else:
-                blocks.append(SwiftFormerConvEncoder(config, dim=dim))
-
-        self.blocks = nn.ModuleList(blocks)
-
-    def forward(self, input):
         for block in self.blocks:
-            input = block(input)
-        return input
+            hidden_states = block(hidden_states)
+
+        return hidden_states
 
 
 class SwiftFormerEncoder(nn.Module):
-    def __init__(self, config: SwiftFormerConfig) -> None:
+    """
+    SwiftFormer encoder.
+
+    Input: tensor of shape `[batch_size, in_channels, height, width]`
+
+    Output: tensor of shape `[batch_size, out_channels, height/32, width/32]`
+    """
+
+    def __init__(self, config: SwiftFormerConfig):
         super().__init__()
-        self.config = config
-
-        embed_dims = config.embed_dims
-        downsamples = config.downsamples
-        layer_depths = config.depths
-
-        # Transformer model
-        network = []
-        for i in range(len(layer_depths)):
-            stage = SwiftFormerStage(config=config, index=i)
-            network.append(stage)
-            if i >= len(layer_depths) - 1:
-                break
-            if downsamples[i] or embed_dims[i] != embed_dims[i + 1]:
-                # downsampling between two stages
-                network.append(SwiftFormerEmbeddings(config, index=i))
-        self.network = nn.ModuleList(network)
-
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        self.patch_embed = SwiftFormerPatchEmbedding(config)
+        self.network = nn.ModuleList(
+            [
+                SwiftFormerStage(
+                    config,
+                    config.embed_dims[i],
+                    config.embed_dims[i + 1],
+                    config.depths[i],
+                    config.downsamples[i],
+                )
+                for i in range(len(config.depths))
+            ]
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.patch_embed(pixel_values)
 
-        for block in self.network:
-            hidden_states = block(hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        for stage in self.network:
+            hidden_states = stage(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 
 class SwiftFormerPreTrainedModel(PreTrainedModel):
@@ -415,75 +401,81 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["SwiftFormerEncoderBlock"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
-SWIFTFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+@dataclass
+class SwiftFormerEncoderOutput(ModelOutput):
+    """
+    SwiftFormer encoder's outputs, with potential hidden states.
 
-    Parameters:
-        config ([`SwiftFormerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SWIFTFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Last hidden states (final feature map) of the last stage of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, num_channels, height, width)`.
+    """
 
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@add_start_docstrings(
-    "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIFTFORMER_START_DOCSTRING,
-)
 class SwiftFormerModel(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig):
         super().__init__(config)
         self.config = config
 
-        self.patch_embed = SwiftFormerPatchEmbedding(config)
         self.encoder = SwiftFormerEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
-        r""" """
+        r"""
+        Returns:
 
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> model = AutoModel.from_pretrained("MBZUAI/swiftformer-xs")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -492,51 +484,80 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.patch_embed(pixel_values)
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        embedding_output = pixel_values
+
+        encoder_outputs = self.encoder(embedding_output)
 
         if not return_dict:
-            return tuple(v for v in encoder_outputs if v is not None)
+            return (encoder_outputs,)
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
+            last_hidden_state=encoder_outputs,
+            hidden_states=None,
         )
 
 
-@add_start_docstrings(
+class SwiftFormerPooler(nn.Module):
+    def __init__(self, config: SwiftFormerConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.embed_dims[-1], config.embed_dims[-1])
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        pooled_output = self.dense(hidden_states)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+@dataclass
+class SwiftFormerModelWithPoolingOutput(ModelOutput):
     """
-    SwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
-    """,
-    SWIFTFORMER_START_DOCSTRING,
-)
+    SwiftFormer model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Last hidden states (final feature map) of the last stage of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state after a pooling operation on the spatial dimensions.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, num_channels, height, width)`.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    pooler_output: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__(config)
-
-        embed_dims = config.embed_dims
 
         self.num_labels = config.num_labels
         self.swiftformer = SwiftFormerModel(config)
 
         # Classifier head
-        self.norm = nn.BatchNorm2d(embed_dims[-1], eps=config.batch_norm_eps)
-        self.head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
-        self.dist_head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(config.embed_dims[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    @add_start_docstrings_to_model_forward(
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+                [`AutoImageProcessor.__call__`] for details.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """,
     )
     def forward(
         self,
@@ -550,26 +571,47 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModelForImageClassification
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> model = AutoModelForImageClassification.from_pretrained("MBZUAI/swiftformer-xs")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # run base model
         outputs = self.swiftformer(
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs.last_hidden_state if return_dict else outputs[0]
+        if isinstance(outputs, tuple):
+            feature_map = outputs[0]
+        else:
+            feature_map = outputs.last_hidden_state
 
-        # run classification head
-        sequence_output = self.norm(sequence_output)
-        sequence_output = sequence_output.flatten(2).mean(-1)
-        cls_out = self.head(sequence_output)
-        distillation_out = self.dist_head(sequence_output)
-        logits = (cls_out + distillation_out) / 2
+        # Global average pooling
+        pooled_output = torch.mean(feature_map, dim=[-2, -1])
 
-        # calculate loss
+        logits = self.classifier(pooled_output)
+
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
@@ -600,8 +642,5 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
+            hidden_states=outputs.hidden_states if hasattr(outputs, "hidden_states") else None,
         )
-
-
-__all__ = ["SwiftFormerForImageClassification", "SwiftFormerModel", "SwiftFormerPreTrainedModel"]
