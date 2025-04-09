@@ -160,15 +160,10 @@ class GraniteSpeechConformerAttention(nn.Module):
         self.rel_pos_emb = nn.Embedding(2 * self.max_pos_emb + 1, self.dim_head)
         self.dropout = nn.Dropout(config.dropout)
 
-        # Precompute clamped relative positional encoding distances
-        seq = torch.arange(self.context_size)
-        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-        self.relpos_dist = torch.clamp(relpos_dist, -self.context_size, self.context_size) + self.max_pos_emb
-
         if self.context_size <= 0 or self.context_size > self.max_pos_emb:
             raise ValueError("Context size is either less than 0 or exceeds the max_pos_emb")
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_dists: torch.Tensor) -> torch.Tensor:
         hidden_states = self.pre_norm(hidden_states)
         bsz, num_features, _ = hidden_states.shape
 
@@ -186,7 +181,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
 
         # shaw's relative positional embedding
-        dist = self.relpos_dist.to(hidden_states.device)
+        dist = attention_dists.to(hidden_states.device)
         rel_pos_emb = self.rel_pos_emb(dist)
         rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
         pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
@@ -266,9 +261,9 @@ class GraniteSpeechConformerBlock(nn.Module):
         self.ff2 = GraniteSpeechConformerFeedForward(config)
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_dists: torch.Tensor) -> torch.Tensor:
         hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
-        hidden_states = self.attn(hidden_states) + hidden_states
+        hidden_states = self.attn(hidden_states, attention_dists=attention_dists) + hidden_states
         hidden_states = self.conv(hidden_states) + hidden_states
         hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
         hidden_states = self.post_norm(hidden_states)
@@ -279,6 +274,12 @@ class GraniteSpeechCTCEncoder(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
         self.config = config
+
+        # Precompute clamped relative positional encoding distances
+        seq = torch.arange(config.context_size)
+        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+        self.attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
+
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
 
@@ -289,7 +290,8 @@ class GraniteSpeechCTCEncoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
-            hidden_states = layer(hidden_states)
+            hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
+
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
