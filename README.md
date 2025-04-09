@@ -1,3 +1,5 @@
+[![Secret Leaks](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml)
+
 # Transformers
 
 [![Build PR Documentation](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml)
