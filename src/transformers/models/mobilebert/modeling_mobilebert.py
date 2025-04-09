@@ -1215,7 +1215,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
+# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing, BaseModelOutputWithPoolingAndCrossAttentions->BaseModelOutputWithPooling
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1259,7 +1259,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.mobilebert(
+        outputs: BaseModelOutputWithPooling = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1312,7 +1312,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing, BaseModelOutputWithPoolingAndCrossAttentions->BaseModelOutputWithPooling
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1358,7 +1358,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.mobilebert(
+        outputs: BaseModelOutputWithPooling = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1408,7 +1408,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing, BaseModelOutputWithPoolingAndCrossAttentions->BaseModelOutputWithPooling
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1462,7 +1462,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             else None
         )
 
-        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.mobilebert(
+        outputs: BaseModelOutputWithPooling = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1498,7 +1498,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
+# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing, BaseModelOutputWithPoolingAndCrossAttentions->BaseModelOutputWithPooling
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1539,7 +1539,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.mobilebert(
+        outputs: BaseModelOutputWithPooling = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
