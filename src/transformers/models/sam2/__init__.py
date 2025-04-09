@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
+
 if TYPE_CHECKING:
     from .configuration_sam2 import *
     from .image_processing_sam2 import *
