@@ -19,21 +19,20 @@ import unittest
 
 import numpy as np
 
+from tests.test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
-
-from tests.test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from PIL import Image
 
     from transformers.models.deprecated.efficientformer import EfficientFormerImageProcessor
-    from transformers import AutoImageProcessor
 
 
 if is_torch_available() and is_torchvision_available():
     import torch
+
     from transformers.models.deprecated.efficientformer import EfficientFormerImageProcessorFast
 
 
@@ -95,9 +94,11 @@ class EfficientFormerImageProcessingTester:
         if not batched:
             image = image_inputs[0]
             if isinstance(image, Image.Image):
-                width, height = image.size
+                # We don't use width and height but need to unpack them
+                _, _ = image.size
             else:
-                height, width = image.shape[0], image.shape[1]
+                # We don't use height and width but need to unpack them
+                _, _ = image.shape[0], image.shape[1]
             if isinstance(self.size, dict):
                 expected_height = self.size["height"]
                 expected_width = self.size["width"]
@@ -191,22 +192,22 @@ class EfficientFormerImageProcessorTest(ImageProcessingTestMixin, unittest.TestC
 
         # Use PIL images for the slow processor to avoid the shape mismatch issue
         pil_images = [Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(4)]
-        
+
         # Use torch tensors for the fast processor
         torch_images = [torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8) for _ in range(4)]
-        
+
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         slow_time = measure_time(image_processor_slow, pil_images)
         fast_time = measure_time(image_processor_fast, torch_images)
-        
+
         self.assertLess(fast_time, slow_time, f"Fast processor ({fast_time:.6f}s) should be faster than slow processor ({slow_time:.6f}s)")
 
     # Override the test_save_load_fast_slow_auto test to skip it for EfficientFormer
     def test_save_load_fast_slow_auto(self):
         self.skipTest("Skipping save/load auto test for EfficientFormer")
-        
+
     # Override the test_save_load_fast_slow test to skip it for EfficientFormer
     def test_save_load_fast_slow(self):
         self.skipTest("Skipping save/load test for EfficientFormer")
