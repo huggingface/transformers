@@ -35,6 +35,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -892,6 +893,7 @@ class ClapAudioEncoder(nn.Module):
 
         return normalized_input_features
 
+    @can_return_tuple
     def forward(
         self,
         input_features,
@@ -901,8 +903,7 @@ class ClapAudioEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
         always_partition: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, ClapAudioModelOutput]:
+    ) -> BaseModelOutputWithPooling:
         input_features = input_features.transpose(1, 3)
         normalized_input_features = self.batch_norm(input_features)
         normalized_input_features = normalized_input_features.transpose(1, 3)
@@ -996,18 +997,6 @@ class ClapAudioEncoder(nn.Module):
         )
         latent_output = self.avgpool(torch.flatten(last_hidden_state, 2))
         latent_output = torch.flatten(latent_output, 1)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    latent_output,
-                    all_reshaped_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1561,6 +1550,7 @@ class ClapTextEncoder(nn.Module):
         self.layer = nn.ModuleList([ClapTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1572,8 +1562,7 @@ class ClapTextEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -1626,18 +1615,6 @@ class ClapTextEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -1709,6 +1686,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClapAudioConfig)
     def forward(
@@ -1717,8 +1695,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         is_longer: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1739,7 +1716,6 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1750,7 +1726,6 @@ class ClapAudioModel(ClapPreTrainedModel):
             is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
@@ -1790,6 +1765,7 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1804,8 +1780,7 @@ class ClapTextModel(ClapPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1830,7 +1805,6 @@ class ClapTextModel(ClapPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1893,7 +1867,7 @@ class ClapTextModel(ClapPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -1903,13 +1877,9 @@ class ClapTextModel(ClapPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1963,10 +1933,7 @@ class ClapModel(ClapPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -1983,23 +1950,15 @@ class ClapModel(ClapPreTrainedModel):
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=False,
+            output_hidden_states=False,
         )
 
-        pooled_output = text_outputs[1] if return_dict is not None else text_outputs.pooler_output
+        pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
         text_features = F.normalize(text_features, dim=-1)
 
@@ -2010,11 +1969,7 @@ class ClapModel(ClapPreTrainedModel):
         self,
         input_features: Optional[torch.Tensor] = None,
         is_longer: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
         Returns:
             audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
@@ -2032,25 +1987,19 @@ class ClapModel(ClapPreTrainedModel):
         >>> inputs = feature_extractor(random_audio, return_tensors="pt")
         >>> audio_features = model.get_audio_features(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        audio_outputs = self.audio_model(
+        audio_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
-            return_dict=return_dict,
         )
 
-        pooled_output = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
-
+        pooled_output = audio_outputs.pooler_output
         audio_features = self.audio_projection(pooled_output)
         audio_features = F.normalize(audio_features, dim=-1)
 
         return audio_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapOutput, config_class=ClapConfig)
     def forward(
@@ -2063,7 +2012,6 @@ class ClapModel(ClapPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClapOutput]:
         r"""
         Returns:
@@ -2093,29 +2041,26 @@ class ClapModel(ClapPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        audio_outputs = self.audio_model(
+        audio_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        audio_embeds = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
+        audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_projection(audio_embeds)
 
-        text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -2133,10 +2078,6 @@ class ClapModel(ClapPreTrainedModel):
             caption_loss = contrastive_loss(logits_per_text)
             audio_loss = contrastive_loss(logits_per_audio.t())
             loss = (caption_loss + audio_loss) / 2.0
-
-        if not return_dict:
-            output = (logits_per_audio, logits_per_text, text_embeds, audio_embeds, text_outputs, audio_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return ClapOutput(
             loss=loss,
@@ -2171,6 +2112,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.word_embeddings = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapTextModelOutput, config_class=ClapTextConfig)
     def forward(
@@ -2180,8 +2122,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ClapTextModelOutput]:
+    ) -> ClapTextModelOutput:
         r"""
         Returns:
 
@@ -2198,24 +2139,16 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        pooled_output = text_outputs[1] if not return_dict else text_outputs.pooler_output
-
+        pooled_output = text_outputs.pooler_output
         text_embeds = self.text_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
 
         return ClapTextModelOutput(
             text_embeds=text_embeds,
@@ -2245,6 +2178,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.audio_encoder.patch_embed.proj
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapAudioModelOutput, config_class=ClapAudioConfig)
     def forward(
@@ -2253,8 +2187,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         is_longer: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ClapAudioModelOutput]:
+    ) -> ClapAudioModelOutput:
         r"""
         Returns:
 
@@ -2274,27 +2207,20 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        audio_outputs = self.audio_model(
+        audio_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        pooled_output = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
-
+        pooled_output = audio_outputs.pooler_output
         audio_embeds = self.audio_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
 
         return ClapAudioModelOutput(
             audio_embeds=audio_embeds,
