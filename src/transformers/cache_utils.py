@@ -1928,7 +1928,6 @@ class HybridChunkedCache(Cache):
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
             return key_states, value_states
-
         # otherwise we are decoding. Most efficient way to cat 1 token
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
         cache_position = cache_position.clamp(0, max_cache_len - 1)
@@ -1945,7 +1944,11 @@ class HybridChunkedCache(Cache):
 
         self.key_cache[layer_idx] += k_out
         self.value_cache[layer_idx] += v_out
-        return k_out, v_out
+
+        seq_len = key_states.size(-2)
+        active_len = min(seq_len + cache_position[0], max_cache_len)
+
+        return k_out[:, :, :active_len], v_out[:, :, :active_len]
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         k_out[:, :, cache_position] = key_states
