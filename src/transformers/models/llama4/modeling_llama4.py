@@ -828,7 +828,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             else:
                 chunked_attention_mask = chunked_attention_mask[None, None, : sequence_length, :]
 
-            chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
             if self.config._attn_implementation == "eager":
