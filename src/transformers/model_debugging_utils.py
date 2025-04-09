@@ -17,7 +17,8 @@ import functools
 import json
 import os
 import re
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
+from io import StringIO
 from typing import Optional
 
 from transformers.utils.import_utils import export
@@ -88,11 +89,11 @@ def _serialize_io(value):
     if hasattr(value, "_local_tensor"):
         # DTensor-like handling, just use local tensor attribute
         torch.set_printoptions(sci_mode=True)
-        val_repr = repr(value)
+        val_repr = _repr_to_list(value)
         out = {
             "shape": repr(value._local_tensor.shape),
             "dtype": repr(value._local_tensor.dtype),
-            "value": _sanitize_repr_for_diff(val_repr),
+            "value": val_repr,
         }
         if value._local_tensor.dtype in {torch.float16, torch.float32, torch.bfloat16}:
             value = value._local_tensor.copy()
@@ -106,11 +107,11 @@ def _serialize_io(value):
 
     if isinstance(value, torch.Tensor):
         torch.set_printoptions(sci_mode=True)
-        val_repr = repr(value)
+        val_repr = _repr_to_list(value)
         out = {
             "shape": repr(value.shape),
             "dtype": repr(value.dtype),
-            "value": _sanitize_repr_for_diff(val_repr),
+            "value": val_repr,
         }
         if value.dtype in {torch.float16, torch.float32, torch.bfloat16}:
             out.update({
@@ -120,14 +121,18 @@ def _serialize_io(value):
                 "max": _sanitize_repr_for_diff(repr(value.max())),
             })
         return out
-    # if isinstance(value, torch.Tensor):
-    #     # standard PyTorch Tensor
-    #     # return also the shape of such
-    #     return {"shape": repr(value.shape), "dtype": repr(value.dtype), "value": _sanitize_repr_for_diff(repr(value))}
 
-    # fallback for everything else (bool, int, float, None, or custom class)
     return _sanitize_repr_for_diff(repr(value))
 
+def _repr_to_list(val):
+    return _sanitize_repr_for_diff(repr(val)).splitlines()
+
+def _repr_to_list(value: torch.Tensor):
+    torch.set_printoptions(sci_mode=True, linewidth=120)
+    with StringIO() as buf, redirect_stdout(buf):
+        print(value) # to redirected stdout to avoid line splits
+        raw = buf.getvalue()
+    return _sanitize_repr_for_diff(raw).splitlines()
 
 def prune_outputs_if_children(node):
     # if there are children, remove this node's "outputs"
@@ -136,6 +141,30 @@ def prune_outputs_if_children(node):
         node.pop("outputs", None)
         for child in node["children"]:
             prune_outputs_if_children(child)
+
+
+LAYER_SUFFIX_RE = re.compile(r"(.*)\.(\d+)$") # should be generic enough, ends with a number
+
+def is_layer_block(node):
+    match = LAYER_SUFFIX_RE.match(node.get("module_path", ""))
+    if not match or not node.get("children"):
+        return False
+    number = match.group(2)
+    return any(f".{number}." in child.get("module_path", "") for child in node["children"])
+
+
+def prune_intermediate_layers(node):
+    if not node.get("children"):
+        return
+
+    layer_blocks = [(i, child) for i, child in enumerate(node["children"]) if is_layer_block(child)]
+
+    if len(layer_blocks) > 2:
+        to_remove = [i for i, _ in layer_blocks[1:-1]]
+        node["children"] = [child for i, child in enumerate(node["children"]) if i not in to_remove]
+
+    for child in node["children"]:
+        prune_intermediate_layers(child)
 
 
 def log_model_debug_trace(debug_path, model):
@@ -222,6 +251,9 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
             model._call_tree["children"] = finished["children"]
             # prune empty stuff for visibility
             [model._call_tree.pop(k, None) for k in list(model._call_tree.keys()) if not model._call_tree[k]]
+
+            # prune layers that are not 0 or last
+            prune_intermediate_layers(model._call_tree)
             # Write final JSON trace here
             log_model_debug_trace(debug_path=debug_path, model=model)
         return out
