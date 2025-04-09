@@ -2075,17 +2075,22 @@ class OffloadedHybridCache(HybridChunkedCache):
         if self._prefetch_stream is not None:
             torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
 
+        # Get correct on-device layer
+        k_out = self.device_key_cache[self.active_device_layer]
+        v_out = self.device_value_cache[self.active_device_layer]
+
+        # Let's prefetch the next layer as soon as possible
+        self._prefetch_next_layer(layer_idx)
+
         # Copy to on-device layer
-        self.device_key_cache[self.active_device_layer][:, :, cache_position] = key_states
-        self.device_value_cache[self.active_device_layer][:, :, cache_position] = value_states
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
 
         # Copy to offloaded device
         self.key_cache[layer_idx][:, :, cache_position] = key_states.to(self.offload_device)
         self.value_cache[layer_idx][:, :, cache_position] = value_states.to(self.offload_device)
 
-        self._prefetch_next_layer(layer_idx)
-
-        return self.device_key_cache, self.device_value_cache
+        return k_out, v_out
 
     def _prefetch_next_layer(self, layer_idx: int) -> None:
         """Based on current layer_idx, prefetch next full layer to the device."""
