@@ -41,38 +41,39 @@ if is_vision_available():
 class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.image1 = Image.open(
+        cls.image1 = Image.open(
             BytesIO(
                 requests.get(
                     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
                 ).content
             )
         )
-        self.image2 = Image.open(
+        cls.image2 = Image.open(
             BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
         )
-        self.image3 = Image.open(
+        cls.image3 = Image.open(
             BytesIO(
                 requests.get(
                     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
                 ).content
             )
         )
-        self.bos_token = processor.tokenizer.bos_token
-        self.image_token = processor.image_token.content
-        self.fake_image_token = processor.fake_image_token.content
+        cls.bos_token = processor.tokenizer.bos_token
+        cls.image_token = processor.image_token.content
+        cls.fake_image_token = processor.fake_image_token.content
 
-        self.bos_token_id = processor.tokenizer.convert_tokens_to_ids(self.bos_token)
-        self.image_token_id = processor.tokenizer.convert_tokens_to_ids(self.image_token)
-        self.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(self.fake_image_token)
-        self.image_seq_len = processor.image_seq_len
+        cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
+        cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
+        cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
+        cls.image_seq_len = processor.image_seq_len
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -83,8 +84,9 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         tokenizer = self.get_tokenizer()
