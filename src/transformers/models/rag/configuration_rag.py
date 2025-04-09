@@ -79,7 +79,7 @@ RAG_CONFIG_DOC = r"""
 @add_start_docstrings(RAG_CONFIG_DOC)
 class RagConfig(PretrainedConfig):
     model_type = "rag"
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(
         self,
