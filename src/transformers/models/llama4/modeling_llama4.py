@@ -796,7 +796,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=full_cache_length,
+            target_length=key_length,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -814,7 +814,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             min_dtype = torch.finfo(dtype).min
             local_attention_mask = attention_mask[:, start_idx:end_idx]  # offset here as well
             chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
-            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
+            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], key_length, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
             if self.config._attn_implementation == "eager":
                 min_dtype = torch.finfo(dtype).min
