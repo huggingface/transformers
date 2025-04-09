@@ -14,11 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Optional, Tuple, Union
-from ...cache_utils import Cache
+
 import torch.nn as nn
 import torch.utils.checkpoint
+
+from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
-from ...utils import logging, LossKwargs
+from ...processing_utils import Unpack
+from ...utils import LossKwargs, logging
 from ..glm.modeling_glm import (
     GlmAttention,
     GlmForCausalLM,
@@ -28,9 +32,7 @@ from ..glm.modeling_glm import (
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm4 import Glm4Config
 from .modeling_glm4 import Glm4RMSNorm
-from ...processing_utils import Unpack
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ..glm.modeling_glm import apply_rotary_pos_emb, rotate_half
+
 
 logger = logging.get_logger(__name__)
 
