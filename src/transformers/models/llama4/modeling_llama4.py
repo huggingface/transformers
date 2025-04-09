@@ -819,10 +819,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # It may be smaller than attention_chunk_size -> pad it
             requires_padding = local_attention_mask.shape[-1] < attention_chunk_size
             if requires_padding:
-                new_local_attention_mask = torch.zeros(local_attention_mask.shape[0], end_idx-start_idx, dtype=local_attention_mask.dtype, device=local_attention_mask.device)
-                new_local_attention_mask[:, : local_attention_mask.shape[-1]] = local_attention_mask
-                local_attention_mask = new_local_attention_mask
-            # Depending on the padding, take the query tokens from one side or the other
+                local_attention_mask = nn.functional.pad(local_attention_mask, (0, attention_chunk_size - local_attention_mask.shape[-1]))
+            # Depending on the padding, take the query tokens from the beginning or the end
             if not requires_padding:
                 chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             else:
