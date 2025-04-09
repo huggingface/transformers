@@ -50,7 +50,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]), scale_ub=self.input_scale_ub
+            x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
         )
         # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
