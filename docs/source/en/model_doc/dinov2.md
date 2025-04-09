@@ -109,6 +109,35 @@ predicted_class_idx = logits.argmax(-1).item()
 print("Predicted class:", model.config.id2label[predicted_class_idx])
 ```
 
+The example below shows how to split the output tensor into one embedding for the whole image, i.e. the CLS token, and patch embeddings.
+
+```py
+from transformers import AutoImageProcessor, AutoModel
+from PIL import Image
+import requests
+
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
+print(image.height, image.width)  # [480, 640]
+
+processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
+model = AutoModel.from_pretrained('facebook/dinov2-base')
+patch_size = model.config.patch_size
+
+inputs = processor(images=image, return_tensors="pt")
+print(inputs.pixel_values.shape)  # [1, 3, 224, 224]
+B, C, H, W = inputs.pixel_values.shape
+h, w = H // patch_size, W // patch_size
+
+outputs = model(**inputs)
+last_hidden_states = outputs[0]
+print(last_hidden_states.shape)  # [1, 1 + 256, 768]
+assert last_hidden_states.shape == (B, 1 + h * w, model.config.hidden_size)
+
+cls_token = last_hidden_states[:, 0, :]
+patch_features = last_hidden_states[:, 1:, :].unflatten(1, (h, w))
+```
+
 ## Notes
 
 - Use [torch.jit.trace](https://pytorch.org/docs/stable/generated/torch.jit.trace.html) to speedup inference. However, it will produce some mismatched elements. The difference between the original and traced model is 1e-4.
