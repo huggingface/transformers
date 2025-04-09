@@ -7,13 +7,14 @@ from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoModel,
+    OlmoRotaryEmbedding,
     apply_rotary_pos_emb,
 )
 
@@ -285,6 +286,14 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):
+    pass
+
+
+class Olmo2PreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 # The OLMo2 model is identical to the OLMo model, except RMSNorm is used instead of

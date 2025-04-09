@@ -276,7 +276,23 @@ class GotOcr2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, GotOcr2LayerNorm)):  # noqa: F821
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, GotOcr2VisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, GotOcr2VisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
 
 
 GOT_OCR2_INPUTS_DOCSTRING = r"""
