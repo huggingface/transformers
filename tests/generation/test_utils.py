@@ -1955,6 +1955,8 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_cache_class:
                 self.skipTest(reason="This model does not support the new cache format")
+            if any(model_name in model_class.__name__.lower() for model_name in ["mamba", "jamba", "zamba", "bamba"]):
+                self.skipTest(reason="This model does not support offloaded cache")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
