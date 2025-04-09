@@ -864,11 +864,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
         If the chunk size is 3.
         This can just be appplied over the already created attention mask
         """
+        arange_vector = torch.arange(start, end, device=device)
         block_pos = torch.abs(
-            (torch.arange(start, end).unsqueeze(0) // attention_chunk_size)
-            - (torch.arange(start, end).unsqueeze(1) // attention_chunk_size)
+            arange_vector.unsqueeze(0) // attention_chunk_size - arange_vector.unsqueeze(1) // attention_chunk_size
         )
-        token_pos = torch.arange(start, end).unsqueeze(0) - torch.arange(start, end).unsqueeze(1)
+        token_pos = arange_vector.unsqueeze(0) - arange_vector.unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
         
