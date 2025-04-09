@@ -761,9 +761,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        # In case the full layers have size < attention_chunk_size, make sure that layers will still see a mask
-        # of attention_chunk_size, as the slicing layers have that as a fixed length
-        full_cache_length = max(full_cache_length, attention_chunk_size)
 
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
@@ -800,7 +797,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=full_cache_length,
+            target_length=max(full_cache_length, attention_chunk_size),
             dtype=dtype,
             device=device,
             cache_position=cache_position,
