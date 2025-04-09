@@ -844,7 +844,7 @@ def check_objects_being_equally_in_main_init():
     failures = []
     for attr in attrs:
         obj = getattr(transformers, attr)
-        if isinstance(hasattr(obj, "__module__") and obj.__module__, ModuleSpec):
+        if hasattr(obj, "__module__") and isinstance(obj.__module__, ModuleSpec):
             continue
         if not hasattr(obj, "__module__") or "models.deprecated" in obj.__module__:
             continue
