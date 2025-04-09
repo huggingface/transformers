@@ -803,23 +803,23 @@ class Llama4TextModel(Llama4PreTrainedModel):
             batch_size=input_tensor.shape[0],
         )
         if full_cache_length > self.config.attention_chunk_size:
+            start_idx = max(last_cache_position - key_length, 0)
+            end_idx = last_cache_position + 1
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
-                start=max(last_cache_position - key_length, 0),  # same offset as with flex
-                end=last_cache_position+1,
+                start=start_idx,  # same offset as with flex
+                end=end_idx,
                 device=device,
             )
-            # chunked_attention_mask = chunked_attention_mask & attention_mask[..., -sequence_length:]
-            # if sequence_length == 1:
-            #     chunked_attention_mask = chunked_attention_mask[-1:]
+            local_attention_mask = attention_mask[:, start_idx:end_idx]  # offset here as well
+
+            min_dtype = torch.finfo(dtype).min
             chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
+            chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
             if self.config._attn_implementation == "eager":
-                chunked_attention_mask = (
-                    chunked_attention_mask[None, None, :, :]
-                    .to(dtype)
-                    .masked_fill(chunked_attention_mask, torch.finfo(dtype).min)
-                )
+                min_dtype = torch.finfo(dtype).min
+                chunked_attention_mask = torch.where(chunked_attention_mask == 0, min_dtype, 0.0).to(dtype)
 
         if (
             self.config._attn_implementation == "sdpa"
