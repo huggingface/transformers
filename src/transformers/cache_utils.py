@@ -2207,6 +2207,7 @@ class MambaCache:
         # when the cache is initialized in the forward pass (e.g. Mamba)
         if self.conv_states[layer_idx].device != new_conv_state.device:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
+
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
