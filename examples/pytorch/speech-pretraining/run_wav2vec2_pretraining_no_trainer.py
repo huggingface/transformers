@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import datasets
 import torch
@@ -328,7 +327,7 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -716,7 +715,7 @@ def main():
                 }
                 log_str = ""
                 for k, v in train_logs.items():
-                    log_str += "| {}: {:.3e}".format(k, v.item())
+                    log_str += f"| {k}: {v.item():.3e}"
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
@@ -773,7 +772,7 @@ def main():
 
         log_str = ""
         for k, v in val_logs.items():
-            log_str += "| {}: {:.3e}".format(k, v.item())
+            log_str += f"| {k}: {v.item():.3e}"
 
         if accelerator.is_local_main_process:
             progress_bar.write(log_str)

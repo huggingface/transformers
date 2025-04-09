@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,9 +49,9 @@ if is_torch_available():
         Wav2Vec2BertForXVector,
         Wav2Vec2BertModel,
     )
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _sample_negative_indices
     from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import (
         _compute_mask_indices,
-        _sample_negative_indices,
     )
 
 
