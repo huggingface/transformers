@@ -2129,10 +2129,11 @@ class OffloadedHybridCache(HybridChunkedCache):
 class MambaCache:
     """
     Cache for mamba model which does not have attention mechanism and key value states.  At initialization, the cache
-    is preallocated to its maximum possible shape, but can it be used with any shape that fits in it.
+    is preallocated to its maximum possible shape. Contrarily to other caches, `max_batch_size` must match the
+    batch size used at inference time.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
@@ -2206,10 +2207,7 @@ class MambaCache:
         # when the cache is initialized in the forward pass (e.g. Mamba)
         if self.conv_states[layer_idx].device != new_conv_state.device:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
-
-        batch_size = new_conv_state.shape[0]
-
-        conv_state = self.conv_states[layer_idx][:batch_size, ...]
+        conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
@@ -2411,13 +2409,13 @@ class OffloadedStaticCache(StaticCache):
                 value_states = value_states.to(self.offload_device)
 
                 try:
-                    self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-                    self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
+                    self.key_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, key_states)
+                    self.value_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, value_states)
                 except NotImplementedError:
                     # The operator 'aten::index_copy.out' is not currently implemented for the MPS
                     # device.
-                    self.key_cache[layer_idx][:, :, cache_position] = key_states
-                    self.value_cache[layer_idx][:, :, cache_position] = value_states
+                    self.key_cache[layer_idx][:batch_size, :, cache_position] = key_states
+                    self.value_cache[layer_idx][:batch_size, :, cache_position] = value_states
 
         return k_out, v_out
 
