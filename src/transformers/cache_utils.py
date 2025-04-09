@@ -1195,9 +1195,7 @@ class StaticCache(Cache):
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         self._dtype = dtype
         self.num_key_value_heads = (

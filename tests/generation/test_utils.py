@@ -1755,9 +1755,7 @@ class GenerationTesterMixin:
 
             text_config = model.config.get_text_config()
             head_dim = (
-                text_config.head_dim
-                if hasattr(text_config, "head_dim")
-                else text_config.hidden_size // text_config.num_attention_heads
+                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )
             num_key_value_heads = (
                 text_config.num_attention_heads
@@ -2008,9 +2006,8 @@ class GenerationTesterMixin:
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
                 text_config = config.text_config if hasattr(config, "text_config") else config
                 head_dim = (
-                    text_config.head_dim
-                    if hasattr(text_config, "head_dim")
-                    else text_config.hidden_size // text_config.num_attention_heads
+                    getattr(text_config, "head_dim", None)
+                    or text_config.hidden_size // text_config.num_attention_heads
                 )
                 num_key_value_heads = (
                     text_config.num_attention_heads
