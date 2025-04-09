@@ -61,11 +61,11 @@ class WrappedFlexAttention:
         """
         Initialize or update the singleton instance.
         """
-        if not self._is_flex_compiled or training!= self.training:
+        if not self._is_flex_compiled or training != self.training:
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            self.training=training
+            self.training = training
             if _torch_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"

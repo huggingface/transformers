@@ -761,7 +761,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
             first_cache_position + sequence_length > attention_chunk_size
@@ -819,12 +818,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # It may be smaller than attention_chunk_size -> pad it
             requires_padding = local_attention_mask.shape[-1] < attention_chunk_size
             if requires_padding:
-                local_attention_mask = nn.functional.pad(local_attention_mask, (0, attention_chunk_size - local_attention_mask.shape[-1]))
+                local_attention_mask = nn.functional.pad(
+                    local_attention_mask, (0, attention_chunk_size - local_attention_mask.shape[-1])
+                )
             # Depending on the padding, take the query tokens from the beginning or the end
             if not requires_padding:
                 chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             else:
-                chunked_attention_mask = chunked_attention_mask[None, None, : sequence_length, :]
+                chunked_attention_mask = chunked_attention_mask[None, None, :sequence_length, :]
 
             chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
@@ -881,7 +882,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         token_pos = arange_vector.unsqueeze(0) - arange_vector.unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
-        
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
