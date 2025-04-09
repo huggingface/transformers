@@ -36,6 +36,7 @@ from ..cache_utils import (
     OffloadedCache,
     QuantizedCacheConfig,
     StaticCache,
+    HybridChunkedCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -1848,6 +1849,7 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != batch_size
+            or isinstance(cache_to_check, HybridChunkedCache)  # due to internal slicing to get shape, we always re-init
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
