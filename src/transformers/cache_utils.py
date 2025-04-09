@@ -2025,7 +2025,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         super().__init__(config, max_batch_size, max_cache_len, device, dtype, layer_device_map)
         self.offload_device = torch.device(offload_device)
         # Create new CUDA stream for parallel prefetching.
-        self._prefetch_stream = torch.cuda.Stream() if self.device.type == "cuda" else None
+        self._prefetch_stream = torch.cuda.Stream() if torch._C._get_accelerator().type == "cuda" else None
         # Those will be dynamically created as the other layers (for TP)
         self.device_key_cache = None
         self.device_value_cache = None
@@ -2100,8 +2100,13 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
-        self.device_key_cache.copy_(self.key_cache[layer_idx], non_blocking=True)
-        self.device_value_cache.copy_(self.value_cache[layer_idx], non_blocking=True)
+        if len(self.key_cache) >= layer_idx:
+            self.device_key_cache.copy_(self.key_cache[layer_idx], non_blocking=True)
+            self.device_value_cache.copy_(self.value_cache[layer_idx], non_blocking=True)
+        # The layer was not yet initialized
+        else:
+            self.device_key_cache.fill_(0.0)
+            self.device_value_cache.fill_(0.0)
 
 
 class MambaCache:
