@@ -498,7 +498,7 @@ def cached_files(
         elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
 
     resolved_files = [
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
