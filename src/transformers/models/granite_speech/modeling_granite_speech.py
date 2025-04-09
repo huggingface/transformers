@@ -138,6 +138,7 @@ class GraniteSpeechConformerFeedForward(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
+
 class GraniteSpeechConformerAttention(nn.Module):
     """Attention for conformer blocks using Shaw's relative positional embeddings.
     See the following [paper](https://arxiv.org/pdf/1803.02155) for more details.
@@ -234,7 +235,9 @@ class GraniteSpeechConformerConvModule(nn.Module):
         self.up_conv = nn.Conv1d(config.hidden_dim, inner_dim * 2, 1)
         self.glu = nn.GLU(dim=1)
         self.depth_conv = GraniteSpeechConformerDepthWiseConv1d(
-            inner_dim, inner_dim, kernel_size=config.conv_kernel_size,
+            inner_dim,
+            inner_dim,
+            kernel_size=config.conv_kernel_size,
         )
         self.silu = nn.SiLU()
         self.batch_norm = nn.BatchNorm1d(inner_dim)
@@ -250,6 +253,7 @@ class GraniteSpeechConformerConvModule(nn.Module):
         hidden_states = self.down_conv(hidden_states).permute(0, 2, 1)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
 
 class GraniteSpeechConformerBlock(nn.Module):
     """Conformer block, consisting largely of linear layers, attention, and convolutional layers."""
