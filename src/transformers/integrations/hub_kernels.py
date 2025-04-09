@@ -32,14 +32,14 @@ try:
                 layer_name="MultiScaleDeformableAttention",
             )
         },
-        "LlamaRMSNorm": {
+        "RMSNorm": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/triton-layer-norm",
-                layer_name="LlamaRMSNorm",
+                layer_name="RMSNorm",
                 revision="pure-layer-test",
             )
         },
-        "LlamaMLP": {
+        "MLP": {
             "cuda": LayerRepository(
                 repo_id="medmekk/triton-llama-mlp",
                 layer_name="TritonLlamaMLP",

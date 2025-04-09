@@ -68,7 +68,7 @@ _CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b-hf"
 _CONFIG_FOR_DOC = "LlamaConfig"
 
 
-@use_kernel_forward_from_hub("LlamaRMSNorm")
+@use_kernel_forward_from_hub("RMSNorm")
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -160,7 +160,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_forward_from_hub("LlamaMLP")
+@use_kernel_forward_from_hub("MLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
