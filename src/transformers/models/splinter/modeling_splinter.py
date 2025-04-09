@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -27,7 +27,13 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, ModelOutput, QuestionAnsweringModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    logging,
+)
 from .configuration_splinter import SplinterConfig
 
 
@@ -424,6 +430,7 @@ class SplinterEncoder(nn.Module):
         self.layer = nn.ModuleList([SplinterLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -435,8 +442,7 @@ class SplinterEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -489,18 +495,6 @@ class SplinterEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -633,6 +627,7 @@ class SplinterModel(SplinterPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -653,8 +648,7 @@ class SplinterModel(SplinterPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -678,7 +672,6 @@ class SplinterModel(SplinterPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -735,7 +728,7 @@ class SplinterModel(SplinterPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -745,12 +738,8 @@ class SplinterModel(SplinterPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+        sequence_output = encoder_outputs.last_hidden_state
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -835,6 +824,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -853,9 +843,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -871,7 +860,6 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             the only one for which start_logits and end_logits are calculated and they will be of shape `(batch_size,
             sequence_length)`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         question_positions_were_none = False
         if question_positions is None:
@@ -886,7 +874,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             question_positions = question_position_for_each_example.unsqueeze(-1)
             question_positions_were_none = True
 
-        outputs = self.splinter(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.splinter(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -895,10 +883,9 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         start_logits, end_logits = self.splinter_qass(sequence_output, question_positions)
 
         if question_positions_were_none:
@@ -924,10 +911,6 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
@@ -989,6 +972,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(
         SPLINTER_INPUTS_DOCSTRING.format("batch_size, num_questions, sequence_length")
     )
@@ -1004,9 +988,8 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SplinterForPreTrainingOutput]:
+    ) -> SplinterForPreTrainingOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size, num_questions)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1022,7 +1005,6 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             the only one for which start_logits and end_logits are calculated and they will be of shape `(batch_size,
             sequence_length)`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if question_positions is None and start_positions is not None and end_positions is not None:
             raise TypeError("question_positions must be specified in order to calculate the loss")
@@ -1033,7 +1015,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         elif question_positions is None:
             question_positions = self._prepare_question_positions(input_ids)
 
-        outputs = self.splinter(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.splinter(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1042,10 +1024,9 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         batch_size, sequence_length, dim = sequence_output.size()
         # [batch_size, num_questions, sequence_length]
         start_logits, end_logits = self.splinter_qass(sequence_output, question_positions)
@@ -1079,10 +1060,6 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
                 end_positions.view(batch_size * num_questions),
             )
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return SplinterForPreTrainingOutput(
             loss=total_loss,
