@@ -821,11 +821,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 local_attention_mask = nn.functional.pad(
                     local_attention_mask, (0, attention_chunk_size - local_attention_mask.shape[-1])
                 )
-            # Depending on the padding, take the query tokens from the beginning or the end
+            # Depending on the padding, take the query tokens from the end or the cache_position
             if not requires_padding:
                 chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             else:
-                chunked_attention_mask = chunked_attention_mask[None, None, :sequence_length, :]
+                chunked_attention_mask = chunked_attention_mask[None, None, cache_position, :]
 
             chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
