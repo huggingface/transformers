@@ -761,6 +761,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
+        # In case the full layers have size < attention_chunk_size, make sure that layers will still see a mask
+        # of attention_chunk_size, as the slicing layers have that as a fixed length
+        full_cache_length = max(full_cache_length, attention_chunk_size)
+
         cond1 = first_cache_position >= attention_chunk_size
         cond2 = (first_cache_position < attention_chunk_size) & (
             first_cache_position + sequence_length > attention_chunk_size
@@ -796,7 +800,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=key_length,
+            target_length=target_length,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -814,7 +818,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             min_dtype = torch.finfo(dtype).min
             local_attention_mask = attention_mask[:, start_idx:end_idx]  # offset here as well
             chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
-            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], key_length, -1, -1)
+            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
             if self.config._attn_implementation == "eager":
                 min_dtype = torch.finfo(dtype).min
