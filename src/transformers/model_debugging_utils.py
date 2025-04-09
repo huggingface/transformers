@@ -96,7 +96,7 @@ def _serialize_io(value):
             "value": val_repr,
         }
         if value._local_tensor.dtype in {torch.float16, torch.float32, torch.bfloat16}:
-            value = value._local_tensor.copy()
+            value = value._local_tensor.clone()
             out.update({
                 "mean": _sanitize_repr_for_diff(repr(value.mean())),
                 "std": _sanitize_repr_for_diff(repr(value.std())),
