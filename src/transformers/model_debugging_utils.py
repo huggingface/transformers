@@ -29,9 +29,7 @@ from .utils import is_torch_available
 if is_torch_available():
     import torch
     import torch.distributed.tensor
-    from torch import nn
 
-    from .modeling_utils import PreTrainedModel
 
 from .utils import logging
 
@@ -97,12 +95,14 @@ def _serialize_io(value):
         }
         if value._local_tensor.dtype in {torch.float16, torch.float32, torch.bfloat16}:
             value = value._local_tensor.clone()
-            out.update({
-                "mean": _sanitize_repr_for_diff(repr(value.mean())),
-                "std": _sanitize_repr_for_diff(repr(value.std())),
-                "min": _sanitize_repr_for_diff(repr(value.min())),
-                "max": _sanitize_repr_for_diff(repr(value.max())),
-            })
+            out.update(
+                {
+                    "mean": _sanitize_repr_for_diff(repr(value.mean())),
+                    "std": _sanitize_repr_for_diff(repr(value.std())),
+                    "min": _sanitize_repr_for_diff(repr(value.min())),
+                    "max": _sanitize_repr_for_diff(repr(value.max())),
+                }
+            )
         return out
 
     if isinstance(value, torch.Tensor):
@@ -114,25 +114,30 @@ def _serialize_io(value):
             "value": val_repr,
         }
         if value.dtype in {torch.float16, torch.float32, torch.bfloat16}:
-            out.update({
-                "mean": _sanitize_repr_for_diff(repr(value.mean())),
-                "std": _sanitize_repr_for_diff(repr(value.std())),
-                "min": _sanitize_repr_for_diff(repr(value.min())),
-                "max": _sanitize_repr_for_diff(repr(value.max())),
-            })
+            out.update(
+                {
+                    "mean": _sanitize_repr_for_diff(repr(value.mean())),
+                    "std": _sanitize_repr_for_diff(repr(value.std())),
+                    "min": _sanitize_repr_for_diff(repr(value.min())),
+                    "max": _sanitize_repr_for_diff(repr(value.max())),
+                }
+            )
         return out
 
     return _sanitize_repr_for_diff(repr(value))
 
+
 def _repr_to_list(val):
     return _sanitize_repr_for_diff(repr(val)).splitlines()
+
 
 def _repr_to_list(value: torch.Tensor):
     torch.set_printoptions(sci_mode=True, linewidth=120)
     with StringIO() as buf, redirect_stdout(buf):
-        print(value) # to redirected stdout to avoid line splits
+        print(value)  # to redirected stdout to avoid line splits
         raw = buf.getvalue()
     return _sanitize_repr_for_diff(raw).splitlines()
+
 
 def prune_outputs_if_children(node):
     # if there are children, remove this node's "outputs"
@@ -143,7 +148,8 @@ def prune_outputs_if_children(node):
             prune_outputs_if_children(child)
 
 
-LAYER_SUFFIX_RE = re.compile(r"(.*)\.(\d+)$") # should be generic enough, ends with a number
+LAYER_SUFFIX_RE = re.compile(r"(.*)\.(\d+)$")  # should be generic enough, ends with a number
+
 
 def is_layer_block(node):
     match = LAYER_SUFFIX_RE.match(node.get("module_path", ""))
@@ -203,7 +209,6 @@ def log_model_debug_trace(debug_path, model):
         for child in node.get("children", []):
             strip_values(child)
 
-
     tree_copy = json.loads(json.dumps(model._call_tree))  # deep copy
     strip_values(tree_copy)
 
@@ -211,13 +216,12 @@ def log_model_debug_trace(debug_path, model):
         json.dump(tree_copy, f, indent=2)
 
 
-
-
 def _attach_debugger_logic(model, class_name, debug_path: str):
     # Prepare data structures on the model object
     model._call_tree = {"module_path": class_name, "inputs": None, "outputs": None, "children": []}
     model._debugger_model_call_stack = []
     model._debugger_module_dump_name = class_name  # used for final JSON filename
+
     def wrap_forward(module, full_path):
         orig_forward = module.forward
 
