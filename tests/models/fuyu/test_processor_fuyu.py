@@ -36,8 +36,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        # Ensure tempdir is cleaned up even if there's a failure
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: rmtree(tempdir))
 
         image_processor = FuyuImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("adept/fuyu-8b")
@@ -48,6 +46,10 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         cls.text_prompt = "Generate a coco-style caption.\\n"
         bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         cls.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
+
+    @classmethod
+    def tearDownClass(cls):
+        rmtree(cls.tmpdirname)
 
     def get_processor(self):
         image_processor = FuyuImageProcessor()
