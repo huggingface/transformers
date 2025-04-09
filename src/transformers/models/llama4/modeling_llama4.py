@@ -800,7 +800,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=target_length,
+            target_length=full_cache_length,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
