@@ -2039,14 +2039,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 try:
                     kernel = get_kernel(repo_id)
-                except Exception as e:
-                    raise ValueError(f"Could not find kernel repository '{repo_id}' in the hub: {e}")
-
-                # Add the kernel implementation to ALL_ATTENTION_FUNCTIONS
-                ALL_ATTENTION_FUNCTIONS.register(
-                    f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
-                )
-                config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                    ALL_ATTENTION_FUNCTIONS.register(
+                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
+                    )
+                    config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                except FileNotFoundError as e:
+                    logger.warning(
+                        f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
+                    )
+                    config._attn_implementation = "eager"
+                except AttributeError:
+                    raise ValueError(
+                        "the kernel function name or class specified in the attn_implementation argument is not valid. \
+                                     Please check the documentation for the correct format, \
+                                     and check that the kernel exports the class and the function correctly."
+                    )
 
             if (
                 not isinstance(config._attn_implementation, dict)
