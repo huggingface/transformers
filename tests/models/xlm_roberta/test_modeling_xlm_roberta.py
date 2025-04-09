@@ -18,11 +18,14 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    require_flash_attn,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_gpu,
     require_torch_sdpa,
     slow,
+    torch_device,
 )
 
 
@@ -68,6 +71,28 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
         model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="sdpa")
         with torch.no_grad():
             output = model(input_ids)["last_hidden_state"].detach()
+        self.assertEqual(output.shape, expected_output_shape)
+        # compare the actual values for a slice of last dim
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+
+    @slow
+    @require_torch_gpu
+    @require_flash_attn
+    def test_xlm_roberta_base_fa2(self):
+        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        # The dog is cute and lives in the garden house
+
+        expected_output_shape = torch.Size((1, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_values_last_dim = torch.tensor(
+            [[-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252]],
+            dtype=torch.float16,
+        )
+
+        model = XLMRobertaModel.from_pretrained(
+            "FacebookAI/xlm-roberta-base", attn_implementation="flash_attention_2", torch_dtype="float16"
+        ).to(torch_device)
+        with torch.no_grad():
+            output = model(input_ids.to(torch_device))["last_hidden_state"].detach().cpu()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)

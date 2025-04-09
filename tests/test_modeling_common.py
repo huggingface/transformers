@@ -3160,6 +3160,10 @@ class ModelTesterMixin:
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
 
+                # ForMultipleChoice requires additional input dimension
+                if model_class.__name__.endswith("ForMultipleChoice"):
+                    dummy_input = dummy_input.unsqueeze(1)
+
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if dummy_attention_mask is not None:
@@ -3256,6 +3260,10 @@ class ModelTesterMixin:
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
+
+                # ForMultipleChoice requires additional input dimension
+                if model_class.__name__.endswith("ForMultipleChoice"):
+                    dummy_input = dummy_input.unsqueeze(1)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 

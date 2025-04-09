@@ -519,6 +519,10 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    @unittest.skip("Roberta does not support left-side padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class RobertaModelIntegrationTest(TestCasePlus):
