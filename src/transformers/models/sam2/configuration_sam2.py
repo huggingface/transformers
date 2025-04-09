@@ -651,3 +651,13 @@ class Sam2Config(PretrainedConfig):
             (128, 128),
             (64, 64),
         ]
+
+
+__all__ = [
+    "Sam2Config",
+    "Sam2ImageEncoderConfig",
+    "Sam2PromptEncoderConfig",
+    "Sam2MaskDecoderConfig",
+    "Sam2MemoryAttentionConfig",
+    "Sam2MemoryEncoderConfig",
+]

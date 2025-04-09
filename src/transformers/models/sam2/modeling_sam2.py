@@ -120,7 +120,7 @@ OLD_GPU, USE_FLASH_ATTN, MATH_KERNEL_ON = get_sdpa_settings()
 @dataclass
 class Sam2ImageEncoderOutput(ModelOutput):
     """
-    Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
+    Base class for sam2 vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
 
     Args:
@@ -181,15 +181,6 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-# TO DO : fix this
-@dataclass
-class Sam2VideoSegmentationOutput(ModelOutput):
-    inference_state: dict = None
-    frame_idx: int = None
-    obj_ids: List[int] = None
-    video_res_masks: torch.Tensor = None
 
 
 class Sam2PatchEmbeddings(nn.Module):
@@ -2292,3 +2283,6 @@ class Sam2Model(Sam2PreTrainedModel):
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+
+__all__ = ["Sam2Model", "Sam2PreTrainedModel"]
