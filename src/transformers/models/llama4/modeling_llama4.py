@@ -797,7 +797,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=max(full_cache_length, key_length),
+            target_length=max(full_cache_length, attention_chunk_size),
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -806,14 +806,28 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if full_cache_length > self.config.attention_chunk_size:
             start_idx = max(last_cache_position - key_length, 0)
             end_idx = last_cache_position + 1 if sequence_length > 1 else last_cache_position
+            # We always need a mask of at least attention_chunk_size, so we use the max here
+            end_idx = max(end_idx, start_idx + attention_chunk_size)
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
                 start=start_idx,  # same offset as with flex
                 end=end_idx,
                 device=device,
             )
-            min_dtype = torch.finfo(dtype).min
+
             local_attention_mask = attention_mask[:, start_idx:end_idx]  # offset here as well
+            # It may be smaller than attention_chunk_size -> pad it
+            requires_padding = local_attention_mask.shape[-1] < attention_chunk_size
+            if requires_padding:
+                new_local_attention_mask = torch.zeros(local_attention_mask.shape[0], end_idx-start_idx, dtype=local_attention_mask.dtype, device=local_attention_mask.device)
+                new_local_attention_mask[:, : local_attention_mask.shape[-1]] = local_attention_mask
+                local_attention_mask = new_local_attention_mask
+            # Depending on the padding, take the query tokens from one side or the other
+            if not requires_padding:
+                chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
+            else:
+                chunked_attention_mask = chunked_attention_mask[None, None, : sequence_length, :]
+
             chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
             chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             chunked_attention_mask = chunked_attention_mask * local_attention_mask[:, None, None, :]
