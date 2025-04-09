@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +41,7 @@ else:
     FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
 
 
-class FlavaImageProcessingTester(unittest.TestCase):
+class FlavaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -76,7 +75,6 @@ class FlavaImageProcessingTester(unittest.TestCase):
         codebook_image_mean=FLAVA_CODEBOOK_MEAN,
         codebook_image_std=FLAVA_CODEBOOK_STD,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 224, "width": 224}
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         codebook_size = codebook_size if codebook_size is not None else {"height": 112, "width": 112}

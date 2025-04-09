@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics3ImageProcessingTester(unittest.TestCase):
+class Idefics3ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -58,7 +57,6 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
         do_image_splitting=True,
         resample=PILImageResampling.LANCZOS,
     ):
-        super().__init__()
         self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
         self.batch_size = batch_size

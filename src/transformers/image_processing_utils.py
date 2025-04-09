@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Iterable, Optional, Union
+import math
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension
+from .image_utils import ChannelDimension, get_image_size
 from .utils import logging
 
 
@@ -115,7 +116,7 @@ class BaseImageProcessor(ImageProcessingMixin):
     def center_crop(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -206,7 +207,7 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: Union[int, Iterable[int], Dict[str, int]] = None,
+    size: Union[int, Iterable[int], dict[str, int]] = None,
     max_size: Optional[int] = None,
     height_width_order: bool = True,
     default_to_square: bool = True,
@@ -285,3 +286,23 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
             best_fit = (height, width)
 
     return best_fit
+
+
+def get_patch_output_size(image, target_resolution, input_data_format):
+    """
+    Given an image and a target resolution, calculate the output size of the image after cropping to the target
+    """
+    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    target_height, target_width = target_resolution
+
+    scale_w = target_width / original_width
+    scale_h = target_height / original_height
+
+    if scale_w < scale_h:
+        new_width = target_width
+        new_height = min(math.ceil(original_height * scale_w), target_height)
+    else:
+        new_height = target_height
+        new_width = min(math.ceil(original_width * scale_h), target_width)
+
+    return new_height, new_width

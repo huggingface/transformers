@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ if is_pytesseract_available():
     from transformers import LayoutLMv2ImageProcessor
 
 
-class LayoutLMv2ImageProcessingTester(unittest.TestCase):
+class LayoutLMv2ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -41,7 +40,6 @@ class LayoutLMv2ImageProcessingTester(unittest.TestCase):
         size=None,
         apply_ocr=True,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

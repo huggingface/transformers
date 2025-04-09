@@ -1,4 +1,3 @@
-# coding=utf-8 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -249,7 +248,7 @@ class ReformerModelTester:
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        # set all position encodings to zero so that postions don't matter
+        # set all position encodings to zero so that positions don't matter
         with torch.no_grad():
             embedding = model.embeddings.position_embeddings.embedding
             embedding.weight = nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
@@ -603,7 +602,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -620,36 +618,42 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
+        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            num_chunks = tgt_len // config.local_attn_chunk_length + (tgt_len % config.local_attn_chunk_length != 0)
-            tgt_chunk_len = config.local_attn_chunk_length
-            src_chunk_len = config.local_attn_chunk_length * (
+        for generated_length, iter_attentions in enumerate(attentions):
+            use_cache = decoder_past_key_values is not None and generated_length > 0
+
+            model_input_length = prompt_length + generated_length if not use_cache else 1
+            num_chunks = model_input_length // config.local_attn_chunk_length + (
+                model_input_length % config.local_attn_chunk_length != 0
+            )
+            model_input_chunk_len = config.local_attn_chunk_length
+            query_chunk_len = config.local_attn_chunk_length * (
                 1 + config.local_num_chunks_after + config.local_num_chunks_before
             )
 
             if use_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
-                    tgt_len,
-                    min_length // config.local_attn_chunk_length + 1 + idx,
+                    model_input_length,
+                    prompt_length // config.local_attn_chunk_length + generated_length,
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks,
-                    tgt_chunk_len,
-                    src_chunk_len,
+                    model_input_chunk_len,
+                    query_chunk_len,
                 )
             # check attn size
             self.assertListEqual(
@@ -657,25 +661,29 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
+        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length + idx
-            seq_len = config.local_attn_chunk_length * (
-                seq_len // config.local_attn_chunk_length + (seq_len % config.local_attn_chunk_length != 0)
+        for generation_length, iter_hidden_states in enumerate(hidden_states):
+            use_cache_this_iter = use_cache and generation_length > 0
+            model_input_length = prompt_length + generation_length
+            model_output_length = config.local_attn_chunk_length * (
+                model_input_length // config.local_attn_chunk_length
+                + (model_input_length % config.local_attn_chunk_length != 0)
             )
 
-            if use_cache:
-                seq_len = 1
+            if use_cache_this_iter:
+                model_output_length = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, model_output_length, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -687,7 +695,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         pass
 
     def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
-        # override because overwise we hit max possible seq length for model (4*8=32)
+        # override because otherwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
         # NOTE: seq_length has to be multiple of 4, otherwise it fails for other tests
         original_sequence_length = self.model_tester.seq_length
@@ -706,7 +714,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ReformerModel,
@@ -789,37 +796,42 @@ class ReformerLSHAttnModelTest(
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
+        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            num_chunks = tgt_len // config.lsh_attn_chunk_length + (tgt_len % config.lsh_attn_chunk_length != 0)
-            tgt_chunk_len = config.lsh_attn_chunk_length
-            src_chunk_len = config.lsh_attn_chunk_length * (
+        for generated_length, iter_attentions in enumerate(attentions):
+            use_cache = decoder_past_key_values is not None and generated_length > 0
+            model_input_len = prompt_length + generated_length if not use_cache else 1
+            num_chunks = model_input_len // config.lsh_attn_chunk_length + (
+                model_input_len % config.lsh_attn_chunk_length != 0
+            )
+            model_input_chunk_len = config.lsh_attn_chunk_length
+            query_chunk_len = config.lsh_attn_chunk_length * (
                 1 + config.lsh_num_chunks_after + config.lsh_num_chunks_before
             )
 
             if use_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     config.num_hashes,
-                    tgt_len,
+                    model_input_len,
                     config.num_hashes * (1 + config.lsh_num_chunks_after + config.lsh_num_chunks_before),
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks * config.num_hashes,
-                    tgt_chunk_len,
-                    src_chunk_len,
+                    model_input_chunk_len,
+                    query_chunk_len,
                 )
             # check attn size
             self.assertListEqual(
@@ -827,25 +839,29 @@ class ReformerLSHAttnModelTest(
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
+        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length + idx if not use_cache else 1
-            seq_len = config.lsh_attn_chunk_length * (
-                seq_len // config.lsh_attn_chunk_length + (seq_len % config.lsh_attn_chunk_length != 0)
+        for generation_length, iter_hidden_states in enumerate(hidden_states):
+            use_cache_this_iter = use_cache and generation_length > 0
+            model_input_length = prompt_length + generation_length
+            model_output_length = config.local_attn_chunk_length * (
+                model_input_length // config.local_attn_chunk_length
+                + (model_input_length % config.local_attn_chunk_length != 0)
             )
 
-            if use_cache:
-                seq_len = 1
+            if use_cache_this_iter:
+                model_output_length = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, model_output_length, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -870,7 +886,7 @@ class ReformerLSHAttnModelTest(
 @require_tokenizers
 class ReformerIntegrationTests(unittest.TestCase):
     """
-    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
+    These integration tests test the current layer activations and gradients against the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
     """
 
     def _get_basic_config_and_input(self):
@@ -1229,7 +1245,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         )
         loss.backward()
 
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [-0.0005, -0.0001, -0.0002, -0.0006, -0.0006],
@@ -1270,7 +1286,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
         )
         loss.backward()
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [0.0004, 0.0003, 0.0006, -0.0004, 0.0002],

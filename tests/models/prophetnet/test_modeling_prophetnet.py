@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team, The Microsoft Research team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -888,7 +887,6 @@ class ProphetNetStandaloneEncoderModelTester:
 @require_torch
 class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ProphetNetModel,
@@ -1127,7 +1125,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (ProphetNetForCausalLM,) if is_torch_available() else ()
     test_pruning = False
 
     test_resize_embeddings = False

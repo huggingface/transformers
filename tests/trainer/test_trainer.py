@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -46,6 +45,8 @@ from transformers import (
     PretrainedConfig,
     TrainerCallback,
     TrainingArguments,
+    default_data_collator,
+    enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
     logging,
@@ -61,11 +62,14 @@ from transformers.testing_utils import (
     TemporaryHubRepo,
     TestCasePlus,
     backend_device_count,
+    evaluate_side_effect_factory,
     execute_subprocess_async,
     get_gpu_count,
+    get_steps_per_epoch,
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_apollo_torch,
     require_bitsandbytes,
     require_deepspeed,
     require_galore_torch,
@@ -73,6 +77,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_hpu,
     require_non_xpu,
     require_optuna,
     require_peft,
@@ -86,6 +91,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
@@ -96,6 +102,8 @@ from transformers.testing_utils import (
     require_torchdynamo,
     require_vision,
     require_wandb,
+    run_first,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -115,6 +123,13 @@ from transformers.utils import (
 )
 from transformers.utils.hp_naming import TrialShortNamer
 
+
+if torch_device == "hpu":
+    RTOL = 1e-3
+    ATOL = 1e-3
+else:
+    RTOL = 1e-5
+    ATOL = 1e-5
 
 if is_torch_available():
     import torch
@@ -226,7 +241,7 @@ def bytes2megabytes(x):
     return int(x / 2**20)
 
 
-# Copied from acclerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
+# Copied from accelerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
@@ -575,13 +590,41 @@ if is_torch_available():
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
+    def get_language_model_trainer(**kwargs):
+        import datasets
+
+        dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        def _tokenize_function(examples):
+            model_inputs = tokenizer(examples["prompt"], padding="max_length", truncation=True)
+            model_inputs["labels"] = np.array(model_inputs["input_ids"]).astype(np.int64)
+            return model_inputs
+
+        tokenized_datasets = dataset.map(_tokenize_function, batched=True)
+        training_args = TrainingArguments(**kwargs)
+
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=tokenized_datasets["train"],
+        )
+
+        return trainer
+
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=True):
+    def check_saved_checkpoints(
+        self, output_dir, freq, total, is_pretrained=True, safe_weights=True, use_scaler=False
+    ):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
+        if use_scaler:
+            file_list.append("scaler.pt")
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
             self.assertTrue(os.path.isdir(checkpoint))
@@ -604,7 +647,7 @@ class TrainerIntegrationCommon:
         else:
             best_model = RegressionModel()
             if not safe_weights:
-                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
             else:
                 state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
@@ -656,7 +699,7 @@ class TrainerIntegrationCommon:
         keys = list(state_dict.keys())
 
         shard_files = [
-            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            shard_name.replace(f".{extension}", f"-{idx + 1:05d}-of-{len(keys):05d}.{extension}")
             for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
@@ -695,11 +738,11 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.alternate_trained_model = (trainer.model.a, trainer.model.b)
 
-    def check_trained_model(self, model, alternate_seed=False):
+    def check_trained_model(self, model, alternate_seed=False, **kwargs):
         # Checks a training seeded with learning_rate = 0.1
         (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
-        torch.testing.assert_close(model.a, a)
-        torch.testing.assert_close(model.b, b)
+        torch.testing.assert_close(model.a, a, **kwargs)
+        torch.testing.assert_close(model.b, b, **kwargs)
 
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
@@ -767,30 +810,25 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
         import datasets
 
-        model_name = "nickypro/tinyllama-110M"
+        model_name = "nickypro/tinyllama-15M"
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:500]")
-        dataset = dataset.train_test_split(test_size=0.2)
+        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
 
         def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=128, padding="max_length", truncation=True)
+            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
 
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
+        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
 
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-
-        base_loss_callback = StoreLossCallback()
 
         args_kwargs = {
             "report_to": "none",
             "logging_steps": 1,
-            "max_steps": 20,
+            "max_steps": 5,
             "learning_rate": 3e-4,
             "disable_tqdm": True,
         }
@@ -800,71 +838,74 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir,
                 **args_kwargs,
             )
+            # train with base loss
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[base_loss_callback],
                 data_collator=data_collator,
             )
             assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
-        grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 tmp_dir,
                 **args_kwargs,
                 gradient_accumulation_steps=2,
                 per_device_train_batch_size=4,
             )
+
+            # train with gradient accumulation
             set_seed(42)
             model = AutoModelForCausalLM.from_pretrained(model_name)
+            grad_accum_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[grad_accum_loss_callback],
                 data_collator=data_collator,
             )
+            assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
+            # train with broken loss
             set_seed(42)
             model = AutoModelForCausalLM.from_pretrained(model_name)
             broken_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[broken_loss_callback],
                 data_collator=data_collator,
             )
-            # disable model_accepts_loss_kwargs
+            # disable model_accepts_loss_kwargs so that "num_items_in_batch" is not passed to the model
             trainer.model_accepts_loss_kwargs = False
             trainer.train()
 
-            # Calculate the difference between the base loss and the grad_accum loss
-            diff_truth = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-            ]
-            diff_broken = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
-            ]
+        # Calculate the difference between the base loss and the grad_accum loss
+        diff_truth = [
+            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+        ]
+        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
-            # all diff truth should be quite close
-            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+        # all diff truth should be quite close
+        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+        # max diff broken should be very off ("very off" is arbitrary, but as long as it's bigger than 0.1, it's fine)
+        self.assertGreater(max(diff_broken), 0.7, f"Difference {max(diff_broken)} is not greater than 0.7")
 
-            # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 2, f"Difference {max(diff_broken)} is not greater than 2")
+        loss_base = sum(base_loss_callback.losses)
+        loss_broken = sum(broken_loss_callback.losses)
 
-            loss_base = sum(base_loss_callback.losses)
-            loss_broken = sum(broken_loss_callback.losses)
+        # mean/sum loss should not vary too much.
+        relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
+        self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
 
-            # mean/sum loss should not vary too much.
-            relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
-            self.assertLess(relative_diff, 0.1, f"Relative difference {relative_diff} is not within 0.1")
-
-    @slow
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
         import datasets
@@ -872,14 +913,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:500]")
-        dataset = dataset.train_test_split(test_size=0.2)
+        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        def tokenize_function(examples):
-            return tokenizer(examples["text"])
+        tokenizer.pad_token = tokenizer.eos_token
 
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
+        def tokenize_function(examples):
+            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
+
+        tokenized_dataset = dataset.map(tokenize_function, batched=True)
 
         tokenizer.pad_token = tokenizer.eos_token
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -898,7 +940,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         args_kwargs = {
             "report_to": "none",
             "logging_steps": 1,
-            "max_steps": 20,
+            "max_steps": 5,
             "learning_rate": 3e-4,
             "disable_tqdm": True,
         }
@@ -911,7 +953,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[base_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
@@ -931,7 +973,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[grad_accum_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
@@ -945,7 +987,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[broken_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
@@ -1184,14 +1226,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
-    @require_torch_accelerator
     @require_torch_bf16
+    @require_torch_accelerator
     def test_mixed_bf16(self):
         # very basic test
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, output_dir=tmp_dir)
             trainer.train()
-            self.check_trained_model(trainer.model)
+            self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
 
         # --bf16 --half_precision_backend apex can't be used together
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1865,14 +1907,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        # Trainer without inf/nan filter
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(),
-            learning_rate=1e-9,
-            logging_steps=5,
-            optim="schedule_free_adamw",
-        )
-        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-9,
+                logging_steps=5,
+                optim="schedule_free_adamw",
+                lr_scheduler_type="constant",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_schedulefree
+    @require_torch_gpu
+    def test_schedulefree_radam(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-9,
+                logging_steps=5,
+                lr_scheduler_type="constant",
+                optim="schedule_free_radam",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
         # Check this works
         _ = trainer.train()
@@ -2205,6 +2271,168 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_type="cosine",
             logging_steps=1,
             optim="galore_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # creating log history of trainer, results don't matter
+        trainer.train()
+        logs = trainer.state.log_history[1:][:-1]
+
+        # reach given learning rate peak and end with 0 lr
+        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
+        self.assertTrue(logs[-1]["learning_rate"] == 0)
+
+        # increasing and decreasing pattern of lrs
+        increasing_lrs = [
+            logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+            for i in range(len(logs))
+            if i < num_warmup_steps - 2
+        ]
+        decreasing_lrs = [
+            logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+            for i in range(len(logs) - 1)
+            if i >= num_warmup_steps - 2
+        ]
+
+        self.assertTrue(all(increasing_lrs))
+        self.assertTrue(all(decreasing_lrs))
+
+        # warm up steps << total steps
+        self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="apollo_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo_extra_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="apollo_adamw",
+            optim_args="proj=random,scale_type=tensor,rank=1,update_proj_gap=100,scale=128.0",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo_layerwise(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="apollo_adamw_layerwise",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo_layerwise_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="apollo_adamw_layerwise",
+            lr_scheduler_type="cosine",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            optim="apollo_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # reflects displayed lr in trainer
+        self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_apollo_torch
+    @require_torch_gpu
+    def test_apollo_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 2e-4
+        num_train_epochs = 10
+        num_warmup_steps = 5
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            num_train_epochs=num_train_epochs,
+            learning_rate=learning_rate,
+            warmup_steps=num_warmup_steps,
+            lr_scheduler_type="cosine",
+            logging_steps=1,
+            optim="apollo_adamw",
             optim_target_modules=[r".*attn.*", r".*mlp.*"],
         )
         trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
@@ -2747,20 +2975,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
             )
 
+    def test_save_collator_tokenizer_by_default(self):
+        class FakeCollator:
+            def __init__(self):
+                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+                self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
+
+            def __call__(self, features: list[Any], return_tensors="pt") -> dict[str, Any]:
+                return default_data_collator(features, return_tensors)
+
+        data_collator = FakeCollator()
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir, save_steps=5, save_safetensors=True, data_collator=data_collator
+        )
+        trainer.train()
+        loaded_tokenizer = AutoTokenizer.from_pretrained(os.path.join(tmp_dir, os.listdir(tmp_dir)[0]))
+        assert len(loaded_tokenizer) == len(trainer.data_collator.tokenizer), "Failed to load updated tokenizer"
+
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
             output_dir=tmp_dir,
             save_steps=5,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=5,
             max_steps=9,
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(
-            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
-        ), f"Could not find checkpoint-{trainer.state.max_steps}"
+        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
+            f"Could not find checkpoint-{trainer.state.max_steps}"
+        )
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
@@ -2773,7 +3019,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(
             output_dir=tmp_dir,
             save_steps=5,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=5,
             load_best_model_at_end=True,
             save_total_limit=2,
@@ -2907,6 +3153,62 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+
+    # require_torch_non_multi_accelerator is necessary because this worker blocks runs when using multiple GPUs, making
+    # the test slower.
+    @require_torch_non_multi_accelerator
+    @run_test_using_subprocess
+    @slow
+    def test_can_resume_training_lm(self):
+        # Check if it works for a simple language modeling example
+        training_steps = 10
+        resume_from_step = 8
+        with tempfile.TemporaryDirectory() as tmpdir:
+            enable_full_determinism(0)
+            kwargs = {
+                "output_dir": tmpdir,
+                "fp16": True,
+                "max_steps": training_steps,
+                "per_device_train_batch_size": 1,
+                "learning_rate": 1e-5,
+                "lr_scheduler_type": "cosine",
+                "save_strategy": "steps",
+                "save_steps": 1,
+                "logging_strategy": "steps",
+                "logging_steps": 1,
+                "report_to": "none",
+            }
+
+            trainer = get_language_model_trainer(**kwargs)
+            trainer.train(resume_from_checkpoint=False)
+            # Get the parameter length of the model
+            model_params = torch.cat([p.cpu().flatten() for p in trainer.model.parameters()])
+            model_param_len = len(model_params)
+            # Sample uniform indexes and save the values of the parameters (considering an unrolled vector with
+            # all of them)
+            indices = torch.randint(0, model_param_len, (1000,))
+            # Save the values of the parameters for later comparison
+            model_params_sample = model_params[indices].detach().clone()
+            state1 = dataclasses.asdict(trainer.state)
+            # Delete the reference
+            del model_params, trainer
+            # Checks if all checkpoints are there, +1 is necessary because range is 1-indexed
+            self.check_saved_checkpoints(
+                tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, safe_weights=True, use_scaler=True
+            )
+
+            # Checkpoint at intermediate step
+            enable_full_determinism(0)
+            checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step + 1}")
+            trainer = get_language_model_trainer(**kwargs)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            model_params = torch.cat([p.cpu().flatten() for p in trainer.model.parameters()])
+
+            # Check that the parameters are the same
+            self.assertTrue(torch.allclose(model_params[indices], model_params_sample))
+            state2 = dataclasses.asdict(trainer.state)
+            self.check_trainer_state_are_the_same(state1, state2)
+            del model_params, trainer
 
     @unittest.skip(
         reason="@muellerzr: Fix once Trainer can take an accelerate configuration. Need to set `seedable_sampler=True`."
@@ -3310,6 +3612,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
 
     @slow
+    @run_first
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3326,6 +3629,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(result["eval_loss"], 0.2)
 
     @slow
+    @run_first
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3625,6 +3929,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(skip_memory_metrics=True, output_dir=tmp_dir)
             self.check_mem_metrics(trainer, self.assertNotIn)
 
+    @require_torch_fp16
     @require_torch_accelerator
     def test_fp16_full_eval(self):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
@@ -3799,7 +4104,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Functional check
             self.assertAlmostEqual(loss, orig_loss)
 
-            # AOT Autograd recomputaion and nvfuser recomputation optimization
+            # AOT Autograd recomputation and nvfuser recomputation optimization
             # aggressively fuses the operations and reduce the memory footprint.
             self.assertGreater(orig_peak_mem, peak_mem * 2)
 
@@ -3880,6 +4185,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
+    @require_non_hpu
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
         # Tests that `translation.py` will run without issues
@@ -3953,7 +4259,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             model = RegressionPreTrainedModel(config)
             eval_dataset = SampleIterableDataset()
 
-            accelerator_config = {
+            accelerator_config: dict[str, Any] = {
                 "split_batches": True,
                 "dispatch_batches": True,
                 "even_batches": False,
@@ -4062,56 +4368,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
-
-    def test_accelerator_config_from_dict_with_deprecated_args(self):
-        # Checks that accelerator kwargs can be passed through
-        # and the accelerator is initialized respectively
-        # and maintains the deprecated args if passed in
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config = RegressionModelConfig(a=1.5, b=2.5)
-            model = RegressionPreTrainedModel(config)
-            eval_dataset = SampleIterableDataset()
-
-            # Leaves all options as something *not* basic
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    accelerator_config={
-                        "split_batches": True,
-                    },
-                    dispatch_batches=False,
-                )
-                self.assertIn("dispatch_batches", str(cm.warnings[0].message))
-            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-            self.assertEqual(trainer.accelerator.dispatch_batches, False)
-            self.assertEqual(trainer.accelerator.split_batches, True)
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    accelerator_config={
-                        "even_batches": False,
-                    },
-                    split_batches=True,
-                )
-                self.assertIn("split_batches", str(cm.warnings[0].message))
-            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-            self.assertEqual(trainer.accelerator.split_batches, True)
-            self.assertEqual(trainer.accelerator.even_batches, False)
-            self.assertEqual(trainer.accelerator.dispatch_batches, None)
-
-    def test_accelerator_config_only_deprecated_args(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    split_batches=True,
-                )
-                self.assertIn("split_batches", str(cm.warnings[0].message))
-                config = RegressionModelConfig(a=1.5, b=2.5)
-                model = RegressionPreTrainedModel(config)
-                eval_dataset = SampleIterableDataset()
-                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-                self.assertEqual(trainer.accelerator.split_batches, True)
 
     def test_accelerator_custom_state(self):
         AcceleratorState._reset_state(reset_partial_state=True)
@@ -4423,6 +4679,191 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
+    def test_best_model_checkpoint_behavior(self):
+        # Case 1. Never evaluated, save_total_limit > 1 and save_steps == 1.
+        # Both best_metric and best_model_checkpoint should be None.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+            )
+            trainer.train()
+
+            assert trainer.state.best_metric is None
+            assert trainer.state.best_model_checkpoint is None
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step
+
+        # Case 2. Never evaluated and save_total_limit == 1.
+        # Both best_metric and best_model_checkpoint should be None.
+        # Only the last checkpoint should remain.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                save_total_limit=1,
+            )
+            trainer.train()
+
+            num_steps = trainer.state.global_step
+
+            assert trainer.state.best_metric is None
+            assert trainer.state.best_model_checkpoint is None
+            assert len(os.listdir(tmpdir)) == 1
+
+            ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{num_steps}")
+            assert os.path.isdir(ckpt)
+            assert os.listdir(tmpdir)[0] == f"{PREFIX_CHECKPOINT_DIR}-{num_steps}"
+
+        # Case 3. eval_strategy == save_strategy.
+        # best_model_checkpoint should be at epoch 1.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="epoch",
+                save_strategy="epoch",
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                load_best_model_at_end=False,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.59},
+                        {"eval_accuracy": 0.57},
+                        {"eval_accuracy": 0.55},
+                    ]
+                ),
+            ):
+                trainer.train()
+
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
+            assert trainer.state.best_metric == 0.59
+            assert trainer.state.best_global_step == steps_per_epoch
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == trainer.state.num_train_epochs
+
+        # Case 4. eval_strategy != save_strategy.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="epoch",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                load_best_model_at_end=False,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.59},
+                        {"eval_accuracy": 0.57},
+                        {"eval_accuracy": 0.55},
+                    ]
+                ),
+            ):
+                trainer.train()
+
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
+            assert trainer.state.best_metric == 0.59
+            assert trainer.state.best_global_step == steps_per_epoch
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step
+
+        # Case 5. Multiple checkpoints, save_total_limit == 1.
+        # Best metric is found at step 1 and that checkpoint should be saved.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                save_total_limit=1,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.90},
+                        {"eval_accuracy": 0.80},
+                        {"eval_accuracy": 0.70},
+                    ]
+                ),
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.90
+            assert trainer.state.best_global_step == 1
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == 1
+
+        # Case 6. Saving happens more often and eval/save mismatch.
+        # `best_model_checkpoint` should be None due to a step mismatch.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                eval_steps=3,
+                save_strategy="steps",
+                save_steps=2,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.90},
+                        {"eval_accuracy": 0.80},
+                        {"eval_accuracy": 0.70},
+                    ]
+                ),
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.90
+            assert trainer.state.best_global_step == 3
+
+            assert trainer.state.best_model_checkpoint is None
+
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
+
 
 @require_torch
 @is_staging_test
@@ -4481,8 +4922,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
             "git log".split(),
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             check=True,
             encoding="utf-8",
             cwd=repo,
@@ -4699,7 +5139,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
 
-        def compute_objective(metrics: Dict[str, float]) -> List[float]:
+        def compute_objective(metrics: dict[str, float]) -> list[float]:
             return metrics["eval_loss"], metrics["eval_accuracy"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4723,6 +5163,38 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 hp_name=hp_name,
                 n_trials=4,
                 compute_objective=compute_objective,
+            )
+
+
+@require_torch
+@require_optuna
+class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
+    def test_hyperparameter_search(self):
+        def hp_space(trial):
+            return {}
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.suggest_int("a", -4, 4)
+                b = trial.suggest_int("b", -4, 4)
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                disable_tqdm=True,
+                model_init=model_init,
+                fp16_full_eval=True,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize",
+                hp_space=hp_space,
+                n_trials=2,
             )
 
 
@@ -4870,16 +5342,6 @@ if is_torch_available():
     }
 
     optim_test_params = [
-        (
-            OptimizerNames.ADAMW_HF,
-            transformers.optimization.AdamW,
-            default_adam_kwargs,
-        ),
-        (
-            OptimizerNames.ADAMW_HF.value,
-            transformers.optimization.AdamW,
-            default_adam_kwargs,
-        ),
         (
             OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
@@ -5388,9 +5850,6 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
         self.batch_size = args.train_batch_size
 
     def test_hyperparameter_search(self):
-        class MyTrialShortNamer(TrialShortNamer):
-            DEFAULTS = {"a": 0, "b": 0}
-
         def hp_space(trial):
             return {
                 "method": "random",
@@ -5412,9 +5871,6 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
 
             return RegressionPreTrainedModel(model_config)
 
-        def hp_name(params):
-            return MyTrialShortNamer.shortname(params)
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
                 output_dir=tmp_dir,
@@ -5429,9 +5885,31 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 run_name="test",
                 model_init=model_init,
             )
-            trainer.hyperparameter_search(
-                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
-            )
+            sweep_kwargs = {
+                "direction": "minimize",
+                "hp_space": hp_space,
+                "backend": "wandb",
+                "n_trials": 4,
+            }
+            best_run = trainer.hyperparameter_search(**sweep_kwargs)
+
+            self.assertIsNotNone(best_run.run_id)
+            self.assertIsNotNone(best_run.run_summary)
+            hp_keys = set(best_run.hyperparameters.keys())
+            self.assertSetEqual(hp_keys, {"a", "b", "assignments", "metric"})
+
+            # pretend restarting the process purged the environ
+            import os
+
+            del os.environ["WANDB_ENTITY"]
+            del os.environ["WANDB_PROJECT"]
+            sweep_kwargs["sweep_id"] = best_run.run_summary
+            updated_best_run = trainer.hyperparameter_search(**sweep_kwargs)
+
+            self.assertIsNotNone(updated_best_run.run_id)
+            self.assertEqual(updated_best_run.run_summary, best_run.run_summary)
+            updated_hp_keys = set(updated_best_run.hyperparameters.keys())
+            self.assertSetEqual(updated_hp_keys, {"a", "b", "assignments", "metric"})
 
 
 class HyperParameterSearchBackendsTest(unittest.TestCase):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
@@ -33,19 +32,20 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     from_pretrained_vocab_key = "tokenizer_file"
 
-    def setUp(self):
-        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
-        super().setUp()
-        self.test_rust_tokenizer = True
+    @classmethod
+    def setUpClass(cls):
+        cls.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
+        super().setUpClass()
+        cls.test_rust_tokenizer = True
 
         model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
-        self.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
+        cls.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
-        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+        cls.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @unittest.skip(
         "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
@@ -169,6 +169,41 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             # NOTE even if the model has a default max_length, it is not used...
             # thus tok(sentences, truncation = True) does nothing and does not warn either
             self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
+
+    def test_class_after_save_and_reload(self):
+        # Model contains a `LlamaTokenizerFast` tokenizer with no slow fallback
+        model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            # Fast tokenizer will ignore `use_fast=False`
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            # Save tokenizer
+            tokenizer.save_pretrained(temp_dir)
+
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
+            # Verify post save and reload the fast tokenizer class did not change
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
+            # Verify post save and reload the fast tokenizer class did not change
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
 
 
 @require_tokenizers

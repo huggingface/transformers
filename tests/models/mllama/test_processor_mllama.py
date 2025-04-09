@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import shutil
 import tempfile
 import unittest
@@ -36,21 +36,37 @@ if is_vision_available():
 class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MllamaProcessor
 
-    def setUp(self):
-        self.checkpoint = "hf-internal-testing/mllama-11b"
-        processor = MllamaProcessor.from_pretrained(self.checkpoint)
-        self.image1 = Image.new("RGB", (224, 220))
-        self.image2 = Image.new("RGB", (512, 128))
-        self.image_token = processor.image_token
-        self.image_token_id = processor.image_token_id
-        self.pad_token_id = processor.tokenizer.pad_token_id
-        self.bos_token = processor.bos_token
-        self.bos_token_id = processor.tokenizer.bos_token_id
-        self.tmpdirname = tempfile.mkdtemp()
-        processor.save_pretrained(self.tmpdirname)
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "hf-internal-testing/mllama-11b"
+        processor = MllamaProcessor.from_pretrained(cls.checkpoint)
+        cls.image1 = Image.new("RGB", (224, 220))
+        cls.image2 = Image.new("RGB", (512, 128))
+        cls.image_token = processor.image_token
+        cls.image_token_id = processor.image_token_id
+        cls.pad_token_id = processor.tokenizer.pad_token_id
+        cls.bos_token = processor.bos_token
+        cls.bos_token_id = processor.tokenizer.bos_token_id
+        cls.tmpdirname = tempfile.mkdtemp()
+        processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    def prepare_processor_dict(self):
+        return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
+
+    def test_chat_template_is_saved(self):
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        # chat templates aren't serialized to json in processors
+        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+
+        # they have to be saved as separate file and loaded back from that file
+        # so we check if the same template is loaded
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
@@ -312,6 +328,11 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=None, padding=True)
 
+        # see https://github.com/huggingface/transformers/pull/35934
+        images = [self.image1, self.image2]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=None, padding=True)
+
     # Override as MllamaProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
@@ -324,4 +345,33 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return ["lower newer <|image|>"]
         return ["lower newer <|image|>", "<|image|> upper older longer string"] + ["<|image|> lower newer"] * (
             batch_size - 2
+        )
+
+    def test_unstructured_kwargs_batched(self):
+        # Overriden because Mllama expects images in nested format. For 2 images it can't infer
+        # the correct nesting, so we better throw an error
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < 76
         )

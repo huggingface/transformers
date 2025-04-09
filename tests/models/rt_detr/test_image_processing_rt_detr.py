@@ -16,7 +16,14 @@ import unittest
 
 import requests
 
-from transformers.testing_utils import require_torch, require_torch_gpu, require_torchvision, require_vision, slow
+from transformers.testing_utils import (
+    is_flaky,
+    require_torch,
+    require_torch_gpu,
+    require_torchvision,
+    require_vision,
+    slow,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -31,7 +38,7 @@ if is_torch_available():
     import torch
 
 
-class RTDetrImageProcessingTester(unittest.TestCase):
+class RTDetrImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -45,7 +52,6 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         do_pad=False,
         return_tensors="pt",
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -119,7 +125,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         params = {"image_id": 39769, "annotations": target}
@@ -156,7 +162,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -262,7 +268,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -379,7 +385,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -428,3 +434,9 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         # verify size
         torch.testing.assert_close(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu"))
+
+    @is_flaky(
+        description="Still flaky with a failing ratio of ~0.6% after #36240",
+    )
+    def test_fast_is_faster_than_slow(self):
+        super().test_fast_is_faster_than_slow()

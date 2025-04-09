@@ -14,41 +14,36 @@
 from __future__ import annotations
 
 import inspect
-from typing import Callable, List, Optional, Set, Tuple, Union
+from functools import lru_cache, wraps
+from typing import Callable
 
 import torch
-from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, logging
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
-
-is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
-is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
-is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
-is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
+is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
+is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 
 # For backwards compatibility (e.g. some remote codes on Hub using those variables).
-is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
-is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
-is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
+is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
+is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
+is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
+is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_dev=True)
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import Replicate
-    from torch.distributed.tensor.parallel import (
-        ColwiseParallel,
-        RowwiseParallel,
-    )
+    pass
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -77,12 +72,12 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
         `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone().detach()
+            b = layer.bias.detach().clone()
         else:
-            b = layer.bias[index].clone().detach()
+            b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
@@ -141,11 +136,11 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
         [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if dim == 0:
-        b = layer.bias.clone().detach()
+        b = layer.bias.detach().clone()
     else:
-        b = layer.bias[index].clone().detach()
+        b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
@@ -158,9 +153,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     return new_layer
 
 
-def prune_layer(
-    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[nn.Linear, Conv1D]:
+def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
@@ -261,8 +254,8 @@ def apply_chunking_to_forward(
 
 
 def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
+    heads: list[int], n_heads: int, head_size: int, already_pruned_heads: set[int]
+) -> tuple[set[int], torch.LongTensor]:
     """
     Finds the heads and their indices taking `already_pruned_heads` into account.
 
@@ -287,9 +280,7 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
-def meshgrid(
-    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
-) -> Tuple[torch.Tensor, ...]:
+def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
     """
     Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
 
@@ -298,7 +289,7 @@ def meshgrid(
     return torch.meshgrid(*tensors, indexing=indexing)
 
 
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
@@ -343,22 +334,27 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         return torch.isin(elements, test_elements)
 
 
-def translate_to_torch_parallel_style(style: str):
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
-    In model configurations, we use a neutral type (string) to specify parallel
-    styles, here we translate them into torch.distributed tensor-parallel
-    types.
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
     """
-    if not isinstance(style, str):
-        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
 
-    if style == "colwise":
-        return ColwiseParallel()
-    elif style == "rowwise":
-        return RowwiseParallel()
-    elif style == "colwise_rep":
-        return ColwiseParallel(output_layouts=Replicate())
-    elif style == "rowwise_rep":
-        return RowwiseParallel(input_layouts=Replicate())
-    else:
-        raise ValueError(f"Unsupported parallel style value: {style}")
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not is_torchdynamo_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

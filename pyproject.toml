@@ -14,6 +14,7 @@ exclude_lines = [
 ]
 
 [tool.ruff]
+target-version = "py39"
 line-length = 119
 
 [tool.ruff.lint]
@@ -52,3 +53,5 @@ markers = [
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
     "generate: marks tests that use the GenerationTesterMixin"
 ]
+log_cli = 1
+log_cli_level = "WARNING"

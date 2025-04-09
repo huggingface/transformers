@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.5.1'
+ARG PYTORCH='2.6.0'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='2.3.0'
 # Example: `cu102`, `cu113`, etc.
@@ -57,7 +57,8 @@ RUN python3 -m pip uninstall -y ninja
 
 # For `dinat` model
 # The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-RUN python3 -m pip install --no-cache-dir natten==0.15.1+torch220$CUDA -f https://shi-labs.com/natten/wheels
+# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
+RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein

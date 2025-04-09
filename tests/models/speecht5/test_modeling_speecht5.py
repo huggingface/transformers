@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +31,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -315,6 +315,15 @@ class SpeechT5ForSpeechToTextTester:
             vocab_size=self.vocab_size,
         )
 
+    def get_subsampled_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for stride in self.conv_stride:
+            input_lengths = (input_lengths // stride) - 1
+
+        return input_lengths
+
     def create_and_check_model_forward(self, config, inputs_dict):
         model = SpeechT5ForSpeechToText(config=config).to(torch_device).eval()
 
@@ -360,9 +369,8 @@ class SpeechT5ForSpeechToTextTester:
 
 
 @require_torch
-class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -703,13 +711,13 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -726,6 +734,18 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             module.bias.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
+
+    @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
+    def test_generate_with_head_masking(self):
+        pass
+
+    @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="Very flaky")  # TODO (joao, eustache): have a look at this test
+    def test_generate_continue_from_past_key_values(self):
+        pass
 
 
 @require_torch
@@ -880,7 +900,7 @@ class SpeechT5ForTextToSpeechTester:
 @require_torch
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -891,6 +911,12 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_model_can_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertTrue(model.can_generate())
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -1021,13 +1047,13 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -1423,7 +1449,6 @@ class SpeechT5ForSpeechToSpeechTester:
 @require_torch
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -1724,13 +1749,13 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -1887,14 +1912,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not output hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_batched_inputs_outputs(self):

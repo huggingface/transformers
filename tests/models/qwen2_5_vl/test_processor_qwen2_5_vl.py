@@ -12,21 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import shutil
 import tempfile
 import unittest
 
 import pytest
+from huggingface_hub import hf_hub_download
 
 from transformers import AutoProcessor, Qwen2Tokenizer
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLImageProcessor, Qwen2_5_VLProcessor
+    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
 
 
 @require_vision
@@ -34,10 +36,11 @@ if is_vision_available():
 class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5_VLProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen2_5_VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -45,8 +48,12 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    def prepare_processor_dict(self):
+        return {"chat_template": "{% set image_count = namespace(value=0) %}{% set video_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' or 'image' in content or 'image_url' in content %}{% set image_count.value = image_count.value + 1 %}{% if add_vision_id %}Picture {{ image_count.value }}: {% endif %}<|vision_start|><|image_pad|><|vision_end|>{% elif content['type'] == 'video' or 'video' in content %}{% set video_count.value = video_count.value + 1 %}{% if add_vision_id %}Video {{ video_count.value }}: {% endif %}<|vision_start|><|video_pad|><|vision_end|>{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"}  # fmt: skip
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
@@ -59,7 +66,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Qwen2_5_VLImageProcessor)
+        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -111,3 +118,325 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, videos=video_inputs)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    def test_image_chat_template_single(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                },
+            ]
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 1)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+
+        # Now test the ability to return dict
+        messages[0][0]["content"].append(
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        )
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertTrue(self.images_input_name in out_dict)
+
+        # should always have input_ids and attention_mask
+        self.assertEqual(len(out_dict["input_ids"]), 1)
+        self.assertEqual(len(out_dict["attention_mask"]), 1)
+        self.assertEqual(len(out_dict[self.images_input_name]), 71280)
+
+    def test_image_chat_template_batched(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        batched_messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What do you see?"},
+                    ],
+                },
+            ],
+        ]
+
+        formatted_prompt = processor.apply_chat_template(batched_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 2)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=True, padding=True
+        )
+        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None, padding=True).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+        )
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+
+        # Now test the ability to return dict
+        batched_messages[0][0]["content"].append(
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        )
+        batched_messages[1][0]["content"].append(
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"}
+        )
+        out_dict = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+        )
+        self.assertTrue(self.images_input_name in out_dict)
+
+        # should always have input_ids and attention_mask
+        self.assertEqual(len(out_dict["input_ids"]), 2)
+        self.assertEqual(len(out_dict["attention_mask"]), 2)
+        self.assertEqual(len(out_dict[self.images_input_name]), 90480)
+
+    @require_av
+    def test_chat_template_video(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        signature = inspect.signature(processor.__call__)
+        if "videos" not in {*signature.parameters.keys()} or (
+            signature.parameters.get("videos") is not None
+            and signature.parameters["videos"].annotation == inspect._empty
+        ):
+            self.skipTest("Processor doesn't accept videos at input")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video"},
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 1)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+
+        # Add video URL for return dict and load with `num_frames` arg
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+        }
+        num_frames = 3
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            num_frames=num_frames,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 115200)
+
+        # Load with `video_fps` arg
+        video_fps = 1
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            video_fps=video_fps,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 288000)
+
+        # Load with `video_fps` and `num_frames` args, should raise an error
+        with self.assertRaises(ValueError):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                video_fps=video_fps,
+                num_frames=num_frames,
+            )
+
+        # Load without any arg should load the whole video
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8640000)
+
+        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
+        # because we assume they come from one video
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://www.ilankelman.org/stopsigns/australia.jpg",
+            ],
+        }
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 71280)
+
+    def test_kwargs_overrides_custom_image_processor_kwargs(self):
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component("image_processor")
+        processor_components["tokenizer"] = self.get_component("tokenizer")
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs, use_fast=True)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 800)
+
+    @require_av
+    def test_chat_template_video_custom_sampling(self):
+        """
+        Tests that models can pass their custom callables to sample video indices.
+        """
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        signature = inspect.signature(processor.__call__)
+        if "videos" not in {*signature.parameters.keys()} or (
+            signature.parameters.get("videos") is not None
+            and signature.parameters["videos"].annotation == inspect._empty
+        ):
+            self.skipTest("Processor doesn't accept videos at input")
+
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video", "path": video_file_path},
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        def dummy_sample_indices_fn(metadata, **fn_kwargs):
+            # sample only the first two frame always
+            return [0, 1]
+
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            sample_indices_fn=dummy_sample_indices_fn,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
+
+    @require_av
+    def test_chat_template_video_special_processing(self):
+        """
+        Tests that models can use their own preprocessing to preprocess conversations.
+        """
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        signature = inspect.signature(processor.__call__)
+        if "videos" not in {*signature.parameters.keys()} or (
+            signature.parameters.get("videos") is not None
+            and signature.parameters["videos"].annotation == inspect._empty
+        ):
+            self.skipTest("Processor doesn't accept videos at input")
+
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video", "path": video_file_path},
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        def _process_messages_for_chat_template(
+            conversation,
+            batch_images,
+            batch_videos,
+            batch_video_metadata,
+            **chat_template_kwargs,
+        ):
+            # Let us just always return a dummy prompt
+            new_msg = [
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "video"},  # no need to use path, video is loaded already by this moment
+                            {"type": "text", "text": "Dummy prompt for preprocess testing"},
+                        ],
+                    },
+                ]
+            ]
+            return new_msg
+
+        processor._process_messages_for_chat_template = _process_messages_for_chat_template
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+
+        # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
+        formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
+        self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1756800)

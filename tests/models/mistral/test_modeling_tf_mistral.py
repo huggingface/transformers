@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Mistral AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,6 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_tf_utils import TFGenerationIntegrationTests
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -244,7 +242,7 @@ class TFMistralModelTester:
 
 
 @require_tf
-class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, PipelineTesterMixin, unittest.TestCase):
+class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFMistralModel, TFMistralForCausalLM, TFMistralForSequenceClassification) if is_tf_available() else ()
     )
@@ -325,10 +323,6 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
         model = TFMistralForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @unittest.skip("Mistral buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip("Mistral uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -124,7 +123,6 @@ class Emu3Text2TextModelTester:
 @require_torch
 class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-generation": Emu3ForCausalLM,
@@ -312,7 +310,6 @@ class Emu3Vision2TextModelTester:
 @require_torch
 class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False
@@ -386,10 +383,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         "Emu3 has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
     )
     def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
         pass
 
     @unittest.skip("VQ-VAE module doesn't initialize weights properly")

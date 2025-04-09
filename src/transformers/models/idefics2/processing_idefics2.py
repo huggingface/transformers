@@ -89,7 +89,9 @@ class Idefics2Processor(ProcessorMixin):
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
+    def __init__(
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -221,7 +223,7 @@ class Idefics2Processor(ProcessorMixin):
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
-            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
                 if text is not None:
                     if sum(n_images_in_text) != len(images):
                         raise ValueError(
@@ -238,8 +240,8 @@ class Idefics2Processor(ProcessorMixin):
                     images = [images]
 
             elif (
-                not isinstance(images, list)
-                and not isinstance(images[0], list)
+                not isinstance(images, (list, tuple))
+                and not isinstance(images[0], (list, tuple))
                 and not is_image_or_image_url(images[0][0])
             ):
                 raise ValueError(

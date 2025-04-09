@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,6 +146,7 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
@@ -171,14 +171,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(reason="ZoeDepth does not support training yet")
@@ -300,8 +292,8 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             out_l_reduced = torch.nn.functional.interpolate(
                 out_l.unsqueeze(0).unsqueeze(1), size=img.size[::-1], mode="bicubic", align_corners=False
             )
-            self.assertTrue((np.array(out_l.shape)[::-1] == np.array(img.size) * 2).all())
-            torch.testing.assert_close(out, out_l_reduced, rtol=2e-2)
+            out_l_reduced = out_l_reduced.squeeze(0).squeeze(0)
+            torch.testing.assert_close(out, out_l_reduced, rtol=2e-2, atol=2e-2)
 
     def check_post_processing_test(self, image_processor, images, model, pad_input=True, flip_aug=True):
         inputs = image_processor(images=images, return_tensors="pt", do_pad=pad_input).to(torch_device)
@@ -323,7 +315,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         for img, out, expected_slice in zip(images, outputs, expected_slices):
             out = out["predicted_depth"]
             self.assertTrue(img.size == out.shape[::-1])
-            torch.testing.assert_close(expected_slice, out[:3, :3], rtol=1e-3)
+            torch.testing.assert_close(expected_slice, out[:3, :3], rtol=1e-3, atol=1e-3)
 
         self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flipped)
 

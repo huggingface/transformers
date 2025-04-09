@@ -64,6 +64,9 @@ class MoonshineConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `decoder_num_attention_heads`.
+        pad_head_dim_to_multiple_of (`int`, *optional*):
+            Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
+            optimized attention implementations.
         encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder.
         decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -164,6 +167,7 @@ class MoonshineConfig(PretrainedConfig):
         decoder_num_attention_heads=8,
         encoder_num_key_value_heads=None,
         decoder_num_key_value_heads=None,
+        pad_head_dim_to_multiple_of=None,
         encoder_hidden_act="gelu",
         decoder_hidden_act="silu",
         max_position_embeddings=512,
@@ -195,6 +199,8 @@ class MoonshineConfig(PretrainedConfig):
         if decoder_num_key_value_heads is None:
             decoder_num_key_value_heads = decoder_num_attention_heads
         self.decoder_num_key_value_heads = decoder_num_key_value_heads
+
+        self.pad_head_dim_to_multiple_of = pad_head_dim_to_multiple_of
 
         self.encoder_hidden_act = encoder_hidden_act
         self.decoder_hidden_act = decoder_hidden_act

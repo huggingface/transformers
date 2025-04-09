@@ -242,7 +242,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         if sampling_rate is None:
             logger.warning_once(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 

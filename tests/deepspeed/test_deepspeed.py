@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import dataclasses
-import io
 import itertools
 import json
 import os
@@ -45,12 +44,14 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
+    require_torch_fp16,
     require_torch_multi_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device
+from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 
 if is_torch_available():
@@ -150,10 +151,12 @@ optims = [HF_OPTIM, DS_OPTIM]
 schedulers = [HF_SCHEDULER, DS_SCHEDULER]
 
 stages = [ZERO2, ZERO3]
+
+dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
+    dtypes.append(BF16)
+if is_torch_fp16_available_on_device(torch_device):
+    dtypes.append(FP16)
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -170,7 +173,6 @@ params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optim
 
 
 @require_deepspeed
-@require_torch_accelerator
 class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     """
     Testing non-Trainer DeepSpeed integration
@@ -194,12 +196,52 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # reset the ds config global so that tests state doesn't leak
         unset_hf_deepspeed_config()
 
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+    @require_torch_fp16
+    @require_torch_accelerator
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
             "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
+            },
+            "fp16": {
+                "enabled": True,
             },
         }
 
@@ -362,7 +404,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demostrating that this issue is
+        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
         # exclusive to DeepSpeed
         bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
@@ -393,9 +435,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
         }
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
@@ -418,6 +460,7 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
 
 
 @require_deepspeed
+@require_torch_fp16
 @require_torch_accelerator
 class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, TrainerIntegrationCommon):
     """
@@ -584,7 +627,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
-            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #
@@ -676,7 +719,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # dynamic loss scale value set to:
         #   "fp16.initial_scale_power": 1
         # plus having the same WarmupLR's warmup_min_lr == warmup_max_lr in the config file
-        # but for some reason going to train_len=64 the weights, weights start to mismatch with this setup.
+        # but for some reason going to train_len=64, the weights start to mismatch with this setup.
         # the culprit seems to be `initial_scale_power` - putting it back to its default 32 keeps the weights identical
 
         train_len = 64
@@ -719,8 +762,12 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         # training with half the batch size but accumulation steps as 2 should give the same
         # weights, but sometimes get a slight difference still of 1e-6
-        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
-        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
+        if torch_device == "hpu":
+            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
+        else:
+            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
+            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
@@ -898,7 +945,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.check_trainer_state_are_the_same(state, state1)
 
             # Finally, should be able to resume with the same trainer/same deepspeed engine instance
-            # XXX: but currently this not possible due DS bug: https://github.com/microsoft/DeepSpeed/issues/1612
+            # XXX: but currently this not possible due DS bug: https://github.com/deepspeedai/DeepSpeed/issues/1612
             # trainer.train(resume_from_checkpoint=checkpoint)
             # a workaround needs to be used that re-creates the deepspeed engine
 
@@ -975,7 +1022,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     def test_load_best_model(self, stage, dtype):
         # Test that forced deepspeed reinit doesn't break the model. the forced re-init after
         # loading the best model in Trainer is there to workaround this bug in Deepspeed
-        # https://github.com/microsoft/DeepSpeed/issues/1612
+        # https://github.com/deepspeedai/DeepSpeed/issues/1612
         #
         # The test is derived from a repro script submitted in this Issue:
         # https://github.com/huggingface/transformers/issues/17114
@@ -1062,6 +1109,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
 
 @slow
+@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedWithLauncher(TestCasePlus):
@@ -1088,6 +1136,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_basic_distributed(self, stage, dtype):
         self.run_and_check(stage=stage, dtype=dtype, distributed=True)
 
+    @require_torch_fp16
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
@@ -1161,12 +1210,15 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(reason="test requires bfloat16 hardware support")
 
+        if dtype == "fp16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(reason="test requires fp16 hardware support")
+
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
         fp32 = True if dtype == "fp32" else False
         self.run_and_check(
             stage=ZERO3,
-            dtype=FP16,
+            dtype=dtype,
             model_name=T5_TINY,
             distributed=True,
             do_train=False,
@@ -1343,6 +1395,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
+    @require_torch_fp16
     def test_clm_from_config_zero3_fp16(self):
         # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
 

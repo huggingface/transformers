@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -269,10 +268,6 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_from_pretrained(self):
         model = TFDebertaModel.from_pretrained("kamalkraj/deberta-base")
         self.assertIsNotNone(model)
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_pt_tf_model_equivalence(self):
-        pass
 
 
 @require_tf

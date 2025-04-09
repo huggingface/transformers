@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import unittest
 from importlib import import_module
 
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
-from transformers.testing_utils import TestCasePlus, is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.testing_utils import TestCasePlus, require_tf, require_vision, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -372,7 +371,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(attentions[0] is None)
             out_len = len(outputs)
 
@@ -386,7 +385,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(self_attentions[0] is None)
 
     def test_hidden_states_output(self):
@@ -419,11 +418,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        self.has_attentions = False
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -1234,7 +1234,7 @@ class WhisperGenerationMixin(GenerationMixin):
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
         set_inputs = _get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
         extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
-        set_inputs({"inputs": segment_input, "decoder_input_ids": decoder_input_ids, **extra_kwargs})
+        set_inputs({"inputs": segment_input, "input_ids": decoder_input_ids, **extra_kwargs})
 
     @staticmethod
     def _retrieve_total_input_frames(input_features, input_stride, kwargs):
@@ -1779,7 +1779,10 @@ class WhisperGenerationMixin(GenerationMixin):
 
         prev_start_of_text = getattr(generation_config, "prev_sot_token_id", None)
         if prev_start_of_text is None:
-            prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
+            if suppress_tokens is not None and len(suppress_tokens) >= 2:
+                prev_start_of_text = suppress_tokens[-2]
+            else:
+                prev_start_of_text = None
 
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609

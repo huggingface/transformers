@@ -19,7 +19,7 @@ Processor class for PaliGemma.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -99,30 +99,6 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
     return f"{image_token * image_seq_len * num_images}{bos_token}{prompt}\n"
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next.make_batched_images
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
-
-
 class PaliGemmaProcessor(ProcessorMixin):
     r"""
     Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
@@ -141,7 +117,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
-    image_processor_class = "SiglipImageProcessor"
+    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
     def __init__(
@@ -186,7 +162,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
@@ -282,9 +258,13 @@ class PaliGemmaProcessor(ProcessorMixin):
                 # make a nested list of lists to be able to iterate over the images and text below
                 if is_valid_image(images):
                     images = [[images]]
-                elif isinstance(images, list) and is_valid_image(images[0]):
+                elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
                     images = [[image] for image in images]
-                elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+                elif not (
+                    isinstance(images, (list, tuple))
+                    and isinstance(images[0], (list, tuple))
+                    and is_valid_image(images[0][0])
+                ):
                     raise ValueError("images must be an image, list of images or list of list of images")
 
                 input_strings = [
@@ -297,7 +277,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_batched_images(images)
+                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:

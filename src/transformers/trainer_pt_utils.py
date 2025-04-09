@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +23,12 @@ import math
 import os
 import sys
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -122,9 +121,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert (
-            type(tensors) is type(new_tensors)
-        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        assert type(tensors) is type(new_tensors), (
+            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        )
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -221,12 +220,12 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
 
 
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]],
+    scalars: list[Union[int, float]],
     num_total_examples: Optional[int] = None,
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).to(device)
+        tensorized_scalar = torch.tensor(scalars, device=device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -292,7 +291,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
 
 class EvalLoopContainer:
     """
-    Container to store intermediate results of evaluation loop
+    Container to store intermediate results of evaluation loop.
 
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
@@ -382,15 +381,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert (
-            len(indices) == self.total_size
-        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        assert len(indices) == self.total_size, (
+            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        )
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert (
-            len(indices) == self.num_samples
-        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        assert len(indices) == self.num_samples, (
+            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        )
 
         return iter(indices)
 
@@ -444,7 +443,7 @@ class DistributedTensorGatherer:
         - P1: `[6, 7, 8, 9, 10, 11]`
         - P2: `[12, 13, 14, 15, 0, 1]`
 
-    The first batch treated on each process will be
+    The first batch treated on each process will be:
 
         - P0: `[0, 1]`
         - P1: `[6, 7]`
@@ -507,9 +506,9 @@ class DistributedTensorGatherer:
         if isinstance(arrays, (list, tuple)):
             result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
             return result[0][0], type(arrays)(r[1] for r in result)
-        assert (
-            arrays.shape[0] % self.world_size == 0
-        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        assert arrays.shape[0] % self.world_size == 0, (
+            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        )
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
@@ -624,7 +623,7 @@ class LengthGroupedSampler(Sampler):
         self,
         batch_size: int,
         dataset: Optional[Dataset] = None,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
@@ -675,7 +674,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         rank: Optional[int] = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
     ):
         if dataset is None and lengths is None:
@@ -737,7 +736,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # add extra samples to make it evenly divisible
             indices += indices[: (self.total_size - len(indices))]
         else:
-            # remove tail of data to make it evenly divisible.
+            # remove tail of data to make it evenly divisible
             indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
@@ -929,16 +928,16 @@ def _get_learning_rate(self):
 
 def _secs2timedelta(secs):
     """
-    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
     """
 
     msec = int(abs(secs - int(secs)) * 100)
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     """
-    Reformat Trainer metrics values to a human-readable format
+    Reformat Trainer metrics values to a human-readable format.
 
     Args:
         metrics (`Dict[str, float]`):
@@ -951,11 +950,11 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     metrics_copy = metrics.copy()
     for k, v in metrics_copy.items():
         if "_mem_" in k:
-            metrics_copy[k] = f"{ v >> 20 }MB"
+            metrics_copy[k] = f"{v >> 20}MB"
         elif "_runtime" in k:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
-            metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            metrics_copy[k] = f"{int(v) >> 30}GF"
         elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
@@ -964,7 +963,7 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
 
 def log_metrics(self, split, metrics):
     """
-    Log metrics in a specially formatted way
+    Log metrics in a specially formatted way.
 
     Under distributed environment this is done only for a process with rank 0.
 
@@ -978,7 +977,7 @@ def log_metrics(self, split, metrics):
 
     In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include: :
+    Now when this method is run, you will see a report that will include:
 
     ```
     init_mem_cpu_alloc_delta   =     1301MB
@@ -1007,7 +1006,7 @@ def log_metrics(self, split, metrics):
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
     use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
-    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUs. Perhaps in the
     future these reports will evolve to measure those too.
 
     The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
@@ -1080,7 +1079,7 @@ def save_metrics(self, split, metrics, combined=True):
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
@@ -1092,7 +1091,7 @@ def save_metrics(self, split, metrics, combined=True):
 
 def save_state(self):
     """
-    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
 
     Under distributed environment this is done only for a process with rank 0.
     """
@@ -1105,7 +1104,7 @@ def save_state(self):
 
 def get_model_param_count(model, trainable_only=False):
     """
-    Calculate model's total param count. If trainable_only is True then count only those requiring grads
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads.
     """
     if is_deepspeed_zero3_enabled():
 
@@ -1120,19 +1119,25 @@ def get_model_param_count(model, trainable_only=False):
     return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
-def get_parameter_names(model, forbidden_layer_types):
+def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
+    if forbidden_layer_names is None:
+        forbidden_layer_names = []
     result = []
     for name, child in model.named_children():
+        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
         result += [
             f"{name}.{n}"
-            for n in get_parameter_names(child, forbidden_layer_types)
+            for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
+            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
         ]
-    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
-    result += list(model._parameters.keys())
+    # Add model specific parameters that are not in any child
+    result += [
+        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+    ]
     return result
 
 
@@ -1199,7 +1204,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.concat().detach().cpu()
+        return tensor.detach().concat().cpu()
 
 
 @dataclass
@@ -1225,8 +1230,8 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
@@ -1258,7 +1263,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1278,8 +1283,8 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
@@ -1294,7 +1299,7 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[Dict] = field(
+    gradient_accumulation_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
@@ -1390,3 +1395,17 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
+    """Helper to set RNG state for a specific device type (CUDA, NPU, MLU, MUSA)"""
+    device_state_key = device_name.lower()
+    err_template = "Didn't manage to set back the RNG states of the {backend} because of the following error:\n {exception}\nThis won't yield the same results as if the training had not been interrupted."
+    try:
+        if is_distributed:
+            device_module.random.set_rng_state_all(checkpoint_rng_state[device_state_key])
+        else:
+            device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
+    except Exception as e:
+        # Log error if setting RNG state fails
+        logger.error(err_template.format(backend=device_name, exception=e))

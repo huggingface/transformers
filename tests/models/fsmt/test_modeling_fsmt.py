@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -163,7 +162,6 @@ def prepare_fsmt_inputs_dict(
 @require_torch
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FSMTModel,
@@ -262,20 +260,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = FSMTModel(config).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
-                f"{tmpdirname}/fsmt_test.onnx",
-                export_params=True,
-                opset_version=12,
-                input_names=["input_ids", "attention_mask"],
-            )
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -424,7 +408,7 @@ class FSMTHeadTests(unittest.TestCase):
 
     def test_prepare_fsmt_decoder_inputs(self):
         config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor(([4, 4, 2]))
+        input_ids = _long_tensor([4, 4, 2])
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
         causal_mask_dtype = torch.float32
         ignore = torch.finfo(causal_mask_dtype).min
@@ -563,6 +547,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         emb = emb1(input_ids)
         desired_weights = torch.tensor(
             [
@@ -577,10 +562,16 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         # odd embedding_dim  is allowed
-        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
         # odd num_embeddings is allowed
-        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
     @unittest.skip(reason="different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
@@ -594,6 +585,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         weights = emb1.weights.data[:3, :5]
         # XXX: only the 1st and 3rd lines match - this is testing against
         # verbatim copy of SinusoidalPositionalEmbedding from fairseq

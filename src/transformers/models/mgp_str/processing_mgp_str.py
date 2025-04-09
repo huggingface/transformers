@@ -51,7 +51,7 @@ class MgpstrProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "char_tokenizer"]
-    image_processor_class = "ViTImageProcessor"
+    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
     char_tokenizer_class = "MgpstrTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -81,7 +81,7 @@ class MgpstrProcessor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
         [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
         arguments to MgpstrTokenizer's [`~MgpstrTokenizer.__call__`] if `text` is not `None` to encode the text. Please
-        refer to the doctsring of the above methods for more information.
+        refer to the docstring of the above methods for more information.
         """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
@@ -182,7 +182,7 @@ class MgpstrProcessor(ProcessorMixin):
         for index in range(batch_size):
             pred_eos = preds_str[index].find(eos_str)
             pred = preds_str[index][:pred_eos]
-            pred_index = preds_index[index].cpu().tolist()
+            pred_index = preds_index[index].tolist()
             pred_eos_index = pred_index.index(eos_token) if eos_token in pred_index else -1
             pred_max_prob = preds_max_prob[index][: pred_eos_index + 1]
             confidence_score = pred_max_prob.cumprod(dim=0)[-1] if pred_max_prob.nelement() != 0 else 0.0

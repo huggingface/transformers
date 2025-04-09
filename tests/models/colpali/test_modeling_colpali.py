@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,20 +19,17 @@ from typing import ClassVar
 
 import torch
 from datasets import load_dataset
-from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import (
     is_torch_available,
-    is_vision_available,
 )
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import (
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -42,9 +38,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class ColPaliForRetrievalModelTester:
@@ -258,30 +251,22 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(outputs, ColPaliForRetrievalOutput)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
 
     @unittest.skip(
         reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."

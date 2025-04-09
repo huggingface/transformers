@@ -790,6 +790,8 @@ class LxmertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LxmertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 LXMERT_START_DOCSTRING = r"""
@@ -1072,9 +1074,14 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             }
         self.visual_losses = visual_losses
 
-    def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
+    def _tie_weights(self):
+        self.cls.predictions.decoder.weight = self.lxmert.embeddings.word_embeddings.weight
+
+    def resize_token_embeddings(
+        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+    ) -> nn.Embedding:
         # Adding the following steps to resize bias to match the shape of resized embeddings
-        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self.cls.predictions.bias = self._resize_bias(self.cls.predictions.bias, new_num_tokens)
         return new_embeddings
 

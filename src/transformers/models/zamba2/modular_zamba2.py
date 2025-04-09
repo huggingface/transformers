@@ -35,7 +35,7 @@ from ...utils.import_utils import (
     is_mamba_ssm_available,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
-from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
+from ..mamba2.modeling_mamba2 import pad_tensor_by_size, reshape_into_chunks, segment_sum
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -70,8 +70,25 @@ _CONFIG_FOR_DOC = "Zyphra/Zamba2-2.7B"
 logger = logging.get_logger(__name__)
 
 
-class Zamba2RMSNormGated(MambaRMSNormGated):
-    pass
+class Zamba2RMSNormGated(torch.nn.Module):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.group_size = group_size
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if gate is not None:
+            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Zamba2RMSNorm(ZambaRMSNorm):
@@ -182,8 +199,8 @@ class Zamba2Attention(ZambaAttention):
         self,
         config: Zamba2Config,
         layer_idx: Optional[int] = None,
-        num_fwd_mem_blocks: int = None,
-        block_id: int = None,
+        num_fwd_mem_blocks: Optional[int] = None,
+        block_id: Optional[int] = None,
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
@@ -285,7 +302,7 @@ class Zamba2MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: Zamba2Config, layer_idx: int = None):
+    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -296,6 +313,7 @@ class Zamba2MambaMixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = "silu"
         self.act = nn.SiLU()
+        self.use_mem_eff_path = config.use_mem_eff_path
 
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
@@ -334,7 +352,9 @@ class Zamba2MambaMixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = Zamba2RMSNormGated(self.intermediate_size, eps=1e-5)
+        self.norm = Zamba2RMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=1e-5
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -418,7 +438,7 @@ class Zamba2MambaMixer(nn.Module):
             else:
                 input_not_masked = True
 
-            if self.training and cache_params is None and input_not_masked:
+            if self.use_mem_eff_path and self.training and cache_params is None and input_not_masked:
                 out, ssm_state = mamba_split_conv1d_scan_combined(
                     projected_states,
                     self.conv1d.weight.squeeze(1),
@@ -705,7 +725,7 @@ class Zamba2MambaMixer(nn.Module):
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None):
+    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: Optional[int] = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
@@ -747,7 +767,7 @@ class Zamba2MLP(nn.Module):
 
 
 class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
-    def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, block_id: Optional[int] = None, layer_idx: Optional[int] = None):
         self.block_id = block_id
         num_gs = len(config.hybrid_layer_ids)
         super().__init__(config, layer_idx)
@@ -827,7 +847,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Zamba2HybridDynamicCache] = None,
@@ -896,7 +916,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
@@ -1021,7 +1041,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Zamba2HybridDynamicCache] = None,

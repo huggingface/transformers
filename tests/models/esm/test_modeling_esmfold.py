@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,7 +168,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
 
@@ -240,10 +238,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="ESMFold only has one output format.")
     def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="ESMFold does not support input chunking.")

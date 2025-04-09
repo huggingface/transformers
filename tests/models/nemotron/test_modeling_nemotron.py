@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 #
@@ -75,7 +74,6 @@ class NemotronModelTest(GemmaModelTest):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (NemotronForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": NemotronModel,

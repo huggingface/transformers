@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_vision_available():
     from transformers import PvtImageProcessor
 
 
-class PvtImageProcessingTester(unittest.TestCase):
+class PvtImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -41,7 +40,6 @@ class PvtImageProcessingTester(unittest.TestCase):
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_peft,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -440,7 +440,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized(self):
         """
@@ -479,7 +479,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized_regression(self):
         """
@@ -525,9 +525,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from transformers import pipeline
 
-        for model_id in self.peft_test_model_ids:
-            pipe = pipeline("text-generation", model_id)
-            _ = pipe("Hello")
+        for adapter_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            peft_pipe = pipeline("text-generation", adapter_id)
+            base_pipe = pipeline("text-generation", base_model_id)
+            peft_params = list(peft_pipe.model.parameters())
+            base_params = list(base_pipe.model.parameters())
+            self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
+            _ = peft_pipe("Hello")
 
     def test_peft_add_adapter_with_state_dict(self):
         """
@@ -549,7 +553,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
 
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
                 with self.assertRaises(ValueError):
@@ -574,7 +578,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # this should always work
                 model.load_adapter(
@@ -642,7 +646,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # add unexpected key
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
@@ -669,7 +673,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # remove a key so that we have missing keys
                 key = next(iter(dummy_state_dict.keys()))
@@ -810,3 +814,50 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     msg = "When using prompt learning PEFT methods such as PREFIX_TUNING"
                     with self.assertRaisesRegex(RuntimeError, msg):
                         trainer.train()
+
+    def test_peft_pipeline_no_warning(self):
+        """
+        Test to verify that the warning message "The model 'PeftModel' is not supported for text-generation"
+        does not appear when using PeftModel with text-generation pipeline.
+        """
+        from peft import PeftModel
+
+        from transformers import pipeline
+
+        ADAPTER_PATH = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        BASE_PATH = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # Input text for testing
+        text = "Who is a Elon Musk?"
+        expected_error_msg = "The model 'PeftModel' is not supported for text-generation"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_PATH,
+            device_map="auto",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(BASE_PATH)
+
+        lora_model = PeftModel.from_pretrained(
+            model,
+            ADAPTER_PATH,
+            device_map="auto",
+        )
+
+        # Create pipeline with PEFT model while capturing log output
+        # Check that the warning message is not present in the logs
+        pipeline_logger = logging.get_logger("transformers.pipelines.base")
+        with self.assertNoLogs(pipeline_logger, logging.ERROR) as cl:
+            lora_generator = pipeline(
+                task="text-generation",
+                model=lora_model,
+                tokenizer=tokenizer,
+                max_length=10,
+            )
+
+            # Generate text to verify pipeline works
+            _ = lora_generator(text)
+
+        # Check that the warning message is not present in the logs
+        self.assertNotIn(
+            expected_error_msg, cl.out, f"Error message '{expected_error_msg}' should not appear when using PeftModel"
+        )

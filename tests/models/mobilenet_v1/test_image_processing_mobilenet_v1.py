@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_vision_available():
     from transformers import MobileNetV1ImageProcessor
 
 
-class MobileNetV1ImageProcessingTester(unittest.TestCase):
+class MobileNetV1ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -40,7 +39,6 @@ class MobileNetV1ImageProcessingTester(unittest.TestCase):
         do_center_crop=True,
         crop_size=None,
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent

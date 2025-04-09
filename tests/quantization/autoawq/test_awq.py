@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,11 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_auto_awq,
     require_intel_extension_for_pytorch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -37,7 +38,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
     def test_wrong_backend(self):
         """
@@ -56,16 +57,23 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
+        # Only cuda and xpu devices can run this function
+        support_llm_awq = False
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if major >= 8:
+                support_llm_awq = True
+        elif torch.xpu.is_available():
+            support_llm_awq = True
 
-        if major < 8:
+        if support_llm_awq:
+            # LLMAWQ should work on an A100
+            AwqConfig(bits=4, backend="llm-awq")
+        else:
             # LLMAWQ does not work on a T4
             with self.assertRaises(ValueError):
                 AwqConfig(bits=4, backend="llm-awq")
-        else:
-            # LLMAWQ should work on an A100
-            AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
@@ -90,7 +98,7 @@ class AwqConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqTest(unittest.TestCase):
@@ -107,7 +115,7 @@ class AwqTest(unittest.TestCase):
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very creative",
     ]
-    device_map = "cuda"
+    device_map = torch_device
 
     # called only once for all test in this class
     @classmethod
@@ -120,7 +128,7 @@ class AwqTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -475,7 +483,7 @@ class AwqFusedTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqScaleTest(unittest.TestCase):
@@ -488,7 +496,7 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map="cuda"
+            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
         )
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 

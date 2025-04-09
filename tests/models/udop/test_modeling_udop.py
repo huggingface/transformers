@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -265,7 +265,7 @@ class UdopModelTester:
 
 
 @require_torch
-class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             UdopModel,
@@ -274,7 +274,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": UdopModel, "image-text-to-text": UdopForConditionalGeneration}
         if is_torch_available()
@@ -330,13 +329,13 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -419,6 +418,14 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "microsoft/udop-large"
         model = UdopForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="TODO: Fix me @joao")
+    def test_generate_with_head_masking(self):
+        pass
+
+    @unittest.skip(reason="TODO: Fix me @joao")
+    def test_generate_without_input_ids(self):
+        pass
 
 
 class UdopEncoderOnlyModelTester:

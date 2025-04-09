@@ -20,7 +20,6 @@ import numpy as np
 from transformers import MistralConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -146,7 +145,7 @@ class FlaxMistralModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     # Copied from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
@@ -180,14 +179,13 @@ class FlaxMistralModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
-class FlaxMistralModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxMistralModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxMistralModel, FlaxMistralForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxMistralForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMistralModelTester(self)

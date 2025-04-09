@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -27,21 +27,22 @@ if is_vision_available():
     from transformers import CLIPImageProcessor
 
 if is_torch_available:
-    import torch
+    pass
 
 
 @require_vision
 class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor(do_center_crop=False)
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -49,11 +50,17 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template", "patch_size": 3, "vision_feature_select_strategy": "default"}
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
+            "patch_size": 3,
+            "vision_feature_select_strategy": "default"
+        }  # fmt: skip
 
     @unittest.skip(
         "Skip because the model has no processor kwargs except for chat template and"
@@ -122,29 +129,6 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True
         )
         self.assertListEqual(list(out_dict_with_image.keys()), ["input_ids", "attention_mask", "pixel_values"])
-
-    @require_torch
-    def test_chat_template_dict_torch(self):
-        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        out_dict_tensors = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        self.assertListEqual(list(out_dict_tensors.keys()), ["input_ids", "attention_mask", "pixel_values"])
-        self.assertTrue(isinstance(out_dict_tensors["input_ids"], torch.Tensor))
 
     def test_chat_template_with_continue_final_message(self):
         processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")

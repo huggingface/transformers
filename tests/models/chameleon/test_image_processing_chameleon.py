@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,7 @@ if is_vision_available():
     from transformers import ChameleonImageProcessor
 
 
-class ChameleonImageProcessingTester(unittest.TestCase):
+class ChameleonImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -50,7 +49,6 @@ class ChameleonImageProcessingTester(unittest.TestCase):
         image_std=[1.0, 1.0, 1.0],
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent

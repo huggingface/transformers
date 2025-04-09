@@ -15,7 +15,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
+from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+    from torch.nn import ModuleList
+else:
+    ModuleList = str
 
 
 class HfQuantizer(ABC):
@@ -109,6 +113,27 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `unexpected_keys`.
+
+        Args:
+            unexpected_keys (`List[str]`, *optional*):
+                The list of unexpected keys in the checkpoint compared to the state dict of the model
+        """
+        return unexpected_keys
+
+    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys` after loading the model params,
+        but before the model is post-processed.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
+
     def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
@@ -177,6 +202,10 @@ class HfQuantizer(ABC):
         """
         return
 
+    def update_tp_plan(self, config):
+        "updates the tp plan for the scales"
+        return config
+
     def preprocess_model(self, model: "PreTrainedModel", **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
@@ -191,6 +220,8 @@ class HfQuantizer(ABC):
         """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
+        if self.pre_quantized:
+            self._convert_model_for_quantization(model)
         return self._process_model_before_weight_loading(model, **kwargs)
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
@@ -226,9 +257,36 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
+    @staticmethod
+    def get_modules_to_not_convert(
+        model: "PreTrainedModel",
+        skip_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[List[str]] = None,
+        add_default_skips: bool = False,
+    ):
+        from ..integrations import get_keys_to_not_convert
+
+        if skip_modules is None or add_default_skips:
+            modules_to_not_convert = get_keys_to_not_convert(model)
+        else:
+            modules_to_not_convert = []
+
+        if skip_modules is not None:
+            modules_to_not_convert.extend(skip_modules)
+
+        if keep_in_fp32_modules is not None:
+            modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        return modules_to_not_convert
+
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return False
+
+    @property
+    def is_compileable(self) -> bool:
+        """Flag indicating whether the quantized model can be compiled"""
         return False
 
     @abstractmethod
@@ -243,3 +301,52 @@ class HfQuantizer(ABC):
     @property
     @abstractmethod
     def is_trainable(self): ...
+
+    def _convert_model_for_quantization(self, model):
+        from accelerate import init_empty_weights
+
+        for name, module in model.named_modules():
+            module_class_name = module.__class__.__name__
+            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys() and (
+                self.quantization_config.quant_method
+                in MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["quantization_methods"]
+            ):
+                with init_empty_weights():
+                    parent_module, name = get_module_from_name(model, name)
+                    parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
+                        model.config.get_text_config()
+                    )
+
+
+class SequentialLlama4TextExperts(ModuleList):
+    """
+    A module that implements a compressed version of a list of expert modules.
+    This is specifically designed to work with Llama4TextExperts in MoE layers.
+    """
+
+    def __init__(self, config):
+        from transformers.models.llama4.modeling_llama4 import Llama4TextMLP
+
+        super().__init__([Llama4TextMLP(config) for _ in range(config.num_local_experts)])
+        self.num_experts = config.num_local_experts
+
+    def forward(
+        self,
+        hidden_states: "torch.Tensor",
+    ) -> "torch.Tensor":
+        hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
+        routed_out = torch.zeros_like(hidden_states)
+        for expert_idx in range(self.num_experts):
+            routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
+        return routed_out
+
+
+MODULES_TO_PATCH_FOR_QUANTIZATION = {
+    "Llama4TextExperts": {
+        "module_name": SequentialLlama4TextExperts,
+        "quantization_methods": [
+            QuantizationMethod.COMPRESSED_TENSORS,
+            QuantizationMethod.BITS_AND_BYTES,
+        ],
+    }
+}

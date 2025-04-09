@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BLIP
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 ## Overview
 
 The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
@@ -59,6 +64,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 ## BlipImageProcessor
 
 [[autodoc]] BlipImageProcessor
+    - preprocess
+
+## BlipImageProcessorFast
+
+[[autodoc]] BlipImageProcessorFast
     - preprocess
 
 <frameworkcontent>

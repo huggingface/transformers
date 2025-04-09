@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -281,7 +280,6 @@ class ClvpDecoderTester:
 @require_torch
 class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (ClvpForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
     test_pruning = False
@@ -333,6 +331,10 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         loss = model(**inputs).loss
         loss.backward()
+
+    @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
 
 
 class ClvpModelForConditionalGenerationTester:
@@ -405,6 +407,8 @@ class ClvpModelForConditionalGenerationTester:
 @require_torch
 class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModelForConditionalGeneration,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
 
     test_head_masking = False
     test_pruning = False
@@ -495,7 +499,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Clvp
+    # override as the `logit_scale` parameter initialization is different for Clvp
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -504,7 +508,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         expected_value = np.log(1 / 0.07)
                         returned_value = param.data.item()

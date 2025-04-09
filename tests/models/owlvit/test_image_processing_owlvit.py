@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_vision_available():
     from transformers import OwlViTImageProcessor
 
 
-class OwlViTImageProcessingTester(unittest.TestCase):
+class OwlViTImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -44,7 +43,6 @@ class OwlViTImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

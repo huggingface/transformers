@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ from transformers.testing_utils import (
     require_optimum_quanto,
     require_read_token,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -181,11 +179,11 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model, "cpu")
 
-    def test_generate_quality_cuda(self):
+    def test_generate_quality_accelerator(self):
         """
-        Simple test to check the quality of the model on cuda by comparing the generated tokens with the expected tokens
+        Simple test to check the quality of the model on accelerators by comparing the generated tokens with the expected tokens
         """
-        self.check_inference_correctness(self.quantized_model, "cuda")
+        self.check_inference_correctness(self.quantized_model, torch_device)
 
     def test_quantized_model_layers(self):
         from optimum.quanto import QBitsTensor, QModuleMixin, QTensor
@@ -215,7 +213,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             )
             self.quantized_model.to(0)
         self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cuda"
+            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, torch_device
         )
 
     def test_serialization_bin(self):
@@ -430,7 +428,7 @@ class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializa
     weights = "int4"
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class QuantoQuantizationActivationTest(unittest.TestCase):
     def test_quantize_activation(self):
         quantization_config = QuantoConfig(
@@ -443,23 +441,25 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
 
 
 @require_optimum_quanto
-@require_torch_gpu
+@require_torch_accelerator
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
     @require_read_token
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory is the most",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that 1) time and space are not absolute, but are relative to the observer, and 2) the laws of physics are the same everywhere in the universe. This means that the speed of light is",
+            "My favorite all time favorite condiment is ketchup. I love how it adds a sweet and tangy flavor to my food. I also enjoy using it as a dip for fries, burgers, and grilled meats. It's a classic condiment that never",
         ]
 
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="left")
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", pad_token="</s>", padding_side="left"
+        )
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "unsloth/Llama-3.2-1B-Instruct", device_map="sequential", torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 

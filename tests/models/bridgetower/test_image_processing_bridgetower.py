@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 
 import unittest
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -31,26 +30,25 @@ if is_vision_available():
     from transformers import BridgeTowerImageProcessor
 
 
-class BridgeTowerImageProcessingTester(unittest.TestCase):
+class BridgeTowerImageProcessingTester:
     def __init__(
         self,
         parent,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: dict[str, int] = None,
         size_divisor: int = 32,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         do_center_crop: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
-        image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        image_mean: Optional[Union[float, list[float]]] = [0.48145466, 0.4578275, 0.40821073],
+        image_std: Optional[Union[float, list[float]]] = [0.26862954, 0.26130258, 0.27577711],
         do_pad: bool = True,
         batch_size=7,
         min_resolution=30,
         max_resolution=400,
         num_channels=3,
     ):
-        super().__init__()
         self.parent = parent
         self.do_resize = do_resize
         self.size = size if size is not None else {"shortest_edge": 288}

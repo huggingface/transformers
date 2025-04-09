@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ if is_vision_available():
     from transformers import ViltImageProcessor
 
 
-class ViltImageProcessingTester(unittest.TestCase):
+class ViltImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -46,7 +45,6 @@ class ViltImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 30}
         self.parent = parent
         self.batch_size = batch_size

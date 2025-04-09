@@ -14,6 +14,7 @@
 
 import unittest
 
+import datasets
 import numpy as np
 from huggingface_hub import AudioClassificationOutputElement
 
@@ -44,6 +45,15 @@ if is_torch_available():
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
 
     def get_test_pipeline(
         self,
@@ -94,11 +104,9 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
-        import datasets
-
+        self._load_dataset()
         # test with a local file
-        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        audio = dataset[0]["audio"]["array"]
+        audio = self._dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(
             output,
@@ -144,17 +152,20 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         audio = np.ones((8000,))
         output = audio_classifier(audio, top_k=4)
 
+        # Expected outputs are collected running the test on torch 2.6 in few scenarios.
+        # Running on CUDA T4/A100 and on XPU PVC (note: using stock torch xpu, NOT using IPEX):
         EXPECTED_OUTPUT = [
+            {"score": 0.0833, "label": "go"},
+            {"score": 0.0833, "label": "off"},
+            {"score": 0.0833, "label": "stop"},
+            {"score": 0.0833, "label": "on"},
+        ]
+        # Running on CPU:
+        EXPECTED_OUTPUT_PT_2 = [
             {"score": 0.0839, "label": "no"},
             {"score": 0.0837, "label": "go"},
             {"score": 0.0836, "label": "yes"},
             {"score": 0.0835, "label": "right"},
-        ]
-        EXPECTED_OUTPUT_PT_2 = [
-            {"score": 0.0845, "label": "stop"},
-            {"score": 0.0844, "label": "on"},
-            {"score": 0.0841, "label": "right"},
-            {"score": 0.0834, "label": "left"},
         ]
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
@@ -165,8 +176,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_large_model_pt(self):
-        import datasets
-
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)
@@ -188,3 +197,60 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     @unittest.skip(reason="Audio classification is not implemented for TF")
     def test_small_model_tf(self):
         pass
+
+    @require_torch
+    @slow
+    def test_top_k_none_returns_all_labels(self):
+        model_name = "superb/wav2vec2-base-superb-ks"  # model with more than 5 labels
+        classification_pipeline = pipeline(
+            "audio-classification",
+            model=model_name,
+            top_k=None,
+        )
+
+        # Create dummy input
+        sampling_rate = 16000
+        signal = np.zeros((sampling_rate,), dtype=np.float32)
+
+        result = classification_pipeline(signal)
+        num_labels = classification_pipeline.model.config.num_labels
+
+        self.assertEqual(len(result), num_labels, "Should return all labels when top_k is None")
+
+    @require_torch
+    @slow
+    def test_top_k_none_with_few_labels(self):
+        model_name = "superb/hubert-base-superb-er"  # model with fewer labels
+        classification_pipeline = pipeline(
+            "audio-classification",
+            model=model_name,
+            top_k=None,
+        )
+
+        # Create dummy input
+        sampling_rate = 16000
+        signal = np.zeros((sampling_rate,), dtype=np.float32)
+
+        result = classification_pipeline(signal)
+        num_labels = classification_pipeline.model.config.num_labels
+
+        self.assertEqual(len(result), num_labels, "Should handle models with fewer labels correctly")
+
+    @require_torch
+    @slow
+    def test_top_k_greater_than_labels(self):
+        model_name = "superb/hubert-base-superb-er"
+        classification_pipeline = pipeline(
+            "audio-classification",
+            model=model_name,
+            top_k=100,  # intentionally large number
+        )
+
+        # Create dummy input
+        sampling_rate = 16000
+        signal = np.zeros((sampling_rate,), dtype=np.float32)
+
+        result = classification_pipeline(signal)
+        num_labels = classification_pipeline.model.config.num_labels
+
+        self.assertEqual(len(result), num_labels, "Should cap top_k to number of labels")

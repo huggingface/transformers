@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +35,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class FlaxRegNetModelTester(unittest.TestCase):
+class FlaxRegNetModelTester:
     def __init__(
         self,
         parent,
@@ -65,7 +64,6 @@ class FlaxRegNetModelTester(unittest.TestCase):
         self.num_labels = num_labels
         self.scope = scope
         self.num_stages = len(hidden_sizes)
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
