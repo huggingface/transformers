@@ -272,10 +272,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             "layers.*.feed_forward.experts.down_proj": "local_colwise",
         }
         if config.get_text_config() is not None:
-            print("config.get_text_config(). ", config.get_text_config().base_model_tp_plan)
             config.get_text_config().base_model_tp_plan = text_plan
         else:
-            print("config.base_model_tp_plan", config.base_model_tp_plan)
             config.base_model_tp_plan = text_plan
         return config
 
