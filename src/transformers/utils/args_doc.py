@@ -326,6 +326,15 @@ class ClassDocstring:
     SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """
 
+    ForMultipleChoice = r"""
+    The {model_name} Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """
+
+    ForMaskedLM = r"""
+    The {model_name} Model with a `language modeling` head on top."
+    """
+
     ForTokenClassification = r"""
     The {model_name} transformer with a token classification head on top (a linear layer on top of the hidden-states
     output) e.g. for Named-Entity-Recognition (NER) tasks.
@@ -769,6 +778,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                     expected_loss="...",
                     qa_target_start_index=14,
                     qa_target_end_index=15,
+                    mask="<mask>",
                 )
                 docstring += set_min_indent(example_annotation, indent_level + 4)
             else:
@@ -816,7 +826,12 @@ def auto_class_docstring(cls, custom_intro=None):
         )
     if name != []:
         name = name[0]
-        pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title, model_checkpoint="dummy-path")
+        if custom_intro is not None:
+            pre_block = custom_intro
+        else:
+            pre_block = getattr(ClassDocstring, name).format(
+                model_name=model_name_title, model_checkpoint="dummy-path"
+            )
         # Start building the docstring
         docstring = set_min_indent(f"{pre_block}", indent_level)
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
