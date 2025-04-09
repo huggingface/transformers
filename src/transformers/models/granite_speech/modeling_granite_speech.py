@@ -182,7 +182,9 @@ class GraniteSpeechConformerFeedForward(nn.Module):
 
 
 class GraniteSpeechConformerAttention(nn.Module):
-    """Attention for conformer blocks with shaw's relpos embeddings."""
+    """Attention for conformer blocks using Shaw's relative positional embeddings.
+    See the following [paper](https://arxiv.org/pdf/1803.02155) for more details.
+    """
 
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
@@ -215,10 +217,10 @@ class GraniteSpeechConformerAttention(nn.Module):
 
         query_states = self.to_q(hidden_states)
         key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
-        query_states, key_states, value_states = [
-            t.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
-            for t in (query_states, key_states, value_states)
-        ]
+
+        query_states = query_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        key_states = key_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
 
         # shaw's relative positional embedding
         seq = torch.arange(self.context_size, device=hidden_states.device)
