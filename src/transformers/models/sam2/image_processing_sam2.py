@@ -625,15 +625,6 @@ class Sam2ImageProcessor(BaseImageProcessor):
                 binarize=binarize,
                 pad_size=pad_size,
             )
-        elif return_tensors == "tf":
-            return self._post_process_masks_tf(
-                masks=masks,
-                original_sizes=original_sizes,
-                reshaped_input_sizes=reshaped_input_sizes,
-                mask_threshold=mask_threshold,
-                binarize=binarize,
-                pad_size=pad_size,
-            )
         else:
             raise ValueError("return_tensors must be either 'pt' or 'tf'")
 
@@ -681,48 +672,6 @@ class Sam2ImageProcessor(BaseImageProcessor):
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
-
-        return output_masks
-
-    def _post_process_masks_tf(
-        self, masks, original_sizes, reshaped_input_sizes, mask_threshold=0.0, binarize=True, pad_size=None
-    ):
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Args:
-            masks (`tf.Tensor`):
-                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`tf.Tensor`):
-                The original size of the images before resizing for input to the model, in (height, width) format.
-            reshaped_input_sizes (`tf.Tensor`):
-                The size of the image input to the model, in (height, width) format. Used to remove padding.
-            mask_threshold (`float`, *optional*, defaults to 0.0):
-                The threshold to use for binarizing the masks.
-            binarize (`bool`, *optional*, defaults to `True`):
-                Whether to binarize the masks.
-            pad_size (`int`, *optional*, defaults to `self.pad_size`):
-                The target size the images were padded to before being passed to the model. If None, the target size is
-                assumed to be the processor's `pad_size`.
-        Returns:
-            (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width) is
-            given by original_size.
-        """
-        requires_backends(self, ["tf"])
-        pad_size = self.pad_size if pad_size is None else pad_size
-        target_image_size = (pad_size["height"], pad_size["width"])
-
-        output_masks = []
-        for i, original_size in enumerate(original_sizes):
-            # tf.image expects NHWC, we transpose the NCHW inputs for it
-            mask = tf.transpose(masks[i], perm=[0, 2, 3, 1])
-            interpolated_mask = tf.image.resize(mask, target_image_size, method="bilinear")
-            interpolated_mask = interpolated_mask[:, : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1], :]
-            interpolated_mask = tf.image.resize(interpolated_mask, original_size, method="bilinear")
-            if binarize:
-                interpolated_mask = interpolated_mask > mask_threshold
-            # And then we transpose them back at the end
-            output_masks.append(tf.transpose(interpolated_mask, perm=[0, 3, 1, 2]))
 
         return output_masks
 
@@ -863,17 +812,6 @@ class Sam2ImageProcessor(BaseImageProcessor):
                 mask_threshold=mask_threshold,
                 stability_score_offset=stability_score_offset,
             )
-        elif return_tensors == "tf":
-            return self._filter_masks_tf(
-                masks=masks,
-                iou_scores=iou_scores,
-                original_size=original_size,
-                cropped_box_image=cropped_box_image,
-                pred_iou_thresh=pred_iou_thresh,
-                stability_score_thresh=stability_score_thresh,
-                mask_threshold=mask_threshold,
-                stability_score_offset=stability_score_offset,
-            )
 
     def _filter_masks_pt(
         self,
@@ -952,83 +890,6 @@ class Sam2ImageProcessor(BaseImageProcessor):
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
         # conversion to rle is necessary to run non-maximum suppresion
         masks = _mask_to_rle_pytorch(masks)
-
-        return masks, scores, converted_boxes
-
-    def _filter_masks_tf(
-        self,
-        masks,
-        iou_scores,
-        original_size,
-        cropped_box_image,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.95,
-        mask_threshold=0,
-        stability_score_offset=1,
-    ):
-        """
-        Filters the predicted masks by selecting only the ones that meets several criteria. The first criterion being
-        that the iou scores needs to be greater than `pred_iou_thresh`. The second criterion is that the stability
-        score needs to be greater than `stability_score_thresh`. The method also converts the predicted masks to
-        bounding boxes and pad the predicted masks if necessary.
-
-        Args:
-            masks (`tf.Tensor`):
-                Input masks.
-            iou_scores (`tf.Tensor`):
-                List of IoU scores.
-            original_size (`Tuple[int,int]`):
-                Size of the orginal image.
-            cropped_box_image (`np.array`):
-                The cropped image.
-            pred_iou_thresh (`float`, *optional*, defaults to 0.88):
-                The threshold for the iou scores.
-            stability_score_thresh (`float`, *optional*, defaults to 0.95):
-                The threshold for the stability score.
-            mask_threshold (`float`, *optional*, defaults to 0):
-                The threshold for the predicted masks.
-            stability_score_offset (`float`, *optional*, defaults to 1):
-                The offset for the stability score used in the `_compute_stability_score` method.
-
-        """
-        requires_backends(self, ["tf"])
-        original_height, original_width = original_size
-        iou_scores = tf.reshape(iou_scores, [iou_scores.shape[0] * iou_scores.shape[1], iou_scores.shape[2:]])
-        masks = tf.reshape(masks, [masks.shape[0] * masks.shape[1], masks.shape[2:]])
-
-        if masks.shape[0] != iou_scores.shape[0]:
-            raise ValueError("masks and iou_scores must have the same batch size.")
-
-        batch_size = masks.shape[0]
-
-        keep_mask = tf.ones(batch_size, dtype=tf.bool)
-
-        if pred_iou_thresh > 0.0:
-            keep_mask = keep_mask & (iou_scores > pred_iou_thresh)
-
-        # compute stability score
-        if stability_score_thresh > 0.0:
-            stability_scores = _compute_stability_score_tf(masks, mask_threshold, stability_score_offset)
-            keep_mask = keep_mask & (stability_scores > stability_score_thresh)
-
-        scores = iou_scores[keep_mask]
-        masks = masks[keep_mask]
-
-        # binarize masks
-        masks = masks > mask_threshold
-        converted_boxes = _batched_mask_to_box_tf(masks)
-
-        keep_mask = ~_is_box_near_crop_edge_tf(
-            converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
-        )
-
-        scores = scores[keep_mask]
-        masks = masks[keep_mask]
-        converted_boxes = converted_boxes[keep_mask]
-
-        masks = _pad_masks_tf(masks, cropped_box_image, original_height, original_width)
-        # conversion to rle is necessary to run non-maximum suppresion
-        masks = _mask_to_rle_tf(masks)
 
         return masks, scores, converted_boxes
 
@@ -1221,16 +1082,6 @@ def _pad_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
     pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
     pad = (left, pad_x - left, top, pad_y - top)
     return torch.nn.functional.pad(masks, pad, value=0)
-
-
-def _pad_masks_tf(masks, crop_box: List[int], orig_height: int, orig_width: int):
-    left, top, right, bottom = crop_box
-    if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
-        return masks
-    # Coordinate transform masks
-    pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
-    pad = (left, pad_x - left, top, pad_y - top)
-    return tf.pad(masks, pad, constant_values=0)
 
 
 def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
