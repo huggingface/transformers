@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,10 +116,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
         pass
 
     @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")

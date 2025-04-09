@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import dataclasses
-import io
 import itertools
 import json
 import os
@@ -405,7 +404,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demostrating that this issue is
+        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
         # exclusive to DeepSpeed
         bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
@@ -436,9 +435,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
         }
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
@@ -628,7 +627,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
-            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #

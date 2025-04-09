@@ -240,7 +240,8 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->DepthAnything,dpt->depth_anything
+# Modified from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->DepthAnything,dpt->depth_anything
+# avoiding sdpa and flash_attn_2 support, it's done in the backend
 class DepthAnythingPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

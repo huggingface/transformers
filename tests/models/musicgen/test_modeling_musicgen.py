@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -969,12 +968,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.audio_channels = 2
         super().test_greedy_generate_dict_outputs()
         self.model_tester.audio_channels = original_audio_channels
-
-    @unittest.skip(
-        reason="MusicgenModel is actually not the base of MusicgenForCausalLM as the latter is a composit model"
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @require_flash_attn
     @require_torch_gpu

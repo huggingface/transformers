@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +86,7 @@ class TFBartModelTester:
             clip_value_min=self.eos_token_id + 1,
             clip_value_max=self.vocab_size + 1,
         )
-        # Explicity add "end of sequence" to the inputs
+        # Explicitly add "end of sequence" to the inputs
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
@@ -225,7 +224,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 
