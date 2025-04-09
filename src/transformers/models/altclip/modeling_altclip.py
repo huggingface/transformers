@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -32,7 +32,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, torch_int
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    logging,
+    replace_return_docstrings,
+    torch_int,
+)
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -619,6 +626,7 @@ class AltRobertaEncoder(nn.Module):
         self.layer = nn.ModuleList([AltRobertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -630,8 +638,7 @@ class AltRobertaEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -684,18 +691,6 @@ class AltRobertaEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -907,6 +902,7 @@ class AltCLIPEncoder(nn.Module):
         self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -914,8 +910,7 @@ class AltCLIPEncoder(nn.Module):
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -949,7 +944,6 @@ class AltCLIPEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -982,8 +976,6 @@ class AltCLIPEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1141,6 +1133,7 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
     def forward(
@@ -1148,9 +1141,8 @@ class AltCLIPVisionTransformer(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1159,7 +1151,6 @@ class AltCLIPVisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1167,19 +1158,15 @@ class AltCLIPVisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1202,6 +1189,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
     def forward(
@@ -1210,8 +1198,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1234,14 +1221,11 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
 
@@ -1305,8 +1289,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1331,7 +1314,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1394,7 +1376,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -1404,13 +1386,9 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1441,6 +1419,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         return super().resize_token_embeddings(new_num_tokens)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALTCLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndProjection, config_class=AltCLIPTextConfig)
     def forward(
@@ -1454,9 +1433,8 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndProjection]:
+    ) -> BaseModelOutputWithPoolingAndProjection:
         r"""
         Returns:
 
@@ -1476,10 +1454,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1490,11 +1465,10 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         # last module outputs
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         # project every module
         sequence_output = self.pre_LN(sequence_output)
@@ -1502,9 +1476,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         # pooler
         projection_state = self.transformation(sequence_output)
         pooler_output = projection_state[:, 0]
-
-        if not return_dict:
-            return (projection_state, pooler_output) + outputs[2:4]
 
         return BaseModelOutputWithPoolingAndProjection(
             last_hidden_state=projection_state,
@@ -1555,9 +1526,6 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         token_type_ids=None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1574,23 +1542,15 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use AltCLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=False,
+            output_hidden_states=False,
         )
-        pooled_output = text_outputs[1]
+        pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
         return text_features
@@ -1599,10 +1559,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1623,26 +1580,17 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use AltCLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_attentions=False,
+            output_hidden_states=False,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
-
-        pooled_output = vision_outputs[1]  # pooled_output
+        pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
-
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALTCLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AltCLIPOutput, config_class=AltCLIPConfig)
     def forward(
@@ -1656,8 +1604,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, AltCLIPOutput]:
+    ) -> AltCLIPOutput:
         r"""
         Returns:
 
@@ -1684,30 +1631,27 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1722,10 +1666,6 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         loss = None
         if return_loss:
             loss = clip_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return AltCLIPOutput(
             loss=loss,
