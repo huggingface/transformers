@@ -266,6 +266,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
             "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
             "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+            # For Fused implementation
+            "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",
+            "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
+            "layers.*.feed_forward.experts.down_proj": "local_colwise",
         }
         if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
             config.get_text_config().base_model_tp_plan = additional_text_plan
