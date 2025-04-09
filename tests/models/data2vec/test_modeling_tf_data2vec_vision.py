@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -168,7 +167,7 @@ class TFData2VecVisionModelTester:
     def prepare_config_and_inputs_for_keras_fit(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, _, _ = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros((self.batch_size))}
+        inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros(self.batch_size)}
         return config, inputs_dict
 
 

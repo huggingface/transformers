@@ -225,7 +225,7 @@ def distributed_broadcast_scalars(
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).to(device)
+        tensorized_scalar = torch.tensor(scalars, device=device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
