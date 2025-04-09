@@ -185,6 +185,7 @@ class RunCompressedTest(unittest.TestCase):
     def test_default_run_compressed__False(self):
         from compressed_tensors.linear.compressed_linear import CompressedLinear
         from compressed_tensors.quantization.utils import iter_named_leaf_modules
+
         from transformers.utils.quantization_config import CompressedTensorsConfig
 
         quantization_config = CompressedTensorsConfig(run_compressed=False)
