@@ -1362,6 +1362,7 @@ class MolmoSdpaAttention(MolmoAttention):
 
         return attn_output, None
 
+
 class MolmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -2140,9 +2141,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             valid_positions = image_token_indices_flat >= 0
             valid_indices = image_token_indices_flat[valid_positions].long()
             valid_features = image_features_flat[valid_positions]
-            valid_batch_indices = valid_batch_indices_expanded[
-                valid_positions\
-            ].long()
+            valid_batch_indices = valid_batch_indices_expanded[valid_positions].long()
 
             flat_indices = valid_batch_indices * seq_len + valid_indices
             inputs_embeds_flat = inputs_embeds.view(-1, hidden_size).clone()
