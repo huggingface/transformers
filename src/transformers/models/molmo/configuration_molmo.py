@@ -123,6 +123,8 @@ class MolmoPoolingConfig(PretrainedConfig):
             Dimensionality of the pooler attention layer.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer pooler.
+        num_key_value_heads (`int`, *optional*, defaults to 16): 
+            Number of kv heads for each attention layer in the Transformer pooler.
         head_dim (`int`, *optional*, defaults to 64):
             The poolinng attention head dimension.
         attention_dropout (`float`, *optional*, defaults to 0.0):

@@ -154,6 +154,8 @@ class MolmoPoolingConfig(PretrainedConfig):
             Dimensionality of the pooler attention layer.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer pooler.
+        num_key_value_heads (`int`, *optional*, defaults to 16): 
+            Number of kv heads for each attention layer in the Transformer pooler.
         head_dim (`int`, *optional*, defaults to 64):
             The poolinng attention head dimension.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -572,6 +574,7 @@ class MolmoTextDecoderLayer(Qwen2DecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -635,6 +638,7 @@ class MolmoTextDecoderLayer(Qwen2DecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
 
 class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
     def forward(

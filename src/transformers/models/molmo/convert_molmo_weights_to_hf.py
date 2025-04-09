@@ -298,7 +298,10 @@ def write_model(
         tokenizer.bos_token_id = tokenizer.eos_token_id
     elif variant == "7B-O":
         tokenizer = GPT2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
+        tokenizer.bos_token = tokenizer.eos_token
+        tokenizer.bos_token_id = tokenizer.eos_token_id
         tokenizer.save_pretrained(model_path)
+
     image_processor_class = MolmoImageProcessor if MolmoImageProcessorFast is None else MolmoImageProcessorFast
     image_processor = image_processor_class.from_pretrained(input_base_path)
     processor = MolmoProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=CHAT_TEMPLATE)
