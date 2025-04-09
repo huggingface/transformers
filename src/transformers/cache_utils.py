@@ -2029,6 +2029,8 @@ class OffloadedHybridCache(HybridChunkedCache):
         # Those will be dynamically created as the other layers (for TP)
         self.device_key_cache = None
         self.device_value_cache = None
+        # This gives the index of which on-device full layer to use
+        self.active_device_layer = 0
 
     def initialise_cache_layer(self, layer_idx, key_states):
         """Overriden to use the correct device if offloaded layer (and pin memory)."""
@@ -2057,12 +2059,16 @@ class OffloadedHybridCache(HybridChunkedCache):
 
         # Make sure to initialize the on-device layer if it does not already exist
         if self.device_key_cache is None and not self.is_sliding[layer_idx]:
-            device_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
-            device_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.device_key_cache = device_layer_key_cache
-            self.device_value_cache = device_layer_value_cache
+            self.device_key_cache = []
+            self.device_value_cache = []
+            # We need 2 layers to avoid race conditions when prefetching the next one
+            for _ in range(2):
+                device_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
+                device_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
+                self.device_key_cache.append(device_layer_key_cache)
+                self.device_value_cache.append(device_layer_value_cache)
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         # Wait for prefetch stream if needed
@@ -2070,8 +2076,8 @@ class OffloadedHybridCache(HybridChunkedCache):
             torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
 
         # Copy to on-device layer
-        self.device_key_cache[:, :, cache_position] = key_states
-        self.device_value_cache[:, :, cache_position] = value_states
+        self.device_key_cache[self.active_device_layer][:, :, cache_position] = key_states
+        self.device_value_cache[self.active_device_layer][:, :, cache_position] = value_states
 
         # Copy to offloaded device
         self.key_cache[layer_idx][:, :, cache_position] = key_states.to(self.offload_device)
@@ -2084,9 +2090,12 @@ class OffloadedHybridCache(HybridChunkedCache):
     def _prefetch_next_layer(self, layer_idx: int) -> None:
         """Based on current layer_idx, prefetch next full layer to the device."""
 
+        # Switch the active layer
+        self.active_device_layer = 0 if self.active_device_layer == 1 else 1
+
         # Find the next non-sliding layer
         try:
-            next_layer = layer_idx + self.is_sliding[layer_idx + 1 :].index(False)
+            next_layer = layer_idx + 1 + self.is_sliding[layer_idx + 1 :].index(False)
         # In this case, we are at the last layer, and we go back to prefect the first one
         except ValueError:
             next_layer = self.is_sliding.index(False)
@@ -2101,12 +2110,12 @@ class OffloadedHybridCache(HybridChunkedCache):
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
         if len(self.key_cache) >= layer_idx:
-            self.device_key_cache.copy_(self.key_cache[layer_idx], non_blocking=True)
-            self.device_value_cache.copy_(self.value_cache[layer_idx], non_blocking=True)
+            self.device_key_cache[self.active_device_layer].copy_(self.key_cache[layer_idx], non_blocking=True)
+            self.device_value_cache[self.active_device_layer].copy_(self.value_cache[layer_idx], non_blocking=True)
         # The layer was not yet initialized
         else:
-            self.device_key_cache.fill_(0.0)
-            self.device_value_cache.fill_(0.0)
+            self.device_key_cache[self.active_device_layer].fill_(0.0)
+            self.device_value_cache[self.active_device_layer].fill_(0.0)
 
 
 class MambaCache:
