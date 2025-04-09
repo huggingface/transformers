@@ -252,13 +252,12 @@ class GraniteSpeechConformerConvModule(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
         inner_dim = config.hidden_dim * config.conv_expansion_factor
-        padding = self.calc_same_padding(config.conv_kernel_size)
 
         self.norm = nn.LayerNorm(config.hidden_dim)
         self.up_conv = nn.Conv1d(config.hidden_dim, inner_dim * 2, 1)
         self.glu = nn.GLU(dim=1)
         self.depth_conv = GraniteSpeechConformerDepthWiseConv1d(
-            inner_dim, inner_dim, kernel_size=config.conv_kernel_size, padding=padding
+            inner_dim, inner_dim, kernel_size=config.conv_kernel_size,
         )
         self.silu = nn.SiLU()
         self.batch_norm = nn.BatchNorm1d(inner_dim)
@@ -285,9 +284,13 @@ class GraniteSpeechConformerConvModule(nn.Module):
 class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     """Wrapper for padded 1D pointwise convolution."""
 
-    def __init__(self, chan_in: int, chan_out: int, kernel_size: int, padding: Tuple[int, int]):
+    def __init__(self, chan_in: int, chan_out: int, kernel_size: int):
         super().__init__()
-        self.padding = padding
+        # Padding for the 1D conv is symmetric or close (i.e., offset by one).
+        pad = kernel_size // 2
+        pad_offset = (kernel_size + 1) % 2
+        self.padding = (pad, pad - pad_offset)
+
         self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
