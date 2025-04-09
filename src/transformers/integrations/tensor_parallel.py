@@ -219,7 +219,7 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        if isinstance(inputs[0], DTensor):
+        if inputs and isinstance(inputs[0], DTensor):
             inputs = inputs[0].to_local()
         return inputs
 

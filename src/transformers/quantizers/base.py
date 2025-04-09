@@ -220,7 +220,8 @@ class HfQuantizer(ABC):
         """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
-        self._convert_model_for_quantization(model)
+        if self.pre_quantized:
+            self._convert_model_for_quantization(model)
         return self._process_model_before_weight_loading(model, **kwargs)
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
@@ -337,4 +338,12 @@ class SequentialLlama4TextExperts(ModuleList):
         return routed_out
 
 
-MODULES_TO_PATCH_FOR_QUANTIZATION = {"Llama4TextExperts": SequentialLlama4TextExperts}
+MODULES_TO_PATCH_FOR_QUANTIZATION = {
+    "Llama4TextExperts": {
+        "module_name": SequentialLlama4TextExperts,
+        "quantization_methods": [
+            QuantizationMethod.COMPRESSED_TENSORS,
+            QuantizationMethod.BITS_AND_BYTES,
+        ],
+    }
+}
