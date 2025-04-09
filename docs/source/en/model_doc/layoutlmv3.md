@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # LayoutLMv3
 
-LayoutLMv3 is a powerful multimodal transformer model designed specifically for Document AI tasks. What makes it unique is its unified approach to handling both text and images in documents, using a simple yet effective architecture that combines patch embeddings with transformer layers. Unlike its predecessor LayoutLMv2, it uses a more streamlined approach with patch embeddings (similar to ViT) instead of a CNN backbone.
+[LayoutLMv3](https://huggingface.co/papers/2204.08387) is a multimodal transformer model designed specifically for Document AI tasks. It unites the pretraining objective for text and images, masked language and masked image modeling, and also includes a word-patch alignment objective for even stronger text and image alignment. The model architecture is also unified and uses a more streamlined approach with patch embeddings (similar to [ViT](./vit)) instead of a CNN backbone.
 
 The model is pre-trained on three key objectives:
 1. Masked Language Modeling (MLM) for text understanding
@@ -32,10 +32,11 @@ The model is pre-trained on three key objectives:
 
 This unified architecture and training approach makes LayoutLMv3 particularly effective for both text-centric tasks (like form understanding and receipt analysis) and image-centric tasks (like document classification and layout analysis).
 
-[Paper](https://arxiv.org/abs/2204.08387) | [Official Checkpoints](https://huggingface.co/microsoft/layoutlmv3-base)
+You can find all the original LayoutLMv3 checkpoints under the [LayoutLM](https://huggingface.co/collections/microsoft/layoutlm-6564539601de72cb631d0902) collection.  
+
 
 > [!TIP]
-> Click on the right sidebar for more examples of how to use the model for different tasks!
+> Click on the LayoutLMv3 models in the right sidebar for more examples of how to apply LayoutLMv3 to different vision and language tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -54,7 +55,7 @@ token_classifier = pipeline("token-classification", model="microsoft/layoutlmv3-
 result = token_classifier("form.jpg")
 
 # For question answering
-qa = pipeline("document-question-answering", model="microsoft/layoutlmv3-base")
+qa = pipeline(task="document-question-answering", model="microsoft/layoutlmv3-base", torch_dtype=torch.bfloat16, device=0)  
 result = qa(question="What is the total amount?", image="receipt.jpg")
 ```
 
@@ -86,25 +87,34 @@ transformers-cli document-classification "document.jpg" --model microsoft/layout
 </hfoption>
 </hfoptions>
 
-For large models, you can use quantization to reduce memory usage:
+For large models, you can use quantization to reduce memory usage. The example below demonstrates how to quantize the weights to 8-bit precision using the `TorchAoConfig` configuration.
 
 ```python
-from transformers import LayoutLMv3Processor, LayoutLMv3ForSequenceClassification
+# pip install torchao
 import torch
+from transformers import TorchAoConfig, LayoutLMv3ForSequenceClassification, AutoProcessor
 
-# Load model with 8-bit quantization
+# Define the quantization configuration
+quantization_config = TorchAoConfig("int8_weight_only", group_size=128)
+
+# Load the model with 8-bit quantization
 model = LayoutLMv3ForSequenceClassification.from_pretrained(
     "microsoft/layoutlmv3-base",
-    load_in_8bit=True,
-    device_map="auto"
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
 )
 
-# Or with 4-bit quantization
-model = LayoutLMv3ForSequenceClassification.from_pretrained(
-    "microsoft/layoutlmv3-base",
-    load_in_4bit=True,
-    device_map="auto"
-)
+# Load the processor
+processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+
+# Example input
+image_path = "document.jpg"
+inputs = processor(image_path, return_tensors="pt").to("cuda")
+
+# Perform inference
+outputs = model(**inputs)
+print(outputs)
 ```
 
 ## Notes
@@ -115,7 +125,6 @@ model = LayoutLMv3ForSequenceClassification.from_pretrained(
   Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
 - Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
 
-## Model Details
 
 ### LayoutLMv3Config
 
