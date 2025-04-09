@@ -66,7 +66,7 @@ class WrappedFlexAttention:
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
             self.training = training
-            if _torch_version == "2.6.0" and training:
+            if _torch_version.split("+")[0] == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
