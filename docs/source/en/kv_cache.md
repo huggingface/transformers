@@ -336,9 +336,9 @@ model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-# Init StaticCache with big enough max-length (1024 tokens for the below example) 
+# Init StaticCache with big enough max-length (1024 tokens for the below example)
 # You can also init a DynamicCache, if that suits you better
-prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
+prompt_cache = StaticCache(config=model.config, batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
 
 INITIAL_PROMPT = "You are a helpful assistant. "
 inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
@@ -351,7 +351,7 @@ responses = []
 for prompt in prompts:
     new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
     past_key_values = copy.deepcopy(prompt_cache)
-    outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20) 
+    outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20)
     response = tokenizer.batch_decode(outputs)[0]
     responses.append(response)
 

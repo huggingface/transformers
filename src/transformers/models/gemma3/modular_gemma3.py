@@ -620,7 +620,7 @@ class Gemma3TextModel(Gemma2Model):
             batch_size, seq_len, _ = inputs_embeds.shape
             past_key_values = HybridCache(
                 self.config,
-                max_batch_size=batch_size,
+                batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
             )

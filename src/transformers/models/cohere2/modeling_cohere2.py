@@ -565,7 +565,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
             # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             past_key_values = HybridCache(
                 self.config,
-                max_batch_size=batch_size,
+                batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
                 device=self.device,

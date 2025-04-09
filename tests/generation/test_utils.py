@@ -3979,7 +3979,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # TODO: We need to raise a warning in case the cache is not set correctly
         # with self.assertRaisesRegex(ValueError, "If you are manually initializing the cache"):
         #     past_key_values = StaticCache(
-        #         config=model.config, max_batch_size=1, max_cache_len=30, device=torch_device, dtype=model.dtype
+        #         config=model.config, batch_size=1, max_cache_len=30, device=torch_device, dtype=model.dtype
         #     )
         #     results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
@@ -3987,7 +3987,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         layer_device_map = {0: 0, 1: 1}
         past_key_values = StaticCache(
             config=model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=30,
             device=torch_device,
             dtype=model.dtype,
@@ -4189,7 +4189,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         query_length = input_ids.shape[-1] - init_input_ids.shape[-1]
         static_cache = StaticCache(
             config=config,
-            max_batch_size=batch_size,
+            batch_size=batch_size,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=torch.float32,
