@@ -761,8 +761,16 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
+        cond1 = first_cache_position >= attention_chunk_size
+        cond2 = (first_cache_position < attention_chunk_size) & (
+            first_cache_position + sequence_length > attention_chunk_size
+        )
         key_length = (
-            sequence_length if sequence_length > attention_chunk_size else attention_chunk_size
+            torch.where(
+                cond1,
+                attention_chunk_size + sequence_length - 1,
+                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+            )
             if use_cache
             else full_cache_length
         )
@@ -797,13 +805,15 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if full_cache_length > self.config.attention_chunk_size:
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
-                start=first_cache_position,
-                end=first_cache_position + key_length,
+                start=max(last_cache_position - key_length, 0),  # same offset as with flex
+                end=last_cache_position+1,
                 device=device,
             )
-            chunked_attention_mask = chunked_attention_mask & attention_mask
-            if sequence_length == 1:
-                chunked_attention_mask = chunked_attention_mask[-1:]
+            # chunked_attention_mask = chunked_attention_mask & attention_mask[..., -sequence_length:]
+            # if sequence_length == 1:
+            #     chunked_attention_mask = chunked_attention_mask[-1:]
+            chunked_attention_mask = chunked_attention_mask[None, None, -sequence_length:, :]
+            chunked_attention_mask = chunked_attention_mask.expand(input_tensor.shape[0], -1, -1, -1)
             if self.config._attn_implementation == "eager":
                 chunked_attention_mask = (
                     chunked_attention_mask[None, None, :, :]
@@ -861,6 +871,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         token_pos = torch.arange(start, end).unsqueeze(0) - torch.arange(start, end).unsqueeze(1)
         mask = (block_pos == 0) & (token_pos <= 0)
         return mask.to(device)
+        
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
