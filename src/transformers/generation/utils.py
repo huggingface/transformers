@@ -1707,10 +1707,30 @@ class GenerationMixin:
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
         if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
-            cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+            inputs_embeds = model_kwargs["inputs_embeds"]
+            past_length = 0
+            if model_kwargs.get("past_key_values") is not None:
+                cache = model_kwargs["past_key_values"]
+                if not isinstance(cache, Cache):
+                    past_length = cache[0][0].shape[2]
+                elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                    past_length = cache.get_seq_length()
+            seq_len = inputs_embeds.shape[1]
+            cache_position = torch.arange(
+                    past_length, past_length + seq_len, dtype=torch.int64, device=inputs_embeds.device
+            )
         elif "decoder_inputs_embeds" in model_kwargs and self.config.is_encoder_decoder:
-            cache_position = (
-                torch.ones_like(model_kwargs["decoder_inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+            decoder_inputs_embeds = model_kwargs["decoder_inputs_embeds"]
+            past_length = 0
+            if model_kwargs.get("past_key_values") is not None:
+                cache = model_kwargs["past_key_values"]
+                if not isinstance(cache, Cache):
+                    past_length = cache[0][0].shape[2]
+                elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                    past_length = cache.get_seq_length()
+            seq_len = decoder_inputs_embeds.shape[1]
+            cache_position = torch.arange(
+                    past_length, past_length + seq_len, dtype=torch.int64, device=decoder_inputs_embeds.device
             )
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
