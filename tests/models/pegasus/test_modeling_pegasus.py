@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -288,19 +287,19 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -347,6 +346,19 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     @cached_property
     def model(self):
         return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+
+    @slow
+    def test_device_map(self):
+        model_no_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+        model_with_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name, device_map="auto")
+        assert torch.equal(
+            model_no_device_map.model.decoder.embed_positions.weight,
+            model_with_device_map.model.decoder.embed_positions.weight,
+        )
+        assert torch.equal(
+            model_no_device_map.model.encoder.embed_positions.weight,
+            model_with_device_map.model.encoder.embed_positions.weight,
+        )
 
     @slow
     @require_torch_fp16

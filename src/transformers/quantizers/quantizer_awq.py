@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from packaging import version
 
@@ -92,17 +92,21 @@ class AwqQuantizer(HfQuantizer):
         if torch_dtype is None:
             torch_dtype = torch.float16
             logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
+        elif torch_dtype == torch.bfloat16:
+            logger.warning("`torch.bfloat16` is not supported for AWQ kernels yet. Casting to `torch.float16`.")
+            torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import get_keys_to_not_convert, replace_quantization_scales, replace_with_awq_linear
+    def _process_model_before_weight_loading(
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+    ):
+        from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
+        )
 
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert

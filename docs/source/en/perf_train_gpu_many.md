@@ -19,6 +19,8 @@ Multi-GPU setups are effective for accelerating training and fitting large model
 
 This guide will discuss the various parallelism methods, combining them, and choosing an appropriate strategy for your setup. For more details about distributed training, refer to the [Accelerate](https://hf.co/docs/accelerate/index) documentation.
 
+For a comprehensive guide on scaling large language models, check out the [Ultrascale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook), which provides detailed strategies and best practices for training at scale.
+
 ## Scalability strategy
 
 Use the [Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) to calculate how much memory a model requires. Then refer to the table below to select a strategy based on your setup.
