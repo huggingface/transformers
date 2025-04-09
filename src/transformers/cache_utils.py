@@ -2029,7 +2029,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         # Those will be dynamically created as the other layers (for TP)
         self.device_key_cache = None
         self.device_value_cache = None
-        # This gives the index of which on-device full layer to use
+        # This gives the index of which on-device full layer to use (we need 2 to avoid race conditions when prefetching)
         self.active_device_layer = 0
 
     def initialise_cache_layer(self, layer_idx, key_states):
