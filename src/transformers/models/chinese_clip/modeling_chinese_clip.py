@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -36,6 +36,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -924,6 +925,7 @@ class ChineseCLIPTextEncoder(nn.Module):
         self.layer = nn.ModuleList([ChineseCLIPTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -935,8 +937,7 @@ class ChineseCLIPTextEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -989,18 +990,6 @@ class ChineseCLIPTextEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -1025,13 +1014,13 @@ class ChineseCLIPVisionEncoder(nn.Module):
         self.layers = nn.ModuleList([ChineseCLIPVisionLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1051,7 +1040,6 @@ class ChineseCLIPVisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1080,8 +1068,6 @@ class ChineseCLIPVisionEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1098,6 +1084,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         self.encoder = ChineseCLIPVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ChineseCLIPVisionConfig)
     def forward(
@@ -1106,8 +1093,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
         """
@@ -1115,7 +1101,6 @@ class ChineseCLIPVisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1123,19 +1108,15 @@ class ChineseCLIPVisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1191,6 +1172,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1211,8 +1193,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1237,7 +1218,6 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1300,7 +1280,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -1310,13 +1290,9 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1346,6 +1322,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ChineseCLIPVisionConfig)
     def forward(
@@ -1354,8 +1331,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1378,14 +1354,11 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
 
@@ -1425,6 +1398,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
@@ -1432,9 +1406,6 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1453,36 +1424,24 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> text_features = model.get_text_features(**inputs)
         >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
-        # Use CHINESE_CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=False,
+            output_hidden_states=False,
         )
-
-        pooled_output = text_outputs[0][:, 0, :]
+        pooled_output = text_outputs.last_hidden_state[:, 0, :]
         text_features = self.text_projection(pooled_output)
-
         return text_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1507,26 +1466,17 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         >>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
-        # Use CHINESE_CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_attentions=False,
+            output_hidden_states=False,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
-
-        pooled_output = vision_outputs[1]  # pooled_output
+        pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
-
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ChineseCLIPOutput, config_class=ChineseCLIPConfig)
     def forward(
@@ -1540,8 +1490,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ChineseCLIPOutput]:
+    ) -> ChineseCLIPOutput:
         r"""
         Returns:
 
@@ -1569,30 +1518,27 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[0][:, 0, :]
+        text_embeds = text_outputs.last_hidden_state[:, 0, :]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1607,14 +1553,6 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         loss = None
         if return_loss:
             loss = chinese_clip_loss(logits_per_text)
-
-        if not return_dict:
-            # fix the None pooled_output of text_outputs to conform with dict_output
-            pooled_output = text_outputs[1]
-            if pooled_output is None:
-                text_outputs = (text_outputs[0],) + text_outputs[2:]
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return ChineseCLIPOutput(
             loss=loss,
