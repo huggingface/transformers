@@ -336,7 +336,7 @@ class DeepseekV3Attention(nn.Module):
         else:
             q_states = self.q_proj(hidden_states)
 
-        q_states = q_states.view(batch_size, seq_length, self.num_heads, self.qk_head_dim).transpose(1, 2)
+        q_states = q_states.reshape(batch_size, seq_length, self.num_heads, self.qk_head_dim).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
