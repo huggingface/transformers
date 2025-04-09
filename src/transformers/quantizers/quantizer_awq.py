@@ -102,15 +102,11 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
     ):
-        from ..integrations import get_keys_to_not_convert, replace_quantization_scales, replace_with_awq_linear
+        from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
-
-        if keep_in_fp32_modules is not None:
-            self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
+        )
 
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert

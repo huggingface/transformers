@@ -263,14 +263,17 @@ class HfQuantizer(ABC):
         model: "PreTrainedModel",
         skip_modules: Optional[List[str]] = None,
         keep_in_fp32_modules: Optional[List[str]] = None,
+        add_default_skips: bool = False,
     ):
         from ..integrations import get_keys_to_not_convert
 
-        modules_to_not_convert = []
-        if skip_modules is None:
+        if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            modules_to_not_convert = skip_modules
+            modules_to_not_convert = []
+
+        if skip_modules is not None:
+            modules_to_not_convert.extend(skip_modules)
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
