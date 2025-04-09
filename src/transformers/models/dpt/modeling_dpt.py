@@ -66,7 +66,7 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: torch.FloatTensor = None
+    last_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -99,8 +99,8 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -855,6 +855,9 @@ class DPTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
 
 
 DPT_START_DOCSTRING = r"""

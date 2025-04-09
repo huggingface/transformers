@@ -651,6 +651,8 @@ class IBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, IBertLMHead):
+            module.bias.data.zero_()
 
     def resize_token_embeddings(self, new_num_tokens=None):
         raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")

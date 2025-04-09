@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,8 +33,9 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FSMTTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -64,22 +64,22 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-        self.langs = ["en", "ru"]
+        cls.langs = ["en", "ru"]
         config = {
-            "langs": self.langs,
+            "langs": cls.langs,
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
 
-        self.src_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["src_vocab_file"])
-        self.tgt_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["tgt_vocab_file"])
-        config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.src_vocab_file, "w") as fp:
+        cls.src_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["src_vocab_file"])
+        cls.tgt_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["tgt_vocab_file"])
+        config_file = os.path.join(cls.tmpdirname, "tokenizer_config.json")
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.src_vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(self.tgt_vocab_file, "w") as fp:
+        with open(cls.tgt_vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(self.merges_file, "w") as fp:
+        with open(cls.merges_file, "w") as fp:
             fp.write("\n".join(merges))
         with open(config_file, "w") as fp:
             fp.write(json.dumps(config))

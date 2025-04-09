@@ -92,7 +92,7 @@ class TestAddNewModelLike(unittest.TestCase):
             f.write(content)
 
     def check_result(self, file_name, expected_result):
-        with open(file_name, "r", encoding="utf-8") as f:
+        with open(file_name, encoding="utf-8") as f:
             result = f.read()
             self.assertEqual(result, expected_result)
 

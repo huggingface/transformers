@@ -193,7 +193,7 @@ class HqqHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer is processsed here.
+        Each nn.Linear layer is processed here.
         We first check if the corresponding module state_dict contains already HQQ quantized parameters.
         If not, we create a temp linear layer with the module state_dict params and use it for quantization
         """

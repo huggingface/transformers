@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 from parameterized import parameterized
@@ -86,7 +85,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
     @parameterized.expand([(0,), ([0, 18],)])
-    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, list[int]]):
         vocab_size = 20
         batch_size = 4
 
@@ -976,7 +975,8 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids[:, -1] = 10
         scores_wo_bias = scores[:, -1].clone()
         out = watermark(input_ids=input_ids, scores=scores)
-        self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
+        greenlist_id = 3 if torch_device == "xpu" else 1
+        self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
 
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):

@@ -164,7 +164,7 @@ class Pop2PianoLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # Pop2Piano uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -1214,7 +1214,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         input_features: torch.FloatTensor,
         composer: str,
         generation_config: GenerationConfig,
-        attention_mask: torch.FloatTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
     ):
         """
         This method is used to concatenate mel conditioner tokens at the front of the input_features in order to

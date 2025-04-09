@@ -242,7 +242,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -255,6 +255,11 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, SeparableConv1D):
+            module.bias.data.zero_()
+        elif isinstance(module, GroupedLinearLayer):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.bias.data.zero_()
 
 
 class SeparableConv1D(nn.Module):

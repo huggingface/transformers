@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 import numpy as np
 
@@ -148,7 +147,7 @@ if __name__ == "__main__":
     for dataset_length in [101, 40, 7]:
         dataset = DummyDataset(dataset_length)
 
-        def compute_metrics(p: EvalPrediction) -> Dict:
+        def compute_metrics(p: EvalPrediction) -> dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
             if not success and training_args.local_rank == 0:
@@ -200,6 +199,8 @@ if __name__ == "__main__":
     model = RegressionModel()
     training_args.per_device_train_batch_size = 1
     training_args.max_steps = 1
-    training_args.dispatch_batches = False
+    training_args.accelerator_config = {
+        "dispatch_batches": False,
+    }
     trainer = Trainer(model, training_args, train_dataset=train_dataset)
     trainer.train()

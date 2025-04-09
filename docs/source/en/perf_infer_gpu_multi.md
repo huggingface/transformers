@@ -44,11 +44,6 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# initialize distributed environment
-rank = int(os.environ["RANK"])
-device = torch.device(f"cuda:{rank}")
-torch.cuda.set_device(device)
-torch.distributed.init_process_group("nccl", device_id=device)
 
 # enable tensor parallelism
 model = AutoModelForCausalLM.from_pretrained(
@@ -59,7 +54,7 @@ model = AutoModelForCausalLM.from_pretrained(
 # prepare input tokens
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 prompt = "Can I help"
-inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 
 # distributed run
 outputs = model(inputs)
@@ -70,6 +65,13 @@ Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/
 ```bash
 torchrun --nproc-per-node 4 demo.py
 ```
+
+For CPU, please binding different socket on each rank. For example, if you are using Intel 4th Gen Xeon:
+```bash
+export OMP_NUM_THREADS=56
+numactl -C 0-55 -m 0 torchrun --nnodes=2 --node_rank=0 --master_addr="127.0.0.1" --master_port=29500 --nproc-per-node 1 demo.py & numactl -C 56-111 -m 1 torchrun --nnodes=2 --node_rank=1 --master_addr="127.0.0.1" --master_port=29500 --nproc-per-node 1 demo.py & wait
+```
+The CPU benchmark data will be released soon.
 
 You can benefit from considerable speed ups for inference, especially for inputs with large batch size or long sequences.
 

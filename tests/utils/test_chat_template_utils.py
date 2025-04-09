@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
@@ -119,7 +119,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_nested_list(self):
-        def fn(x: List[List[Union[str, int]]]):
+        def fn(x: list[list[Union[str, int]]]):
             """
             Test function
 
@@ -173,7 +173,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_multiple_complex_arguments(self):
-        def fn(x: List[Union[int, float]], y: Optional[Union[int, str]] = None):
+        def fn(x: list[Union[int, float]], y: Optional[Union[int, str]] = None):
             """
             Test function
 
@@ -283,7 +283,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_tuple(self):
-        def fn(x: Tuple[int, str]):
+        def fn(x: tuple[int, str]):
             """
             Test function
 
@@ -315,7 +315,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_single_element_tuple_fails(self):
-        def fn(x: Tuple[int]):
+        def fn(x: tuple[int]):
             """
             Test function
 
@@ -333,7 +333,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             get_json_schema(fn)
 
     def test_ellipsis_type_fails(self):
-        def fn(x: Tuple[int, ...]):
+        def fn(x: tuple[int, ...]):
             """
             Test function
 
@@ -446,8 +446,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
     def test_everything_all_at_once(self):
         def fn(
-            x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")
-        ) -> Tuple[int, str]:
+            x: str, y: Optional[list[Union[str, int]]], z: tuple[Union[str, int], str] = (42, "hello")
+        ) -> tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
 

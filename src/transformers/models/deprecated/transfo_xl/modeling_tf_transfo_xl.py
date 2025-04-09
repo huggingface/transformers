@@ -690,7 +690,7 @@ class TFTransfoXLModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -723,7 +723,7 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    prediction_scores: tf.Tensor = None
+    prediction_scores: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -757,7 +757,7 @@ class TFTransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -1095,9 +1095,9 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 batch_size, sequence_length = shape_list(input_ids)[:2]
             else:
                 batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            assert (
-                self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            assert self.config.pad_token_id is not None or batch_size == 1, (
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]

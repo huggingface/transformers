@@ -75,13 +75,13 @@ class TvltModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    last_pixel_hidden_state: torch.FloatTensor = None
-    last_audio_hidden_state: torch.FloatTensor = None
-    pixel_label_masks: torch.LongTensor = None
-    audio_label_masks: torch.LongTensor = None
-    pixel_ids_restore: torch.LongTensor = None
-    audio_ids_restore: torch.LongTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    last_pixel_hidden_state: Optional[torch.FloatTensor] = None
+    last_audio_hidden_state: Optional[torch.FloatTensor] = None
+    pixel_label_masks: Optional[torch.LongTensor] = None
+    audio_label_masks: Optional[torch.LongTensor] = None
+    pixel_ids_restore: Optional[torch.LongTensor] = None
+    audio_ids_restore: Optional[torch.LongTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -104,7 +104,7 @@ class TvltDecoderOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -136,9 +136,9 @@ class TvltForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    matching_logits: torch.FloatTensor = None
-    pixel_logits: torch.FloatTensor = None
-    audio_logits: torch.FloatTensor = None
+    matching_logits: Optional[torch.FloatTensor] = None
+    pixel_logits: Optional[torch.FloatTensor] = None
+    audio_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 

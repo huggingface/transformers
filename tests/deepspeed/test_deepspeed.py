@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import dataclasses
-import io
 import itertools
 import json
 import os
@@ -436,9 +435,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
         }
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.

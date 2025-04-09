@@ -201,7 +201,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
         "audio_encoder": AutoConfig,
         "decoder": MusicgenMelodyDecoderConfig,
     }
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(
         self,

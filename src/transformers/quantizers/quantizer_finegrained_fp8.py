@@ -1,7 +1,4 @@
-import importlib
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
-from packaging import version
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 from .base import HfQuantizer
@@ -32,7 +29,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+        if not is_torch_available():
             raise ImportError(
                 "Using fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
@@ -52,9 +49,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
-        if major < 9:
+        if (major < 8) or (major == 8 and minor < 9):
             raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                f", actual = `{major}.{minor}`"
             )
 
         device_map = kwargs.get("device_map", None)

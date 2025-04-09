@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import requests
@@ -229,8 +228,8 @@ class CLIPModelTesterMixin(ModelTesterMixin):
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
-        use_attention_mask_options: Tuple[Optional[str], ...] = (None, "left", "right"),
-        logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+        use_attention_mask_options: tuple[Optional[str], ...] = (None, "left", "right"),
+        logit_keys: tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -446,14 +445,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "openai/clip-vit-base-patch32"
@@ -626,14 +617,6 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow

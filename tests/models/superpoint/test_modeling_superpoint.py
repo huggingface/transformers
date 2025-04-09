@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import unittest
-from typing import List
 
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
@@ -43,7 +42,7 @@ class SuperPointModelTester:
         batch_size=3,
         image_width=80,
         image_height=60,
-        encoder_hidden_sizes: List[int] = [32, 32, 64, 64],
+        encoder_hidden_sizes: list[int] = [32, 32, 64, 64],
         decoder_hidden_size: int = 128,
         keypoint_decoder_dim: int = 65,
         descriptor_decoder_dim: int = 128,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 import unittest
 from pathlib import Path
-from typing import Dict, Union
+from typing import Union
 
 import numpy as np
 import pytest
@@ -35,7 +34,7 @@ if is_vision_available():
 AUTHORIZED_TYPES = ["string", "boolean", "integer", "number", "audio", "image", "any"]
 
 
-def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
+def create_inputs(tool_inputs: dict[str, dict[Union[str, type], str]]):
     inputs = {}
 
     for input_name, input_desc in tool_inputs.items():

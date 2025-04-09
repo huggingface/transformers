@@ -50,8 +50,8 @@ class EncodecOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_codes: torch.LongTensor = None
-    audio_values: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -64,8 +64,8 @@ class EncodecEncoderOutput(ModelOutput):
             Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
-    audio_codes: torch.LongTensor = None
-    audio_scales: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_scales: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -76,7 +76,7 @@ class EncodecDecoderOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class EncodecConv1d(nn.Module):
@@ -589,7 +589,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        padding_mask: torch.Tensor = None,
+        padding_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
@@ -617,8 +617,7 @@ class EncodecModel(EncodecPreTrainedModel):
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
             raise ValueError(
-                f"This model doesn't support the bandwidth {bandwidth}. "
-                f"Select one of {self.config.target_bandwidths}."
+                f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}."
             )
 
         _, channels, input_length = input_values.shape

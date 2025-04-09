@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,11 +38,12 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece_ignore_case = True
     pre_trained_model_path = "google/rembert"
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     # Copied from ReformerTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
@@ -222,7 +222,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                        tokenizer_fast = self.get_rust_tokenizer(pretrained_name, eos_token=new_eos)
                         self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright

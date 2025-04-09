@@ -117,7 +117,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
     Args:
     """
 
-    probabilities: torch.Tensor = None
+    probabilities: Optional[torch.Tensor] = None
 
 
 class ShieldGemma2ForImageClassification(PreTrainedModel):
@@ -154,8 +154,8 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     @add_start_docstrings_to_model_forward(SHIELDGEMMA2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,

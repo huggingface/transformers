@@ -69,8 +69,8 @@ class ZoeDepthDepthEstimatorOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    predicted_depth: torch.FloatTensor = None
-    domain_logits: torch.FloatTensor = None
+    predicted_depth: Optional[torch.FloatTensor] = None
+    domain_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 

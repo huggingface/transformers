@@ -849,6 +849,22 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
     supports_binary_output=True,
 )
 
+SUPPORTED_PEFT_TASKS = {
+    "document-question-answering": ["PeftModelForQuestionAnswering"],
+    "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
+    "question-answering": ["PeftModelForQuestionAnswering"],
+    "summarization": ["PeftModelForSeq2SeqLM"],
+    "table-question-answering": ["PeftModelForQuestionAnswering"],
+    "text2text-generation": ["PeftModelForSeq2SeqLM"],
+    "text-classification": ["PeftModelForSequenceClassification"],
+    "sentiment-analysis": ["PeftModelForSequenceClassification"],
+    "text-generation": ["PeftModelForCausalLM"],
+    "token-classification": ["PeftModelForTokenClassification"],
+    "ner": ["PeftModelForTokenClassification"],
+    "translation": ["PeftModelForSeq2SeqLM"],
+    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
+    "zero-shot-classification": ["PeftModelForSequenceClassification"],
+}
 
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
@@ -947,12 +963,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if device == -1 and self.model.device is not None:
                 device = self.model.device
             if isinstance(device, torch.device):
-                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                if (device.type == "xpu" and not is_torch_xpu_available(check_device=True)) or (
+                    device.type == "hpu" and not is_torch_hpu_available()
+                ):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+
                 self.device = device
             elif isinstance(device, str):
-                if "xpu" in device and not is_torch_xpu_available(check_device=True):
+                if ("xpu" in device and not is_torch_xpu_available(check_device=True)) or (
+                    "hpu" in device and not is_torch_hpu_available()
+                ):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
@@ -975,6 +997,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
+        if torch.distributed.is_initialized():
+            self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
@@ -1201,6 +1225,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
             supported_models_names = []
+            if self.task in SUPPORTED_PEFT_TASKS:
+                supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
+
             for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):

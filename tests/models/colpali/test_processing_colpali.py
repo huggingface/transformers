@@ -27,16 +27,18 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColPaliProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.image_seq_length = 0
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     @require_vision

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -219,14 +218,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(

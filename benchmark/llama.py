@@ -118,7 +118,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
         with torch.no_grad():
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -144,7 +144,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -187,7 +187,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate + 10,
@@ -204,7 +204,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             time_to_first_token = end - start
             logger.info(f"completed first compile generation in: {time_to_first_token}s")
             cache_position += 1
-            all_generated_tokens += next_token.clone().detach().cpu().tolist()
+            all_generated_tokens += next_token.tolist()
 
             cache_position = torch.tensor([seq_length], device=device)
             ### First compile, decoding
@@ -215,9 +215,9 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_second_token = end - start
-            logger.info(f"completed second compile generation in: {time_to_first_token}s")
+            logger.info(f"completed second compile generation in: {time_to_second_token}s")
             cache_position += 1
-            all_generated_tokens += next_token.clone().detach().cpu().tolist()
+            all_generated_tokens += next_token.tolist()
 
             ### Second compile, decoding
             start = perf_counter()
@@ -227,15 +227,15 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_third_token = end - start
-            logger.info(f"completed third compile forward in: {time_to_first_token}s")
+            logger.info(f"completed third compile forward in: {time_to_third_token}s")
             cache_position += 1
-            all_generated_tokens += next_token.clone().detach().cpu().tolist()
+            all_generated_tokens += next_token.tolist()
 
             ### Using cuda graphs decoding
 
             start = perf_counter()
             for _ in range(1, num_tokens_to_generate):
-                all_generated_tokens += next_token.clone().detach().cpu().tolist()
+                all_generated_tokens += next_token.tolist()
                 next_token = decode_one_token(
                     model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
                 )
@@ -254,7 +254,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -271,7 +271,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -287,7 +287,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -298,12 +298,12 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             third_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+            logger.info(f"completed third compile generation in: {third_compile_generate_time}s")
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -313,7 +313,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             fourth_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+            logger.info(f"completed fourth compile generation in: {fourth_compile_generate_time}s")
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         metrics_recorder.collect_model_measurements(

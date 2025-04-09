@@ -487,6 +487,12 @@ class DeiTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DeiTEmbeddings):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
+            module.distillation_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
 DEIT_START_DOCSTRING = r"""
@@ -899,9 +905,9 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    distillation_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

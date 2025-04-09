@@ -164,6 +164,10 @@ visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
 visualizer("<img>What is shown in this image?")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-3-attn-mask.png"/>
+</div>
+
 ## Notes
 
 - Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.
@@ -204,7 +208,7 @@ visualizer("<img>What is shown in this image?")
     +   do_pan_and_scan=True,
         ).to("cuda")
     ```
-- For text-only inputs, use [`AutoModelForCausalLM`] instead to skip loading the vision components and save resources.
+- For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
     ```py
     import torch

@@ -36,11 +36,12 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
 @require_torch
 class SpeechT5ProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         tokenizer = SpeechT5Tokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
         feature_extractor_map = {
             "feature_size": 1,
@@ -58,8 +59,8 @@ class SpeechT5ProcessorTest(unittest.TestCase):
             "return_attention_mask": True,
         }
 
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
     def get_tokenizer(self, **kwargs):
@@ -68,8 +69,9 @@ class SpeechT5ProcessorTest(unittest.TestCase):
     def get_feature_extractor(self, **kwargs):
         return SpeechT5FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
@@ -87,15 +89,20 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = SpeechT5Processor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = SpeechT5Processor(
+                tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = SpeechT5Tokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
+            feature_extractor_add_kwargs = SpeechT5FeatureExtractor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
-        processor = SpeechT5Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = SpeechT5Processor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, SpeechT5Tokenizer)

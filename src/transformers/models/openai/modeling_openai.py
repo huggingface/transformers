@@ -318,8 +318,8 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     mc_loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mc_logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    mc_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

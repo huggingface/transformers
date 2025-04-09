@@ -13,14 +13,16 @@ class ExpectationsTest(unittest.TestCase):
                 ("rocm", 8): 4,
                 ("rocm", None): 5,
                 ("cpu", None): 6,
+                ("xpu", 3): 7,
             }
         )
 
         def check(value, key):
             assert expectations.find_expectation(key) == value
 
-        # xpu has no matches so should find default expectation
-        check(1, ("xpu", None))
+        # npu has no matches so should find default expectation
+        check(1, ("npu", None))
+        check(7, ("xpu", 3))
         check(2, ("cuda", 8))
         check(3, ("cuda", 7))
         check(4, ("rocm", 9))

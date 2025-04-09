@@ -33,7 +33,6 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralPreTrainedModel,
-    MistralRotaryEmbedding,
     eager_attention_forward,
     rotate_half,
 )
@@ -242,55 +241,6 @@ class Phi3DecoderLayer(MistralDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
-
-
-class Phi3RotaryEmbedding(MistralRotaryEmbedding):
-    def __init__(self, config: Phi3Config, device=None):
-        super().__init__(config, device)
-
-    def _longrope_frequency_update(self, position_ids, device):
-        """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
-        seq_len = torch.max(position_ids) + 1
-        if hasattr(self.config, "original_max_position_embeddings"):
-            original_max_position_embeddings = self.config.original_max_position_embeddings
-        else:
-            original_max_position_embeddings = self.config.max_position_embeddings
-        if seq_len > original_max_position_embeddings:
-            if not hasattr(self, "long_inv_freq"):
-                self.long_inv_freq, _ = self.rope_init_fn(
-                    self.config, device, seq_len=original_max_position_embeddings + 1
-                )
-            self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
-        else:
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-        elif self.rope_type == "longrope":
-            self._longrope_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class Phi3PreTrainedModel(MistralPreTrainedModel):

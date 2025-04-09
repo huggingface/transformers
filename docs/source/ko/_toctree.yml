@@ -720,6 +720,8 @@
         title: (번역중) Perceiver
       - local: in_translation
         title: (번역중) Pix2Struct
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
       - local: in_translation
