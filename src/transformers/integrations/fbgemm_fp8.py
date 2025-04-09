@@ -207,9 +207,6 @@ def _replace_with_fbgemm_fp8_linear(
                 (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
-                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[
-                        re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")
-                    ]
                     tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                     model._modules[name] = FbgemmFp8Llama4TextExperts(
                         config.text_config,

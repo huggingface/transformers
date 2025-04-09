@@ -345,7 +345,6 @@ MODULES_TO_PATCH_FOR_QUANTIZATION = {
         "quantization_methods": [
             QuantizationMethod.COMPRESSED_TENSORS,
             QuantizationMethod.BITS_AND_BYTES,
-            QuantizationMethod.FBGEMM_FP8,
         ],
     }
 }
