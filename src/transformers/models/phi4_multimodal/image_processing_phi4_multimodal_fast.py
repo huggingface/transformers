@@ -79,7 +79,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height):
+    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
         best_ratio_diff = float("inf")
         best_ratio = (1, 1)
         area = width * height
@@ -90,7 +90,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
                 best_ratio_diff = ratio_diff
                 best_ratio = ratio
             elif ratio_diff == best_ratio_diff:
-                if area > 0.5 * self.image_size * self.image_size * ratio[0] * ratio[1]:
+                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
                     best_ratio = ratio
         return best_ratio
 
@@ -113,7 +113,9 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
             # find the closest aspect ratio to the target
-            target_aspect_ratio = self.find_closest_aspect_ratio(aspect_ratio, target_ratios, orig_width, orig_height)
+            target_aspect_ratio = self.find_closest_aspect_ratio(
+                aspect_ratio, target_ratios, orig_width, orig_height, image_size
+            )
 
             # calculate the target width and height
             target_width = image_size * target_aspect_ratio[0]
