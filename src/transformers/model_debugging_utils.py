@@ -233,7 +233,7 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
                     "children": [],
                 }
                 model._debugger_model_call_stack.append(node)
-            with torch.inference_mode():
+            with torch.no_grad():
                 out = orig_forward(*inps, **kws)
 
             if _is_rank_zero():
@@ -291,28 +291,6 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
 
     model.forward = top_wrapped_forward
 
-    # # Final hook for writing JSON on forward-end
-    # def final_hook(_, inputs, outputs):
-    #     if _is_rank_zero() and model._debugger_model_call_stack:
-    #         finished = model._debugger_model_call_stack.pop()
-    #         model._call_tree["inputs"] = finished["inputs"]
-    #         model._call_tree["outputs"] = finished["outputs"]
-    #         model._call_tree["children"] = finished["children"]
-
-    #     if _is_rank_zero():
-    #         log_model_debug_trace(debug_path=debug_path, model=model)
-
-    # model.register_forward_hook(final_hook)
-    # # Optionally also for a couple possible hooks that have specific names. It should be just one.
-    # # This means modules that are not typically called "forward" within the model. But we should not need to recurse
-    # # through them.
-    # possible_model_calls = ["language_model", "model"]
-    # for model_call in possible_model_calls:
-    #     this_model_call = getattr(model, model_call, None)
-    #     if this_model_call and isinstance(this_model_call, (nn.Module, PreTrainedModel)):
-    #         this_model_call.register_forward_hook(final_hook)
-    #         break  # exit the loop after finding one (unsure, but should be just one call.)
-
 
 @export(backends=("torch",))
 def model_addition_debugger(cls):
@@ -320,7 +298,7 @@ def model_addition_debugger(cls):
     # Model addition debugger - a model adder tracer
     This decorator is a power user tool intended for model adders.
     It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
-    To note, this decorator enforces `torch.inference_mode()`.
+    To note, this decorator enforces `torch.no_grad()`.
     ## Usage
 
     add decorator to your model class
@@ -378,7 +356,7 @@ def model_addition_debugger_context(model, debug_path: Optional[str] = None):
     # Model addition debugger - context manager for model adders
     This context manager is a power user tool intended for model adders.
     It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
-    To note, this context manager enforces `torch.inference_mode()`.
+    To note, this context manager enforces `torch.no_grad()`.
 
     ## Usage
 
