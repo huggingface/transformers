@@ -493,8 +493,6 @@ class GemmaForCausalLM(LlamaForCausalLM):
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-        Returns:
-
         Example:
 
         ```python
