@@ -47,10 +47,7 @@ from transformers.utils import (
 
 
 if is_torch_available():
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
     from transformers.trainer import FSDP_MODEL_NAME
-else:
-    is_torch_greater_or_equal_than_2_1 = False
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
@@ -260,7 +257,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @run_first
     @slow
-    @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
