@@ -739,6 +739,7 @@ _import_structure = {
     ],
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
+        "Qwen2_5_VLTextConfig",
         "Qwen2_5_VLProcessor",
     ],
     "models.qwen2_audio": [
@@ -749,6 +750,7 @@ _import_structure = {
     "models.qwen2_moe": ["Qwen2MoeConfig"],
     "models.qwen2_vl": [
         "Qwen2VLConfig",
+        "Qwen2VLTextConfig",
         "Qwen2VLProcessor",
     ],
     "models.qwen3": ["Qwen3Config"],
@@ -6038,6 +6040,7 @@ if TYPE_CHECKING:
     from .models.qwen2_5_vl import (
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
+        Qwen2_5_VLTextConfig,
     )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
@@ -6048,6 +6051,7 @@ if TYPE_CHECKING:
     from .models.qwen2_vl import (
         Qwen2VLConfig,
         Qwen2VLProcessor,
+        Qwen2VLTextConfig,
     )
     from .models.qwen3 import Qwen3Config
     from .models.qwen3_moe import Qwen3MoeConfig
