@@ -1858,6 +1858,22 @@ class _LazyModule(ModuleType):
 
             for backends, module in import_structure.items():
                 missing_backends = []
+
+                # This ensures that if a module is importable, then all other keys of the module are importable.
+                # As an example, in module.keys() we might have the following:
+                #
+                # dict_keys(['models.nllb_moe.configuration_nllb_moe', 'models.sew_d.configuration_sew_d'])
+                #
+                # with this, we don't only want to be able to import these explicitely, we want to be able to import
+                # every intermediate module as well. Therefore, this is what is returned:
+                #
+                # {
+                #     'models.nllb_moe.configuration_nllb_moe',
+                #     'models.sew_d.configuration_sew_d',
+                #     'models',
+                #     'models.sew_d', 'models.nllb_moe'
+                # }
+
                 module_keys = set(
                     chain(*[[k.rsplit(".", i)[0] for i in range(k.count(".") + 1)] for k in list(module.keys())])
                 )

@@ -491,6 +491,7 @@ class ChatCommand(BaseTransformersCLICommand):
             user = args.user
 
         model, tokenizer = load_model_and_tokenizer(args)
+        print(model.device)
         generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         pad_token_id, eos_token_ids = parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
