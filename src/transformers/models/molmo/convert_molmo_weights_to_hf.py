@@ -150,7 +150,6 @@ def write_model(
     safe_serialization=True,
 ):
     os.makedirs(model_path, exist_ok=True)
-    torch_dtype = torch.bfloat16
 
     if os.path.isdir(input_base_path):
         weight_files = glob.glob(os.path.join(input_base_path, "model-000*"))
@@ -241,8 +240,12 @@ def write_model(
                 ).clone()
                 state_dict[new_key.replace("qkv_proj", "v_proj")] = v_proj.clone()
             del state_dict[new_key]
-        elif "q_norm" in new_key or "k_norm" in new_key:
+        elif "q_norm" in new_key :
+
             state_dict[new_key] = state_dict[new_key].reshape(config.text_config.num_attention_heads, -1)
+        elif "k_norm" in new_key:
+
+            state_dict[new_key] = state_dict[new_key].reshape(config.text_config.num_key_value_heads, -1)
 
     gc.collect()
     print("Loading the checkpoint in a Molmo model.")

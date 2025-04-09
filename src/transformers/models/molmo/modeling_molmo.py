@@ -50,6 +50,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_molmo import MolmoConfig, MolmoPoolingConfig, MolmoTextConfig, MolmoVisionConfig
 
 
@@ -58,7 +59,7 @@ if is_flash_attn_2_available():
 
 
 logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "MolmoTextConfig"
+_CONFIG_FOR_DOC = "MolmoConfig"
 
 
 @dataclass
@@ -126,7 +127,6 @@ class MolmoTextMLP(nn.Module):
 class MolmoTextRotaryEmbedding(nn.Module):
     def __init__(self, config: MolmoTextConfig, device=None):
         super().__init__()
-        self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -138,7 +138,7 @@ class MolmoTextRotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -150,13 +150,14 @@ class MolmoTextRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -397,8 +398,6 @@ class MolmoTextDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
-        hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -411,12 +410,16 @@ class MolmoTextDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+
+        hidden_states = self.input_layernorm(hidden_states)
+
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -520,9 +523,11 @@ class MolmoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -548,9 +553,11 @@ class MolmoTextPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -835,7 +842,7 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -934,6 +941,7 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MOLMO_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -949,7 +957,7 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
-        num_logits_to_keep=0,
+        logits_to_keep=0,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -959,8 +967,8 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
@@ -1005,7 +1013,8 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1087,7 +1096,7 @@ class MolmoVisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, patches, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=2)
         embeddings = embeddings + self.position_embedding(self.position_ids).unsqueeze(1)
-        return embeddings.flatten(0, 1)  # NOTE: DON'T FLATTEN MORE TO MATCH ORIG IMPL
+        return embeddings.flatten(0, 1)
 
 
 class MolmoAttention(nn.Module):
@@ -1336,13 +1345,14 @@ class MolmoSdpaAttention(MolmoAttention):
             value_states = value_states.contiguous()
 
         # MOLMO text model uses both `causal_attention_mask` and `attention_mask` sequentially.
+        print(self.scale, query_states.shape)
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            scale=self.scale,
+            # scale=self.scale,
         )
 
         attn_output = attn_output.transpose(1, 2)
@@ -1351,7 +1361,6 @@ class MolmoSdpaAttention(MolmoAttention):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None
-
 
 class MolmoMLP(nn.Module):
     def __init__(self, config):
@@ -1704,8 +1713,9 @@ class MolmoPoolingAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
-        self.scaling = self.head_dim**0.5
+        self.scaling = self.head_dim**-0.5
         self.is_causal = True
 
         self.dropout = config.attention_dropout
@@ -1748,7 +1758,6 @@ class MolmoPoolingAttention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -1895,8 +1904,10 @@ MOLMO_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
@@ -1931,6 +1942,10 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = MolmoForCausalLM._from_config(config.text_config)
+
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
 
@@ -1954,16 +1969,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1977,8 +1982,10 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`int`):
-                The index of the layer to select the vision feature.
+            vision_feature_layer (`Union[int, List[int]]`):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
@@ -2006,6 +2013,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         pass
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MOLMO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MolmoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -2026,7 +2034,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: int = 0,
     ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
         r"""
         Args:
@@ -2035,8 +2043,8 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
@@ -2103,9 +2111,9 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
             valid_crops_flat = valid_crops.view(-1)
 
-            all_pixel_values = pixel_values_flat[valid_crops_flat.to(pixel_values_flat.device)]
-            all_image_masks = image_masks_flat[valid_crops_flat.to(image_masks_flat.device)]
-            all_image_token_indices = image_token_indices_flat[valid_crops_flat.to(image_token_indices_flat.device)]
+            all_pixel_values = pixel_values_flat[valid_crops_flat]
+            all_image_masks = image_masks_flat[valid_crops_flat]
+            all_image_token_indices = image_token_indices_flat[valid_crops_flat]
 
             batch_indices = (
                 torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
@@ -2131,15 +2139,14 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
             valid_positions = image_token_indices_flat >= 0
             valid_indices = image_token_indices_flat[valid_positions].long()
-            valid_features = image_features_flat[valid_positions.to(image_features_flat.device)]
+            valid_features = image_features_flat[valid_positions]
             valid_batch_indices = valid_batch_indices_expanded[
-                valid_positions.to(valid_batch_indices_expanded.device)
+                valid_positions\
             ].long()
 
-            flat_indices = valid_batch_indices * seq_len + valid_indices.to(valid_batch_indices.device)
-            inputs_embeds_flat = inputs_embeds.view(-1, hidden_size)
-
-            inputs_embeds_flat.index_add_(0, flat_indices, valid_features.to(inputs_embeds_flat.device))
+            flat_indices = valid_batch_indices * seq_len + valid_indices
+            inputs_embeds_flat = inputs_embeds.view(-1, hidden_size).clone()
+            inputs_embeds_flat.index_add_(0, flat_indices, valid_features)
             inputs_embeds = inputs_embeds_flat.view(batch_size, seq_len, hidden_size)
 
         outputs = self.language_model(
@@ -2152,7 +2159,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
         )
 
         logits = outputs[0]
@@ -2184,7 +2191,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         image_token_indices=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         model_inputs = self.language_model.prepare_inputs_for_generation(
@@ -2193,7 +2200,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -2201,7 +2208,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_token_indices"] = image_token_indices
             model_inputs["image_masks"] = image_masks
-
+            model_inputs["attention_mask"] = attention_mask
         return model_inputs
 
 
