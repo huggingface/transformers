@@ -159,6 +159,11 @@ class GraniteSpeechConformerAttention(nn.Module):
         self.rel_pos_emb = nn.Embedding(2 * self.max_pos_emb + 1, self.dim_head)
         self.dropout = nn.Dropout(config.dropout)
 
+        # Precompute clamped relative positional encoding distances
+        seq = torch.arange(self.context_size)
+        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+        self.relpos_dist = torch.clamp(relpos_dist, -self.context_size, self.context_size) + self.max_pos_emb
+
         if self.context_size <= 0 or self.context_size > self.max_pos_emb:
             raise ValueError("Context size is either less than 0 or exceeds the max_pos_emb")
 
@@ -180,10 +185,8 @@ class GraniteSpeechConformerAttention(nn.Module):
         value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
 
         # shaw's relative positional embedding
-        seq = torch.arange(self.context_size, device=hidden_states.device)
-        dist = seq.view(-1, 1) - seq.view(1, -1)
-        dist = torch.clamp(dist, -self.context_size, self.context_size) + self.max_pos_emb
-        rel_pos_emb = self.rel_pos_emb(dist).to(query_states)
+        dist = self.relpos_dist.to(hidden_states.device)
+        rel_pos_emb = self.rel_pos_emb(dist)
         rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
         pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
 
