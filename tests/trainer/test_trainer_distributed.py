@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 import numpy as np
 
@@ -148,7 +147,7 @@ if __name__ == "__main__":
     for dataset_length in [101, 40, 7]:
         dataset = DummyDataset(dataset_length)
 
-        def compute_metrics(p: EvalPrediction) -> Dict:
+        def compute_metrics(p: EvalPrediction) -> dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
             if not success and training_args.local_rank == 0:

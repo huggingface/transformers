@@ -61,9 +61,10 @@ class PretrainedConfig(PushToHubMixin):
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **is_composition** (`bool`) -- Whether the config class is composed of multiple sub-configs. In this case the
-      config has to be initialized from two or more configs of type [`~transformers.PretrainedConfig`] like:
-      [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`].
+    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
+      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
+      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
+      two or more configs of type [`~transformers.PretrainedConfig`].
     - **keys_to_ignore_at_inference** (`List[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -193,7 +194,7 @@ class PretrainedConfig(PushToHubMixin):
     model_type: str = ""
     base_config_key: str = ""
     sub_configs: dict[str, "PretrainedConfig"] = {}
-    is_composition: bool = False
+    has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
@@ -801,19 +802,20 @@ class PretrainedConfig(PushToHubMixin):
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
-        Removes all attributes from config which correspond to the default config attributes for better readability and
-        serializes to a Python dictionary.
+        Removes all attributes from the configuration that correspond to the default config attributes for
+        better readability, while always retaining the `config` attribute from the class. Serializes to a
+        Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         config_dict = self.to_dict()
 
-        # get the default config dict
+        # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PretrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
 
         serializable_config_dict = {}
 
@@ -847,8 +849,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
             _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
