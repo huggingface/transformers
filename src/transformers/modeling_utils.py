@@ -3990,8 +3990,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
                         torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
                     elif device_type == "xpu":
-                        torch.distributed.init_process_group(
-                            "ccl", rank=rank, world_size=world_size)
+                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
                         torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
 
                 except Exception as e:
