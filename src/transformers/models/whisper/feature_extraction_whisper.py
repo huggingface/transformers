@@ -330,7 +330,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
         if return_token_timestamps is not None:
-            warnings.warn(
+            logger.warning_once(
                 f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
             )
             padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]

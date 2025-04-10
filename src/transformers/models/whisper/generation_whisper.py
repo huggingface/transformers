@@ -1626,7 +1626,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 else:
                     generation_config.num_frames = torch.tensor(generation_config.num_frames)
 
-                warnings.warn(
+                logger.warning_once(
                     "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
                     "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
                 )
