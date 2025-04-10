@@ -221,14 +221,12 @@ class AutoRoundConfig(QuantizationConfigMixin):
     def __init__(
         self,
         bits: int = 4,
-        dataset: str = None,
         group_size: int = 128,
         sym: bool = False,
         backend: str = "auto",
         **kwargs,
     ):
         self.bits = bits
-        self.dataset = dataset
         self.group_size = group_size
         self.sym = sym
         self.target_backend = "auto"
