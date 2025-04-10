@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from huggingface_hub import get_full_repo_name
-from packaging import version
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -555,10 +554,6 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-        tp_size (`int`, *optional*):
-            Use tp_size to enable PyTorch tensor parallelism. Tensor parallelism support is only available to models having `base_tp_plan`
-            in their respective config classes.
-            Set a value greater than 1 to activate TP. The same is used to prepare device mesh internally. Requires accelerate>1.3.0.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/deepspeedai/DeepSpeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -1245,18 +1240,6 @@ class TrainingArguments:
             )
         },
     )
-    tp_size: Optional[int] = field(
-        default=0,
-        metadata={
-            "help": (
-                "Use tp_size to enable pytorch tensor parallelism."
-                "Tensor parallelism support is only available to models having `base_tp_plan` in their respective config classes."
-                "Set a value greater than 1 to activate TP."
-                "The same is used to prepare device mesh internally."
-                "Requires accelerate>1.3.0."
-            )
-        },
-    )
     fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
         default=None,
         metadata={
@@ -1290,7 +1273,7 @@ class TrainingArguments:
 
     default_optim = "adamw_torch"
     # XXX: enable when pytorch==2.0.1 comes out - we want to give it time to get all the bugs sorted out
-    # if is_torch_available() and version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.1.0"):
+    # if is_torch_available():
     #     default_optim = "adamw_torch_fused"
     # and update the doc above to:
     # optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.1.0 `"adamw_torch"`):
@@ -1732,12 +1715,6 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
-        if self.optim == OptimizerNames.ADAMW_TORCH_FUSED and is_torch_available():
-            if version.parse(version.parse(torch.__version__).base_version) < version.parse("2.0.0"):
-                raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
-            # there is a bug in fp16/AMP in pt-2.0.0
-            if version.parse(version.parse(torch.__version__).base_version) == version.parse("2.0.0") and self.fp16:
-                raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
@@ -1948,14 +1925,6 @@ class TrainingArguments:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
-        if self.tp_size > 1:
-            if not is_accelerate_available("1.3.1"):
-                raise NotImplementedError(
-                    "TP using PyTorch requires Accelerate version `accelerate` >= 1.3.1. "
-                    "This is not supported and we recommend you to update your version."
-                )
-            os.environ["ACCELERATE_USE_TP"] = "true"
-            os.environ["TP_SIZE"] = str(self.tp_size)
         # accelerate integration for FSDP
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
             os.environ["ACCELERATE_USE_FSDP"] = "true"

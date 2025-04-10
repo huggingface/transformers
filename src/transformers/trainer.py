@@ -459,7 +459,7 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
-
+        self.model = model
         self.create_accelerator_and_postprocess()
 
         # memory metrics - must set up as early as possible
@@ -1902,22 +1902,14 @@ class Trainer:
                     jit_model.forward = original_forward
                 autocast_handler = AutocastKwargs(cache_enabled=False)
                 with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
-                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
-                        if isinstance(example_batch, dict):
-                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
-                        else:
-                            jit_model = torch.jit.trace(
-                                jit_model,
-                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
-                                strict=False,
-                            )
+                    if isinstance(example_batch, dict):
+                        jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
                     else:
-                        jit_inputs = []
-                        for key in example_batch:
-                            example_tensor = torch.ones_like(example_batch[key])
-                            jit_inputs.append(example_tensor)
-                        jit_inputs = tuple(jit_inputs)
-                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                        jit_model = torch.jit.trace(
+                            jit_model,
+                            example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                            strict=False,
+                        )
                 jit_model = torch.jit.freeze(jit_model)
                 with torch.no_grad():
                     jit_model(**example_batch)
@@ -2313,6 +2305,11 @@ class Trainer:
 
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
+        # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
+        is_fsdp2 = self.is_fsdp_enabled and (getattr(self.accelerator.state.fsdp_plugin, "fsdp_version", 1) == 2)
+        if is_fsdp2:
+            delay_optimizer_creation = False
+
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
         if self._created_lr_scheduler:
             self.lr_scheduler = None
@@ -2454,7 +2451,7 @@ class Trainer:
         self.state.init_training_references(self, max_steps, num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
-        tr_loss = torch.tensor(0.0).to(args.device)
+        tr_loss = torch.tensor(0.0, device=args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
@@ -3227,9 +3224,8 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
-            # Solely rely on numerical checkpoint id for rotation.
-            # mtime is not reliable especially on some fuse fs in cloud environments.
-            self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
+            # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -3692,7 +3688,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            ctx_manager = torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
@@ -4042,7 +4038,17 @@ class Trainer:
                     ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
 
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+        # mtime is not reliable on all filesystems, especially on some fuse fs in cloud environments
+        # so we check if the mtime is fake and fallback to numerical ordering if needed
+        if use_mtime and len(ordering_and_checkpoint_path) > 1:
+            mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
+            if mtime_diff < 1.0:  # less than 1 second, which is almost impossible when mtime works fine
+                warnings.warn("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+                return self._sorted_checkpoints(
+                    use_mtime=False, output_dir=output_dir, checkpoint_prefix=checkpoint_prefix
+                )
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+
         # Make sure we don't delete the best model.
         if (
             self.state.best_model_checkpoint is not None
@@ -5140,10 +5146,10 @@ class Trainer:
             args.update(accelerator_config)
         # tp is initialized at Accelerator init phase so
         # args should be prepared here
-        if self.args.tp_size > 1:
+        if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.args.tp_size)
+                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
             else:
                 raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
 
@@ -5267,6 +5273,10 @@ class Trainer:
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
+
+                if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
+                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
 
         return batch_samples, num_items_in_batch
 

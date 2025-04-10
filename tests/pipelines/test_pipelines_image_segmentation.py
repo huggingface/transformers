@@ -14,7 +14,6 @@
 
 import tempfile
 import unittest
-from typing import Dict
 
 import datasets
 import numpy as np
@@ -37,7 +36,6 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
-    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -66,14 +64,14 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     white_pixels = (npimg == 255).sum()
     shape = npimg.shape
     return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
-def mask_to_test_readable_only_shape(mask: Image) -> Dict:
+def mask_to_test_readable_only_shape(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"shape": shape}
@@ -89,13 +87,17 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     )
+    _dataset = None
 
-    if _run_pipeline_tests:
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        _dataset = datasets.load_dataset(
-            "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
-        )
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
 
     def get_test_pipeline(
         self,
@@ -120,6 +122,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
+        self._load_dataset()
         outputs = image_segmenter(
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             threshold=0.0,

@@ -76,7 +76,7 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
@@ -115,7 +115,7 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -146,7 +146,7 @@ class TFSampleDecoderOnlyOutput(ModelOutput):
             `tf.Tensor` of shape `(num_return_sequences*batch_size, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
@@ -185,7 +185,7 @@ class TFSampleEncoderDecoderOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size*num_return_sequences, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -221,7 +221,7 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     beam_indices: Optional[tf.Tensor] = None
@@ -268,7 +268,7 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     beam_indices: Optional[tf.Tensor] = None
@@ -306,7 +306,7 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     beam_indices: Optional[tf.Tensor] = None
@@ -352,7 +352,7 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     beam_indices: Optional[tf.Tensor] = None
@@ -384,7 +384,7 @@ class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
@@ -422,7 +422,7 @@ class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
             `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
-    sequences: tf.Tensor = None
+    sequences: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
