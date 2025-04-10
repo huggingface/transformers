@@ -90,6 +90,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         transform is not JSON serializable.
         """
         if self.melspec is None:
+            # TODO (@alex-jw-brooks / @eustlb) move this to common batch
+            # feature extraction in audio utils once they are written!
             self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
 
     def _extract_mel_spectrograms(self, audio: torch.Tensor, device="cpu"):
