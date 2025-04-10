@@ -31,6 +31,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedPreTrainedModel
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
+from ..jamba import modeling_jamba
 from ...utils import add_start_docstrings
 
 class GraniteMultiHeadLatentAttention(nn.Module):
@@ -123,7 +124,61 @@ class GraniteMultiHeadLatentAttention(nn.Module):
             softmax_scale = self.attention_multiplier
 
         return softmax_scale   
-    
+
+# TODO probably find a better way to re-use existing class in Bamba
+class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynamicCache):
+    """
+    A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
+    (which has a constant shape regardless of seq_len).
+
+    This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
+    and `ssm_states` for mamba cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
+    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
+    while `conv_states` and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
+    For mamba layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
+    while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
+    and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
+    """
+
+    def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
+        super().__init__(config, batch_size, dtype, device)
+        self.layers_block_type = config.layer_types
+        self.has_previous_state = False  # only used by mamba
+        conv_kernel_size = config.mamba_d_conv
+        ssm_state_size = config.mamba_d_state
+
+        self.conv_states = []
+        self.ssm_states = []
+        self.transformer_layers = []
+        for i in range(config.num_hidden_layers):
+            if self.layers_block_type[i] == "mamba2":
+                self.conv_states += [
+                    torch.zeros(
+                        batch_size,
+                        (config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * ssm_state_size),
+                        conv_kernel_size,
+                        device=device,
+                        dtype=dtype,
+                    )
+                ]
+                self.ssm_states += [
+                    torch.zeros(
+                        batch_size,
+                        config.mamba_n_heads,
+                        config.mamba_d_head,
+                        ssm_state_size,
+                        device=device,
+                        dtype=dtype,
+                    )
+                ]
+            else:
+                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
+                self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
+                self.transformer_layers.append(i)
+
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+ 
 class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         # TO DO map variables here
@@ -201,9 +256,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        # confirm moe is needed. 
-        # referral https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/models/gpt_dolomite/layer.py
-        # dolomite does not have moe block. This is taken from sharedmoe class however
         moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
         if self.shared_mlp is None:
@@ -217,19 +269,21 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
         outputs = (hidden_states,)
 
-        # TODO: understand what this is
+        # TODO: understand what this is and if/how to enable
         # if output_attentions:
         #     outputs += (self_attn_weights,)
 
-        # if use_cache:
-        #     outputs += (present_key_value,)
+        if use_cache:
+            outputs += (past_key_value,)
 
         if output_router_logits:
             outputs += (router_logits,)
 
         return outputs
     
-    def _self_attn_forward( 
+    # TODO : get rid of function and do code inline
+    # TODO doctsring - MambaCache type not Cache
+    def _self_attn_forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
@@ -239,15 +293,16 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # TODO add elif and else here for error handling
         if self.self_attn_type == "multihead_latent_attention":
             return self.self_attn(
-                hidden_states = hidden_states,
-                past_key_value = past_key_value,
+                hidden_states=hidden_states,
+                past_key_value=past_key_value,
                 attention_mask=attention_mask,
             )
         else:
             return self.self_attn(
-                hidden_states = hidden_states,
-                cache_position = cache_position,
-                attention_mask = attention_mask,
+                hidden_states=hidden_states,
+                cache_position=cache_position,
+                cache_params=past_key_value,
+                attention_mask=attention_mask,
             )
 
 # TO DO update docstring
@@ -379,5 +434,71 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        **kwargs,
+    ):
+        # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+
+        empty_past_kv = past_key_values is None
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
+        if not empty_past_kv:
+            if (
+                inputs_embeds is not None  # Exception 1
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
+            ):
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+        else:
+            past_key_values = HybridMambaAttentionDynamicCache(
+                self.config, input_ids.shape[0], self.dtype, device=self.device
+            )
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if not empty_past_kv:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and empty_past_kv:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "logits_to_keep": self.config.logits_to_keep,
+                "cache_position": cache_position,
+            }
+        )
+        return model_inputs 
+
+    def _supports_default_dynamic_cache(self) -> bool:
+        """
+        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache` 
+        and do not need to initialize the Cache in advance in order to save memory
+        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
+        for `HybridMambaAttentionDynamicCache`).
+        """
+        return False
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

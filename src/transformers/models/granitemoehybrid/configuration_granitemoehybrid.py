@@ -167,6 +167,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_conv_bias=True,
         # confirm this variable if needed or not
         mamba_proj_bias=False,
+        logits_to_keep=1,
         # mla variables
         mla_dropout = 0,
         # rename attention_dropout to mla_softmax_dropout
@@ -234,6 +235,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.mamba_expand = mamba_expand
+        self.logits_to_keep = logits_to_keep
 
         self.mla_query_comp_size = mla_query_comp_size
         self.mla_key_value_comp_size = mla_key_value_comp_size
