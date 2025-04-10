@@ -172,4 +172,5 @@ class AutoRoundTest(unittest.TestCase):
                 device_map="auto"
             )
             text = "There is a girl who likes adventure,"
-            inputs = tokenizer(text, return_tensors="pt").to(model.device)
+            inputs=tokenizer(text, return_tensors="pt").to(model.device)
+            tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
