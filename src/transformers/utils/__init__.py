@@ -156,6 +156,7 @@ from .import_utils import (
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
