@@ -642,6 +642,10 @@ _import_structure = {
         "MoshiConfig",
         "MoshiDepthConfig",
     ],
+    "models.conversational_speech_model": [
+        "ConversationalSpeechModelConfig",
+        "ConversationalSpeechModelDepthDecoderConfig",
+    ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -3103,6 +3107,14 @@ else:
             "MoshiForConditionalGeneration",
             "MoshiModel",
             "MoshiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.conversational_speech_model"].extend(
+        [
+            "ConversationalSpeechModelForCausalLM",
+            "ConversationalSpeechModelDepthDecoderForCausalLM",
+            "ConversationalSpeechModelDepthDecoder",
+            "ConversationalSpeechModelBackbone",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5568,6 +5580,10 @@ if TYPE_CHECKING:
         ConvBertConfig,
         ConvBertTokenizer,
     )
+    from .models.conversational_speech_model import (
+        ConversationalSpeechModelConfig,
+        ConversationalSpeechModelDepthDecoderConfig,
+    )
     from .models.convnext import ConvNextConfig
     from .models.convnextv2 import (
         ConvNextV2Config,
@@ -7157,6 +7173,12 @@ if TYPE_CHECKING:
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
+        )
+        from .models.conversational_speech_model import (
+            ConversationalSpeechModelForCausalLM,
+            ConversationalSpeechModelDepthDecoderForCausalLM,
+            ConversationalSpeechModelDepthDecoder,
+            ConversationalSpeechModelBackbone,
         )
         from .models.convnext import (
             ConvNextBackbone,

@@ -58,6 +58,7 @@ from . import (
     colpali,
     conditional_detr,
     convbert,
+    csm,
     convnext,
     convnextv2,
     cpm,
