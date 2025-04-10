@@ -296,6 +296,8 @@ class GgufModelTests(unittest.TestCase):
     nemotron_model_id = "bartowski/Nemotron-Mini-4B-Instruct-GGUF"
     original_gemma2_model_id = "google/gemma-2-2b-it"
     gemma2_model_id = "bartowski/gemma-2-2b-it-GGUF"
+    original_gemma3_model_id = "google/gemma-3-1b-it"
+    gemma3_model_id = "unsloth/gemma-3-1b-it-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -325,6 +327,7 @@ class GgufModelTests(unittest.TestCase):
     q3_k_gemma2_model_id = "gemma-2-2b-it-Q3_K_L.gguf"
     q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
     fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
+    q2_k_gemma3_model_id = "gemma-3-1b-it-Q2_K.gguf"
 
     example_text = "Hello"
 
@@ -868,6 +871,43 @@ class GgufModelTests(unittest.TestCase):
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
+            gguf_file=self.fp32_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_gemma3_q2_k(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gemma2_model_id,
+            gguf_file=self.q2_k_gemma3_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma3_model_id, gguf_file=self.q2_k_gemma3_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello! 👋\n\nI'm trying to create a"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    @require_read_token
+    def test_gemma3_weights_conversion_fp32(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.original_gemma3_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.gemma3_model_id,
             gguf_file=self.fp32_gemma2_model_id,
             torch_dtype=torch.float16,
         )

@@ -253,6 +253,7 @@ TENSOR_PROCESSORS = {
     "mamba": MambaTensorProcessor,
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
+    "gemma3": Gemma2TensorProcessor,
 }
 
 
