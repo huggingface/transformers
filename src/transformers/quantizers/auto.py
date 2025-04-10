@@ -98,7 +98,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
-    "intel/auto-round": AutoRoundConfig,
+    "auto-round": AutoRoundConfig,
 }
 
 logger = logging.get_logger(__name__)
