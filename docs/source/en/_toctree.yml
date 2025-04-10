@@ -161,6 +161,8 @@
   sections:
   - local: quantization/overview
     title: Overview
+  - local: quantization/selecting
+    title: Selecting a quantization method
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/awq
@@ -461,6 +463,8 @@
         title: Gemma2
       - local: model_doc/glm
         title: GLM
+      - local: model_doc/glm4
+        title: glm4
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -507,6 +511,8 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/llama4
+        title: Llama4
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -603,6 +609,10 @@
         title: Qwen2
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm

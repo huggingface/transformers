@@ -25,6 +25,10 @@ Most of those are only useful if you are studying the code of the models in the 
 [[autodoc]] AttentionInterface
     - register
 
+## Rotary Position Embedding Functions
+
+[[autodoc]] dynamic_rope_update
+
 ## Pytorch custom modules
 
 [[autodoc]] pytorch_utils.Conv1D

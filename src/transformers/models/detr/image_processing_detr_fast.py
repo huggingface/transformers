@@ -254,7 +254,7 @@ def prepare_coco_panoptic_annotation(
     new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
+        masks = read_image(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
         masks = rgb_to_id(masks)
 
         ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
@@ -371,7 +371,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -831,7 +831,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -940,7 +940,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
