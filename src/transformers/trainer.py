@@ -4303,7 +4303,8 @@ class Trainer:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
-        model.eval()
+        if hasattr(model, "eval") and callable(model.eval):
+            model.eval()
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
 
