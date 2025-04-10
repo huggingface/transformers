@@ -111,6 +111,7 @@ class FlavaImageProcessingTester:
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
+        # LANCZOS resample does not support torch Tensor. Use BICUBIC as closest alternative
         self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.BICUBIC
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
