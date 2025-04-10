@@ -220,7 +220,6 @@ class HfQuantizer(ABC):
         """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
-        print("self.pre_quantized", self.pre_quantized)
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         return self._process_model_before_weight_loading(model, **kwargs)
@@ -263,14 +262,17 @@ class HfQuantizer(ABC):
         model: "PreTrainedModel",
         skip_modules: Optional[List[str]] = None,
         keep_in_fp32_modules: Optional[List[str]] = None,
+        add_default_skips: bool = False,
     ):
         from ..integrations import get_keys_to_not_convert
 
-        modules_to_not_convert = []
-        if skip_modules is None:
+        if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            modules_to_not_convert = skip_modules
+            modules_to_not_convert = []
+
+        if skip_modules is not None:
+            modules_to_not_convert.extend(skip_modules)
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
@@ -342,6 +344,9 @@ class SequentialLlama4TextExperts(ModuleList):
 MODULES_TO_PATCH_FOR_QUANTIZATION = {
     "Llama4TextExperts": {
         "module_name": SequentialLlama4TextExperts,
-        "quantization_methods": [QuantizationMethod.COMPRESSED_TENSORS, QuantizationMethod.BITS_AND_BYTES],
+        "quantization_methods": [
+            QuantizationMethod.COMPRESSED_TENSORS,
+            QuantizationMethod.BITS_AND_BYTES,
+        ],
     }
 }
