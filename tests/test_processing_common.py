@@ -881,13 +881,13 @@ class ProcessorTesterMixin:
         # Test continue from final message
         assistant_message = {
             "role": "assistant",
-            "content": [{"type": "text", "text": "It is the sound of "}],
+            "content": [{"type": "text", "text": "It is the sound of"}],
         }
-        for message in batch_messages:
-            message.append(assistant_message)
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx] = batch_messages[idx] + [assistant_message]
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
-            self.assertTrue(prompt.endswith("It is the sound of "))  # no `eos` token at the end
+            self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
     @require_av
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
