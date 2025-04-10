@@ -251,6 +251,13 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         )
 
         rope_config_validation(self)
-
+    
+    # TODO redefine this for use or get rid of it
+    @property
+    def layers_block_type(self):
+        return [
+            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
+            for i in range(self.num_hidden_layers)
+        ]
 
 __all__ = ["GraniteMoeHybridConfig"]
