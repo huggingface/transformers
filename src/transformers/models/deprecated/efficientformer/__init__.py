@@ -18,6 +18,7 @@ from ....utils import (
     _LazyModule,
     is_tf_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -58,6 +59,14 @@ else:
         "TFEfficientFormerPreTrainedModel",
     ]
 
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_efficientformer_fast"] = ["EfficientFormerImageProcessorFast"]
+
 if TYPE_CHECKING:
     from .configuration_efficientformer import EfficientFormerConfig
 
@@ -93,6 +102,14 @@ if TYPE_CHECKING:
             TFEfficientFormerModel,
             TFEfficientFormerPreTrainedModel,
         )
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_efficientformer_fast import EfficientFormerImageProcessorFast
 
 else:
     import sys
