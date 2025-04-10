@@ -275,7 +275,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
                 "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
                 # For Fused implementation we use local_packed_rowwise for the gate_up_proj, and the same for the packed scales
-                # We use local_colwise for the down_proj, and the scales are replicated
+                # We use local_colwise for the down_proj, and the scales are replicated so we don't add them
                 "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",
                 "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
                 "layers.*.feed_forward.experts.down_proj": "local_colwise",
