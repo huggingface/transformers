@@ -37,6 +37,7 @@ from ...utils import (
 )
 from .image_processing_layoutlmv3 import apply_tesseract
 
+
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
