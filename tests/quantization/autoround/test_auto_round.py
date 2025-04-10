@@ -142,7 +142,7 @@ class AutoRoundTest(unittest.TestCase):
 
         text = "There is a girl who likes adventure,"
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
-        print(tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0]))
+        tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
 
     def test_mixed_bits(self):
         """
@@ -171,6 +171,5 @@ class AutoRoundTest(unittest.TestCase):
                 torch_dtype=torch.float16,
                 device_map="auto"
             )
-        text = "There is a girl who likes adventure,"
-        inputs = tokenizer(text, return_tensors="pt").to(model.device)
-        print(tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0]))
+            text = "There is a girl who likes adventure,"
+            inputs = tokenizer(text, return_tensors="pt").to(model.device)
