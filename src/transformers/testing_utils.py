@@ -3085,11 +3085,10 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
+        major, _ = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
-            major, _ = torch.hip.get_device_capability()
             return ("rocm", major)
         else:
-            major, _ = torch.cuda.get_device_capability()
             return ("cuda", major)
     elif IS_XPU_SYSTEM:
         import torch
