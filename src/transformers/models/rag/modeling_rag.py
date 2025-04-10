@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -112,8 +112,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
@@ -202,8 +202,8 @@ class RetrievAugLMOutput(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
@@ -234,13 +234,6 @@ class RagPreTrainedModel(PreTrainedModel):
     base_model_prefix = "rag"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
 
     @classmethod
     def from_pretrained_question_encoder_generator(
@@ -590,7 +583,7 @@ class RagModel(RagPreTrainedModel):
 
                 retriever_outputs = self.retriever(
                     input_ids,
-                    question_encoder_last_hidden_state.cpu().detach().to(torch.float32).numpy(),
+                    question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
                     prefix=self.generator.config.prefix,
                     n_docs=n_docs,
                     return_tensors="pt",
@@ -981,7 +974,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=n_docs,
                 return_tensors="pt",
@@ -1129,7 +1122,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
-class RagTokenForGeneration(RagPreTrainedModel):
+class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
@@ -1469,7 +1462,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             out = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=n_docs,
                 return_tensors="pt",
