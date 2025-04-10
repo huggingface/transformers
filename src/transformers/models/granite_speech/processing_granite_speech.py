@@ -39,15 +39,18 @@ class GraniteSpeechProcessor(ProcessorMixin):
         audio_processor,
         tokenizer,
         audio_token="<|audio|>",
+        chat_template=None,
     ):
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        super().__init__(audio_processor, tokenizer)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         audio: Union[torch.Tensor, List[torch.Tensor]] = None,
         device: str = "cpu",
+        images=None,
+        videos=None,
         **kwargs,
     ) -> BatchFeature:
         text = self._get_validated_text(text)
