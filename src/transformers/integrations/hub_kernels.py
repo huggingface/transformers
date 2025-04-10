@@ -35,7 +35,7 @@ try:
         "RMSNorm": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/triton-layer-norm",
-                layer_name="RMSNorm",
+                layer_name="LlamaRMSNorm",
                 revision="pure-layer-test",
             )
         },
