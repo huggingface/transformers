@@ -5148,7 +5148,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
             self._last_compile_config = compile_config
-            compile_config.dynamic = False
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
 

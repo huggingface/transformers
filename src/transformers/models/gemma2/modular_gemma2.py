@@ -30,7 +30,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
+from ...pytorch_utils import prepare_sliding_window_attention_mask
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -47,6 +49,8 @@ from ..gemma.modeling_gemma import (
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
 
 logger = logging.get_logger(__name__)
+
+GEMMA2_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 class Gemma2Config(PretrainedConfig):
@@ -327,6 +331,7 @@ class Gemma2DecoderLayer(nn.Module):
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
 
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -337,30 +342,23 @@ class Gemma2DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: int = 0,
+        sliding_window_attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # In prefill, we may be larger than sliding window
-            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
             # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
             # thus we must slice from the right (at most `effective_seq_len` elements)
             if self.config._attn_implementation == "flash_attention_2":
+                # In prefill, we may be larger than sliding window
+                effective_seq_len = max(cache_position.shape[0], self.sliding_window)
                 attention_mask = attention_mask[:, -effective_seq_len:]
-            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
-            # from the left, with an offset if we are beyond the sliding window
-            else:
-                min_dtype = torch.finfo(attention_mask.dtype).min
-                sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice from the left,
+            # with an offset if we are beyond the sliding window. This is not torch.compile friendly, so we use an
+            # external `sliding_window_attention_mask` when possible.
+            elif sliding_window_attention_mask is None:
+                attention_mask = prepare_sliding_window_attention_mask(
+                    attention_mask, cache_position, self.sliding_window, hidden_states.dtype
                 )
-                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
-                offset = last_cache_position - effective_seq_len
-                # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
-                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
 
         residual = hidden_states
 
@@ -402,6 +400,7 @@ class Gemma2Model(GemmaModel):
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -413,7 +412,7 @@ class Gemma2Model(GemmaModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: Optional[int] = None,
+        sliding_window_attention_mask: Optional[torch.Tensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -454,16 +453,6 @@ class Gemma2Model(GemmaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        if last_cache_position is None:
-            last_cache_position = 0
-            if attention_mask is not None:
-                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
-                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
-                last_cache_position = (
-                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
-                )
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -499,7 +488,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    last_cache_position,
+                    sliding_window_attention_mask,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -511,7 +500,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    last_cache_position=last_cache_position,
+                    sliding_window_attention_mask=sliding_window_attention_mask,
                     **flash_attn_kwargs,
                 )
 
@@ -574,6 +563,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         self.model = Gemma2Model(config)
         self.post_init()
 
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -587,6 +577,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        sliding_window_attention_mask: Optional[torch.Tensor] = None,
         **loss_kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
@@ -641,6 +632,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
+            sliding_window_attention_mask=sliding_window_attention_mask,
             **loss_kwargs,
         )
 
@@ -691,9 +683,6 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             **kwargs,
         )
 
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
         if logits_to_keep is None:
             _ = model_inputs.pop("logits_to_keep", None)
 
@@ -719,6 +708,14 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 batch_size=batch_size,
             )
             model_inputs["attention_mask"] = attention_mask
+
+        sliding_window_attention_mask = prepare_sliding_window_attention_mask(
+            attention_mask=model_inputs["attention_mask"],
+            cache_position=model_inputs["cache_position"],
+            sliding_window=self.config.sliding_window,
+            dtype=self.model.embed_tokens.weight.dtype,
+        )
+        model_inputs["sliding_window_attention_mask"] = sliding_window_attention_mask
 
         return model_inputs
 

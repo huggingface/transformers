@@ -358,3 +358,38 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
+
+
+def prepare_sliding_window_attention_mask(
+    attention_mask: torch.Tensor, cache_position: torch.Tensor, sliding_window: int, dtype: torch.dtype
+) -> torch.Tensor:
+    """
+    Prepares the attention mask for the sliding window from the full causal mask. In a nutshell, takes a sliding window
+    from the original mask, offset by how many tokens were already seen.
+
+    These operations are not `torch.compile` friendly, so it is best if the sliding window attention mask is prepared
+    outside of the forward pass.
+
+    Args:
+        attention_mask (torch.Tensor):
+            The full 4D attention mask.
+        cache_position (torch.Tensor):
+            Indices depicting the position of the input sequence tokens in the sequence.
+        sliding_window (int):
+            The size of the sliding window.
+        dtype (torch.dtype):
+            The dtype hidden states.
+
+    Returns:
+        The attention mask for the sliding window.
+    """
+    # In prefill, we may be larger than sliding window
+    effective_seq_len = max(cache_position.shape[0], sliding_window)
+    sliding_window_mask = torch.tril(torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-sliding_window)
+    attention_mask = torch.where(sliding_window_mask, torch.finfo(dtype).min, attention_mask)
+    # In case we are beyond the sliding window, we need to correctly offset the mask slicing
+    offset = cache_position[-1] - effective_seq_len
+    # Should only be used when beyond the sliding window (i.e. offset > 0)
+    offset = max(0, offset)
+    attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+    return attention_mask
