@@ -602,9 +602,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -628,6 +625,8 @@ def main():
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(all_results, f, indent=2)
 
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 if __name__ == "__main__":
     main()
