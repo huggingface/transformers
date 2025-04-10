@@ -892,12 +892,12 @@ class GgufModelTests(unittest.TestCase):
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_text_q2_k(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.gemma3_model_id,
-            gguf_file=self.q2_k_gemma3_model_id,
+            self.gemma3_text_model_id,
+            gguf_file=self.q2_k_gemma3_text_model_id,
             torch_dtype=torch.float16,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma3_model_id, gguf_file=self.q2_k_gemma3_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma3_text_model_id, gguf_file=self.q2_k_gemma3_text_model_id)
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
@@ -908,13 +908,13 @@ class GgufModelTests(unittest.TestCase):
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_text_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
-            self.original_gemma3_model_id,
+            self.original_gemma3_text_model_id,
             torch_dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
-            self.gemma3_model_id,
-            gguf_file=self.bf16_gemma3_model_id,
+            self.gemma3_text_model_id,
+            gguf_file=self.bf16_gemma3_text_model_id,
             torch_dtype=torch.float16,
         )
 
