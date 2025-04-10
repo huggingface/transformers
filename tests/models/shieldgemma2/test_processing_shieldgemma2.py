@@ -72,8 +72,9 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = Gemma3ImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
 
         extra_special_tokens = {
@@ -83,14 +84,16 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
 
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = ShieldGemma2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def prepare_processor_dict(self):
+    @classmethod
+    def prepare_processor_dict(cls):
         return {
             "chat_template": _CHAT_TEMPLATE,
             "policy_definitions": _SHIELDGEMMA2_POLICIES,

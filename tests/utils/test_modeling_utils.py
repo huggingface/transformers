@@ -1720,8 +1720,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
-        # `GenerationMixin`)
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
                 pass
@@ -1729,7 +1729,7 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithPrepareInputs.can_generate()
         self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
-        self.assertTrue(can_generate)
+        self.assertFalse(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """

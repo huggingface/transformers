@@ -42,7 +42,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
         image_processor = LlavaOnevisionImageProcessor()
         video_processor = LlavaOnevisionVideoProcessor()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
@@ -61,6 +60,10 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():

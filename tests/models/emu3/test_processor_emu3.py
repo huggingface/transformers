@@ -31,8 +31,9 @@ if is_vision_available():
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = Emu3ImageProcessor()
         extra_special_tokens = extra_special_tokens = {
             "image_token": "<image>",
@@ -46,10 +47,10 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = self.processor_class(
+        processor = cls.processor_class(
             image_processor=image_processor, tokenizer=tokenizer, chat_template="dummy_template"
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def prepare_processor_dict(self):
         return {
