@@ -111,7 +111,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    embeddings: torch.Tensor = None
+    embeddings: Optional[torch.Tensor] = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -191,8 +191,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
