@@ -786,6 +786,8 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "early_stopping_patience_counter": self.early_stopping_patience_counter,
             },
         }
+
+
 class ProfilerCallback(TrainerCallback):
     """
     A callback that profiles the training process using PyTorch Profiler.
@@ -805,8 +807,8 @@ class ProfilerCallback(TrainerCallback):
             with_flops=True,
             export_chrome_trace=True,
             profile_level="step",  # New parameter: "step" or "epoch"
-            profile_epochs=1,      # New parameter: number of epochs to profile
-            warmup_epochs=0        # New parameter: number of epochs to warmup
+            profile_epochs=1,  # New parameter: number of epochs to profile
+            warmup_epochs=0  # New parameter: number of epochs to warmup
     ):
         """
         Initialize the ProfilerCallback.
@@ -836,8 +838,7 @@ class ProfilerCallback(TrainerCallback):
         self.with_stack = with_stack
         self.with_flops = with_flops
         self.export_chrome_trace = export_chrome_trace
-        
-        # New parameters for epoch-level profiling
+
         self.profile_level = profile_level
         self.profile_epochs = profile_epochs
         self.warmup_epochs = warmup_epochs
@@ -848,60 +849,63 @@ class ProfilerCallback(TrainerCallback):
         self.is_profiling = False
         self.start_time = None
 
-        # Create the log directory if it doesn't exist
         os.makedirs(log_dir, exist_ok=True)
 
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     def on_train_begin(self, args, state, control, **kwargs):
-        """Called at the beginning of training."""
+        if not state.is_world_process_zero and not state.is_local_process_zero:
+            return
+
         if self.profile_level == "step":
-            print(f"🔍 Step-level profiler initialized. Will profile after {self.warmup_steps} warmup steps for {self.profile_steps} steps.")
-            
-            # Set schedule for step-level profiling
+            logger.info(
+                f"🔍 Step-level profiler initialized. Will profile after {self.warmup_steps} warmup steps for {self.profile_steps} steps.")
+
             schedule = torch.profiler.schedule(
                 wait=self.wait_steps,
                 warmup=self.warmup_steps,
                 active=self.profile_steps,
                 repeat=1
             )
-            
-            # Start profiler immediately for step-level profiling
+
             self._start_profiler(schedule)
         else:
-            print(f"🔍 Epoch-level profiler initialized. Will profile after {self.warmup_epochs} warmup epochs for {self.profile_epochs} epochs.")
-            # For epoch-level profiling, we'll start the profiler in on_epoch_begin
+            logger.info(
+                f"🔍 Epoch-level profiler initialized. Will profile after {self.warmup_epochs} warmup epochs for {self.profile_epochs} epochs.")
+
 
     def on_epoch_begin(self, args, state, control, **kwargs):
-        """Called at the beginning of each epoch."""
         self.epoch_count += 1
-        
+
+        if not state.is_world_process_zero and not state.is_local_process_zero:
+            return
+
         if self.profile_level == "epoch":
             if self.epoch_count == self.warmup_epochs + 1:
-                print(f"📊 Starting epoch-level profiling at epoch {self.epoch_count}")
-                # For epoch-level profiling, we use a simple schedule that stays active
+                logger.info(f"📊 Starting epoch-level profiling at epoch {self.epoch_count}")
+
                 schedule = torch.profiler.schedule(
                     wait=0,
                     warmup=0,
-                    active=10000,  # Large number to ensure it stays active for the whole epoch
+                    active=10000,
                     repeat=1
                 )
                 self._start_profiler(schedule)
-                
+
             if self.is_profiling:
                 with record_function(f"epoch_{self.epoch_count}"):
-                    print(f"📊 Profiling epoch {self.epoch_count}")
+                    logger.info(f"📊 Profiling epoch {self.epoch_count}")
 
     def on_epoch_end(self, args, state, control, **kwargs):
-        """Called at the end of each epoch."""
+        if not state.is_world_process_zero and not state.is_local_process_zero:
+            return
+
         if self.profile_level == "epoch" and self.is_profiling:
             if self.epoch_count >= self.warmup_epochs + self.profile_epochs:
-                print(f"📊 Completed profiling {self.profile_epochs} epochs")
-                self.stop_profiler(f"epoch_{self.epoch_count}")
-    
+                logger.info(f"📊 Completed profiling {self.profile_epochs} epochs")
+                self.stop_profiler(f"epoch_{self.epoch_count}", state)
+
     def _start_profiler(self, schedule):
-        """Start the profiler with the given schedule."""
-        # Prepare the profiler
         tensorboard_log_path = os.path.join(self.log_dir, f"{self.profile_level}_profile_{self.timestamp}")
         self.profiler = profile(
             activities=self.activities,
@@ -913,79 +917,82 @@ class ProfilerCallback(TrainerCallback):
             with_flops=self.with_flops
         )
 
-        # Start the profiler
         self.profiler.start()
         self.start_time = time.time()
         self.is_profiling = True
 
     def on_step_begin(self, args, state, control, **kwargs):
-        """Called at the beginning of each step."""
+
+        if not state.is_world_process_zero and not state.is_local_process_zero:
+            return
+
         if self.is_profiling and self.profile_level == "step":
             self.step_count += 1
             if self.step_count <= self.wait_steps:
-                print(f"⏳ Waiting: Step {self.step_count}/{self.wait_steps}")
+                logger.info(f"⏳ Waiting: Step {self.step_count}/{self.wait_steps}")
             elif self.step_count <= self.wait_steps + self.warmup_steps:
                 warmup_step = self.step_count - self.wait_steps
-                print(f"🔥 Warming up: Step {warmup_step}/{self.warmup_steps}")
+                logger.info(f"🔥 Warming up: Step {warmup_step}/{self.warmup_steps}")
             elif self.step_count <= self.wait_steps + self.warmup_steps + self.profile_steps:
                 profile_step = self.step_count - self.wait_steps - self.warmup_steps
-                print(f"📊 Profiling: Step {profile_step}/{self.profile_steps}")
+                logger.info(f"📊 Profiling: Step {profile_step}/{self.profile_steps}")
 
-            # Record the forward pass
             with record_function(f"step_{self.step_count}"):
                 pass
 
     def on_step_end(self, args, state, control, **kwargs):
-        """Called at the end of each step."""
+        if not state.is_world_process_zero and not state.is_local_process_zero:
+            return
+
         if self.is_profiling:
-            # Step the profiler
             try:
                 self.profiler.step()
 
-                # Check if we should stop profiling for step-level profiling
                 if self.profile_level == "step":
                     total_profile_steps = self.wait_steps + self.warmup_steps + self.profile_steps
                     if self.step_count >= total_profile_steps:
-                        self.stop_profiler(f"step_level_profile")
+                        self.stop_profiler(f"step_level_profile", state)
             except Exception as e:
-                print(f"❌ Error in profiler step: {e}")
-                self.stop_profiler()
+                logger.info(f"❌ Error in profiler step: {e}")
+                self.stop_profiler(state=state)
 
-    def stop_profiler(self, profile_name="profile"):
-        """Stop the profiler and record results."""
+    def stop_profiler(self, profile_name="profile", state=None):
         if self.is_profiling and self.profiler is not None:
-            # Record duration
+            is_main_process = state is None or state.is_world_process_zero or state.is_local_process_zero
+
             duration = time.time() - self.start_time
-            print(f"⏱️ Profiling completed in {duration:.2f} seconds")
+            if is_main_process:
+                logger.info(f"⏱️ Profiling completed in {duration:.2f} seconds")
 
             try:
-                # Stop the profiler
                 self.profiler.stop()
 
-                # Print summary
-                print(f"\n===== PROFILER SUMMARY ({profile_name}) =====")
-                print(self.profiler.key_averages().table(
-                    sort_by="cuda_time_total", row_limit=20))
+                if is_main_process:
+                    if torch.distributed.is_initialized():
+                        rank = torch.distributed.get_rank()
+                        profile_name = f"{profile_name}_rank_{rank}"
 
-                # Export chrome trace if requested
-                if self.export_chrome_trace:
-                    trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
-                    self.profiler.export_chrome_trace(trace_path)
-                    print(f"🔍 Chrome trace exported to {trace_path}")
+                    logger.info(f"\n===== PROFILER SUMMARY ({profile_name}) =====")
+                    logger.info(self.profiler.key_averages().table(
+                        sort_by="cuda_time_total", row_limit=20))
 
-                # Print optimization tips
-                self.print_optimization_tips()
+                    if self.export_chrome_trace:
+                        trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
+                        self.profiler.export_chrome_trace(trace_path)
+                        logger.info(f"🔍 Chrome trace exported to {trace_path}")
 
-                print(f"\n📊 Profiler logs saved to {self.log_dir}")
-                print(f"📈 View results with: tensorboard --logdir={self.log_dir}")
+                    self.print_optimization_tips()
+
+                    logger.info(f"\n📊 Profiler logs saved to {self.log_dir}")
+                    logger.info(f"📈 View results with: tensorboard --logdir={self.log_dir}")
             except Exception as e:
-                print(f"❌ Error stopping profiler: {e}")
+                if is_main_process:
+                    logger.info(f"❌ Error stopping profiler", e)
 
             self.is_profiling = False
 
     def print_optimization_tips(self):
-        """Print optimization tips based on profiling results."""
-        print("\n===== OPTIMIZATION TIPS =====")
+        logger.info("\n===== OPTIMIZATION TIPS =====")
         # Get top operations by CUDA time
         top_cuda_ops = self.profiler.key_averages().table(
             sort_by="cuda_time_total", row_limit=5)
@@ -999,21 +1006,24 @@ class ProfilerCallback(TrainerCallback):
             try:
                 top_memory_ops = self.profiler.key_averages().table(
                     sort_by="self_cuda_memory_usage", row_limit=5)
-                print("💾 Check for memory-intensive operations in the trace")
+                logger.info("💾 Check for memory-intensive operations in the trace")
             except:
                 pass
 
-        print("⚡ Focus on optimizing the most time-consuming operations")
-        print("💡 Consider using torch.compile() for performance improvements")
-        print("🧠 Check for unnecessary CPU-GPU synchronization")
-        print("📏 Consider optimizing batch size for better GPU utilization")
+        logger.info("⚡ Focus on optimizing the most time-consuming operations")
+        logger.info("💡 Consider using torch.compile() for performance improvements")
+        logger.info("🧠 Check for unnecessary CPU-GPU synchronization")
+        logger.info("📏 Consider optimizing batch size for better GPU utilization")
 
     def on_train_end(self, args, state, control, **kwargs):
         """Called at the end of training."""
-        # Ensure profiler is stopped
-        self.stop_profiler()
-        print("✅ Profiling session completed")
+        # Only run on the main process
+        if not state.is_world_process_zero and state.is_local_process_zero:
+            return
 
+        # Ensure profiler is stopped
+        self.stop_profiler(state=state)
+        logger.info("✅ Profiling session completed")
 
 
 class SimpleProfilerCallback(TrainerCallback):
