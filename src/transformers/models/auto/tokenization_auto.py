@@ -378,6 +378,7 @@ else:
             ("myt5", ("MyT5Tokenizer", None)),
             ("nemotron", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("ngpt", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "nllb",
                 (

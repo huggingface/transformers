@@ -7207,6 +7207,27 @@ class NemotronPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class NGPTForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NGPTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NGPTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class NllbMoeForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
