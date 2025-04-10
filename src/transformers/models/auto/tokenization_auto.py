@@ -172,6 +172,13 @@ else:
                 ),
             ),
             (
+                "deepseek_v3",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "diffllama",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -215,8 +222,23 @@ else:
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "gemma3",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "gemma3_text",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -266,6 +288,20 @@ else:
             ("lilt", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "llama",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "llama4",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "llama4_text",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
@@ -433,6 +469,20 @@ else:
                 ),
             ),
             ("qwen2_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "qwen3",
+                (
+                    "Qwen2Tokenizer",
+                    "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "qwen3_moe",
+                (
+                    "Qwen2Tokenizer",
+                    "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -477,6 +527,13 @@ else:
                 (
                     "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "shieldgemma2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("siglip", ("SiglipTokenizer" if is_sentencepiece_available() else None, None)),
@@ -983,6 +1040,7 @@ class AutoTokenizer:
             f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
         )
 
+    @staticmethod
     def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
         """
         Register a new tokenizer in this mapping.

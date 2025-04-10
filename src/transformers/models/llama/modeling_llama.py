@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, List, Optional, Tuple, Union
+from functools import partial
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -44,11 +45,21 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_llama import LlamaConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+
+from ...integrations import use_kernel_forward_from_hub
 
 
 logger = logging.get_logger(__name__)
@@ -57,6 +68,7 @@ _CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b-hf"
 _CONFIG_FOR_DOC = "LlamaConfig"
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -98,45 +110,18 @@ class LlamaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -175,6 +160,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernel_forward_from_hub("MLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -280,6 +266,7 @@ class LlamaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
@@ -329,7 +316,6 @@ class LlamaDecoderLayer(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -441,20 +427,12 @@ LLAMA_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -515,10 +493,11 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -526,16 +505,14 @@ class LlamaModel(LlamaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -545,6 +522,10 @@ class LlamaModel(LlamaPreTrainedModel):
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -580,7 +561,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
@@ -614,13 +595,12 @@ class LlamaModel(LlamaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
@@ -628,12 +608,17 @@ class LlamaModel(LlamaPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -676,7 +661,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -781,25 +766,25 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -835,10 +820,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -847,12 +831,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -860,10 +843,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -905,29 +884,28 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.model(
+        transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -936,9 +914,8 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -953,7 +930,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -967,10 +944,6 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -1006,21 +979,21 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.transformer.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1031,9 +1004,8 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1041,10 +1013,9 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1054,10 +1025,6 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         loss = None
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=loss,
@@ -1098,6 +1065,7 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1109,23 +1077,21 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1134,19 +1100,14 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
         logits = self.score(sequence_output)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,

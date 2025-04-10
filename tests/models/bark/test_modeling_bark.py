@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1075,6 +1074,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def fine_generation_config(self):
         fine_generation_config = BarkFineGenerationConfig(**self.model.generation_config.fine_acoustics_config)
         return fine_generation_config
+
+    def test_model_can_generate(self):
+        # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
+        self.assertTrue(self.model.can_generate())
 
     @slow
     def test_generate_semantic(self):

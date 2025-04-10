@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
 
 
 _import_structure = {
@@ -53,7 +53,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
-    "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
@@ -70,6 +70,12 @@ _import_structure = {
         "replace_with_higgs_linear",
     ],
     "hqq": ["prepare_for_hqq_linear"],
+    "hub_kernels": [
+        "LayerRepository",
+        "register_kernel_mapping",
+        "replace_kernel_forward_from_hub",
+        "use_kernel_forward_from_hub",
+    ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
         "AzureMLCallback",
@@ -128,6 +134,27 @@ else:
         "convert_and_export_with_cache",
     ]
 
+try:
+    if not is_torch_greater_or_equal("2.3"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tensor_parallel"] = [
+        "shard_and_distribute_module",
+        "SUPPORTED_TP_STYLES",
+        "translate_to_torch_parallel_style",
+    ]
+try:
+    if not is_torch_greater_or_equal("2.5"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flex_attention"] = [
+        "make_flex_block_causal_mask",
+    ]
+
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
@@ -165,7 +192,7 @@ if TYPE_CHECKING:
         unset_hf_deepspeed_config,
     )
     from .eetq import replace_with_eetq_linear
-    from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (
@@ -177,6 +204,12 @@ if TYPE_CHECKING:
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
+    from .hub_kernels import (
+        LayerRepository,
+        register_kernel_mapping,
+        replace_kernel_forward_from_hub,
+        use_kernel_forward_from_hub,
+    )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
         AzureMLCallback,
@@ -231,6 +264,25 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
+    try:
+        if not is_torch_greater_or_equal("2.3"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tensor_parallel import (
+            SUPPORTED_TP_STYLES,
+            shard_and_distribute_module,
+            translate_to_torch_parallel_style,
+        )
+
+    try:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .flex_attention import make_flex_block_causal_mask
 else:
     import sys
 

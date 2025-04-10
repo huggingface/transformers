@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -193,7 +192,7 @@ class FP8QuantizerTest(unittest.TestCase):
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
         quantization_config = FineGrainedFP8Config()
@@ -250,6 +249,10 @@ class FP8QuantizerTest(unittest.TestCase):
 class FP8LinearTest(unittest.TestCase):
     device = "cuda"
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
+    )
     def test_linear_preserves_shape(self):
         """
         Test that FP8Linear preserves shape when in_features == out_features.
@@ -262,6 +265,10 @@ class FP8LinearTest(unittest.TestCase):
         x_ = linear(x)
         self.assertEqual(x_.shape, x.shape)
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
+    )
     def test_linear_with_diff_feature_size_preserves_shape(self):
         """
         Test that FP8Linear generates the correct shape when in_features != out_features.

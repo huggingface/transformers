@@ -156,7 +156,7 @@ Die [`pipeline`] kann jedes Modell aus dem [Model Hub](https://huggingface.co/mo
 
 <frameworkcontent>
 <pt>
-Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `AutoClass` below):
+Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and its associated tokenizer (more on an `AutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -166,7 +166,7 @@ Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the
 ```
 </pt>
 <tf>
-Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` below):
+Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and its associated tokenizer (more on an `TFAutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
@@ -222,7 +222,7 @@ Anschließend wandelt der Tokenizer die Token in Zahlen um, um einen Tensor als 
 Der Tokenizer gibt ein Wörterbuch zurück, das Folgendes enthält:
 
 * [input_ids](./glossary#input-ids): numerische Repräsentationen Ihrer Token.
-* [atttention_mask](.glossary#attention-mask): gibt an, welche Token beachtet werden sollen.
+* [attention_mask](.glossary#attention-mask): gibt an, welche Token beachtet werden sollen.
 
 Genau wie die [`pipeline`] akzeptiert der Tokenizer eine Liste von Eingaben. Darüber hinaus kann der Tokenizer den Text auch auffüllen und kürzen, um einen Stapel mit einheitlicher Länge zurückzugeben:
 

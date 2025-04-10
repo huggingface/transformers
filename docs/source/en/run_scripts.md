@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Training scripts
 
-Transformers provides many example training scripts for deep learning frameworks (PyTorch, TensorFlow, Flax) and tasks in [transformers/examples](https://github.com/huggingface/transformers/tree/main/examples). There are additional scripts in [transformers/research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects) and [transformers/legacy](https://github.com/huggingface/transformers/tree/main/examples/legacy), but these aren't actively maintained and requires a specific version of Transformers.
+Transformers provides many example training scripts for deep learning frameworks (PyTorch, TensorFlow, Flax) and tasks in [transformers/examples](https://github.com/huggingface/transformers/tree/main/examples). There are additional scripts in [transformers/research projects](https://github.com/huggingface/transformers-research-projects/) and [transformers/legacy](https://github.com/huggingface/transformers/tree/main/examples/legacy), but these aren't actively maintained and requires a specific version of Transformers.
 
 Example scripts are only examples and you may need to adapt the script to your use-case. To help you with this, most scripts are very transparent in how data is preprocessed, allowing you to edit it as necessary.
 

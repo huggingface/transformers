@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -429,18 +428,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip(
-        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4T has no base model")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(
@@ -683,16 +672,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @unittest.skip(
-        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4T has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -1017,7 +996,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        # FOR NOW, only first units correspondance
+        # FOR NOW, only first units correspondence
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])

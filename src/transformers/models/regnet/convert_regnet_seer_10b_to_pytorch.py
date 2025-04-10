@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from pprint import pprint
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -35,7 +35,7 @@ from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
 from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import _load_state_dict_into_meta_model, load_state_dict
 from transformers.utils import logging
 
 
@@ -159,7 +159,7 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
@@ -244,14 +244,18 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         our_model_func = RegNetModel
         if "in1k" in model_name:
             our_model_func = RegNetForImageClassification
-        our_model = our_model_func(our_config)
-        # place our model to the meta device (so remove all the weights)
-        our_model.to(torch.device("meta"))
+        with torch.device("meta"):
+            our_model = our_model_func(our_config)
         logger.info("Loading state_dict in our model.")
         # load state dict
         state_dict_keys = our_model.state_dict().keys()
-        PreTrainedModel._load_pretrained_model_low_mem(
-            our_model, state_dict_keys, [save_directory / f"{model_name}.pth"]
+        state_dict = load_state_dict(save_directory / f"{model_name}.pth", weights_only=True)
+        fixed_state_dict = state_dict = {our_model._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
+        _load_state_dict_into_meta_model(
+            our_model,
+            fixed_state_dict,
+            start_prefix="",
+            expected_keys=state_dict_keys,
         )
         logger.info("Finally, pushing!")
         # push it to hub

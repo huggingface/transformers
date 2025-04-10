@@ -34,7 +34,7 @@ task_score_names = {
 
 def parse_search_arg(search):
     groups = search.split()
-    entries = dict((g.split("=") for g in groups))
+    entries = dict(g.split("=") for g in groups)
     entry_names = list(entries.keys())
     sets = [[f"--{k} {v}" for v in vs.split(":")] for k, vs in entries.items()]
     matrix = [list(x) for x in itertools.product(*sets)]
@@ -105,7 +105,7 @@ def run_search():
     col_widths = {col: len(str(col)) for col in col_names}
     results = []
     for r in matrix:
-        hparams = dict((x.replace("--", "").split() for x in r))
+        hparams = dict(x.replace("--", "").split() for x in r)
         args_exp = " ".join(r).split()
         args_exp.extend(["--bs", str(args.bs)])  # in case we need to reduce its size due to CUDA OOM
         sys.argv = args_normal + args_exp
@@ -128,7 +128,7 @@ def run_search():
 
     results_sorted = sorted(results, key=operator.itemgetter(*task_score_names[task]), reverse=True)
     print(" | ".join([f"{col:{col_widths[col]}}" for col in col_names]))
-    print(" | ".join([f"{'-'*col_widths[col]}" for col in col_names]))
+    print(" | ".join([f"{'-' * col_widths[col]}" for col in col_names]))
     for row in results_sorted:
         print(" | ".join([f"{row[col]:{col_widths[col]}}" for col in col_names]))
 

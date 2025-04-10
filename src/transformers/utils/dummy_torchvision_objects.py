@@ -58,7 +58,21 @@ class DetrImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class Gemma3ImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class GotOcr2ImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class Llama4ImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
@@ -80,6 +94,13 @@ class LlavaNextImageProcessorFast(metaclass=DummyObject):
 
 
 class LlavaOnevisionImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):

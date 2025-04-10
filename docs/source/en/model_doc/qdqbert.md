@@ -54,7 +54,7 @@ This model was contributed by [shangz](https://huggingface.co/shangz).
 - QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *google-bert/bert-base-uncased*), and
   perform Quantization Aware Training/Post Training Quantization.
 - A complete example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for
-  SQUAD task can be found at [transformers/examples/research_projects/quantization-qdqbert/](examples/research_projects/quantization-qdqbert/).
+  SQUAD task can be found at https://github.com/huggingface/transformers-research-projects/tree/main/quantization-qdqbert.
 
 ### Set default quantizers
 

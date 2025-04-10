@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -130,7 +129,7 @@ class ConfigTester:
             general_config_dict = config.to_dict()
 
             # Iterate over all sub_configs if there are any and load them with their own classes
-            sub_configs = self.config_class.sub_configs
+            sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if sub_class.__name__ == "AutoConfig":
                     sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
@@ -164,7 +163,7 @@ class ConfigTester:
         self.parent.assertEqual(len(config.label2id), 3)
 
     def check_config_can_be_init_without_params(self):
-        if self.config_class.is_composition:
+        if self.config_class.has_no_defaults_at_init:
             with self.parent.assertRaises(ValueError):
                 config = self.config_class()
         else:
