@@ -59,7 +59,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_trainer_and_fsdp_gpu
-      slack_report_channel: "#transformers-ci-daily-deepspeed"
+      slack_report_channel: "#transformers-ci-daily-training"
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
@@ -70,7 +70,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-deepspeed"
+      slack_report_channel: "#transformers-ci-daily-training"
       runner: daily-ci
       docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
       ci_event: Daily CI
