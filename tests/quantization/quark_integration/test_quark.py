@@ -19,6 +19,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
     require_quark,
+    require_read_token,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -42,6 +43,7 @@ class QuarkConfigTest(unittest.TestCase):
 @slow
 @require_quark
 @require_torch_gpu
+@require_read_token
 class QuarkTest(unittest.TestCase):
     reference_model_name = "meta-llama/Llama-3.1-8B-Instruct"
     quantized_model_name = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
