@@ -32,13 +32,14 @@ if is_torch_available:
 class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2AudioProcessor
 
-    def setUp(self):
-        self.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
+        cls.tmpdirname = tempfile.mkdtemp()
 
-        processor_kwargs = self.prepare_processor_dict()
-        processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint, **processor_kwargs)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -46,10 +47,12 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_audio_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "{% set audio_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}{% set audio_count.value = audio_count.value + 1 %}Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
         }
@@ -80,8 +83,9 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Qwen2AudioProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            processor = Qwen2AudioProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
