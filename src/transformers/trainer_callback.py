@@ -965,6 +965,7 @@ class ProfilerCallback(TrainerCallback):
                 logger.info(f"⏱️ Profiling completed in {duration:.2f} seconds")
 
             try:
+                logger.info(f"⏱️ Stopping profiler for {profile_name}, rank {torch.distributed.get_rank()}")
                 self.profiler.stop()
 
                 if is_main_process:
@@ -1018,7 +1019,7 @@ class ProfilerCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         """Called at the end of training."""
         # Only run on the main process
-        if not state.is_world_process_zero and state.is_local_process_zero:
+        if not state.is_world_process_zero and not state.is_local_process_zero:
             return
 
         # Ensure profiler is stopped
