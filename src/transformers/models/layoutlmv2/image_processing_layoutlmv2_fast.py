@@ -33,9 +33,11 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
     requires_backends,
+    logging,
 )
 from .image_processing_layoutlmv2 import apply_tesseract
 
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -45,12 +47,6 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
-
-
-def flip(x, dim):
-    indices = [slice(None)] * x.dim()
-    indices[dim] = torch.arange(x.size(dim) - 1, -1, -1, dtype=torch.long, device=x.device)
-    return x[tuple(indices)]
 
 
 class LayoutLMv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -124,6 +120,10 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
             words_batch = []
             boxes_batch = []
             for image in images:
+                if image.is_cuda:
+                    logger.warning_once(
+                        "apply_ocr can only performed on cpu tensors, got gpu tensors. Tensors will be converted to cpu before processing."
+                    )
                 words, boxes = apply_tesseract(
                     image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST
                 )
