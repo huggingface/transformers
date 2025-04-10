@@ -101,7 +101,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
-    is_torch_fx_available,
     is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
@@ -125,8 +124,8 @@ if is_torch_available():
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
-if is_torch_fx_available():
-    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
 
 if is_deepspeed_available():
     import deepspeed
@@ -1190,10 +1189,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(
-                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
-            )
+        if not self.fx_compatible:
+            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False

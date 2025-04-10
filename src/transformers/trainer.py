@@ -164,7 +164,6 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
-    is_torch_compile_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -257,7 +256,7 @@ if is_accelerate_available("0.28.0"):
 
 def _is_peft_model(model):
     if is_peft_available():
-        classes_to_check = (PeftModel,) if is_peft_available() else ()
+        classes_to_check = (PeftModel,)
         # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
         if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
             from peft import PeftMixedModel
@@ -796,10 +795,6 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
-
-        # torch.compile
-        if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
         self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
@@ -1987,7 +1982,7 @@ class Trainer:
         if self.accelerator.unwrap_model(model) is not model:
             return model
 
-        # Mixed precision training with apex (torch < 1.6)
+        # Mixed precision training with apex
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
@@ -3739,7 +3734,7 @@ class Trainer:
                 torch.musa.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_mps_available(min_version="2.0"):
+            elif is_torch_mps_available():
                 torch.mps.empty_cache()
             elif is_torch_hpu_available():
                 logger.warning(
