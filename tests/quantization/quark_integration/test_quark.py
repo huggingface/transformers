@@ -19,6 +19,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
     require_quark,
+    require_read_token,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -56,6 +57,7 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
 
+    @require_read_token
     @classmethod
     def setUpClass(cls):
         """
