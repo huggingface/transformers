@@ -942,7 +942,6 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
@@ -1128,7 +1127,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
         "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
-        "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
+        "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1137,7 +1136,7 @@ if __name__ == "__main__":
         del additional_files["TensorFlow pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["TensorFlow pipelines"]
-        del additional_files["Torch CUDA extension tests"]
+        del additional_files["DeepSpeed"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
 
@@ -1148,7 +1147,7 @@ if __name__ == "__main__":
         "run_pipelines_torch_gpu": "PyTorch pipelines",
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
-        "run_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+        "run_torch_cuda_extensions_gpu": "DeepSpeed",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.
@@ -1247,7 +1246,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "torch_pipeline",
         "TensorFlow pipelines": "tf_pipeline",
         "Examples directory": "example",
-        "Torch CUDA extension tests": "deepspeed",
+        "DeepSpeed": "deepspeed",
     }
     for job, job_result in additional_results.items():
         with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
@@ -1273,6 +1272,20 @@ if __name__ == "__main__":
             prev_ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
+
+    job_to_test_map.update(
+        {
+            "run_models_gpu": "Models",
+            "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+
+        }
+    )
+
+    ci_name_in_report = ""
+    if job_name in job_to_test_map:
+        ci_name_in_report = job_to_test_map[job_name]
+
+    title = f"🤗 Results of {ci_event}: {ci_name_in_report}."
 
     message = Message(
         title,
