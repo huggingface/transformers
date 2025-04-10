@@ -32,10 +32,12 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    logging,
     requires_backends,
 )
 from .image_processing_layoutlmv3 import apply_tesseract
 
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -128,6 +130,10 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
             words_batch = []
             boxes_batch = []
             for image in images:
+                if image.is_cuda:
+                    logger.warning_once(
+                        "apply_ocr can only performed on cpu tensors, got gpu tensors. Tensors will be converted to cpu before processing."
+                    )
                 words, boxes = apply_tesseract(
                     image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST
                 )
