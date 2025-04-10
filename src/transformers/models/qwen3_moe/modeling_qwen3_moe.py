@@ -29,6 +29,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -289,6 +290,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Qwen3MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """

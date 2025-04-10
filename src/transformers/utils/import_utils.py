@@ -216,6 +216,7 @@ _liger_kernel_available = _is_package_available("liger_kernel")
 _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
+_kernels_available = _is_package_available("kernels")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -327,6 +328,10 @@ if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
 
 def is_kenlm_available():
     return _kenlm_available
+
+
+def is_kernels_available():
+    return _kernels_available
 
 
 def is_cv2_available():
