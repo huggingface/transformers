@@ -1,1 +1,0 @@
-This is a working folder for our contributions to HF Transformers.
