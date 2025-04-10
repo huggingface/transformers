@@ -18,13 +18,12 @@ from packaging import version
 
 from .base import HfQuantizer
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_auto_round_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
+from ..utils.quantization_config import QuantizationConfigMixin
 
 if is_torch_available():
     import torch
@@ -39,7 +38,6 @@ class AutoRoundQuantizer(HfQuantizer):
 
     requires_calibration = False
     required_packages = ["auto_round"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
