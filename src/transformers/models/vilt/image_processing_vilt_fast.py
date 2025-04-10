@@ -112,36 +112,9 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                # Resize with aspect ratio preservation
-                shorter = size.shortest_edge
-                longer = int(MAX_LONGER_EDGE / MAX_SHORTER_EDGE * shorter)
-
-                heights = stacked_images.shape[-2]
-                widths = stacked_images.shape[-1]
-
-                # Determine the new dimensions
-                if heights < widths:
-                    new_heights = shorter
-                    new_widths = widths * (shorter / heights)
-                else:
-                    new_heights = heights * (shorter / widths)
-                    new_widths = shorter
-
-                # Check if the longer side exceeds max size
-                if max(new_heights, new_widths) > longer:
-                    scale = longer / max(new_heights, new_widths)
-                    new_heights = new_heights * scale
-                    new_widths = new_widths * scale
-
-                new_heights = int(new_heights + 0.5)
-                new_widths = int(new_widths + 0.5)
-                # Make dimensions divisible by size_divisor
-                if size_divisor is not None:
-                    new_heights = new_heights // size_divisor * size_divisor
-                    new_widths = new_widths // size_divisor * size_divisor
-
-                # Resize the image
-                stacked_images = F.resize(stacked_images, [new_heights, new_widths], interpolation=interpolation)
+                if isinstance(stacked_images, list):
+                    stacked_images = torch.stack(stacked_images)
+                stacked_images = self._resize(stacked_images, size, interpolation, size_divisor)
 
             resized_images_grouped[shape] = stacked_images
 
@@ -152,6 +125,9 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
+            if isinstance(stacked_images, list):
+                stacked_images = torch.stack(stacked_images)
+
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -164,6 +140,61 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         data = {}
         if do_pad:
             max_size = get_max_height_width(processed_images)
+    def _resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"] = None,
+        size_divisor: Optional[int] = None,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image or batch of images to specified size.
+
+        Args:
+            images (`torch.Tensor`): Image or batch of images to resize.
+            size (`Dict[str, int]`): Size dictionary with shortest_edge key.
+            interpolation (`F.InterpolationMode`, *optional*): Interpolation method to use.
+            size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
+
+        Returns:
+            `torch.Tensor`: Resized image or batch of images.
+        """
+        if interpolation is None:
+            interpolation = self.resample
+
+        # Resize with aspect ratio preservation
+        shorter = size.shortest_edge
+        longer = int(MAX_LONGER_EDGE / MAX_SHORTER_EDGE * shorter)
+
+        heights = images.shape[-2]
+        widths = images.shape[-1]
+
+        # Determine the new dimensions
+        if heights < widths:
+            new_heights = shorter
+            new_widths = widths * (shorter / heights)
+        else:
+            new_heights = heights * (shorter / widths)
+            new_widths = shorter
+
+        # Check if the longer side exceeds max size
+        if max(new_heights, new_widths) > longer:
+            scale = longer / max(new_heights, new_widths)
+            new_heights = new_heights * scale
+            new_widths = new_widths * scale
+
+        new_heights = int(new_heights + 0.5)
+        new_widths = int(new_widths + 0.5)
+
+        # Make dimensions divisible by size_divisor
+        if size_divisor is not None:
+            new_heights = new_heights // size_divisor * size_divisor
+            new_widths = new_widths // size_divisor * size_divisor
+
+        # Resize the image
+        return F.resize(images, [new_heights, new_widths], interpolation=interpolation)
+
             padded_images = []
             pixel_masks = []
 
