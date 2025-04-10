@@ -1195,9 +1195,7 @@ class StaticCache(Cache):
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         self._dtype = dtype
         self.num_key_value_heads = (
@@ -1611,9 +1609,10 @@ class EncoderDecoderCache(Cache):
 
 class HybridCache(Cache):
     """
-    Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
-    and global attention in every other layer. Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention
-    and ["StaticCache"] for global attention. For more information, see the documentation of each subcomponeent cache class.
+    Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
+    attention and global attention in every other layer (originally implemented for Gemma2).
+    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
+    for global attention.For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
         config (`PretrainedConfig):
@@ -1813,9 +1812,11 @@ class HybridCache(Cache):
 
 class HybridChunkedCache(Cache):
     """
-    Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
-    and global attention in every other layer. Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention
-    and ["StaticCache"] for global attention. For more information, see the documentation of each subcomponeent cache class.
+    Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
+    attention and global attention in every other layer, with support for chunked attention (originally implemented
+    for Llama4).
+    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
+    for global attention. For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
         config (`PretrainedConfig):
@@ -1857,7 +1858,7 @@ class HybridChunkedCache(Cache):
 
     # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
     # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1913,22 +1914,34 @@ class HybridChunkedCache(Cache):
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         cumulative_length = self.cumulative_length[layer_idx]
+        # Update it now that we saved the value above
+        self.cumulative_length[layer_idx] += key_states.shape[-2]
         is_full = cumulative_length >= max_cache_len
         if is_full:
             full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
             full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
+            # Fast decoding path -> here as the effective size is still sliding window, it is extremely important
+            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed adress
+            # in memory (the values are the same as the full states, but not the address!!)
+            if key_states.shape[-2] == 1:
+                self.key_cache[layer_idx].copy_(full_key_states)
+                self.value_cache[layer_idx].copy_(full_value_states)
+                return self.key_cache[layer_idx], self.value_cache[layer_idx]
         elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
-            full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
-            full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
+            # Fast prefill path, no need to cat() in this case (which creates a copy even if cating from 0 dim)
+            if cumulative_length == 0:
+                full_key_states = key_states
+                full_value_states = value_states
+            else:
+                full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
             self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
             self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
-            self.cumulative_length[layer_idx] += key_states.shape[-2]
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
         self.key_cache[layer_idx].copy_(full_key_states[:, :, -max_cache_len:, :])
         self.value_cache[layer_idx].copy_(full_value_states[:, :, -max_cache_len:, :])
-        self.cumulative_length[layer_idx] += key_states.shape[-2]
         # we should return the whole states instead of k_out, v_out to take the whole prompt
         # into consideration when building kv cache instead of just throwing away tokens outside of the window
         return full_key_states, full_value_states
@@ -1952,13 +1965,6 @@ class HybridChunkedCache(Cache):
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         self.initialise_cache_layer(layer_idx, key_states)
-
-        # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
-        # when the cache is initialized in the forward pass (e.g. Gemma2)
-        if self.key_cache[layer_idx].device != key_states.device:
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
-        if self.value_cache[layer_idx].device != value_states.device:
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
 
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]

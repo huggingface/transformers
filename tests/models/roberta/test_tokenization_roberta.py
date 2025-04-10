@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,7 +137,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         sequence = "Encode this sequence."
-        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
+        space_encoding = tokenizer.byte_encoder[b" "[0]]
 
         # Testing encoder arguments
         encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)

@@ -482,6 +482,7 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glm": ["GlmConfig"],
+    "models.glm4": ["Glm4Config"],
     "models.glpn": ["GLPNConfig"],
     "models.got_ocr2": [
         "GotOcr2Config",
@@ -2526,6 +2527,15 @@ else:
             "Llama4TextModel",
             "Llama4VisionModel",
             "Llama4PreTrainedModel",
+        ]
+    )
+    _import_structure["models.glm4"].extend(
+        [
+            "Glm4ForCausalLM",
+            "Glm4ForSequenceClassification",
+            "Glm4ForTokenClassification",
+            "Glm4Model",
+            "Glm4PreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -5751,6 +5761,7 @@ if TYPE_CHECKING:
         GitVisionConfig,
     )
     from .models.glm import GlmConfig
+    from .models.glm4 import Glm4Config
     from .models.glpn import GLPNConfig
     from .models.got_ocr2 import GotOcr2Config, GotOcr2Processor, GotOcr2VisionConfig
     from .models.gpt2 import (
@@ -7634,6 +7645,13 @@ if TYPE_CHECKING:
             GlmForTokenClassification,
             GlmModel,
             GlmPreTrainedModel,
+        )
+        from .models.glm4 import (
+            Glm4ForCausalLM,
+            Glm4ForSequenceClassification,
+            Glm4ForTokenClassification,
+            Glm4Model,
+            Glm4PreTrainedModel,
         )
         from .models.glpn import (
             GLPNForDepthEstimation,
