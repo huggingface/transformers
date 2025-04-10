@@ -938,6 +938,8 @@ class HQQQuantizedCache(QuantizedCache):
         )
         meta["compute_dtype"] = self.compute_dtype
         self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        meta["scale"] = meta["scale"].to(qtensor.device)
+        meta["zero"] = meta["zero"].to(qtensor.device)
         return qtensor, meta
 
     def _dequantize(self, qtensor):
