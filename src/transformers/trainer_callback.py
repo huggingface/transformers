@@ -984,11 +984,6 @@ class ProfilerCallback(TrainerCallback):
                 logger.info(self.profiler.key_averages().table(
                     sort_by="cuda_time_total", row_limit=20))
 
-                if self.export_chrome_trace:
-                    trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
-                    self.profiler.export_chrome_trace(trace_path)
-                    logger.info(f"🔍 Chrome trace exported to {trace_path}")
-
                 self.print_optimization_tips()
 
                 logger.info(f"\n📊 Profiler logs saved to {self.log_dir}")
@@ -1000,19 +995,16 @@ class ProfilerCallback(TrainerCallback):
     def print_optimization_tips(self):
         logger.info("\n===== OPTIMIZATION TIPS =====")
         
-        # Get and log top operations by CUDA time
         logger.info("\n----- TOP CUDA OPERATIONS -----")
         cuda_table = self.profiler.key_averages().table(
             sort_by="cuda_time_total", row_limit=5)
         logger.info(cuda_table)
 
-        # Get and log top operations by CPU time
         logger.info("\n----- TOP CPU OPERATIONS -----")
         cpu_table = self.profiler.key_averages().table(
             sort_by="cpu_time_total", row_limit=5)
         logger.info(cpu_table)
 
-        # Get top operations by memory
         if self.profile_memory:
             try:
                 logger.info("\n----- TOP MEMORY-CONSUMING OPERATIONS -----")
