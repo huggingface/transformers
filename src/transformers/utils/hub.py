@@ -152,7 +152,7 @@ def list_repo_templates(
 ) -> list[str]:
     """List template files from a repo.
 
-    A template is a jinja file located under the `templates/` folder.
+    A template is a jinja file located under the `additional_chat_templates/` folder.
     If working in offline mode or if internet is down, the method will list jinja template from the local cache - if any.
     """
 
