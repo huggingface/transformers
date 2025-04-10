@@ -96,6 +96,7 @@ class MolmoVisionText2TextModelTester:
             "image_num_patches": 7,
             "hidden_size": 64,
             "num_attention_heads": 4,
+            "num_key_value_heads": 4,
             "head_dim": 8,
             "pad_embed_dim": 64,
             "text_intermediate_size": 38,
