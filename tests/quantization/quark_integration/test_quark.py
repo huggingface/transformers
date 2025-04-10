@@ -85,7 +85,7 @@ class QuarkTest(unittest.TestCase):
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
-        Checks also if other models are casted correctly.
+        Checks also if other models are casted correctly .
         """
         # This should work
         if self.device_map is None:
