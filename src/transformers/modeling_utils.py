@@ -4020,6 +4020,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     elif device_type == "cpu":
                         cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
                         torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
+                    elif device_type == "xpu":
+                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
+                        torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
 
                 except Exception as e:
                     raise EnvironmentError(
@@ -4028,7 +4031,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     ) from e
 
             # Get device with index assuming equal number of devices per host
-            index = None if device_type == "cpu" else torch.cuda.current_device()
+            if device_type == "xpu":
+                index = torch.xpu.current_device()
+            else:
+                index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
 
             if index is not None and index > 0:
