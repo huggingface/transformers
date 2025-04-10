@@ -40,10 +40,12 @@ class AutoRoundTest(unittest.TestCase):
     model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
     input_text = "There is a girl who likes adventure,"
 
-    EXPECTED_OUTPUT = ('There is a girl who likes adventure, and she has been exploring the world '
-                       'for many years. She travels to different countries and cultures, trying new '
-                       'things every day. One of her favorite places to visit is a small village in '
-                       'the mountains where')
+    EXPECTED_OUTPUT = (
+        "There is a girl who likes adventure, and she has been exploring the world "
+        "for many years. She travels to different countries and cultures, trying new "
+        "things every day. One of her favorite places to visit is a small village in "
+        "the mountains where"
+    )
 
     device_map = "cuda"
 
@@ -84,8 +86,9 @@ class AutoRoundTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16,
-                                                               device_map="cuda")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.bfloat16, device_map="cuda"
+        )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
@@ -135,10 +138,12 @@ class AutoRoundTest(unittest.TestCase):
         """
         model_name = "ybelkada/opt-125m-gptq-4bit"
         from transformers import AutoRoundConfig
+
         quantization_config = AutoRoundConfig()
 
-        model = AutoModelForCausalLM.from_pretrained(model_name,
-                                                     device_map="auto", quantization_config=quantization_config)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto", quantization_config=quantization_config
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         text = "There is a girl who likes adventure,"
@@ -152,26 +157,18 @@ class AutoRoundTest(unittest.TestCase):
         model_name = "facebook/opt-125m"
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", trust_remote_code=True)
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        layer_config = {"model.decoder.layers.0.self_attn.k_proj": {"bits": 8},
-                        "model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
+        layer_config = {
+            "model.decoder.layers.0.self_attn.k_proj": {"bits": 8},
+            "model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32},
+        }
 
         bits, group_size, sym = 4, 128, True
         from auto_round import AutoRound
-        autoround = AutoRound(
-            model,
-            tokenizer,
-            bits=bits,
-            group_size=group_size,
-            sym=sym,
-            layer_config=layer_config
-        )
+
+        autoround = AutoRound(model, tokenizer, bits=bits, group_size=group_size, sym=sym, layer_config=layer_config)
         with tempfile.TemporaryDirectory() as tmpdirname:
             autoround.quantize_and_save(output_dir=tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname,
-                torch_dtype=torch.float16,
-                device_map="auto"
-            )
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float16, device_map="auto")
             text = "There is a girl who likes adventure,"
-            inputs=tokenizer(text, return_tensors="pt").to(model.device)
+            inputs = tokenizer(text, return_tensors="pt").to(model.device)
             tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
