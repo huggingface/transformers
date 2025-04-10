@@ -810,7 +810,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and attention_mask.ndim == 4
             and not output_attentions  # Only unmask for 4d masks
         ):
