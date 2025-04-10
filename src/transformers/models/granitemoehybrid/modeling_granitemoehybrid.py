@@ -116,7 +116,9 @@ class GraniteMultiHeadLatentAttention(nn.Module):
             (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
         )
         if past_key_value is not None:
-            key, value = past_key_value.update(key, value, self.layer_idx)
+            key, value = past_key_value.update(key.unsqueeze(1), value.unsqueeze(1), self.layer_idx)
+            key = key.squeeze(1)
+            value = value.squeeze(1)
 
         query = self.query_up_projection(query)
         key = self.key_up_projection(key)
