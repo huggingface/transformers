@@ -1041,6 +1041,11 @@ if __name__ == "__main__":
         "Unclassified",
     ]
 
+    job_name = os.getenv("CI_TEST_JOB")
+    report_name_prefix = "run_models_gpu"
+    if job_name == "run_trainer_and_fsdp_gpu":
+        report_name_prefix = job_name
+
     # This dict will contain all the information relative to each model:
     # - Failures: the total, as well as the number of failures per-category defined above
     # - Success: total
@@ -1055,13 +1060,13 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for model in models
-        if f"run_models_gpu_{model}_test_reports" in available_artifacts
+        if f"{report_name_prefix}_{model}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
+        for artifact_path in available_artifacts[f"{report_name_prefix}_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1148,7 +1153,6 @@ if __name__ == "__main__":
 
     # Remove some entries in `additional_files` if they are not concerned.
     test_name = None
-    job_name = os.getenv("CI_TEST_JOB")
     if job_name in job_to_test_map:
         test_name = job_to_test_map[job_name]
     additional_files = {k: v for k, v in additional_files.items() if k == test_name}
