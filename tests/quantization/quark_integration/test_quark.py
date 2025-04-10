@@ -47,6 +47,7 @@ class QuarkConfigTest(unittest.TestCase):
 class QuarkTest(unittest.TestCase):
     reference_model_name = "meta-llama/Llama-3.1-8B-Instruct"
     quantized_model_name = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
+
     input_text = "Today I am in Paris and"
 
     EXPECTED_OUTPUTS = set()
