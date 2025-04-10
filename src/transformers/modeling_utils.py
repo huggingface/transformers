@@ -2028,7 +2028,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
-            if re.match(r"^[^/:]+/[^/:]+:[^/:]+$", config._attn_implementation):
+            if isinstance(config._attn_implementation, str) and re.match(r"^[^/:]+/[^/:]+:[^/:]+$", config._attn_implementation):
                 if not is_kernels_available():
                     raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
 
