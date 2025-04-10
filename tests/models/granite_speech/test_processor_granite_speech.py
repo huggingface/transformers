@@ -90,7 +90,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
 
         processor = GraniteSpeechProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
         with pytest.raises(TypeError):
-            processor(text=424, audios=None)
+            processor(text=424, audio=None)
 
     def test_bad_nested_text_fails(self):
         """Ensure we gracefully fail if text is the wrong nested type."""
@@ -102,9 +102,9 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
 
         with pytest.raises(TypeError):
-            processor(text=[424], audios=None)
+            processor(text=[424], audio=None)
 
-    def test_bad_audios_fails(self):
+    def test_bad_audio_fails(self):
         """Ensure we gracefully fail if audio is the wrong type."""
         tokenizer = self.get_tokenizer()
         audio_processor = self.get_audio_processor()
@@ -114,9 +114,9 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
 
         with pytest.raises(TypeError):
-            processor(text=None, audios="foo")
+            processor(text=None, audio="foo")
 
-    def test_nested_bad_audios_fails(self):
+    def test_nested_bad_audio_fails(self):
         """Ensure we gracefully fail if audio is the wrong nested type."""
         tokenizer = self.get_tokenizer()
         audio_processor = self.get_audio_processor()
@@ -126,7 +126,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
 
         with pytest.raises(TypeError):
-            processor(text=None, audios=["foo"])
+            processor(text=None, audio=["foo"])
 
     @parameterized.expand(
         [
@@ -147,10 +147,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             tokenizer=tokenizer,
             audio_processor=audio_processor,
         )
-        audios = random_func(*vec_dims) - 0.5
+        audio = random_func(*vec_dims) - 0.5
 
         audio_tokens = processor.audio_token * vec_dims[0]
-        inputs = processor(text=f"{audio_tokens} Can you compare this audio?", audios=audios, return_tensors="pt")
+        inputs = processor(text=f"{audio_tokens} Can you compare this audio?", audio=audio, return_tensors="pt")
 
         # Check the number of audio tokens
         audio_token_id = tokenizer.get_vocab()[processor.audio_token]
@@ -175,14 +175,14 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
         vec_dims = [[1, 142100], [1, 269920]]
         num_expected_features = [90, 171]
-        audios = [torch.rand(dims) - 0.5 for dims in vec_dims]
+        audio = [torch.rand(dims) - 0.5 for dims in vec_dims]
 
         inputs = processor(
             text=[
                 f"{processor.audio_token} Can you describe this audio?",
                 f"{processor.audio_token} How does it compare with this audio?",
             ],
-            audios=audios,
+            audio=audio,
             return_tensors="pt",
         )
 
@@ -214,7 +214,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
 
         inputs = processor(
             text=f"{processor.audio_token} Can you transcribe this audio?",
-            audios=wav,
+            audio=wav,
             return_tensors="pt",
             device="cuda",
         )

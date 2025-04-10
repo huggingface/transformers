@@ -529,7 +529,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             # Merge the audio features into the LLM embeddings
             inputs_embeds = self.get_merged_audio_embeddings(
                 input_ids=input_ids,
-                audio_features=audio_features,
+                audio_features=audio_embeds,
                 input_features_mask=input_features_mask,
             )
 

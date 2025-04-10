@@ -53,12 +53,12 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text = self._get_validated_text(text)
         prompt_strings = text
 
-        if audios is not None:
+        if audio is not None:
             # NOTE - we intentionally avoid throwing for potentially misaligned
             # text / audio inputs here because some inference engines will
             # trigger the conditions due to the way they call multimodal
             # processors, e.g., vLLM.
-            audio_inputs = self.audio_processor(audios, device=device)
+            audio_inputs = self.audio_processor(audio, device=device)
             audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
 
             # Expand the audio placeholders to match the feature dims; this
