@@ -102,6 +102,7 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
+    is_kernels_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -156,6 +157,9 @@ if is_safetensors_available():
 
 if is_deepspeed_available():
     import deepspeed
+
+if is_kernels_available():
+    from kernels import get_kernel
 
 logger = logging.get_logger(__name__)
 
@@ -1496,7 +1500,6 @@ class ModuleUtilsMixin:
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
         # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-        # causal and attention masks must have same type with pytorch version < 1.3
         causal_mask = causal_mask.to(attention_mask.dtype)
 
         if causal_mask.shape[1] < attention_mask.shape[1]:
@@ -1784,6 +1787,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # for example.
     _tp_plan = None
 
+    # tensor parallel degree to which model is sharded to.
+    _tp_size = None
+
     # A pipeline parallel plan specifying the layers which may not be present
     # on all ranks when PP is enabled. For top-level models, this attribute is
     # currently defined in respective model code. For base models, this
@@ -2023,6 +2029,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible.'
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
+
+            if isinstance(config._attn_implementation, str) and re.match(
+                r"^[^/:]+/[^/:]+:[^/:]+$", config._attn_implementation
+            ):
+                if not is_kernels_available():
+                    raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
+
+                # Extract repo_id and kernel_name from the string
+                repo_id, kernel_name = config._attn_implementation.split(":")
+                kernel_name = kernel_name.strip()
+                repo_id = repo_id.strip()
+
+                try:
+                    kernel = get_kernel(repo_id)
+                    ALL_ATTENTION_FUNCTIONS.register(
+                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
+                    )
+                    config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                except FileNotFoundError as e:
+                    logger.warning(
+                        f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
+                    )
+                    config._attn_implementation = "eager"
+                except AttributeError:
+                    raise ValueError(
+                        "the kernel function name or class specified in the attn_implementation argument is not valid. \
+                                     Please check the documentation for the correct format, \
+                                     and check that the kernel exports the class and the function correctly."
+                    )
 
             if (
                 not isinstance(config._attn_implementation, dict)
@@ -3845,6 +3880,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Currently, it only accepts
                 `tp_plan="auto"` to use predefined plan based on the model. Note that if you use it, you should launch your script accordingly with
                 `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
+            tp_size (`str`, *optional*):
+                A torch tensor parallel degree. If not provided would default to world size.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -3941,6 +3978,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
+        tp_size = kwargs.pop("tp_size", None)
         key_mapping = kwargs.pop("key_mapping", None)
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -3953,7 +3991,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             raise ValueError(
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
             )
-
+        if tp_size is not None and tp_plan is None:
+            raise ValueError("tp_plan has to be set when tp_size is passed.")
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
@@ -3989,6 +4028,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     elif device_type == "cpu":
                         cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
                         torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
+                    elif device_type == "xpu":
+                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
+                        torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
 
                 except Exception as e:
                     raise EnvironmentError(
@@ -3997,7 +4039,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     ) from e
 
             # Get device with index assuming equal number of devices per host
-            index = None if device_type == "cpu" else torch.cuda.current_device()
+            if device_type == "xpu":
+                index = torch.xpu.current_device()
+            else:
+                index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
 
             if index is not None and index > 0:
@@ -4007,9 +4052,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 sys.stderr = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+
+            # Assuming sharding the model onto the world when tp_size not provided
+            tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4293,7 +4339,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
-                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
+                config,
+                use_flash_attention_2=use_flash_attention_2,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
             )
 
         with ContextManagers(model_init_context):
@@ -4372,6 +4421,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
+
+        # record tp degree the model sharded to
+        model._tp_size = tp_size
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4456,7 +4508,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             elif from_flax:
                 loading_info = None
             return model, loading_info
-
         return model
 
     @staticmethod
@@ -5099,6 +5150,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if getattr(self.base_model, "_tp_plan", None) is not None:
             return True
         return False
+
+    @property
+    def tp_size(self):
+        """
+        Returns the model's tensor parallelism degree.
+        """
+        # if None, the model didn't undergo tensor parallel sharding
+        return self._tp_size
 
     @property
     def supports_pp_plan(self):

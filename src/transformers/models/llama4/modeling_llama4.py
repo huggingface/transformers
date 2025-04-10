@@ -110,7 +110,7 @@ class Llama4TextMLP(nn.Module):
 
 
 class Llama4TextL2Norm(torch.nn.Module):
-    def __init__(self, dim: int = None, eps: float = 1e-6):
+    def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
 
@@ -301,7 +301,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm()
+            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
 
     def forward(
         self,
@@ -467,7 +467,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     config_class = Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -731,7 +731,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         attention_chunk_size = self.config.attention_chunk_size
 
         first_cache_position = cache_position[0]
-        last_cache_position = cache_position[-1]
 
         if past_key_values is not None:
             full_cache_length = past_key_values.get_max_cache_shape() or sequence_length
@@ -754,7 +753,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                offsets = (first_cache_position, max(last_cache_position - key_length, 0))
+                offsets = (first_cache_position, max(first_cache_position - attention_chunk_size + 1, 0))
                 chunked_attention_mask = make_flex_block_causal_mask(
                     attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
                 )
@@ -780,10 +779,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             batch_size=input_tensor.shape[0],
         )
         if full_cache_length > self.config.attention_chunk_size:
-            start_idx = max(last_cache_position - key_length, 0)
-            end_idx = last_cache_position + 1 if sequence_length > 1 else last_cache_position
-            # We always need a mask of at least attention_chunk_size, so we use the max here
-            end_idx = max(end_idx, start_idx + attention_chunk_size)
+            start_idx = max(first_cache_position - attention_chunk_size + 1, 0)
+            end_idx = start_idx + key_length
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
                 start=start_idx,  # same offset as with flex
@@ -813,7 +810,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and attention_mask.ndim == 4
             and not output_attentions  # Only unmask for 4d masks
         ):
