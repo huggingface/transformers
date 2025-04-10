@@ -79,6 +79,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     size_divisor = 32
     do_pad = True
+    default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
     valid_kwargs = ViltFastImageProcessorKwargs
 
