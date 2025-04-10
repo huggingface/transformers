@@ -86,6 +86,6 @@ Backends that can be added here are all the backends that are available in the `
 
 ## Methods
 
-[[autodoc]] import_utils.define_import_structure
+[[autodoc]] utils.import_utils.define_import_structure
 
-[[autodoc]] import_utils.requires
+[[autodoc]] utils.import_utils.requires
