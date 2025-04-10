@@ -79,11 +79,6 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    # todo: yoni, fix this test
-    @unittest.skip("Chat template has long system prompt")
-    def test_chat_template_accepts_processing_kwargs(self, **kwargs):
-        pass
-
     # Override as AyaVisionProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
