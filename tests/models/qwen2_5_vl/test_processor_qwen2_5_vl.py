@@ -335,7 +335,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         Tests that models can use their own preprocessing to preprocess conversations.
         """
-        processor = self.get_processor_slow_vision()
+        processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
