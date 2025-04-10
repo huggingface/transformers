@@ -1787,6 +1787,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # tensor parallel degree to which model is sharded to.
     _tp_size = None
 
+    # data parallel degree to be used, if any
+    # is used to be forwarded to accelerate to get the correct device mesh
+    _dp_size = None
+
     # A pipeline parallel plan specifying the layers which may not be present
     # on all ranks when PP is enabled. For top-level models, this attribute is
     # currently defined in respective model code. For base models, this
@@ -3850,6 +3854,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
             tp_size (`str`, *optional*):
                 A torch tensor parallel degree. If not provided would default to world size.
+            dp_size (`int`, *optional*):
+                A torch data parallel degree. Is only used to create the correct device mesh if `tp_size` is provided.
+                Only used by Accelerate to compose TP + FSDP/DDP.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -3947,6 +3954,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        dp_size = kwargs.pop("dp_size", None)
         key_mapping = kwargs.pop("key_mapping", None)
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -3968,6 +3976,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
+        if tp_size is None and dp_size is not None:
+            dp_size = None
 
         # If torchrun was used, make sure to TP by default. This way people don't need to change tp or device map
         if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE", 0)):
@@ -4017,7 +4027,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             # Assuming sharding the model onto the world when tp_size not provided
             tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+            if dp_size is not None and tp_size * dp_size != torch.distributed.get_world_size():
+                raise ValueError(
+                    f"tp_size * dp_size ({tp_size} * {dp_size}) must be equal to the world size {torch.distributed.get_world_size()}."
+                )
+            device_mesh_shape = (
+                (
+                    dp_size,
+                    tp_size,
+                )
+                if dp_size
+                else (tp_size,)
+            )
+            mesh_dim_names = (
+                (
+                    "dp",
+                    "tp",
+                )
+                if dp_size
+                else ("tp",)
+            )
+            device_mesh = torch.distributed.init_device_mesh(
+                tp_device.type, device_mesh_shape, mesh_dim_names=mesh_dim_names
+            )
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4376,13 +4408,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_regex=keep_in_fp32_regex,
-                device_mesh=device_mesh,
+                device_mesh=device_mesh["tp"],
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
 
-        # record tp degree the model sharded to
+        # record tp/dp info for accelerate
         model._tp_size = tp_size
+        model._dp_size = dp_size
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4814,7 +4847,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     is_safetensors=is_offloaded_safetensors,
                     keep_in_fp32_regex=keep_in_fp32_regex,
                     unexpected_keys=unexpected_keys,
-                    device_mesh=device_mesh,
+                    device_mesh=device_mesh["tp"],
                 )
 
             # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
@@ -5117,6 +5150,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         # if None, the model didn't undergo tensor parallel sharding
         return self._tp_size
+
+    @property
+    def dp_size(self):
+        """
+        Returns the model's data parallelism degree.
+        """
+        return self._dp_size
 
     @property
     def supports_pp_plan(self):

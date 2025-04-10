@@ -5141,8 +5141,12 @@ class Trainer:
             self.is_tp_enabled = True
             if version.parse(accelerate_version) > version.parse("1.3.0"):
                 args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
+                args["tp_size"] = self.model.tp_size
             else:
                 raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
+        if hasattr(self.model, "dp_size") and self.model.dp_size is not None and self.model.dp_size > 1:
+            # TODO: version check
+            args["dp_size"] = self.model.dp_size
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
