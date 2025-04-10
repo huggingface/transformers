@@ -42,6 +42,7 @@ class MistralMLP(LlamaMLP):
 class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -303,7 +304,7 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

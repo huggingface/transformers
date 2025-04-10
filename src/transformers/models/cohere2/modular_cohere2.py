@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import partial
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -454,7 +454,7 @@ class Cohere2Model(Gemma2Model):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -465,7 +465,7 @@ class Cohere2Model(Gemma2Model):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

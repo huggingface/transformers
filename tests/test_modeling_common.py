@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, List, Tuple
 
 import numpy as np
 from packaging import version
@@ -74,6 +72,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    get_device_properties,
     hub_retry,
     is_flaky,
     require_accelerate,
@@ -860,11 +859,12 @@ class ModelTesterMixin:
                         model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
-                    with torch.device(torch_device):
-                        model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
-                        inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
-                        inputs_dict["labels"] = inputs_dict["input_ids"]
-                        _ = model(**inputs_dict, return_dict=False)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        tmpdir, torch_dtype=torch.float32, device_map=torch_device
+                    )
+                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                    inputs_dict["labels"] = inputs_dict["input_ids"]
+                    _ = model(**inputs_dict, return_dict=False)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
@@ -1977,7 +1977,7 @@ class ModelTesterMixin:
             self.test_resize_tokens_embeddings()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2083,7 +2083,7 @@ class ModelTesterMixin:
             self.test_resize_embeddings_untied()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2332,10 +2332,10 @@ class ModelTesterMixin:
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -2454,7 +2454,7 @@ class ModelTesterMixin:
         return new_tf_outputs, new_pt_outputs
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     def test_inputs_embeds(self):
@@ -2655,7 +2655,7 @@ class ModelTesterMixin:
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
                     torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
-                elif isinstance(value, (Tuple, List)):
+                elif isinstance(value, (tuple, list)):
                     for value_, parallel_value_ in zip(value, parallel_value):
                         torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
 
@@ -3764,12 +3764,15 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -3809,13 +3812,16 @@ class ModelTesterMixin:
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-        torch.compiler.reset()
-        if "cuda" in torch_device:
-            compute_capability = torch.cuda.get_device_capability()
-            major, _ = compute_capability
 
-            if not torch.version.cuda or major < 8:
-                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:

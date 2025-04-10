@@ -151,6 +151,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
     ]
@@ -177,6 +179,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
+    "models/llama4/test_modeling_llama4.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -191,7 +194,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapAudioModelWithProjection",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
-    "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",
@@ -1097,8 +1099,7 @@ def check_all_objects_are_documented():
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
-            "The following objects are in the public init so should be documented:\n - "
-            + "\n - ".join(undocumented_objs)
+            "The following objects are in the public init, but not in the docs:\n - " + "\n - ".join(undocumented_objs)
         )
     check_model_type_doc_match()
     check_public_method_exists(documented_methods_map)

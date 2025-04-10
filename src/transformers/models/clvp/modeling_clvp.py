@@ -171,7 +171,7 @@ class ClvpEncoderOutput(ModelOutput):
     """
 
     embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -211,15 +211,15 @@ class ClvpOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     speech_ids: Optional[torch.LongTensor] = None
-    logits_per_speech: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    speech_embeds: torch.FloatTensor = None
+    logits_per_speech: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    speech_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
-    decoder_hidden_states: torch.FloatTensor = None
-    text_encoder_hidden_states: torch.FloatTensor = None
-    speech_encoder_hidden_states: torch.FloatTensor = None
+    decoder_hidden_states: Optional[torch.FloatTensor] = None
+    text_encoder_hidden_states: Optional[torch.FloatTensor] = None
+    speech_encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Clvp
@@ -1737,8 +1737,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=ClvpOutput, config_class=ClvpConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
@@ -1868,8 +1868,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         pad_to_max_mel_tokens: Optional[int] = None,
