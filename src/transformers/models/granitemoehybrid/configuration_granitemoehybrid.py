@@ -165,6 +165,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_expand=2,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
+        # TODO this variable will not be needed in future
+        attn_layer_indices = None,
         # confirm this variable if needed or not
         mamba_proj_bias=False,
         logits_to_keep=1,
@@ -236,6 +238,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.mamba_proj_bias = mamba_proj_bias
         self.mamba_expand = mamba_expand
         self.logits_to_keep = logits_to_keep
+        self.attn_layer_indices = attn_layer_indices
 
         self.mla_query_comp_size = mla_query_comp_size
         self.mla_key_value_comp_size = mla_key_value_comp_size
