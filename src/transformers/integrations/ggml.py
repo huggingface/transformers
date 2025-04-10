@@ -686,6 +686,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "mamba": GGUFGPTConverter,
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
+    "gemma3_text": GGUFGemmaConverter,
 }
 
 
