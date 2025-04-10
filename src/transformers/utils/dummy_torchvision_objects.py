@@ -78,7 +78,7 @@ class LayoutLMv2ImageProcessorFast(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
-        
+
 class Llama4ImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 

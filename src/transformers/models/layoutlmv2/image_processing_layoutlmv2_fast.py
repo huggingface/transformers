@@ -32,10 +32,11 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    requires_backends,
     logging,
+    requires_backends,
 )
 from .image_processing_layoutlmv2 import apply_tesseract
+
 
 logger = logging.get_logger(__name__)
 
