@@ -854,6 +854,7 @@ class ProfilerCallback(TrainerCallback):
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     def on_train_begin(self, args, state, control, **kwargs):
+        logger.info(f"Train begin. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
         if not state.is_world_process_zero and not state.is_local_process_zero:
             return
 
@@ -875,6 +876,8 @@ class ProfilerCallback(TrainerCallback):
 
 
     def on_epoch_begin(self, args, state, control, **kwargs):
+        logger.info(f"Epoch begin. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
+
         self.epoch_count += 1
 
         if not state.is_world_process_zero and not state.is_local_process_zero:
@@ -897,6 +900,7 @@ class ProfilerCallback(TrainerCallback):
                     logger.info(f"📊 Profiling epoch {self.epoch_count}")
 
     def on_epoch_end(self, args, state, control, **kwargs):
+        logger.info(f"Epoch end. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
         if not state.is_world_process_zero and not state.is_local_process_zero:
             return
 
@@ -922,6 +926,7 @@ class ProfilerCallback(TrainerCallback):
         self.is_profiling = True
 
     def on_step_begin(self, args, state, control, **kwargs):
+        logger.info(f"Step begin. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
 
         if not state.is_world_process_zero and not state.is_local_process_zero:
             return
@@ -941,6 +946,7 @@ class ProfilerCallback(TrainerCallback):
                 pass
 
     def on_step_end(self, args, state, control, **kwargs):
+        logger.info(f"Step end. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
         if not state.is_world_process_zero and not state.is_local_process_zero:
             return
 
@@ -957,72 +963,77 @@ class ProfilerCallback(TrainerCallback):
                 self.stop_profiler(state=state)
 
     def stop_profiler(self, profile_name="profile", state=None):
+        if state is not None:
+            logger.info(f"Stopping profiler. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
+            if not state.is_world_process_zero and not state.is_local_process_zero:
+                return
+        elif self.is_profiling and self.profiler is not None:
+            logger.info("Stopping profiler without state information")
+        
         if self.is_profiling and self.profiler is not None:
-            is_main_process = state is None or state.is_world_process_zero or state.is_local_process_zero
-
             duration = time.time() - self.start_time
-            if is_main_process:
-                logger.info(f"⏱️ Profiling completed in {duration:.2f} seconds")
+            logger.info(f"⏱️ Profiling completed in {duration:.2f} seconds")
 
             try:
-                logger.info(f"⏱️ Stopping profiler for {profile_name}, rank {torch.distributed.get_rank()}")
                 self.profiler.stop()
+                if torch.distributed.is_initialized():
+                    rank = torch.distributed.get_rank()
+                    profile_name = f"{profile_name}_rank_{rank}"
 
-                if is_main_process:
-                    if torch.distributed.is_initialized():
-                        rank = torch.distributed.get_rank()
-                        profile_name = f"{profile_name}_rank_{rank}"
+                logger.info(f"\n===== PROFILER SUMMARY ({profile_name}) =====")
+                logger.info(self.profiler.key_averages().table(
+                    sort_by="cuda_time_total", row_limit=20))
 
-                    logger.info(f"\n===== PROFILER SUMMARY ({profile_name}) =====")
-                    logger.info(self.profiler.key_averages().table(
-                        sort_by="cuda_time_total", row_limit=20))
+                if self.export_chrome_trace:
+                    trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
+                    self.profiler.export_chrome_trace(trace_path)
+                    logger.info(f"🔍 Chrome trace exported to {trace_path}")
 
-                    if self.export_chrome_trace:
-                        trace_path = os.path.join(self.log_dir, f"{profile_name}_trace_{self.timestamp}.json")
-                        self.profiler.export_chrome_trace(trace_path)
-                        logger.info(f"🔍 Chrome trace exported to {trace_path}")
+                self.print_optimization_tips()
 
-                    self.print_optimization_tips()
-
-                    logger.info(f"\n📊 Profiler logs saved to {self.log_dir}")
-                    logger.info(f"📈 View results with: tensorboard --logdir={self.log_dir}")
+                logger.info(f"\n📊 Profiler logs saved to {self.log_dir}")
+                logger.info(f"📈 View results with: tensorboard --logdir={self.log_dir}")
             except Exception as e:
-                if is_main_process:
-                    logger.info(f"❌ Error stopping profiler", e)
-
+                logger.error(f"❌ Error stopping profiler", e)
             self.is_profiling = False
 
     def print_optimization_tips(self):
         logger.info("\n===== OPTIMIZATION TIPS =====")
-        # Get top operations by CUDA time
-        top_cuda_ops = self.profiler.key_averages().table(
+        
+        # Get and log top operations by CUDA time
+        logger.info("\n----- TOP CUDA OPERATIONS -----")
+        cuda_table = self.profiler.key_averages().table(
             sort_by="cuda_time_total", row_limit=5)
+        logger.info(cuda_table)
 
-        # Get top operations by CPU time
-        top_cpu_ops = self.profiler.key_averages().table(
+        # Get and log top operations by CPU time
+        logger.info("\n----- TOP CPU OPERATIONS -----")
+        cpu_table = self.profiler.key_averages().table(
             sort_by="cpu_time_total", row_limit=5)
+        logger.info(cpu_table)
 
         # Get top operations by memory
         if self.profile_memory:
             try:
-                top_memory_ops = self.profiler.key_averages().table(
+                logger.info("\n----- TOP MEMORY-CONSUMING OPERATIONS -----")
+                memory_table = self.profiler.key_averages().table(
                     sort_by="self_cuda_memory_usage", row_limit=5)
+                logger.info(memory_table)
                 logger.info("💾 Check for memory-intensive operations in the trace")
             except:
                 pass
 
+        logger.info("\n----- OPTIMIZATION SUGGESTIONS -----")
         logger.info("⚡ Focus on optimizing the most time-consuming operations")
         logger.info("💡 Consider using torch.compile() for performance improvements")
         logger.info("🧠 Check for unnecessary CPU-GPU synchronization")
         logger.info("📏 Consider optimizing batch size for better GPU utilization")
 
     def on_train_end(self, args, state, control, **kwargs):
-        """Called at the end of training."""
-        # Only run on the main process
+        logger.info(f"Train end. Current operation: is_local_process_zero={state.is_local_process_zero}, is_world_process_zero={state.is_world_process_zero}")
         if not state.is_world_process_zero and not state.is_local_process_zero:
             return
 
-        # Ensure profiler is stopped
         self.stop_profiler(state=state)
         logger.info("✅ Profiling session completed")
 
