@@ -218,41 +218,66 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `dict`: Dictionary containing padded images and pixel masks.
         """
-        # Calculate maximum dimensions
+        # Calculate global maximum dimensions across all images
         max_size = get_max_height_width(images)
 
+        # Group images by shape before padding
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        processed_grouped = {}
+
+        for shape, stacked_images in grouped_images.items():
+            # Convert list to tensor if needed
+            if isinstance(stacked_images, list):
+                stacked_images = torch.stack(stacked_images)
+
+            # Create mask template for efficient masking
+            if return_tensors == "pt" and len(stacked_images) > 0:
+                device = stacked_images.device
+                mask_template = torch.zeros(max_size, dtype=torch.int64, device=device)
+
+            # Process each image in the group
+            padded_images = []
+            pixel_masks = []
+
+            for image in stacked_images:
+                original_size = image.shape[-2:]
+                needs_padding = original_size[0] != max_size[0] or original_size[1] != max_size[1]
+
+                if needs_padding:
+                    padding_bottom = max_size[0] - original_size[0]
+                    padding_right = max_size[1] - original_size[1]
+                    padding = [0, 0, padding_right, padding_bottom]
+
+                    # Pad the image
+                    padded_image = F.pad(image, padding, fill=0)
+
+                    # Create pixel mask (1 for valid pixels, 0 for padding)
+                    pixel_mask = mask_template.clone()
+                    pixel_mask[: original_size[0], : original_size[1]].fill_(1)
+                else:
+                    padded_image = image
+                    pixel_mask = torch.ones(max_size, dtype=torch.int64, device=image.device)
+
+                padded_images.append(padded_image)
+                pixel_masks.append(pixel_mask)
+
+            # Stack for this group if tensors are requested
+            if return_tensors == "pt" and padded_images:
+                padded_images = torch.stack(padded_images)
+                pixel_masks = torch.stack(pixel_masks)
+
+            # Store processed group
+            processed_grouped[shape] = (padded_images, pixel_masks)
+
+        # Reorder images back to original order
         padded_images = []
         pixel_masks = []
 
-        # Create mask template for efficient masking
-        if return_tensors == "pt" and len(images) > 0:
-            device = images[0].device
-            mask_template = torch.zeros(max_size, dtype=torch.int64, device=device)
+        for _, (group_key, position) in grouped_images_index.items():
+            padded_images.append(processed_grouped[group_key][0][position])
+            pixel_masks.append(processed_grouped[group_key][1][position])
 
-        # Process each image
-        for image in images:
-            original_size = image.shape[-2:]
-
-            # Check if padding is needed
-            if original_size[0] != max_size[0] or original_size[1] != max_size[1]:
-                padding_bottom = max_size[0] - original_size[0]
-                padding_right = max_size[1] - original_size[1]
-                padding = [0, 0, padding_right, padding_bottom]
-
-                # Pad the image
-                padded_image = F.pad(image, padding, fill=0)
-
-                # Create pixel mask (1 for valid pixels, 0 for padding)
-                pixel_mask = mask_template.clone()
-                pixel_mask[:original_size[0], :original_size[1]].fill_(1)
-            else:
-                padded_image = image
-                pixel_mask = torch.ones(max_size, dtype=torch.int64, device=image.device)
-
-            padded_images.append(padded_image)
-            pixel_masks.append(pixel_mask)
-
-        # Stack if tensors are requested
+        # Stack if tensors are requested for final result
         if return_tensors == "pt" and padded_images:
             padded_images = torch.stack(padded_images)
             pixel_masks = torch.stack(pixel_masks)
