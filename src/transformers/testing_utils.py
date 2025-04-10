@@ -70,6 +70,7 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
@@ -161,11 +162,9 @@ from .utils import (
     strtobool,
 )
 
-
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils.imports import is_fp8_available
-
 
 if is_pytest_available():
     from _pytest.doctest import (
@@ -183,7 +182,6 @@ if is_pytest_available():
 else:
     Module = object
     DoctestItem = object
-
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
@@ -1023,7 +1021,7 @@ def require_torch_large_gpu(test_case, memory: float = 20):
         return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
 
     return unittest.skipUnless(
-        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        torch.cuda.get_device_properties(0).total_memory / 1024 ** 3 > memory,
         f"test requires a GPU with more than {memory} GiB of memory",
     )(test_case)
 
@@ -1288,6 +1286,13 @@ def require_auto_awq(test_case):
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
+def require_auto_round(test_case):
+    """
+    Decorator for auto_round dependency
+    """
+    return unittest.skipUnless(is_auto_round_available(), "test requires autoround")(test_case)
+
+
 def require_optimum_quanto(test_case):
     """
     Decorator for quanto dependency
@@ -1473,7 +1478,7 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
 
 
 def evaluate_side_effect_factory(
-    side_effect_values: list[dict[str, float]],
+        side_effect_values: list[dict[str, float]],
 ) -> Generator[dict[str, float], None, None]:
     """
     Function that returns side effects for the _evaluate method.
@@ -1529,9 +1534,9 @@ def set_model_tester_for_less_flaky_test(test_case):
     if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
         test_case.model_tester.num_hidden_layers = target_num_hidden_layers
     if (
-        hasattr(test_case.model_tester, "vision_config")
-        and "num_hidden_layers" in test_case.model_tester.vision_config
-        and target_num_hidden_layers is not None
+            hasattr(test_case.model_tester, "vision_config")
+            and "num_hidden_layers" in test_case.model_tester.vision_config
+            and target_num_hidden_layers is not None
     ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
         if isinstance(test_case.model_tester.vision_config, dict):
@@ -1539,9 +1544,9 @@ def set_model_tester_for_less_flaky_test(test_case):
         else:
             test_case.model_tester.vision_config.num_hidden_layers = 1
     if (
-        hasattr(test_case.model_tester, "text_config")
-        and "num_hidden_layers" in test_case.model_tester.text_config
-        and target_num_hidden_layers is not None
+            hasattr(test_case.model_tester, "text_config")
+            and "num_hidden_layers" in test_case.model_tester.text_config
+            and target_num_hidden_layers is not None
     ):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
         if isinstance(test_case.model_tester.text_config, dict):
@@ -2624,11 +2629,11 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
                     return test_func_ref(*args, **kwargs)
                 # We catch all exceptions related to network issues from requests
                 except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ReadTimeout,
-                    requests.exceptions.HTTPError,
-                    requests.exceptions.RequestException,
+                        requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout,
+                        requests.exceptions.ReadTimeout,
+                        requests.exceptions.HTTPError,
+                        requests.exceptions.RequestException,
                 ) as err:
                     logger.error(
                         f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
@@ -2747,7 +2752,7 @@ def run_test_using_subprocess(func):
                     text = ""
                     for line in lines[1:]:
                         if line.startswith("FAILED "):
-                            text = line[len("FAILED ") :]
+                            text = line[len("FAILED "):]
                             text = "".join(text.split(" - ")[1:])
                         elif line.startswith("=") and line.endswith("=") and " failed in " in line:
                             break
@@ -2786,9 +2791,9 @@ def preprocess_string(string, skip_cuda_tests):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
             codeblocks[i] = re.sub(r"(>>> .*load_dataset\(.*)", r"\1 # doctest: +IGNORE_RESULT", codeblock)
         if (
-            (">>>" in codeblock or "..." in codeblock)
-            and re.search(r"cuda|to\(0\)|device=0", codeblock)
-            and skip_cuda_tests
+                (">>>" in codeblock or "..." in codeblock)
+                and re.search(r"cuda|to\(0\)|device=0", codeblock)
+                and skip_cuda_tests
         ):
             is_cuda_found = True
             break
@@ -2830,11 +2835,12 @@ class HfDocTestParser(doctest.DocTestParser):
              (?:\n|$)  # Match a new line or end of string
           )*)
         ''', re.MULTILINE | re.VERBOSE
-    )
+                             )
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
     skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3029,6 +3035,7 @@ if is_torch_available():
 
         torch_device = device_name
 
+
         def update_mapping_from_spec(device_fn_dict: dict[str, Callable], attribute_name: str):
             try:
                 # Try to import the function directly
@@ -3040,6 +3047,7 @@ if is_torch_available():
                     raise AttributeError(
                         f"`{attribute_name}` not found in '{device_spec_path}' and no default fallback function found."
                     ) from e
+
 
         # Add one entry here for each `BACKEND_*` dictionary.
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")

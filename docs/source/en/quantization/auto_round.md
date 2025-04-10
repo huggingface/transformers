@@ -10,48 +10,68 @@ rendered properly in your Markdown viewer.
 -->
 
 # AutoRound
+
 Make sure you have auto-round installed:
 
 ```bash
 pip install auto-round
 ```
 
+AutoRound supports multiple devices, including CPU, XPU, and CUDA. It automatically selects the best available backend
+based on the installed libraries and prompts the user to install additional libraries when a better backend is
+available.
 
-AutoRound supports multiple devices, including CPU, XPU, and CUDA. It automatically selects the best available backend based on the installed libraries and prompts the user to install additional libraries when a better backend is available.
-
-
-## Infercence
-
-
+## Inference
 
 ### CPU
-Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits/XPU and ITREX(intel-extension-for-transformers) for 2/8 bits.
 
-## Example
+Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits or XPU and ITREX(
+intel-extension-for-transformers) for 2/8 bits.
+
+#### Example
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-model_name = "Intel/Qwen2-7B-int4-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu")
+
+model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
-
 
 ### XPU
-Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits/XPU and ITREX(intel-extension-for-transformers) for 2/8 bits.
 
-## Example
+Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits/XPU and ITREX(
+intel-extension-for-transformers) for 2/8 bits.
+
+#### Example
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-model_name = "Intel/Qwen2-7B-int4-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu")
+
+model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
+### CUDA
+
+Supports 2,3 4,8 bits, we recommend to use GPTQModel(intel-extension-for-pytorch) for 4,8 bits
+
+#### Example
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+text = "There is a girl who likes adventure,"
+inputs = tokenizer(text, return_tensors="pt").to(model.device)
+print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
+```
