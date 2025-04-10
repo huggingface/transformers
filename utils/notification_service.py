@@ -1285,7 +1285,7 @@ if __name__ == "__main__":
     if job_name in job_to_test_map:
         ci_name_in_report = job_to_test_map[job_name]
 
-    title = f"🤗 Results of {ci_event}: {ci_name_in_report}."
+    title = f"🤗 Results of {ci_event}: {ci_name_in_report}"
 
     message = Message(
         title,
