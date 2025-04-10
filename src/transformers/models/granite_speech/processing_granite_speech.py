@@ -46,7 +46,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        audios: Union[torch.Tensor, List[torch.Tensor]] = None,
+        audio: Union[torch.Tensor, List[torch.Tensor]] = None,
         device: str = "cpu",
         **kwargs,
     ) -> BatchFeature:

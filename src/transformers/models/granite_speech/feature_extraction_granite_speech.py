@@ -20,9 +20,9 @@ from typing import Optional
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from transformers.tokenization_utils_base import AudioInput
-from transformers.utils import is_torch_available, is_torchaudio_available, logging
+from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from ...tokenization_utils_base import AudioInput
+from ...utils import is_torch_available, is_torchaudio_available, logging
 
 
 logger = logging.get_logger(__name__)
