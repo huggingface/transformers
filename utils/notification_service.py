@@ -993,6 +993,8 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
+    # `title` will be updated at the end before calling `Message()`.
+    title = f"🤗 Results of {ci_event}"
     if runner_not_available or runner_failed or setup_failed:
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
@@ -1277,7 +1279,6 @@ if __name__ == "__main__":
         {
             "run_models_gpu": "Models",
             "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
-
         }
     )
 
