@@ -290,10 +290,10 @@ class MolmoTextAttention(nn.Module):
         if self.use_qk_norm:
             # When sharding the model using Tensor Parallelism, need to be careful to use n_local_heads
             self.q_norm = MolmoTextLayerNorm(
-                hidden_size=(config.num_attention_heads, self.head_dim), eps=config.layer_norm_eps
+                hidden_size=(config.num_attention_heads * self.head_dim), eps=config.layer_norm_eps
             )
             self.k_norm = MolmoTextLayerNorm(
-                hidden_size=(config.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
+                hidden_size=(config.num_key_value_heads * self.head_dim), eps=config.layer_norm_eps
             )
 
     def forward(
@@ -308,16 +308,16 @@ class MolmoTextAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         if self.use_qk_norm:  # main diff from Llama
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -710,10 +710,8 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
         # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
         if not isinstance(past_key_values, (type(None), Cache)):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
@@ -1032,9 +1030,6 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-# New Molmo multimodal projection and image pooling
 
 
 class MolmoMultiModalProjector(nn.Module):
@@ -2091,10 +2086,8 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
             batch_size, num_crops, height, width = pixel_values.shape
@@ -2122,13 +2115,10 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
                 image_masks=all_image_masks.unsqueeze(1),
                 vision_feature_layers=vision_feature_layers,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )  # this returns [total_valid_crops, num_image_tokens, hidden_size]
+            )
 
             image_features_flat = image_features.view(-1, hidden_size)
             image_token_indices_flat = all_image_token_indices.view(-1)
-
-            valid_indices_mask = image_token_indices_flat != -100
-            image_token_indices_flat[valid_indices_mask] += 1  # adjustment, TODO is this still needed
 
             valid_batch_indices_expanded = (
                 valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
