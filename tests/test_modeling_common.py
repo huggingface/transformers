@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, List, Tuple
 
 import numpy as np
 from packaging import version
@@ -860,11 +858,12 @@ class ModelTesterMixin:
                         model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
-                    with torch.device(torch_device):
-                        model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
-                        inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
-                        inputs_dict["labels"] = inputs_dict["input_ids"]
-                        _ = model(**inputs_dict, return_dict=False)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        tmpdir, torch_dtype=torch.float32, device_map=torch_device
+                    )
+                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                    inputs_dict["labels"] = inputs_dict["input_ids"]
+                    _ = model(**inputs_dict, return_dict=False)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
@@ -1977,7 +1976,7 @@ class ModelTesterMixin:
             self.test_resize_tokens_embeddings()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2083,7 +2082,7 @@ class ModelTesterMixin:
             self.test_resize_embeddings_untied()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2332,10 +2331,10 @@ class ModelTesterMixin:
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -2454,7 +2453,7 @@ class ModelTesterMixin:
         return new_tf_outputs, new_pt_outputs
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     def test_inputs_embeds(self):
@@ -2655,7 +2654,7 @@ class ModelTesterMixin:
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
                     torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
-                elif isinstance(value, (Tuple, List)):
+                elif isinstance(value, (tuple, list)):
                     for value_, parallel_value_ in zip(value, parallel_value):
                         torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
 

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import tensorflow as tf
 from keras_nlp.tokenizers import BytePairTokenizer
@@ -25,7 +25,13 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         merges (List[str]): Merges list for Byte Pair Tokenizer
     """
 
-    def __init__(self, vocab: Dict[str, int], merges: List[str], max_length: int = None, pad_token_id: int = None):
+    def __init__(
+        self,
+        vocab: Dict[str, int],
+        merges: List[str],
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+    ):
         super().__init__()
         self.pad_token_id = pad_token_id
         self.max_length = max_length
@@ -88,7 +94,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
             "pad_token_id": self.pad_token_id,
         }
 
-    def call(self, x, max_length: int = None):
+    def call(self, x, max_length: Optional[int] = None):
         input_ids = self.tf_tokenizer(x)
         attention_mask = tf.ones_like(input_ids)
 
