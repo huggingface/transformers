@@ -739,5 +739,6 @@ def main():
     accelerator.wait_for_everyone()
     accelerator.end_training()
 
+
 if __name__ == "__main__":
     main()
