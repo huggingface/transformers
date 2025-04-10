@@ -328,7 +328,7 @@ class GgufModelTests(unittest.TestCase):
     q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
     fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
     q2_k_gemma3_model_id = "gemma-3-1b-it-Q2_K.gguf"
-    bf16_gemma3_model_id = "gemma-2-1b-it-BF16.gguf"
+    bf16_gemma3_model_id = "gemma-3-1b-it-BF16.gguf"
 
     example_text = "Hello"
 
