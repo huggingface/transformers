@@ -140,5 +140,6 @@ class QuarkTest(unittest.TestCase):
 @require_accelerate
 @require_torch_multi_gpu
 @require_quark
+@require_read_token
 class QuarkTestDeviceMap(QuarkTest):
     device_map = "auto"
