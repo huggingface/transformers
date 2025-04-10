@@ -1384,10 +1384,10 @@ class SlidingWindowCache(StaticCache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
-        key_states = key_states.to(k_out.dtype)
-        value_states = value_states.to(v_out.dtype)
+        k_cached = self.key_cache[layer_idx]
+        v_cached = self.value_cache[layer_idx]
+        key_states = key_states.to(k_cached.dtype)
+        value_states = value_states.to(v_cached.dtype)
 
         # assume this only happens in prefill phase when prompt length > sliding_window_size (= max_cache_len)
         if cache_position.shape[0] > self.max_cache_len:
@@ -1405,8 +1405,8 @@ class SlidingWindowCache(StaticCache):
         to_shift = cache_position >= self.max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % self.max_cache_len
 
-        k_out = k_out[:, :, indices]
-        v_out = v_out[:, :, indices]
+        k_out = k_cached[:, :, indices]
+        v_out = v_cached[:, :, indices]
 
         try:
             k_out.index_copy_(2, cache_position, key_states)
@@ -1419,7 +1419,6 @@ class SlidingWindowCache(StaticCache):
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
         self.value_cache[layer_idx].zero_()
-
         self.key_cache[layer_idx] += k_out
         self.value_cache[layer_idx] += v_out
 
@@ -1654,7 +1653,7 @@ class HybridCache(Cache):
 
     # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
     # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1713,7 +1712,8 @@ class HybridCache(Cache):
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
-    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_cached, v_cached, max_cache_len):
+        """Similar to the update in SlidingWindowCache"""
         if cache_position.shape[0] > max_cache_len:
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
@@ -1728,25 +1728,38 @@ class HybridCache(Cache):
         cache_position = cache_position.clamp(0, max_cache_len - 1)
         to_shift = cache_position >= max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
-        k_out = k_out[:, :, indices]
-        v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        k_out = k_cached[:, :, indices]
+        v_out = v_cached[:, :, indices]
+
+        try:
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
+
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
         self.value_cache[layer_idx].zero_()
-
         self.key_cache[layer_idx] += k_out
         self.value_cache[layer_idx] += v_out
         return k_out, v_out
 
-    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_cached, v_cached, max_cache_len):
+        """Similar to the update in StaticCache"""
+        k_out = k_cached
+        v_out = v_cached
 
-        self.key_cache[layer_idx] = k_out
-        self.value_cache[layer_idx] = v_out
+        try:
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
+
         return k_out, v_out
 
     def update(
@@ -1768,10 +1781,10 @@ class HybridCache(Cache):
         if self.value_cache[layer_idx].device != value_states.device:
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
 
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
-        key_states = key_states.to(k_out.dtype)
-        value_states = value_states.to(v_out.dtype)
+        k_cached = self.key_cache[layer_idx]
+        v_cached = self.value_cache[layer_idx]
+        key_states = key_states.to(k_cached.dtype)
+        value_states = value_states.to(v_cached.dtype)
 
         if sliding_window:
             update_fn = self._sliding_update
@@ -1783,9 +1796,9 @@ class HybridCache(Cache):
             layer_idx,
             key_states,
             value_states,
-            k_out,
-            v_out,
-            k_out.shape[2],
+            k_cached,
+            v_cached,
+            k_cached.shape[2],
         )
 
     def get_max_cache_shape(self) -> Optional[int]:
