@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,7 +111,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
@@ -369,12 +368,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @unittest.skip(reason="Broken from common. Fixing TODO @zucchini-nlp @molbap")
-    def test_chat_template_video_special_processing(self):
+    @unittest.skip(reason="SmolVLM replaced `type=video` with `type=image` in chat templates")
+    def test_apply_chat_template_video_special_processing(self):
         pass
 
     @require_av
-    def test_chat_template_video(self):
+    def test_apply_chat_template_video_frame_sampling(self):
         # overriden because SmolVLM has special preprocessing for videos
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -402,11 +401,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
         # Load with `video_fps` arg
         video_fps = 1
@@ -416,6 +416,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

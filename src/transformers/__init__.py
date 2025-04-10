@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.51.0.dev0"
+__version__ = "4.52.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -482,6 +482,7 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glm": ["GlmConfig"],
+    "models.glm4": ["Glm4Config"],
     "models.glpn": ["GLPNConfig"],
     "models.got_ocr2": [
         "GotOcr2Config",
@@ -562,6 +563,12 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.llama4": [
+        "Llama4Config",
+        "Llama4Processor",
+        "Llama4TextConfig",
+        "Llama4VisionConfig",
+    ],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -1355,6 +1362,7 @@ else:
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.levit"].append("LevitImageProcessorFast")
+    _import_structure["models.llama4"].append("Llama4ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -1484,7 +1492,7 @@ else:
 
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
 
     # PyTorch models structure
@@ -2297,6 +2305,7 @@ else:
     )
     _import_structure["models.donut"].extend(
         [
+            "DonutSwinForImageClassification",
             "DonutSwinModel",
             "DonutSwinPreTrainedModel",
         ]
@@ -2509,6 +2518,24 @@ else:
             "GlmForTokenClassification",
             "GlmModel",
             "GlmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llama4"].extend(
+        [
+            "Llama4ForCausalLM",
+            "Llama4ForConditionalGeneration",
+            "Llama4TextModel",
+            "Llama4VisionModel",
+            "Llama4PreTrainedModel",
+        ]
+    )
+    _import_structure["models.glm4"].extend(
+        [
+            "Glm4ForCausalLM",
+            "Glm4ForSequenceClassification",
+            "Glm4ForTokenClassification",
+            "Glm4Model",
+            "Glm4PreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -5727,6 +5754,7 @@ if TYPE_CHECKING:
         GitVisionConfig,
     )
     from .models.glm import GlmConfig
+    from .models.glm4 import Glm4Config
     from .models.glpn import GLPNConfig
     from .models.got_ocr2 import GotOcr2Config, GotOcr2Processor, GotOcr2VisionConfig
     from .models.gpt2 import (
@@ -5808,6 +5836,12 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.llama4 import (
+        Llama4Config,
+        Llama4Processor,
+        Llama4TextConfig,
+        Llama4VisionConfig,
+    )
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -6648,6 +6682,7 @@ if TYPE_CHECKING:
         from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.levit import LevitImageProcessorFast
+        from .models.llama4 import Llama4ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -6764,7 +6799,7 @@ if TYPE_CHECKING:
             model_addition_debugger,
             model_addition_debugger_context,
         )
-        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
@@ -7425,6 +7460,7 @@ if TYPE_CHECKING:
             DistilBertPreTrainedModel,
         )
         from .models.donut import (
+            DonutSwinForImageClassification,
             DonutSwinModel,
             DonutSwinPreTrainedModel,
         )
@@ -7602,6 +7638,13 @@ if TYPE_CHECKING:
             GlmForTokenClassification,
             GlmModel,
             GlmPreTrainedModel,
+        )
+        from .models.glm4 import (
+            Glm4ForCausalLM,
+            Glm4ForSequenceClassification,
+            Glm4ForTokenClassification,
+            Glm4Model,
+            Glm4PreTrainedModel,
         )
         from .models.glpn import (
             GLPNForDepthEstimation,
@@ -7828,6 +7871,13 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.llama4 import (
+            Llama4ForCausalLM,
+            Llama4ForConditionalGeneration,
+            Llama4PreTrainedModel,
+            Llama4TextModel,
+            Llama4VisionModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,

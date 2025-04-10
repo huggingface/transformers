@@ -143,7 +143,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             from accelerate.utils import CustomDtype
 
             # Import AOBaseConfig directly since we know we have the right version
-            if self.quantization_config._get_ao_version() >= version.Version("0.10.0"):
+            if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
                 from torchao.core.config import AOBaseConfig
 
                 quant_type = self.quantization_config.quant_type
@@ -230,13 +230,17 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         if self.pre_quantized:
-            module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
+            module._parameters[tensor_name] = torch.nn.Parameter(
+                param_value.to(device=target_device), requires_grad=param_value.requires_grad
+            )
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
             assert isinstance(self.quantization_config, TorchAoConfig)
-            module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
-            quantize_(module, self.quantization_config.get_apply_tensor_subclass(), set_inductor_config=False)
+            module._parameters[tensor_name] = torch.nn.Parameter(
+                param_value, requires_grad=param_value.requires_grad
+            ).to(device=target_device)
+            quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""

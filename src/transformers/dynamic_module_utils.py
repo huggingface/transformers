@@ -13,6 +13,7 @@
 # limitations under the License.
 """Utilities to dynamically load objects from the Hub."""
 
+import ast
 import filecmp
 import hashlib
 import importlib
@@ -90,7 +91,7 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> list[str]:
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of relative imports in the module.
+        `list[str]`: The list of relative imports in the module.
     """
     with open(module_file, encoding="utf-8") as f:
         content = f.read()
@@ -112,7 +113,7 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
+        `list[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
         of module files a given module needs.
     """
     no_change = False
@@ -144,26 +145,44 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
         filename (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all packages required to use the input module.
+        `list[str]`: The list of all packages required to use the input module.
     """
     with open(filename, encoding="utf-8") as f:
         content = f.read()
+    imported_modules = set()
 
-    # filter out try/except block so in custom code we can have try/except imports
-    content = re.sub(r"\s*try\s*:.*?except.*?:", "", content, flags=re.DOTALL)
+    def recursive_look_for_imports(node):
+        if isinstance(node, ast.Try):
+            return  #  Don't recurse into Try blocks and ignore imports in them
+        elif isinstance(node, ast.If):
+            test = node.test
+            for condition_node in ast.walk(test):
+                if isinstance(condition_node, ast.Call) and getattr(condition_node.func, "id", "").startswith(
+                    "is_flash_attn"
+                ):
+                    # Don't recurse into "if flash_attn_available()" blocks and ignore imports in them
+                    return
+        elif isinstance(node, ast.Import):
+            # Handle 'import x' statements
+            for alias in node.names:
+                top_module = alias.name.split(".")[0]
+                if top_module:
+                    imported_modules.add(top_module)
+        elif isinstance(node, ast.ImportFrom):
+            # Handle 'from x import y' statements, ignoring relative imports
+            if node.level == 0 and node.module:
+                top_module = node.module.split(".")[0]
+                if top_module:
+                    imported_modules.add(top_module)
 
-    # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
-    content = re.sub(
-        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
-    )
+        # Recursively visit all children
+        for child in ast.iter_child_nodes(node):
+            recursive_look_for_imports(child)
 
-    # Imports of the form `import xxx`
-    imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
-    # Imports of the form `from xxx import yyy`
-    imports += re.findall(r"^\s*from\s+(\S+)\s+import", content, flags=re.MULTILINE)
-    # Only keep the top-level module
-    imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
-    return list(set(imports))
+    tree = ast.parse(content)
+    recursive_look_for_imports(tree)
+
+    return sorted(imported_modules)
 
 
 def check_imports(filename: Union[str, os.PathLike]) -> list[str]:
@@ -175,7 +194,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> list[str]:
         filename (`str` or `os.PathLike`): The module file to check.
 
     Returns:
-        `List[str]`: The list of relative imports in the file.
+        `list[str]`: The list of relative imports in the file.
     """
     imports = get_imports(filename)
     missing_packages = []
