@@ -81,7 +81,7 @@ class LayoutLMv2ImageProcessingTester:
 @require_pytesseract
 class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LayoutLMv2ImageProcessor if is_pytesseract_available() else None
-    fast_image_processing_class = LayoutLMv2ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = LayoutLMv2ImageProcessorFast if (is_torchvision_available() and is_pytesseract_available()) else None
 
     def setUp(self):
         super().setUp()

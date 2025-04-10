@@ -145,7 +145,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # flip color channels from RGB to BGR (as Detectron2 requires this)
-            stacked_images = flip(stacked_images, dim=1)
+            stacked_images = stacked_images.flip(1)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
