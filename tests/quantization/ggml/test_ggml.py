@@ -328,6 +328,7 @@ class GgufModelTests(unittest.TestCase):
     q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
     fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
     q2_k_gemma3_model_id = "gemma-3-1b-it-Q2_K.gguf"
+    bf16_gemma3_model_id = "gemma-2-1b-it-BF16.gguf"
 
     example_text = "Hello"
 
@@ -885,9 +886,10 @@ class GgufModelTests(unittest.TestCase):
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
+    @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_q2_k(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.gemma2_model_id,
+            self.gemma3_model_id,
             gguf_file=self.q2_k_gemma3_model_id,
             torch_dtype=torch.float16,
         )
@@ -900,7 +902,8 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     @require_read_token
-    def test_gemma3_weights_conversion_fp32(self):
+    @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
+    def test_gemma3_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma3_model_id,
             torch_dtype=torch.float16,
@@ -908,7 +911,7 @@ class GgufModelTests(unittest.TestCase):
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma3_model_id,
-            gguf_file=self.fp32_gemma2_model_id,
+            gguf_file=self.bf16_gemma3_model_id,
             torch_dtype=torch.float16,
         )
 
