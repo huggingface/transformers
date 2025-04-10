@@ -211,7 +211,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
     loaded AutoRound quantization.
 
     Args:
-        bits (`int`):
+        bits (`int`, *optional*, defaults to 4):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
         tokenizer (`str` or `PreTrainedTokenizerBase`, *optional*):
             The tokenizer used to process the dataset. You can pass either:
@@ -219,20 +219,24 @@ class AutoRoundConfig(QuantizationConfigMixin):
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+        dataset (`str`, *optional*): <fill_docstring>
+        group_size (`int`, *optional*, defaults to 128): <fill_docstring>
+        sym (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        backend (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
+        layer_config (`dict`, *optional*): <fill_docstring>
     """
 
     def __init__(
-            self,
-            bits: int = 4,
-            tokenizer: Any = None,
-            dataset: str = None,
-            group_size: int = 128,
-            sym: bool = False,
-            backend="auto",
-            layer_config: dict = None,
-            **kwargs,
+        self,
+        bits: int = 4,
+        tokenizer: Any = None,
+        dataset: str = None,
+        group_size: int = 128,
+        sym: bool = False,
+        backend="auto",
+        layer_config: dict = None,
+        **kwargs,
     ):
-
         self.bits = bits
         self.tokenizer = tokenizer
         self.dataset = dataset
@@ -271,16 +275,17 @@ class AutoRoundConfig(QuantizationConfigMixin):
             )
 
         if "gptq" in quant_method and "meta" in config_dict:
-            raise NotImplementedError(
-                "Failed to convert gptq format to auto_round format. Only supports `gptqv1`")
+            raise NotImplementedError("Failed to convert gptq format to auto_round format. Only supports `gptqv1`")
 
         if "awq" in quant_method and config_dict.get("version", "gemm") != "gemm":
             raise NotImplementedError(
-                "Failed to convert awq format to auto_round format. Only supports  awq format with gemm version")
+                "Failed to convert awq format to auto_round format. Only supports  awq format with gemm version"
+            )
 
         if "auto-round" not in quant_method:
             config_dict["backend"] = f"auto_round:{quant_method}"
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
+
 
 @dataclass
 class HqqConfig(QuantizationConfigMixin):
