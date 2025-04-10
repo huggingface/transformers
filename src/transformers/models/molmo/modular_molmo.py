@@ -45,6 +45,8 @@ from ..cohere.modeling_cohere import (
     CohereModel,
     CoherePreTrainedModel,
 )
+
+from ..llama.modeling_llama import LlamaAttention
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer,
@@ -562,12 +564,80 @@ class MolmoTextLayerNorm(Qwen2RMSNorm):
     pass
 
 
-class MolmoTextAttention(CohereAttention):
+class MolmoTextAttention(LlamaAttention):
     def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None):
-        self.hidden_size = config.hidden_size
         super().__init__(config, layer_idx)
+        del self.o_proj
+        self.hidden_size = config.hidden_size
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.use_qk_norm = config.use_qk_norm
 
+        if self.use_qk_norm:
+            # When sharding the model using Tensor Parallelism, need to be careful to use n_local_heads
+            self.q_norm = MolmoTextLayerNorm(
+                hidden_size=(config.num_attention_heads * self.head_dim), eps=config.layer_norm_eps
+            )
+            self.k_norm = MolmoTextLayerNorm(
+                hidden_size=(config.num_key_value_heads * self.head_dim), eps=config.layer_norm_eps
+            )
+
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+
+        if self.use_qk_norm:  # main diff from Llama
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 class MolmoTextDecoderLayer(Qwen2DecoderLayer):
     def __init__(self, config, layer_idx: int):
@@ -704,18 +774,80 @@ class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
 
         return outputs
 
+MOLMO_TEXT_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MolmoTextConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+@add_start_docstrings(
+    "The bare Molmo Model outputting raw hidden-states without any specific head on top.",
+    MOLMO_TEXT_START_DOCSTRING,
+)
 class MolmoPreTrainedModel(CoherePreTrainedModel):
+    config_class = MolmoTextConfig
     _no_split_modules = ["MolmoTextDecoderLayer", "MolmoTextPrenormDecoderLayer"]
 
 
+
+
+
+@add_start_docstrings(
+    "The bare MolmoText Model outputting raw hidden-states without any specific head on top.",
+    MOLMO_TEXT_START_DOCSTRING,
+)
+class MolmoTextPreTrainedModel(PreTrainedModel):
+    config_class = MolmoTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MolmoTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
 class MolmoTextModel(CohereModel):
+
     def __init__(self, config):
-        decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
         super().__init__(config)
+        decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.norm = MolmoTextLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.rotary_emb = MolmoTextRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
@@ -782,10 +914,6 @@ class MolmoForCausalLM(Qwen2ForCausalLM):
             logits_to_keep,
             **kwargs,
         )
-
-
-# New Molmo multimodal projection and image pooling
-
 
 class MolmoMultiModalProjector(nn.Module):
     def __init__(self, config: MolmoPoolingConfig):
@@ -1108,6 +1236,83 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         return image_features
 
 
+
+MOLMO_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`MolmoProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     config_class = MolmoConfig
 
@@ -1258,13 +1463,10 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
                 image_masks=all_image_masks.unsqueeze(1),
                 vision_feature_layers=vision_feature_layers,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )  # this returns [total_valid_crops, num_image_tokens, hidden_size]
+            )
 
             image_features_flat = image_features.view(-1, hidden_size)
             image_token_indices_flat = all_image_token_indices.view(-1)
-
-            valid_indices_mask = image_token_indices_flat != -100
-            image_token_indices_flat[valid_indices_mask] += 1  # adjustment, TODO is this still needed
 
             valid_batch_indices_expanded = (
                 valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
