@@ -232,9 +232,11 @@ class MolmoProcessor(ProcessorMixin):
             [f"{self.bos_token}{prompt}" for prompt in prompt_strings], **output_kwargs["text_kwargs"]
         )
 
+        
         # shift patch mapping after addition of bos token (don't touch padding)
-        all_masks = image_inputs["image_token_indices"]
-        image_inputs["image_token_indices"] = [np.where(mask < 0, mask, mask + 1) for mask in all_masks]
+        if image_inputs.get("image_token_indices") is not None:
+            all_masks = image_inputs["image_token_indices"]
+            image_inputs["image_token_indices"] = [np.where(mask < 0, mask, mask + 1) for mask in all_masks]
 
         if kwargs.get("device", None) is not None:
             text_inputs = text_inputs.to(device=kwargs.get("device"))
