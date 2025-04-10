@@ -213,38 +213,26 @@ class AutoRoundConfig(QuantizationConfigMixin):
     Args:
         bits (`int`, *optional*, defaults to 4):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
-        tokenizer (`str` or `PreTrainedTokenizerBase`, *optional*):
-            The tokenizer used to process the dataset. You can pass either:
-                - A custom tokenizer object.
-                - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
-                    using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
-        dataset (`str`, *optional*): <fill_docstring>
-        group_size (`int`, *optional*, defaults to 128): <fill_docstring>
-        sym (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        backend (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
-        layer_config (`dict`, *optional*): <fill_docstring>
+        group_size (`int`, *optional*, defaults to 128): Group-size value
+        sym (`bool`, *optional*, defaults to `False`): Symmetric quantization or not
+        backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ipex,marlin,etc.
     """
 
     def __init__(
         self,
         bits: int = 4,
-        tokenizer: Any = None,
         dataset: str = None,
         group_size: int = 128,
         sym: bool = False,
-        backend="auto",
-        layer_config: dict = None,
+        backend: str = "auto",
         **kwargs,
     ):
         self.bits = bits
-        self.tokenizer = tokenizer
         self.dataset = dataset
         self.group_size = group_size
         self.sym = sym
         self.target_backend = "auto"
         self.backend = backend
-        self.layer_config = layer_config
         if kwargs is not None:
             for key in kwargs.keys():
                 setattr(self, key, kwargs[key])
