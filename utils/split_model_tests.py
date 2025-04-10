@@ -49,6 +49,7 @@ if __name__ == "__main__":
     tests = os.getcwd()
     model_tests = os.listdir(os.path.join(tests, "models"))
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
+    d1 = ["generation"]
     # d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x not in ["deformable_detr", "grounding_dino", "omdet_turbo", "rt_detr", "nat", "dinat"]]))
     d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests if x in [
         # "bark",
