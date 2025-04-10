@@ -123,22 +123,6 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    def get_processor_slow_vision(self):
-        # Used in case when we don't want to depend on require-torch
-        # Loading `use_fast=False` on processor forces slow tokenizer, but not all models
-        # support slow tokenizer (i.e. Chameleon)
-        processor_components = self.prepare_components()
-        if "image_processor" in processor_components:
-            processor_components["image_processor"] = self.get_component("image_processor", use_fast=False)
-        if "video_processor" in processor_components:
-            processor_components["video_processor"] = self.get_component("video_processor", use_fast=False)
-        if "tokenizer" in processor_components:  # some processors have no tokenizer (SAM)
-            processor_components["tokenizer"] = self.get_component("tokenizer")
-
-        processor_kwargs = self.prepare_processor_dict()
-        processor = self.processor_class(**processor_components, **processor_kwargs)
-        return processor
-
     # TODO: raushan unify all these special token LLMs under the general preparation. We can get audio/image token
     # from tokenizer, so we can generalize instead of overriding
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
@@ -806,6 +790,10 @@ class ProcessorTesterMixin:
         if processor_name not in self.processor_class.attributes:
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
+        # some models have only Fast image processor
+        if getattr(processor, processor_name).__class__.__name__.endswith("Fast"):
+            return_tensors = "pt"
+
         batch_messages = [
             [
                 {
@@ -910,7 +898,7 @@ class ProcessorTesterMixin:
         )
 
     def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor_slow_vision()
+        processor = self.get_processor()
 
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
@@ -1010,7 +998,7 @@ class ProcessorTesterMixin:
         """
         Tests that models can use their own preprocessing to preprocess conversations.
         """
-        processor = self.get_processor_slow_vision()
+        processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
