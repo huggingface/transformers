@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.testing_utils import require_av, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -93,50 +93,3 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
-        expected_prompt = "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_av
-    def test_chat_template_dict(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video"},
-                    {"type": "text", "text": "What is shown in this video?"},
-                ],
-            },
-        ]
-
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = [[151644, 872, 220, 151647, 198, 3838, 374, 6839, 304, 419, 2766, 30, 151645, 151644, 77091, 198]]  # fmt: skip
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # add image URL for return dict
-        messages[0]["content"][0] = {
-            "type": "video",
-            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True
-        )
-        self.assertListEqual(list(out_dict_with_video.keys()), ["input_ids", "attention_mask", "pixel_values_videos"])

@@ -226,3 +226,8 @@ print(answer)
 
 [[autodoc]] DonutSwinModel
     - forward
+
+## DonutSwinForImageClassification
+
+[[autodoc]] transformers.DonutSwinForImageClassification
+    - forward

@@ -45,7 +45,7 @@ env:
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_quantization_torch_gpu"]'), inputs.job)
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
@@ -77,12 +77,17 @@ jobs:
         run: pip freeze
 
       - id: set-matrix
-        if: ${{ inputs.job == 'run_models_gpu' }}
+        if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+          if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
+            echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
+            echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
+          fi
 
       - id: set-matrix-quantization
         if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
@@ -111,6 +116,25 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
       runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
+    secrets: inherit
+
+  run_trainer_and_fsdp_gpu:
+    if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' }}
+    name: " "
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        slice_id: [0, 1]
+    uses: ./.github/workflows/model_jobs.yml
+    with:
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      machine_type: ${{ matrix.machine_type }}
+      slice_id: ${{ matrix.slice_id }}
+      runner: ${{ inputs.runner }}
+      docker: ${{ inputs.docker }}
+      report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit
 
   run_pipelines_torch_gpu:
@@ -336,10 +360,6 @@ jobs:
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      # TODO: update the docker image instead
-      - name: Reinstall some packages with specific versions
-        run: python3 -m pip install numpy==1.24.3 numba==0.61.0 scipy==1.12.0 scikit-learn==1.6.1
-
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
@@ -545,6 +565,7 @@ jobs:
     needs: [
       setup,
       run_models_gpu,
+      run_trainer_and_fsdp_gpu,
       run_pipelines_torch_gpu,
       run_pipelines_tf_gpu,
       run_examples_gpu,

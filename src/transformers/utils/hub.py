@@ -465,6 +465,12 @@ def cached_files(
                 "for this model name. Check the model page at "
                 f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
             ) from e
+        elif isinstance(e, PermissionError):
+            raise OSError(
+                f"PermissionError at {e.filename} when downloading {path_or_repo_id}. "
+                "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
+                "2) a previous download was canceled and the lock file needs manual removal."
+            ) from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
@@ -870,7 +876,7 @@ class PushToHubMixin:
                 )
             if os.path.isdir(repo_path_or_name):
                 # repo_path: infer repo_id from the path
-                repo_id = repo_id.split(os.path.sep)[-1]
+                repo_id = repo_path_or_name.split(os.path.sep)[-1]
                 working_dir = repo_id
             else:
                 # repo_name: use it as repo_id
