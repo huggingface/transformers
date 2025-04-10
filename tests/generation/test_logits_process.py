@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 from parameterized import parameterized
@@ -86,7 +85,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
     @parameterized.expand([(0,), ([0, 18],)])
-    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, list[int]]):
         vocab_size = 20
         batch_size = 4
 
