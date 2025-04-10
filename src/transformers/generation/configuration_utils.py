@@ -54,6 +54,7 @@ if is_torch_available():
         HybridCache,
         HybridChunkedCache,
         MambaCache,
+        OffloadedHybridCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
         QuantoQuantizedCache,
@@ -71,6 +72,8 @@ if is_torch_available():
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
         "hybrid_chunked": HybridChunkedCache,
+        "offloaded_hybrid": OffloadedHybridCache,
+        "offloaded_hybrid_chunked": OffloadedHybridCache,
         "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
