@@ -22,9 +22,8 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_optimum_available, is_auto_round_available, is_torch_available, logging
-from ..utils.quantization_config import  QuantizationConfigMixin
-
+from ..utils import is_auto_round_available, is_optimum_available, is_torch_available, logging
+from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -39,7 +38,7 @@ class AutoRoundQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    required_packages = ["optimum","auto_round"]
+    required_packages = ["optimum", "auto_round"]
     optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -49,12 +48,14 @@ class AutoRoundQuantizer(HfQuantizer):
         self.device_map = kwargs.get("device_map", None)
         if not is_auto_round_available():
             raise ImportError(
-                "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)")
+                "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
+            )
 
         autoround_version = version.parse(importlib.metadata.version("auto_round"))
         if autoround_version < version.parse("0.5.0"):
-            raise ImportError("You need a version of auto_round >= 0.5.0 to use AutoRound: `pip install --upgrade "
-                              "auto-round`")
+            raise ImportError(
+                "You need a version of auto_round >= 0.5.0 to use AutoRound: `pip install --upgrade auto-round`"
+            )
 
         if not is_optimum_available():
             raise ImportError("Loading a AutoRound quantized model requires optimum (`pip install optimum`)")
@@ -69,11 +70,11 @@ class AutoRoundQuantizer(HfQuantizer):
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AutoRound")
         return torch_dtype
 
-
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if model.__class__.main_input_name != "input_ids":
             logger.warning("We provide limited support for models that are not purely text-based.")
         from auto_round.inference.convert_model import convert_hf_model, infer_target_device
+
         if self.pre_quantized:
             target_device = infer_target_device(self.device_map)
             model, used_backends = convert_hf_model(model, target_device)
@@ -82,6 +83,7 @@ class AutoRoundQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
             from auto_round.inference.convert_model import post_init
+
             post_init(model, self.used_backends)
         else:
             raise NotImplementedError

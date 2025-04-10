@@ -19,8 +19,8 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
 from ..utils.quantization_config import (
     AqlmConfig,
-    AwqConfig,
     AutoRoundConfig,
+    AwqConfig,
     BitNetConfig,
     BitsAndBytesConfig,
     CompressedTensorsConfig,
@@ -205,7 +205,9 @@ class AutoHfQuantizer:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
-            isinstance(quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig))
+            isinstance(
+                quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig)
+            )
             and quantization_config_from_args is not None
         ):
             # special case for GPTQ / AWQ / FbgemmFp8 config collision

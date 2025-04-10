@@ -1121,8 +1121,10 @@ def is_optimum_available():
 def is_auto_awq_available():
     return _auto_awq_available
 
+
 def is_auto_round_available():
     return _auto_round_available
+
 
 def is_optimum_quanto_available():
     # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
