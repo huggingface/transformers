@@ -57,7 +57,6 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
 
-    @require_read_token
     @classmethod
     def setUpClass(cls):
         """
@@ -76,15 +75,17 @@ class QuarkTest(unittest.TestCase):
             device_map=cls.device_map,
         )
 
+    @require_read_token
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()
 
         self.assertTrue(self.mem_fp16 / mem_quantized > self.EXPECTED_RELATIVE_DIFFERENCE)
 
+    @require_read_token
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
-        Checks also if other models are casted correctly.
+        Checks also if other models are casted correctly .
         """
         # This should work
         if self.device_map is None:
@@ -94,6 +95,7 @@ class QuarkTest(unittest.TestCase):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
 
+    @require_read_token
     def test_original_dtype(self):
         r"""
         A simple test to check if the model succesfully stores the original dtype
@@ -104,6 +106,7 @@ class QuarkTest(unittest.TestCase):
 
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
 
+    @require_read_token
     def check_inference_correctness(self, model):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -127,6 +130,7 @@ class QuarkTest(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    @require_read_token
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
