@@ -158,18 +158,18 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_inputs["input_features"] = audio_inputs.pop(
                 "input_features"
             )  # rename input_features to prevent conflicts later on
-            input_lengths = (audio_inputs["feature_attention_mask"].sum(-1)) // 2 + 1
+            input_lengths = (audio_inputs["feature_attention_mask"].sum(-1) - 1) // 2 + 1
             audio_lengths = iter((input_lengths - 2) // 2 + 1)
         else:
             audio_inputs = {}
-            audio_lengths = None
+            audio_lengths = iter([])
 
         if images is not None:
             images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
-            image_grid_thw = None
+            image_grid_thw = iter([])
 
         if videos is not None:
             videos = make_batched_videos(videos)
@@ -183,7 +183,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
         else:
             videos_inputs = {}
-            video_grid_thw = None
+            video_grid_thw = iter([])
+            video_second_per_grid = iter([])
 
         if not isinstance(text, list):
             text = [text]
