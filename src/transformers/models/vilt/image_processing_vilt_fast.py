@@ -139,7 +139,15 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         # Handle padding if required
         data = {}
         if do_pad:
-            max_size = get_max_height_width(processed_images)
+            data = self._pad_batch(processed_images, return_tensors)
+        else:
+            # If no padding, just return the processed images
+            if return_tensors == "pt":
+                processed_images = torch.stack(processed_images)
+            data["pixel_values"] = processed_images
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
     def _resize(
         self,
         images: "torch.Tensor",
@@ -195,51 +203,61 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         # Resize the image
         return F.resize(images, [new_heights, new_widths], interpolation=interpolation)
 
-            padded_images = []
-            pixel_masks = []
+    def _pad_batch(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> dict:
+        """
+        Pad a batch of images to the same size based on the maximum dimensions.
 
-            # Create mask template for efficient masking
-            if return_tensors == "pt" and len(processed_images) > 0:
-                device = processed_images[0].device
-                mask_template = torch.zeros(max_size, dtype=torch.int64, device=device)
+        Args:
+            images (`list[torch.Tensor]`): List of images to pad.
+            return_tensors (`str` or `TensorType`, *optional*): The type of tensors to return.
 
-            for image in processed_images:
-                # Get original size
-                original_size = image.shape[-2:]
+        Returns:
+            `dict`: Dictionary containing padded images and pixel masks.
+        """
+        # Calculate maximum dimensions
+        max_size = get_max_height_width(images)
 
-                # Check if padding is needed
-                if original_size[0] != max_size[0] or original_size[1] != max_size[1]:
-                    padding_bottom = max_size[0] - original_size[0]
-                    padding_right = max_size[1] - original_size[1]
-                    padding = [0, 0, padding_right, padding_bottom]
+        padded_images = []
+        pixel_masks = []
 
-                    # Pad the image
-                    padded_image = F.pad(image, padding, fill=0)
+        # Create mask template for efficient masking
+        if return_tensors == "pt" and len(images) > 0:
+            device = images[0].device
+            mask_template = torch.zeros(max_size, dtype=torch.int64, device=device)
 
-                    # Create pixel mask (1 for valid pixels, 0 for padding)
-                    pixel_mask = mask_template.clone()
-                    pixel_mask[: original_size[0], : original_size[1]].fill_(1)
-                else:
-                    padded_image = image
-                    pixel_mask = torch.ones(max_size, dtype=torch.int64, device=image.device)
+        # Process each image
+        for image in images:
+            original_size = image.shape[-2:]
 
-                padded_images.append(padded_image)
-                pixel_masks.append(pixel_mask)
+            # Check if padding is needed
+            if original_size[0] != max_size[0] or original_size[1] != max_size[1]:
+                padding_bottom = max_size[0] - original_size[0]
+                padding_right = max_size[1] - original_size[1]
+                padding = [0, 0, padding_right, padding_bottom]
 
-            # Stack if tensors are requested
-            if return_tensors == "pt":
-                padded_images = torch.stack(padded_images)
-                pixel_masks = torch.stack(pixel_masks)
+                # Pad the image
+                padded_image = F.pad(image, padding, fill=0)
 
-            data["pixel_values"] = padded_images
-            data["pixel_mask"] = pixel_masks
-        else:
-            # If no padding, just return the processed images
-            if return_tensors == "pt":
-                processed_images = torch.stack(processed_images)
-            data["pixel_values"] = processed_images
+                # Create pixel mask (1 for valid pixels, 0 for padding)
+                pixel_mask = mask_template.clone()
+                pixel_mask[:original_size[0], :original_size[1]].fill_(1)
+            else:
+                padded_image = image
+                pixel_mask = torch.ones(max_size, dtype=torch.int64, device=image.device)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+            padded_images.append(padded_image)
+            pixel_masks.append(pixel_mask)
+
+        # Stack if tensors are requested
+        if return_tensors == "pt" and padded_images:
+            padded_images = torch.stack(padded_images)
+            pixel_masks = torch.stack(pixel_masks)
+
+        return {"pixel_values": padded_images, "pixel_mask": pixel_masks}
 
 
 __all__ = ["ViltImageProcessorFast"]
