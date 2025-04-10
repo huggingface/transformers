@@ -734,6 +734,7 @@ def _load_state_dict_into_meta_model(
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
+            rank = device_mesh.get_local_rank("tp")
             shard_and_distribute_module(
                 model,
                 param,
@@ -741,8 +742,8 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                int(os.environ["RANK"]),  # the rank
-                device_mesh,
+                rank,  # the rank
+                device_mesh["tp"],
             )
         else:
             param = param[...]
@@ -4897,6 +4898,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 for name, param in parameters_to_initialize.items():
                     # First move data to correct
                     to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
+                    rank = device_mesh.get_local_rank("tp")
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
@@ -4904,8 +4906,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         name,
                         casting_dtype,
                         to_contiguous,
-                        os.environ["RANK"],
-                        device_mesh,
+                        rank,
+                        device_mesh["tp"],
                     )
 
         # All potential warnings/infos
