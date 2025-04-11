@@ -345,6 +345,7 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_v2": ["DeepseekV2Config"],
     "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
@@ -2031,6 +2032,14 @@ else:
             "DecisionTransformerGPT2PreTrainedModel",
             "DecisionTransformerModel",
             "DecisionTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deepseek_v2"].extend(
+        [
+            "DeepseekV2ForCausalLM",
+            "DeepseekV2ForSequenceClassification",
+            "DeepseekV2Model",
+            "DeepseekV2PreTrainedModel",
         ]
     )
     _import_structure["models.deepseek_v3"].extend(
@@ -5604,6 +5613,9 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_v2 import (
+        DeepseekV2Config,
+    )
     from .models.deepseek_v3 import (
         DeepseekV3Config,
     )
@@ -7244,6 +7256,12 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.deepseek_v2 import (
+            DeepseekV2ForCausalLM,
+            DeepseekV2ForSequenceClassification,
+            DeepseekV2Model,
+            DeepseekV2PreTrainedModel,
         )
         from .models.deepseek_v3 import (
             DeepseekV3ForCausalLM,
