@@ -304,16 +304,22 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
-        image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
+        output_hidden_states = (
+            [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        )
+        image_outputs = self.image_tower(
+            pixel_values_images,
+            output_hidden_states=output_hidden_states,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            image_outputs = image_outputs.hidden_states[vision_feature_layer]
+            image_outputs = image_outputs.hidden_states[0]
             if vision_feature_select_strategy == "default":
                 image_outputs = image_outputs[:, 1:]
         else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = image_outputs.hidden_states
             # For default; crop CLS from each hidden state in the hidden state pool
             if vision_feature_select_strategy == "default":
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
@@ -345,15 +351,20 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
+        output_hidden_states = (
+            [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        )
+        video_outputs = self.video_tower(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            video_features = video_outputs.hidden_states[vision_feature_layer]
+            video_features = video_outputs.hidden_states[0]
         else:
-            hs_pool = [video_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            video_features = torch.cat(hs_pool, dim=-1)
+            video_features = torch.cat(video_outputs.hidden_states, dim=-1)
 
         video_features = self.multi_modal_projector(video_features)
 

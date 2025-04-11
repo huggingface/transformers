@@ -305,17 +305,19 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        output_hidden_states = (
+            [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        )
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=output_hidden_states, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+            selected_image_feature = image_outputs.hidden_states[0]
             if vision_feature_select_strategy == "default":
                 selected_image_feature = selected_image_feature[:, 1:]
         else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = image_outputs.hidden_states
             # For default; crop CLS from each hidden state in the hidden state pool
             if vision_feature_select_strategy == "default":
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
