@@ -243,7 +243,6 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
 
 if __name__ == "__main__":
-    import os
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
@@ -254,9 +253,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/Users/chandra/personal/transformers/pytorch_dump",
+        default=None,
         type=str,
-        # required=True,
+        required=True,
         help="Path to the output PyTorch model directory.",
     )
 
