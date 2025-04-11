@@ -35,7 +35,7 @@ try:
         "Llama4TextMoe": {
             "cuda": LayerRepository(
                 # Move to kernels-community/moe once we release.
-                repo_id="kernels-community/moe-new-models",
+                repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
             )
         },
