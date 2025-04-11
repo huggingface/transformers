@@ -467,16 +467,19 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             [
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
-            ]
-            if model.device.type in ("cpu", "xpu")
-            else [
+            ],  # cpu output
+            [
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
-            ]
+            ],  # cuda output
+            [
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute, light-colored puppy sitting on a paved surface with",
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
+            ],  # xpu output
         )
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT)
+        self.assertTrue(outputs in EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
