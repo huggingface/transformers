@@ -4400,29 +4400,31 @@ class ModelTesterMixin:
             
             # Create model with eager attention
             config._attn_implementation = "eager"
-            model_eager = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model_eager = model_class(config).to(torch_device).to(dtype=torch.float32)
             
             # Create model with Flash Attention 2
             config._attn_implementation = "flash_attention_2"
-            model_fa2 = model_class(config).to(device=torch_device, dtype=torch.float32)
-            
-            # Copy weights to ensure same initialization
+            model_fa2 = model_class(config).to(torch_device).to(dtype=torch.float32)
             model_fa2.load_state_dict(model_eager.state_dict())
             
-            # Set both models to train mode
+            # Enable training mode
             model_eager.train()
             model_fa2.train()
 
-            # Set seed for reproducibility of dropout
-            torch.manual_seed(42)
+            # Prepare inputs with labels for gradient computation
             inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss_eager = model_eager(**inputs_dict).loss
+
+            # Test eager implementation
+            torch.manual_seed(42)
+            outputs_eager = model_eager(**inputs_dict)
+            loss_eager = outputs_eager.loss
             loss_eager.backward()
             grads_eager = {name: param.grad.detach().clone() for name, param in model_eager.named_parameters()}
             
-            # Reset seed for identical dropout
+            # Test FA2 implementation
             torch.manual_seed(42)
-            loss_fa2 = model_fa2(**inputs_dict).loss
+            outputs_fa2 = model_fa2(**inputs_dict)
+            loss_fa2 = outputs_fa2.loss
             loss_fa2.backward()
             grads_fa2 = {name: param.grad.detach().clone() for name, param in model_fa2.named_parameters()}
 
@@ -4430,7 +4432,7 @@ class ModelTesterMixin:
             for name in grads_eager:
                 self.assertTrue(
                     torch.allclose(grads_eager[name], grads_fa2[name], rtol=1e-4, atol=1e-4),
-                    f"Gradients for {name} do not match between eager and FA2 implementations"
+                    f"Gradients for parameter '{name}' do not match between eager and FA2 implementations",
                 )
 
 
