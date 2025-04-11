@@ -43,7 +43,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...utils import logging
+from ...utils import can_return_tuple, logging
 from .configuration_markuplm import MarkupLMConfig
 
 
@@ -620,6 +620,7 @@ class MarkupLMEncoder(nn.Module):
         self.layer = nn.ModuleList([MarkupLMLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -631,8 +632,7 @@ class MarkupLMEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -685,18 +685,6 @@ class MarkupLMEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -833,6 +821,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MARKUPLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -847,8 +836,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         Returns:
 
@@ -873,7 +861,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -915,20 +902,16 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
             extended_attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
 
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -967,6 +950,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MARKUPLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -983,8 +967,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1021,9 +1004,8 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         >>> processor.decode(predict_answer_tokens).strip()
         'Niels'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.markuplm(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
             xpath_subs_seq=xpath_subs_seq,
@@ -1034,10 +1016,9 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1060,10 +1041,6 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
@@ -1091,6 +1068,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MARKUPLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1106,8 +1084,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1135,9 +1112,8 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.markuplm(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
             xpath_subs_seq=xpath_subs_seq,
@@ -1148,10 +1124,9 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.classifier(sequence_output)  # (batch_size, seq_length, node_type_size)
 
         loss = None
@@ -1161,10 +1136,6 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
                 prediction_scores.view(-1, self.config.num_labels),
                 labels.view(-1),
             )
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1198,6 +1169,7 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MARKUPLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1213,8 +1185,7 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1241,9 +1212,8 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.markuplm(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
             xpath_subs_seq=xpath_subs_seq,
@@ -1254,11 +1224,9 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-
+        pooled_output = outputs.pooler_output
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
@@ -1284,9 +1252,6 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,

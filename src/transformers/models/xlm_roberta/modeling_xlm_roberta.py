@@ -16,7 +16,7 @@
 """PyTorch XLM-RoBERTa model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -46,6 +46,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     get_torch_version,
     logging,
     replace_return_docstrings,
@@ -585,6 +586,7 @@ class XLMRobertaEncoder(nn.Module):
         self.layer = nn.ModuleList([XLMRobertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -596,8 +598,7 @@ class XLMRobertaEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -650,18 +651,6 @@ class XLMRobertaEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -835,6 +824,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -855,8 +845,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -881,7 +870,6 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -976,7 +964,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -986,13 +974,9 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1030,6 +1014,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1047,9 +1032,8 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1093,11 +1077,10 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1110,10 +1093,9 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.lm_head(sequence_output)
 
         lm_loss = None
@@ -1126,10 +1108,6 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
@@ -1178,6 +1156,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1200,8 +1179,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1210,9 +1188,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1223,9 +1199,8 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.lm_head(sequence_output)
 
         masked_lm_loss = None
@@ -1234,10 +1209,6 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
             labels = labels.to(prediction_scores.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1299,6 +1270,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="cardiffnlp/twitter-roberta-base-emotion",
@@ -1318,17 +1290,14 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1337,9 +1306,8 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         logits = self.classifier(sequence_output)
 
         loss = None
@@ -1366,10 +1334,6 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1398,6 +1362,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(
         XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
@@ -1417,15 +1382,13 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> MultipleChoiceModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1438,7 +1401,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
             else None
         )
 
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1447,9 +1410,8 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        pooled_output = outputs[1]
+        pooled_output = outputs.pooler_output
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -1461,10 +1423,6 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
             labels = labels.to(reshaped_logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -1497,6 +1455,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="Jean-Baptiste/roberta-large-ner-english",
@@ -1516,15 +1475,12 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1533,11 +1489,9 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -1547,10 +1501,6 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1602,6 +1552,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="deepset/roberta-base-squad2",
@@ -1622,8 +1573,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1634,9 +1584,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.roberta(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1645,11 +1593,9 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = outputs.last_hidden_state
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()
@@ -1671,10 +1617,6 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,

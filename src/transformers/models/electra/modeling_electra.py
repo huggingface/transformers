@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -43,6 +43,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -536,6 +537,7 @@ class ElectraEncoder(nn.Module):
         self.layer = nn.ModuleList([ElectraLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -547,8 +549,7 @@ class ElectraEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -601,18 +602,6 @@ class ElectraEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -827,6 +816,7 @@ class ElectraModel(ElectraPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -847,13 +837,11 @@ class ElectraModel(ElectraPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -907,7 +895,7 @@ class ElectraModel(ElectraPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
-        hidden_states = self.encoder(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -917,10 +905,8 @@ class ElectraModel(ElectraPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        return hidden_states
+        return outputs
 
 
 class ElectraClassificationHead(nn.Module):
@@ -964,6 +950,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="bhadresh-savani/electra-base-emotion",
@@ -983,17 +970,15 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1002,10 +987,9 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = discriminator_hidden_states[0]
+        sequence_output = discriminator_outputs.last_hidden_state
         logits = self.classifier(sequence_output)
 
         loss = None
@@ -1031,15 +1015,11 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + discriminator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=discriminator_hidden_states.hidden_states,
-            attentions=discriminator_hidden_states.attentions,
+            hidden_states=discriminator_outputs.hidden_states,
+            attentions=discriminator_outputs.attentions,
         )
 
 
@@ -1060,6 +1040,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=ElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1073,8 +1054,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], ElectraForPreTrainingOutput]:
+    ) -> ElectraForPreTrainingOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the ELECTRA loss. Input should be a sequence of tokens (see `input_ids` docstring)
@@ -1108,9 +1088,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         >>> predictions.squeeze().tolist()
         [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        discriminator_hidden_states = self.electra(
+        discriminator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1119,32 +1097,26 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        discriminator_sequence_output = discriminator_hidden_states[0]
-
-        logits = self.discriminator_predictions(discriminator_sequence_output)
+        sequence_output = discriminator_outputs.last_hidden_state
+        logits = self.discriminator_predictions(sequence_output)
 
         loss = None
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
             if attention_mask is not None:
-                active_loss = attention_mask.view(-1, discriminator_sequence_output.shape[1]) == 1
-                active_logits = logits.view(-1, discriminator_sequence_output.shape[1])[active_loss]
+                active_loss = attention_mask.view(-1, sequence_output.shape[1]) == 1
+                active_logits = logits.view(-1, sequence_output.shape[1])[active_loss]
                 active_labels = labels[active_loss]
                 loss = loss_fct(active_logits, active_labels.float())
             else:
-                loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
-
-        if not return_dict:
-            output = (logits,) + discriminator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
+                loss = loss_fct(logits.view(-1, sequence_output.shape[1]), labels.float())
 
         return ElectraForPreTrainingOutput(
             loss=loss,
             logits=logits,
-            hidden_states=discriminator_hidden_states.hidden_states,
-            attentions=discriminator_hidden_states.attentions,
+            hidden_states=discriminator_outputs.hidden_states,
+            attentions=discriminator_outputs.attentions,
         )
 
 
@@ -1176,6 +1148,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     def set_output_embeddings(self, word_embeddings):
         self.generator_lm_head = word_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="google/electra-small-generator",
@@ -1196,17 +1169,14 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        generator_hidden_states = self.electra(
+        generator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1215,11 +1185,10 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        generator_sequence_output = generator_hidden_states[0]
+        sequence_output = generator_outputs.last_hidden_state
 
-        prediction_scores = self.generator_predictions(generator_sequence_output)
+        prediction_scores = self.generator_predictions(sequence_output)
         prediction_scores = self.generator_lm_head(prediction_scores)
 
         loss = None
@@ -1228,15 +1197,11 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
             loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if not return_dict:
-            output = (prediction_scores,) + generator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return MaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
-            hidden_states=generator_hidden_states.hidden_states,
-            attentions=generator_hidden_states.attentions,
+            hidden_states=generator_outputs.hidden_states,
+            attentions=generator_outputs.attentions,
         )
 
 
@@ -1262,6 +1227,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english",
@@ -1281,15 +1247,12 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        discriminator_hidden_states = self.electra(
+        discriminator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1298,10 +1261,8 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        discriminator_sequence_output = discriminator_hidden_states[0]
-
+        discriminator_sequence_output = discriminator_outputs.last_hidden_state
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
         logits = self.classifier(discriminator_sequence_output)
 
@@ -1310,15 +1271,11 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if not return_dict:
-            output = (logits,) + discriminator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=discriminator_hidden_states.hidden_states,
-            attentions=discriminator_hidden_states.attentions,
+            hidden_states=discriminator_outputs.hidden_states,
+            attentions=discriminator_outputs.attentions,
         )
 
 
@@ -1343,6 +1300,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint="bhadresh-savani/electra-base-squad2",
@@ -1365,8 +1323,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1377,9 +1334,8 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1390,8 +1346,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             output_hidden_states=output_hidden_states,
         )
 
-        sequence_output = discriminator_hidden_states[0]
-
+        sequence_output = discriminator_outputs.last_hidden_state
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()
@@ -1414,19 +1369,12 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + discriminator_hidden_states[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
         return QuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
-            hidden_states=discriminator_hidden_states.hidden_states,
-            attentions=discriminator_hidden_states.attentions,
+            hidden_states=discriminator_outputs.hidden_states,
+            attentions=discriminator_outputs.attentions,
         )
 
 
@@ -1448,6 +1396,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1465,15 +1414,13 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> MultipleChoiceModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1486,7 +1433,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             else None
         )
 
-        discriminator_hidden_states = self.electra(
+        discriminator_outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1495,11 +1442,9 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = discriminator_hidden_states[0]
-
+        sequence_output = discriminator_outputs.last_hidden_state
         pooled_output = self.sequence_summary(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
@@ -1509,15 +1454,11 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if not return_dict:
-            output = (reshaped_logits,) + discriminator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return MultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
-            hidden_states=discriminator_hidden_states.hidden_states,
-            attentions=discriminator_hidden_states.attentions,
+            hidden_states=discriminator_outputs.hidden_states,
+            attentions=discriminator_outputs.attentions,
         )
 
 
@@ -1545,6 +1486,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.generator_lm_head = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1562,9 +1504,8 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1608,11 +1549,10 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
-        outputs = self.electra(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1625,10 +1565,8 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.generator_lm_head(self.generator_predictions(sequence_output))
 
         lm_loss = None
@@ -1639,10 +1577,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,

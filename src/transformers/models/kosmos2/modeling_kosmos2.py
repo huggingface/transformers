@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -36,6 +36,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -654,6 +655,7 @@ class Kosmos2VisionEncoder(nn.Module):
         self.layers = nn.ModuleList([Kosmos2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -661,8 +663,7 @@ class Kosmos2VisionEncoder(nn.Module):
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -696,7 +697,6 @@ class Kosmos2VisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -729,8 +729,6 @@ class Kosmos2VisionEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -749,19 +747,18 @@ class Kosmos2VisionTransformer(nn.Module):
         self.encoder = Kosmos2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -769,19 +766,15 @@ class Kosmos2VisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1219,6 +1212,7 @@ class Kosmos2TextTransformer(nn.Module):
 
         return hidden_states
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1235,14 +1229,12 @@ class Kosmos2TextTransformer(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1360,18 +1352,6 @@ class Kosmos2TextTransformer(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    present_key_value_states,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -1490,6 +1470,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embeddings.patch_embedding
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
     def forward(
@@ -1498,8 +1479,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1509,7 +1489,6 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
 
@@ -1528,6 +1507,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
@@ -1546,8 +1526,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Returns:
 
@@ -1567,7 +1546,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
@@ -1603,6 +1581,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
@@ -1622,8 +1601,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
@@ -1633,14 +1611,13 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
 
-        outputs = self.model(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_embeds=image_embeds,
@@ -1655,9 +1632,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0])
+        lm_logits = self.lm_head(outputs.last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -1672,10 +1648,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             loss = loss_fct(
                 shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
             )
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -1807,6 +1779,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1824,8 +1797,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Kosmos2ModelOutput]:
+    ) -> Kosmos2ModelOutput:
         r"""
         Returns:
 
@@ -1863,7 +1835,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
         projection_attentions = None
@@ -1871,20 +1842,19 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
 
-            vision_model_output = self.vision_model(
+            vision_model_output: BaseModelOutputWithPooling = self.vision_model(
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 interpolate_pos_encoding=interpolate_pos_encoding,
-                return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             image_embeds = nn.functional.normalize(image_embeds, dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
-        outputs = self.text_model(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_embeds=image_embeds,
@@ -1896,12 +1866,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        if not return_dict:
-            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
-            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ModelOutput(
             last_hidden_state=outputs.last_hidden_state,
@@ -1949,6 +1914,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2ForConditionalGenerationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1966,8 +1932,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
+    ) -> Kosmos2ForConditionalGenerationModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
@@ -2018,7 +1983,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
         projection_attentions = None
@@ -2026,19 +1990,17 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
 
-            vision_model_output = self.vision_model(
+            vision_model_output: BaseModelOutputWithPooling = self.vision_model(
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
-            # normalized features
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output.last_hidden_state)
             image_embeds = nn.functional.normalize(image_embeds, dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
-        lm_outputs = self.text_model(
+        lm_outputs: CausalLMOutputWithCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_embeds=image_embeds,
@@ -2051,12 +2013,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        if not return_dict:
-            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
-            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ForConditionalGenerationModelOutput(
             loss=lm_outputs.loss,
