@@ -585,6 +585,8 @@ class Gemma3TextModel(Gemma2Model):
         config.rope_scaling = {"rope_type": "default"}
         self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
 
+    @can_return_tuple
+    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,

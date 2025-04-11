@@ -27,7 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import logging, add_start_docstrings_to_model_forward, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
@@ -43,6 +43,7 @@ from ..gemma.modeling_gemma import (
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
+GEMMA2_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 logger = logging.get_logger(__name__)
 
@@ -405,6 +406,8 @@ class Gemma2Model(GemmaModel):
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+    @can_return_tuple
+    @add_start_docstrings_to_model_forward(GEMMA2_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
