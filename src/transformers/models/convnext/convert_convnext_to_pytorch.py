@@ -24,10 +24,12 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torchvision import transforms
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
+from transformers.models.convnext.image_processing_convnext import get_resize_output_image_size
+import numpy as np
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -145,8 +147,27 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image, prepared by ConvNextImageProcessor
     size = 224 if "224" in checkpoint_url else 384
-    image_processor = ConvNextImageProcessor(size=size)
-    pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
+    image_processor = ConvNextImageProcessor(size={'shortest_edge': size})
+    image = prepare_img()
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
+
+    # resize image with crop_pct=224/256
+    resize_size = get_resize_output_image_size(np.array(image), 256, default_to_square=False)
+
+    transformations = transforms.Compose(
+        [
+            transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(size),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=image_processor.image_mean,  # these are RGB mean+std values
+                std=image_processor.image_std,  # across a large photo dataset.
+            ),
+        ]
+    )
+    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     logits = model(pixel_values).logits
 
@@ -222,19 +243,20 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
 
 if __name__ == "__main__":
+    import os
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
+        default="http://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
         type=str,
         help="URL of the original ConvNeXT checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
+        default="/Users/chandra/personal/transformers/pytorch_dump",
         type=str,
-        required=True,
+        # required=True,
         help="Path to the output PyTorch model directory.",
     )
 
