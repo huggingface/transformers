@@ -179,3 +179,6 @@ class MCTCTConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
+
+
+__all__ = ["MCTCTConfig"]
