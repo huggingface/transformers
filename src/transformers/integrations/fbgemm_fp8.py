@@ -67,7 +67,6 @@ class FbgemmFp8Linear(torch.nn.Linear):
         del x_quantized, x_scale
         return output
 
-@use_kernel_forward_from_hub("Llama4TextMoe")
 class FbgemmFp8Llama4TextExperts(nn.Module):
     def __init__(self, config, dtype=torch.float32):
         super().__init__()
