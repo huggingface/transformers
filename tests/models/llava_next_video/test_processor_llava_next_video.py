@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -28,7 +28,7 @@ if is_vision_available():
     from transformers import LlavaNextImageProcessor, LlavaNextVideoImageProcessor
 
 if is_torch_available:
-    import torch
+    pass
 
 
 @require_vision
@@ -47,6 +47,8 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -61,19 +63,10 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict(cls):
         return {
             "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + ' '}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all video then #}{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}{{ '<video>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ '\n' + content['text'] }}{% endgeneration %}{% endfor %}{% endif %}{{'<|im_end|>'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
-            "num_additional_image_tokens": 6,
-            "patch_size": 4,
+            "num_additional_image_tokens": 0,
+            "patch_size": 128,
             "vision_feature_select_strategy": "default",
         }
-
-    def test_processor_to_json_string(self):
-        processor = self.get_processor()
-        obj = json.loads(processor.to_json_string())
-        for key, value in self.prepare_processor_dict().items():
-            # chat_tempalate are tested as a separate test because they are saved in separate files
-            if key != "chat_template":
-                self.assertEqual(obj[key], value)
-                self.assertEqual(getattr(processor, key, None), value)
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
@@ -90,79 +83,3 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_av
-    def test_chat_template_dict(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video"},
-                    {"type": "text", "text": "What is shown in this video?"},
-                ],
-            },
-        ]
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
-        )
-        expected_output = [[1, 3148, 1001, 29901, 29871, 32000, 13, 5618, 338, 4318, 297, 445, 4863, 29973, 319, 1799, 9047, 13566, 29901]]  # fmt: skip
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # add image URL for return dict
-        messages[0]["content"][0] = {
-            "type": "video",
-            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True
-        )
-        self.assertListEqual(list(out_dict_with_video.keys()), ["input_ids", "attention_mask", "pixel_values_videos"])
-
-    @require_torch
-    @require_av
-    def test_chat_template_dict_torch(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "video",
-                        "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
-                    },
-                    {"type": "text", "text": "What is shown in this video?"},
-                ],
-            },
-        ]
-
-        out_dict_tensors = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        self.assertListEqual(list(out_dict_tensors.keys()), ["input_ids", "attention_mask", "pixel_values_videos"])
-        self.assertTrue(isinstance(out_dict_tensors["input_ids"], torch.Tensor))
