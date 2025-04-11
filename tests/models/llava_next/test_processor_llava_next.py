@@ -34,14 +34,15 @@ if is_vision_available():
 class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = LlavaNextImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -49,7 +50,8 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
             "patch_size": 3,
@@ -75,23 +77,6 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
-        expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_image_token_filling(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")

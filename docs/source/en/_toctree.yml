@@ -161,6 +161,8 @@
   sections:
   - local: quantization/overview
     title: Overview
+  - local: quantization/selecting
+    title: Selecting a quantization method
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/awq
@@ -461,6 +463,8 @@
         title: Gemma2
       - local: model_doc/glm
         title: GLM
+      - local: model_doc/glm4
+        title: glm4
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -1074,6 +1078,8 @@
       title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/import_utils
+      title: Importing Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers

@@ -20,10 +20,13 @@ import copy
 from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
     VideoInput,
+    load_video,
     make_batched_videos,
     make_nested_list_of_images,
 )
@@ -425,32 +428,44 @@ class SmolVLMProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
-    # Add model-specific video sampling method when applying the template
-    def apply_chat_template(
+    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
+    def _load_video_for_model(
         self,
-        conversation,
-        max_frames=None,
-        target_fps=None,
-        skip_secs=1,
-        video_load_backend="pyav",
-        sample_indices_fn=None,
-        **kwargs,
-    ):
-        max_frames = self.default_max_frames if max_frames is None else max_frames
-        target_fps = self.default_fps if target_fps is None else target_fps
+        video: Union[str, "VideoInput"],
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        backend: str = "opencv",
+        skip_secs: int = 0.0,
+    ) -> np.array:
+        """
+        Loads `video` to a numpy array.
+
+        Args:
+            video (`str` or `VideoInput`):
+                The video to convert to the numpy array format. Can be a link to video or local path.
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly. If not passed, the whole video is loaded.
+            fps (`int`, *optional*):
+                Number of frames to sample per second. Should be passed only when `num_frames=None`.
+                If not specified and `num_frames==None`, all frames are sampled.
+            backend (`str`, *optional*, defaults to `"opencv"`):
+                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+
+        Returns:
+            Tuple[`np.array`, Dict]: A tuple containing:
+                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
+                - Metadata dictionary.
+        """
+        max_frames = self.default_max_frames if num_frames is None else num_frames
+        target_fps = self.default_fps if fps is None else fps
 
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return smolvlm_sample_indices_fn(
                 metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
             )
 
-        # word of caution- we are blindly overriding a callable kwarg here.
-        # typed kwargs would be a way to avoid that @molbap
-        if not sample_indices_fn:
-            sample_indices_fn = sample_indices_fn_func
-        return super().apply_chat_template(
-            conversation, video_load_backend=video_load_backend, sample_indices_fn=sample_indices_fn, **kwargs
-        )
+        video, metadata = load_video(video, backend=backend, sample_indices_fn=sample_indices_fn_func)
+        return video, metadata
 
 
 __all__ = ["SmolVLMProcessor"]

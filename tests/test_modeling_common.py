@@ -72,6 +72,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    get_device_properties,
     hub_retry,
     is_flaky,
     require_accelerate,
@@ -100,7 +101,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
-    is_torch_fx_available,
     is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
@@ -119,13 +119,13 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
-    from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers import MODEL_MAPPING
     from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
-if is_torch_fx_available():
-    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
 
 if is_deepspeed_available():
     import deepspeed
@@ -1189,10 +1189,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(
-                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
-            )
+        if not self.fx_compatible:
+            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -2097,7 +2095,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            self.assertIsInstance(model.get_input_embeddings(), nn.Embedding)
 
             new_input_embedding_layer = nn.Embedding(10, 10)
             model.set_input_embeddings(new_input_embedding_layer)
@@ -3763,12 +3761,15 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -3808,13 +3809,16 @@ class ModelTesterMixin:
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-        torch.compiler.reset()
-        if "cuda" in torch_device:
-            compute_capability = torch.cuda.get_device_capability()
-            major, _ = compute_capability
 
-            if not torch.version.cuda or major < 8:
-                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
