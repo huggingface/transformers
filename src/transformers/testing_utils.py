@@ -1073,12 +1073,18 @@ def require_torch_bf16_gpu(test_case):
 
 
 def require_deterministic_for_xpu(test_case):
-    if is_torch_xpu_available():
-        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
-            test_case
-        )
-    else:
-        return test_case
+    @wraps(test_case)
+    def wrapper(*args, **kwargs):
+        if is_torch_xpu_available():
+            original_state = torch.are_deterministic_algorithms_enabled()
+            try:
+                torch.use_deterministic_algorithms(True)
+                return test_case(*args, **kwargs)
+            finally:
+                torch.use_deterministic_algorithms(original_state)
+        else:
+            return test_case(*args, **kwargs)
+    return wrapper
 
 
 def require_torch_tf32(test_case):
