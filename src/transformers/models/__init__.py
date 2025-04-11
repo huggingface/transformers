@@ -248,6 +248,7 @@ from . import (
     rt_detr_v2,
     rwkv,
     sam,
+    sam_hq,
     seamless_m4t,
     seamless_m4t_v2,
     segformer,
