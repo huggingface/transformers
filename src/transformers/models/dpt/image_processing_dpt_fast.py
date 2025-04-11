@@ -16,12 +16,13 @@
 
 from collections.abc import Iterable
 import math
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import get_resize_output_image_size, get_size_with_aspect_ratio, group_images_by_shape, reorder_images
+from transformers.processing_utils import Unpack
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format, make_list_of_images, to_numpy_array
 from ...utils import TensorType, add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available
 
 import numpy as np
@@ -82,6 +83,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pad: Optional[bool]
     ensure_multiple_of: Optional[int]
     keep_aspect_ratio: Optional[bool]
+    segmentation_maps: Optional[ImageInput] = None,
 
 DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = f"""
  Args:
@@ -129,6 +131,12 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     # do_center_crop = None
     # do_convert_rgb = None
 
+        # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -147,9 +155,70 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         do_pad: bool,
         ensure_multiple_of: Optional[int],
         keep_aspect_ratio: bool = False,
+        segmentation_maps: Optional[ImageInput] = None,
         **kwargs,
     ) -> BatchFeature:
+        # here, images are a list of length 1, then inside, shape num_channels, height, width
+        # images = make_list_of_images(images)
+
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
         # Group images by size for batched resizing
+        processed_images = self._preprocess_images(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            interpolation=interpolation,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            return_tensors=return_tensors,
+            size_divisor=size_divisor,
+            do_pad=do_pad,
+            ensure_multiple_of=ensure_multiple_of,
+            keep_aspect_ratio=keep_aspect_ratio,
+            **kwargs,
+        )
+
+        # segmentation_maps = segmentation_maps.unsqueeze(0)
+
+        # I previously had this and processed_images as a list comprehension but there was no need - it was causesing the error below with BatchFeatures
+        processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+
+        # here I want to do the same transformation as I did for the images, with the exception that the images start of as a list of 1 tensor that has dims [channels, height, width]
+        # whereas the segementation_maps start as are a tensors with dims [height, width] (NB: so far we are dealing with unbatched input)
+
+        # so, because images are being transformed to a tensor of dims [1, channels, new_height, new_width], I need to the segmentation maps to have the same transformation excpet they 
+        #  end up with dims [1, height, width]
+
+        # PREVIOUSLY BOTH MAPS AND IMAGES HAVE EXTRA DIM LIKE 1,2,18,18, or 1,18,18
+
+        return BatchFeature(data={"pixel_values": processed_images, "labels": processed_maps}, tensor_type=return_tensors)
+    
+    def _preprocess_images(
+            self,
+            images: list["torch.Tensor"],
+            do_resize: bool,
+            do_center_crop: bool,
+            do_pad: bool,
+            return_tensors: bool,
+            do_rescale: bool,
+            rescale_factor: float,
+            size: SizeDict,
+            interpolation: Optional["F.InterpolationMode"],
+            ensure_multiple_of: Optional[int],
+            keep_aspect_ratio: bool,
+            crop_size: SizeDict,
+            do_normalize: bool,
+            image_mean: Optional[Union[float, list[float]]],
+            image_std: Optional[Union[float, list[float]]],
+            size_divisor: Optional[int],
+            **kwargs,
+        ) -> "torch.Tensor":
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -176,8 +245,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return processed_images
 
     def pad_image(
         self,
