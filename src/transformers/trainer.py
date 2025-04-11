@@ -177,6 +177,7 @@ from .utils import (
     strtobool,
 )
 from .utils.deprecation import deprecate_kwarg
+from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -312,6 +313,12 @@ SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
+@requires(
+    backends=(
+        "torch",
+        "accelerate",
+    )
+)
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.

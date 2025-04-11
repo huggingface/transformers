@@ -389,3 +389,6 @@ class AutoProcessor:
             processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
+
+
+__all__ = ["PROCESSOR_MAPPING", "AutoProcessor"]

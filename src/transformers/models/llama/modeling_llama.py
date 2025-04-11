@@ -160,7 +160,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_forward_from_hub("MLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

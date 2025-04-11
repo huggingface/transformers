@@ -13,83 +13,15 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
-
-
-_import_structure = {
-    "configuration_open_llama": ["OpenLlamaConfig"],
-}
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_open_llama"] = ["LlamaTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_open_llama_fast"] = ["LlamaTokenizerFast"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_open_llama"] = [
-        "OpenLlamaForCausalLM",
-        "OpenLlamaModel",
-        "OpenLlamaPreTrainedModel",
-        "OpenLlamaForSequenceClassification",
-    ]
+from ....utils import _LazyModule
+from ....utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_open_llama import OpenLlamaConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from transformers import LlamaTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from transformers import LlamaTokenizerFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_open_llama import (
-            OpenLlamaForCausalLM,
-            OpenLlamaForSequenceClassification,
-            OpenLlamaModel,
-            OpenLlamaPreTrainedModel,
-        )
-
-
+    from .configuration_open_llama import *
+    from .modeling_open_llama import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
