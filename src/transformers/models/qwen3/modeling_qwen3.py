@@ -81,7 +81,6 @@ class Qwen3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_forward_from_hub("MLP")
 class Qwen3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
