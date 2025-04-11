@@ -27,6 +27,7 @@ from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridChunkedCache
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -35,7 +36,6 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -143,6 +143,7 @@ class Llama4TextRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
 
 @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
