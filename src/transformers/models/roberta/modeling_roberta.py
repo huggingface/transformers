@@ -320,7 +320,7 @@ class RobertaSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in XLMRobertaModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.

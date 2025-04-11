@@ -38,6 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import (
+    ALL_ATTENTION_FUNCTIONS,
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
@@ -360,6 +361,8 @@ class MarkupLMSelfAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
+        self.scaling = int(config.hidden_size / config.num_attention_heads) ** -0.5
+        self.config = config
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -376,6 +379,7 @@ class MarkupLMSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        bsz, tgt_len, _ = hidden_states.size()
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -414,7 +418,70 @@ class MarkupLMSelfAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
+        if self.config._attn_implementation != "eager" and (
+            self.position_embedding_type != "absolute" or output_attentions or head_mask is not None
+        ):
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
+            logger.warning_once(
+                f"attn_implementation {self.config._attn_implementation} is used but the implementation does not support "
+                "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
+                "the manual attention implementation, but specifying the manual implementation will be required from "
+                "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
+                '`attn_implementation="eager"` when loading the model.'
+            )
+            use_eager = True
+        else:
+            use_eager = self.config._attn_implementation == "eager"
+
+        if use_eager:
+            outputs = self.eager_attention_forward(
+                hidden_states,
+                query_layer,
+                key_layer,
+                value_layer,
+                attention_mask,
+                head_mask,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
+        else:
+            # assigned to self since flash attention uses the flag from the module
+            self.is_causal = (
+                True
+                if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1
+                else False
+            )
+
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attn_output, _ = attention_interface(
+                self,
+                query_layer,
+                key_layer,
+                value_layer,
+                attention_mask,
+                dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
+                scaling=self.scaling,
+                is_causal=self.is_causal,
+            )
+
+            attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+            outputs = (attn_output,)
+
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+
+    def eager_attention_forward(
+        self,
+        hidden_states: torch.Tensor,
+        query_layer: torch.Tensor,
+        key_layer: torch.Tensor,
+        value_layer: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
@@ -461,11 +528,7 @@ class MarkupLMSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-        return outputs
+        return (context_layer, attention_probs) if output_attentions else (context_layer,)
 
 
 MARKUPLM_SELF_ATTENTION_CLASSES = {
@@ -477,9 +540,7 @@ MARKUPLM_SELF_ATTENTION_CLASSES = {
 class MarkupLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MARKUPLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config, position_embedding_type=position_embedding_type
-        )
+        self.self = MarkupLMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = MarkupLMSelfOutput(config)
         self.pruned_heads = set()
 
