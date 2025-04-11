@@ -14,6 +14,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -113,6 +114,10 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
 
+class OlmoPreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
 class OlmoModel(LlamaModel):
     def __init__(self, config: OlmoConfig):
         super().__init__(config)
@@ -124,3 +129,6 @@ class OlmoModel(LlamaModel):
 
 class OlmoForCausalLM(LlamaForCausalLM):
     pass
+
+
+__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]
