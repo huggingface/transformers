@@ -503,6 +503,7 @@ class CallbackHandler(TrainerCallback):
 
     def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_training_stop = False
+        control.should_evaluate = args.eval_on_start
         return self.call_event("on_train_begin", args, state, control)
 
     def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
