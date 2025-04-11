@@ -2487,7 +2487,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.update(self.extra_special_tokens)
 
         saved_raw_chat_template_files = []
-        if kwargs.get("save_jinja_files", False) and isinstance(self.chat_template, str):
+        if kwargs.get("save_jinja_files", True) and isinstance(self.chat_template, str):
             # New format for single templates is to save them as chat_template.jinja
             with open(chat_template_file, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
