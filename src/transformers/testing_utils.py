@@ -139,7 +139,6 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_available_on_device,
     is_torch_bf16_gpu_available,
-    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
