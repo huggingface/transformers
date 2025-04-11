@@ -16,13 +16,14 @@
 
 from typing import List, Union
 
-import torch
-
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils import PreTokenizedInput, TextInput
-from transformers.utils import logging
+from transformers.utils import is_torch_available, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
