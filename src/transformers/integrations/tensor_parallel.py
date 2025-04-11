@@ -310,6 +310,83 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     slice_indices[dim] = slice(start, end)
 
     return param[tuple(slice_indices)]
+    Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
+    Extraction follows the pytorch `Shard` placement so that sharding and materializing back to full tensor follows `Shard` semantics.
+    `Shard` follows torch.chunk style sharding of the tensor. We demonstrate some cases below on how sharding happens including some edge cases
+    such as some ranks having an empty tensor as shard. Below implementation is robut to all these cases.
+
+    Case (1)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          4
+    rank 0 gets					(4, 5120, 8190)			 (0 ... 4, 5120, 8190)
+    rank 1 gets					(4, 5120, 8190)			 (4 ... 8, 5120, 8190)
+    rank 2 gets					(4, 5120, 8190)			 (8 ... 12, 5120, 8190)
+    rank 3 gets					(4, 5120, 8190)			 (12 ... 16, 5120, 8190)
+
+    Case (2)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          14
+    rank 0 gets					(2, 5120, 8190)			 (0 ... 2, 5120, 8190)
+    rank 1 gets					(2, 5120, 8190)			 (2 ... 4, 5120, 8190)
+    rank 2 gets					(2, 5120, 8190)			 (4 ... 6, 5120, 8190)
+    rank 3 gets					(2, 5120, 8190)			 (6 ... 8, 5120, 8190)
+    rank 4 gets					(2, 5120, 8190)			 (8 ... 10, 5120, 8190)
+    rank 5 gets					(2, 5120, 8190)			 (10 ... 12, 5120, 8190)
+    rank 6 gets					(2, 5120, 8190)			 (12 ... 14, 5120, 8190)
+    rank 7 gets					(2, 5120, 8190)			 (14 ... 16, 5120, 8190)
+    rank 8 gets					(0, 5120, 8190)
+    rank 9 gets					(0, 5120, 8190)
+    rank 10 gets			    (0, 5120, 8190)
+    rank 11 gets				(0, 5120, 8190)
+    rank 12 gets				(0, 5120, 8190)
+    rank 13 gets				(0, 5120, 8190)
+
+    Case (3)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          3
+    rank 0 gets					(6, 5120, 8190)			 (0 ... 6, 5120, 8190)
+    rank 1 gets					(6, 5120, 8190)			 (6 ... 12, 5120, 8190)
+    rank 2 gets					(4, 5120, 8190)			 (12 ... 16, 5120, 8190)
+
+    In case (2), empty shards are returned with appropriate dimension to allow for operations to work smoothly.
+    """
+    if not (-len(empty_param.shape) <= dim < len(empty_param.shape)):
+        raise ValueError(
+            f"provided index {dim} should be within the range of number of parameter's dimensions {len(empty_param.shape)}"
+        )
+    _dim_size = empty_param.shape[dim]
+    _split_size = math.ceil(_dim_size / device_mesh.size())
+    if dim == 0:
+        if (rank * _split_size) < _dim_size:
+            param = param[rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
+        else:
+            param = torch.empty((0, *empty_param.shape[1:]), dtype=torch.int64)
+    elif dim == 1:
+        if (rank * _split_size) < _dim_size:
+            param = param[:, rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
+        else:
+            param = torch.empty((empty_param.shape[0], 0, empty_param.shape[2:]), dtype=torch.int64)
+    elif dim == -2:
+        if (rank * _split_size) < _dim_size:
+            param = param[..., rank * _split_size : min((rank + 1) * _split_size, _dim_size), :]
+        else:
+            param = torch.empty((*empty_param.shape[:-2], 0, empty_param.shape[-1]), dtype=torch.int64)
+    elif dim == 2:
+        if (rank * _split_size) < _dim_size:
+            param = param[:, :, rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
+        else:
+            param = torch.empty((*empty_param.shape[:2], 0, *empty_param.shape[3:]), dtype=torch.int64)
+    elif dim == -1:
+        if (rank * _split_size) < _dim_size:
+            param = param[..., rank * _split_size : min((rank + 1) * _split_size, _dim_size)]
+        else:
+            param = torch.empty((*empty_param.shape[:-1], 0), dtype=torch.int64)
+    else:
+        raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
+    return param
 
 
 def distribute_module(
