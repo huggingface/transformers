@@ -29,6 +29,7 @@ Citation:
 from typing import Optional, Tuple, Union
 
 import torch
+from packaging import version
 
 from ..utils import is_torch_flex_attn_available
 from ..utils.import_utils import _torch_version
@@ -66,7 +67,7 @@ class WrappedFlexAttention:
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
             self.training = training
-            if _torch_version.split("+")[0] == "2.6.0" and training:
+            if version.parse(_torch_version).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
