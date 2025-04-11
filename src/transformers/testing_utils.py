@@ -243,7 +243,6 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
-_run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
 def is_staging_test(test_case):
@@ -959,13 +958,13 @@ if is_torch_available():
             ) from e
     elif torch.cuda.is_available():
         torch_device = "cuda"
-    elif _run_third_party_device_tests and is_torch_npu_available():
+    elif is_torch_npu_available():
         torch_device = "npu"
-    elif _run_third_party_device_tests and is_torch_mlu_available():
+    elif is_torch_mlu_available():
         torch_device = "mlu"
-    elif _run_third_party_device_tests and is_torch_hpu_available():
+    elif is_torch_hpu_available():
         torch_device = "hpu"
-    elif _run_third_party_device_tests and is_torch_xpu_available():
+    elif is_torch_xpu_available():
         torch_device = "xpu"
     else:
         torch_device = "cpu"
