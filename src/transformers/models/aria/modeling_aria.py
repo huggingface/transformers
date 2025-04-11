@@ -228,7 +228,6 @@ class AriaProjector(nn.Module):
         return out
 
 
-@use_kernel_forward_from_hub("MLP")
 class AriaSharedExpertsMLP(nn.Module):
     """
     Shared Expert MLP for shared experts.

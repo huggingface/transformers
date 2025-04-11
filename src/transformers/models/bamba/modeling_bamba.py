@@ -882,7 +882,6 @@ class BambaMixer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
-@use_kernel_forward_from_hub("MLP")
 class BambaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
