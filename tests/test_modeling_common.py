@@ -30,25 +30,35 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import (AutoModel, AutoModelForCausalLM,
-                          AutoModelForSequenceClassification, PretrainedConfig,
-                          PreTrainedModel, is_torch_available, logging,
-                          set_seed)
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForSequenceClassification,
+    PretrainedConfig,
+    PreTrainedModel,
+    is_torch_available,
+    logging,
+    set_seed,
+)
 from transformers.integrations import HfDeepSpeedConfig
-from transformers.integrations.deepspeed import (is_deepspeed_available,
-                                                 is_deepspeed_zero3_enabled,
-                                                 unset_hf_deepspeed_config)
+from transformers.integrations.deepspeed import (
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+    unset_hf_deepspeed_config,
+)
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
-    MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES,
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
-    MODEL_FOR_MASKED_LM_MAPPING_NAMES, MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
     MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -57,32 +67,46 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES, MODEL_MAPPING_NAMES)
-from transformers.testing_utils import (CaptureLogger, get_device_properties,
-                                        hub_retry, is_flaky,
-                                        require_accelerate,
-                                        require_bitsandbytes,
-                                        require_deepspeed, require_flash_attn,
-                                        require_non_xpu, require_safetensors,
-                                        require_torch,
-                                        require_torch_accelerator,
-                                        require_torch_gpu,
-                                        require_torch_greater_or_equal,
-                                        require_torch_multi_accelerator,
-                                        require_torch_multi_gpu,
-                                        require_torch_sdpa,
-                                        set_config_for_less_flaky_test,
-                                        set_model_for_less_flaky_test,
-                                        set_model_tester_for_less_flaky_test,
-                                        slow, torch_device)
-from transformers.utils import (CONFIG_NAME, GENERATION_CONFIG_NAME,
-                                SAFE_WEIGHTS_NAME, is_accelerate_available,
-                                is_torch_bf16_available_on_device,
-                                is_torch_fp16_available_on_device,
-                                is_torch_sdpa_available)
+    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
+from transformers.testing_utils import (
+    CaptureLogger,
+    get_device_properties,
+    hub_retry,
+    is_flaky,
+    require_accelerate,
+    require_bitsandbytes,
+    require_deepspeed,
+    require_flash_attn,
+    require_non_xpu,
+    require_safetensors,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_greater_or_equal,
+    require_torch_multi_accelerator,
+    require_torch_multi_gpu,
+    require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    CONFIG_NAME,
+    GENERATION_CONFIG_NAME,
+    SAFE_WEIGHTS_NAME,
+    is_accelerate_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+    is_torch_sdpa_available,
+)
 from transformers.utils.generic import ContextManagers
 
 from .generation.test_utils import GenerationTesterMixin
+
 
 if is_accelerate_available():
     from accelerate.utils import compute_module_sizes
@@ -100,8 +124,8 @@ if is_torch_available():
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
-from transformers.utils.fx import (_FX_SUPPORTED_MODELS_WITH_KV_CACHE,
-                                   symbolic_trace)
+from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
 
 if is_deepspeed_available():
     import deepspeed
