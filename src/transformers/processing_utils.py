@@ -650,7 +650,7 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        save_as_jinja = kwargs.get("save_jinja_files", False)
+        save_as_jinja = kwargs.get("save_jinja_files", True)
         is_single_template = isinstance(self.chat_template, str)
 
         if save_as_jinja and is_single_template:
