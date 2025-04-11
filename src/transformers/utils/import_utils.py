@@ -2378,6 +2378,7 @@ def spread_import_structure(nested_import_structure):
     return flattened_import_structure
 
 
+@lru_cache()
 def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
