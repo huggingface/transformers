@@ -544,8 +544,11 @@ class Message:
                 if "https://github.com/huggingface/transformers/actions/runs" in line:
                     pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                     items = re.findall(pattern, line)
-                elif "tests/models/" in line:
-                    model = line.split("/")[2]
+                elif "tests/" in line:
+                    if "tests/models/" in line:
+                        model = line.split("/")[2]
+                    else:
+                        model = line.split("/")[1]
                     if model not in new_failed_tests:
                         new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
                     for url, device in items:
