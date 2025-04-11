@@ -1342,21 +1342,21 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
         if config.layers_block_type[layer_idx] == "multihead_latent_attention":
             self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx)
-        else:
+        elif config.layers_block_type[layer_idx] == "mamba2":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
+        else:
+            raise ValueError("unsupported layer type")
         self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -1388,7 +1388,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type == "mamba":
+        if self.layer_type == "mamba2":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_position=cache_position,

@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GraniteMoeHybrid model configuration"""
-from typing import List
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -154,7 +152,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         normalization_function=None,
         position_embedding_type="nope",
         init_method="mup",
-        #layer_types=List,
+        # layer types should be a List of str
+        layer_types=None,
         # took defaults from bamba config
         mamba_n_heads=128,
         mamba_n_groups=1,
@@ -164,8 +163,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_expand=2,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
-        # None or List
-        attn_layer_indices = None,
         # confirm this variable if needed or not
         mamba_proj_bias=False,
         logits_to_keep=1,
@@ -235,7 +232,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.mamba_proj_bias = mamba_proj_bias
         self.mamba_expand = mamba_expand
         self.logits_to_keep = logits_to_keep
-        self.attn_layer_indices = attn_layer_indices
+        self.layer_types = layer_types
 
         self.mla_query_comp_size = mla_query_comp_size
         self.mla_key_value_comp_size = mla_key_value_comp_size
@@ -252,11 +249,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         rope_config_validation(self)
     
+    # overwrite the function in mamba to use `HybridMambaAttentionDynamicCache`
     @property
     def layers_block_type(self):
-        return [
-            "multihead_latent_attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
-            for i in range(self.num_hidden_layers)
-        ]
+        return self.layer_types if self.layer_types else ["mamba2"] * self.num_hidden_layers
 
 __all__ = ["GraniteMoeHybridConfig"]
