@@ -2223,6 +2223,82 @@ class MambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
+class xLSTMCache:
+    """
+    Cache for xLSTM model which does not have attention mechanism and key value states.
+
+    Arguments:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        batch_size (`int`):
+            The batch size with which the model will be used.
+        dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
+            The default `dtype` to use when initializing the layer.
+        device (`torch.device` or `str`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer.
+
+    Attributes:
+        seqlen_offset: int
+        dtype: torch.dtype
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, xLSTMForCausalLM, xLSTMCache
+
+        >>> model = xLSTMForCausalLM.from_pretrained("NX-AI/xLSTM-7b")
+        >>> tokenizer = xLSTMTokenizer.from_pretrained("NX-AI/xLSTM-7b")
+
+        >>> inputs = tokenizer(text="I am an xLSTM", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_params = xLSTMCache(config=model.config, batch_size=1, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
+        >>> outputs.cache_params
+        xLSTMCache()
+    """
+
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        batch_size: int,
+        dtype: torch.dtype = torch.bfloat16,
+        device: Optional[str] = None,
+        **kwargs,
+    ):
+        self.seqlen_offset = 0
+        self.dtype = dtype
+        self.config = config
+        self.rnn_state = {
+            layer: (
+                torch.zeros(
+                    [batch_size, config.num_heads, config.qk_head_dim, config.v_head_dim], dtype=dtype, device=device
+                ),
+                torch.zeros([batch_size, config.num_heads, config.qk_head_dim], dtype=dtype, device=device),
+                torch.zeros([batch_size, config.num_heads, 1], dtype=dtype, device=device),
+            )
+            for layer in range(config.num_blocks)
+        }
+
+    def reset(self):
+        self.rnn_state = {
+            layer: (
+                torch.zeros_like(self.rnn_state[layer][0]),
+                torch.zeros_like(self.rnn_state[layer][1]),
+                torch.zeros_like(self.rnn_state[layer][2]),
+            )
+            for layer in self.rnn_state
+        }
+
+    def update_rnn_state(self, layer_idx: int, new_rnn_state: tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
+        self.rnn_state[layer_idx] = tuple(
+            new_rnn_state[0].to(self.rnn_state[layer_idx][0].device),
+            new_rnn_state[1].to(self.rnn_state[layer_idx][0].device),
+            new_rnn_state[2].to(self.rnn_state[layer_idx][0].device),
+        )
+        return self.rnn_state[layer_idx]
+
+
 class OffloadedStaticCache(StaticCache):
     """
     Static cache class to be used with `torch.compile(model)` that offloads to the CPU or

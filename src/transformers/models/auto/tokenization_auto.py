@@ -627,6 +627,7 @@ else:
                     "XLNetTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("xlstm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "xmod",
                 (
