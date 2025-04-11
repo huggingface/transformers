@@ -1732,3 +1732,18 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "QDQBertForMaskedLM",
+    "QDQBertForMultipleChoice",
+    "QDQBertForNextSentencePrediction",
+    "QDQBertForQuestionAnswering",
+    "QDQBertForSequenceClassification",
+    "QDQBertForTokenClassification",
+    "QDQBertLayer",
+    "QDQBertLMHeadModel",
+    "QDQBertModel",
+    "QDQBertPreTrainedModel",
+    "load_tf_weights_in_qdqbert",
+]

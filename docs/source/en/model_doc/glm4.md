@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The GLM & ZhipuAI team and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,13 +14,32 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Custom Tools and Prompts
+# Glm4
 
-<Tip warning={true}>
+## Overview
 
-The Agents framework has significantly changed in version v4.41.0.
-This document has been removed as it was referencing an older API.
+To be released with the official model launch.
 
-We eagerly welcome new contributions for the updated API.
+## Glm4Config
 
-</Tip>
+[[autodoc]] Glm4Config
+
+## Glm4Model
+
+[[autodoc]] Glm4Model
+    - forward
+
+## Glm4ForCausalLM
+
+[[autodoc]] Glm4ForCausalLM
+    - forward
+
+## Glm4ForSequenceClassification
+
+[[autodoc]] Glm4ForSequenceClassification
+    - forward
+
+## Glm4ForTokenClassification
+
+[[autodoc]] Glm4ForTokenClassification
+    - forward

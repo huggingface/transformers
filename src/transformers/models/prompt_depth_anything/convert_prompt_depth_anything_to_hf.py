@@ -173,7 +173,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         filename=f"{filename}",
     )
 
-    state_dict = torch.load(filepath, map_location="cpu")["state_dict"]
+    state_dict = torch.load(filepath, map_location="cpu", weights_only=True)["state_dict"]
     state_dict = {key[9:]: state_dict[key] for key in state_dict}
 
     # Convert state dict using mappings

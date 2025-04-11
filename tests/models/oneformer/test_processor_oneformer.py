@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +41,7 @@ if is_vision_available():
 
 
 def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
-    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r") as f:
+    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset")) as f:
         class_info = json.load(f)
     metadata = {}
     class_names = []

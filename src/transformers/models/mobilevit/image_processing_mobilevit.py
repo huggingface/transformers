@@ -39,6 +39,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -51,6 +52,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileViTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileViT image processor.
