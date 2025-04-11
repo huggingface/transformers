@@ -37,6 +37,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_deformable_detr import get_size_with_aspect_ratio
 
 
@@ -284,6 +285,7 @@ def prepare_coco_panoptic_annotation(
 
 
 @auto_docstring
+@requires(backends=("torchvision", "torch"))
 class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

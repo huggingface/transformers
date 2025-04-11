@@ -54,6 +54,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_detr import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -309,6 +310,7 @@ class DetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 
 @auto_docstring
+@requires(backends=("torchvision", "torch"))
 class DetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

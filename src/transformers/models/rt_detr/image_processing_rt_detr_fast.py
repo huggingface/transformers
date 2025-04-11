@@ -37,6 +37,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_rt_detr import get_size_with_aspect_ratio
 
 
@@ -141,6 +142,7 @@ def prepare_coco_detection_annotation(
 
 
 @auto_docstring
+@requires(backends=("torchvision", "torch"))
 class RTDetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

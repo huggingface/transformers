@@ -27,6 +27,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torchdynamo_compiling
@@ -34,6 +35,7 @@ from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_mistral3 import Mistral3Config
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Mistral3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """

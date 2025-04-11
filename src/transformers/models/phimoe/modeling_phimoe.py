@@ -39,7 +39,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
 
@@ -48,8 +47,7 @@ if is_flash_attn_available():
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
+_prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
 logger = logging.get_logger(__name__)
@@ -1142,7 +1140,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
