@@ -20,6 +20,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
+from ...utils.import_utils import requires_backends
 
 
 if is_torch_available():
@@ -48,12 +49,14 @@ class GraniteSpeechProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        audio: Union[torch.Tensor, List[torch.Tensor]] = None,
+        audio: Union["torch.Tensor", List["torch.Tensor"]] = None,
         device: str = "cpu",
         images=None,
         videos=None,
         **kwargs,
     ) -> BatchFeature:
+        requires_backends(self, ["torch"])
+
         text = self._get_validated_text(text)
         prompt_strings = text
 
