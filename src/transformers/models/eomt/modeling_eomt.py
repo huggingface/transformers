@@ -21,20 +21,23 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-import timm
 import torch
-from timm.layers import LayerNorm2d
 from torch import Tensor, nn
 
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_timm_available,
     replace_return_docstrings,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_eomt import EoMTConfig
+
+
+if is_timm_available():
+    from timm import LayerNorm2d, create_model
 
 
 logger = logging.get_logger(__name__)
@@ -121,7 +124,7 @@ class EoMTEncoder(nn.Module):
 
     def __init__(self, config: EoMTConfig):
         super().__init__()
-        self.backbone = timm.create_model(
+        self.backbone = create_model(
             config.backbone,
             pretrained=config.use_pretrained_backbone,
             **config.backbone_kwargs,
@@ -149,9 +152,7 @@ class EoMTNetwork(nn.Module):
             nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
         )
 
-        patch_size = config.patch_size
-        max_patch_size = max(patch_size[0], patch_size[1])
-        num_upscale = max(1, int(math.log2(max_patch_size)) - 2)
+        num_upscale = max(1, int(math.log2(config.patch_size)) - 2)
         self.upscale = nn.Sequential(*[EoMTScaleBlock(self.encoder.backbone.embed_dim) for _ in range(num_upscale)])
 
     def _predict(self, x: Tensor) -> tuple[Tensor, Tensor]:
