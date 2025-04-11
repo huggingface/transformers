@@ -45,7 +45,6 @@ _CHECKPOINT_FOR_DOC = "meta-qwen2/Qwen2-2-7b-hf"
 _CONFIG_FOR_DOC = "Qwen2Config"
 
 
-@use_kernel_forward_from_hub("MLP")
 class Qwen2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
