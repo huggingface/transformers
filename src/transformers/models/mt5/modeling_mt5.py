@@ -2566,5 +2566,4 @@ __all__ = [
     "MT5ForTokenClassification",
     "MT5Model",
     "MT5PreTrainedModel",
-    "MT5Stack",
 ]
