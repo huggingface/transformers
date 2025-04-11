@@ -2075,6 +2075,8 @@ class TrainingArguments:
             )
             self.include_for_metrics.append("inputs")
 
+        self.distributed_state: Optional["PartialState"] = None
+
     def __str__(self):
         self_as_dict = asdict(self)
 
