@@ -20,6 +20,7 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
@@ -28,8 +29,8 @@ from torchvision import transforms
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
 from transformers.models.convnext.image_processing_convnext import get_resize_output_image_size
-import numpy as np
 from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
