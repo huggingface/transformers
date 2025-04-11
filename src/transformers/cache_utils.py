@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
+from abc import ABC, abstractmethod
 
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
@@ -20,7 +21,7 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-class Cache:
+class Cache(ABC):
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
@@ -30,6 +31,7 @@ class Cache:
     def __init__(self):
         super().__init__()
 
+    @abstractmethod
     def update(
         self,
         key_states: torch.Tensor,
@@ -47,15 +49,14 @@ class Cache:
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
-                cache to be created.
+            cache_kwargs (`Dict[str, Any]`, *optional*):
+                Additional arguments for the cache subclass.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        raise NotImplementedError("Make sure to implement `update` in a subclass.")
-
+        raise NotImplementedError()
+    
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
@@ -433,18 +434,26 @@ class DynamicCache(Cache):
             if len(self.key_cache) <= layer_idx:
                 # There may be skipped layers, fill them with empty lists
                 for _ in range(len(self.key_cache), layer_idx):
-                    self.key_cache.append(torch.tensor([]))
-                    self.value_cache.append(torch.tensor([]))
+                    self.key_cache.append([])
+                    self.value_cache.append([])
                 self.key_cache.append(key_states)
                 self.value_cache.append(value_states)
             elif (
-                not self.key_cache[layer_idx].numel()  # prefers not t.numel() to len(t) == 0 to export the model
+                len(self.key_cache[layer_idx]) == 0 and self.update_cache
             ):  # fills previously skipped layers; checking for tensor causes errors
                 self.key_cache[layer_idx] = key_states
                 self.value_cache[layer_idx] = value_states
-            else:
+            elif (
+                len(self.key_cache[layer_idx]) == 0 and not self.update_cache
+            ):  # fills previously skipped layers; checking for tensor causes errors
+                return key_states, value_states
+            elif self.update_cache:
                 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
                 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            else:
+                new_keys = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                new_values = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+                return new_keys, new_values
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
