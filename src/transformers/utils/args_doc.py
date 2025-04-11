@@ -48,6 +48,11 @@ class ImageProcessorArgs:
     passing in images with pixel values between 0 and 1, set `do_rescale=False`.
     """
 
+    videos = r""":
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """
+
     do_resize = r""":
     Whether to resize the image.
     """
@@ -228,6 +233,10 @@ class ModelArgs:
 
     hidden_states = r""": input to the layer of shape `(batch, seq_len, embed_dim)"""
 
+    interpolate_pos_encoding = r""":
+    Whether to interpolate the pre-trained position encodings.
+    """
+
     position_embeddings = r""":
     Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
     with `head_dim` being the embedding dimension of each attention head.
@@ -269,6 +278,7 @@ class ModelArgs:
     [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor_class}`] uses
     [`{image_processor_class}`] for processing images).
     """
+
     vision_feature_layer = r""":
     The index of the layer to select the vision feature. If multiple indices are provided,
     the vision feature of the corresponding indices will be concatenated to form the
@@ -494,6 +504,8 @@ def get_model_name(obj):
     Get the model name from the file path of the object.
     """
     path = inspect.getsourcefile(obj)
+    if path.split(os.path.sep)[-3] != "models":
+        return None
     file_name = path.split(os.path.sep)[-1]
     for file_type in AUTODOC_FILES:
         start = file_type.split("*")[0]
@@ -545,6 +557,7 @@ def format_args_docstring(args, model_name):
     for arg in args:
         new_arg = args[arg]["description"]
         placeholders = re.findall(r"{(.*?)}", new_arg)
+        placeholders = [placeholder for placeholder in placeholders if placeholder in placeholders_dict]
         if placeholders:
             new_arg = new_arg.format(**{placeholder: placeholders_dict[placeholder] for placeholder in placeholders})
         args[arg]["description"] = new_arg
@@ -624,10 +637,13 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
     else:
         model_name_lowercase = get_model_name(func)
     class_name = func.__qualname__.split(".")[0]
-    config_class = getattr(
-        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
-        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
-    )[model_name_lowercase]
+    if model_name_lowercase is None:
+        config_class = None
+    else:
+        config_class = getattr(
+            getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+            PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+        )[model_name_lowercase]
     func_documentation = func.__doc__
 
     # Add intro to the docstring before args description if needed
@@ -648,7 +664,8 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
 
     if func_documentation is not None:
         documented_params, func_documentation = parse_docstring(func_documentation)
-        documented_params = format_args_docstring(documented_params, model_name_lowercase)
+        if model_name_lowercase is not None:
+            documented_params = format_args_docstring(documented_params, model_name_lowercase)
 
     for param_name, param in sig.parameters.items():
         if (
@@ -711,8 +728,10 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
             if kwarg_param.annotation == inspect.Parameter.empty:
                 continue
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
-            documented_kwargs, _ = parse_docstring(kwargs_documentation)
-            documented_kwargs = format_args_docstring(documented_kwargs, model_name_lowercase)
+            if kwargs_documentation is not None:
+                documented_kwargs, _ = parse_docstring(kwargs_documentation)
+                if model_name_lowercase is not None:
+                    documented_kwargs = format_args_docstring(documented_kwargs, model_name_lowercase)
             for param_name, param_type in kwarg_param.annotation.__args__[0].__annotations__.items():
                 param_type = str(param_type)
                 if "typing" in param_type:
@@ -757,8 +776,8 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
 
     if func_documentation is not None and "Example" in func_documentation:
         docstring += func_documentation
-    # No examples for __init__ methods
-    elif parent_class is None:
+    # No examples for __init__ methods or if the class is not a model
+    elif parent_class is None and model_name_lowercase is not None:
         task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
         model_task = re.search(task, class_name)
         CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
@@ -810,14 +829,17 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
     return wrapper
 
 
-def auto_class_docstring(cls, custom_intro=None):
+def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
     """
     Wrapper that automatically generates a docstring for classes based on their attributes and methods.
     """
+    # import here to avoid circular import
+    from transformers.models import auto as auto_module
+
     docstring_init = auto_method_docstring(cls.__init__, parent_class=cls).__doc__.replace("Args:", "Parameters:")
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
-    model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")])
+    model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)
     if name == [] and cls.__doc__ is None and custom_intro is None:
@@ -828,12 +850,20 @@ def auto_class_docstring(cls, custom_intro=None):
         name = name[0]
         if custom_intro is not None:
             pre_block = custom_intro
+        elif model_name_title is None:
+            pre_block = ""
         else:
+            CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
+            checkpoint_example = (
+                get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
+                if checkpoint is None
+                else checkpoint
+            )
             pre_block = getattr(ClassDocstring, name).format(
-                model_name=model_name_title, model_checkpoint="dummy-path"
+                model_name=model_name_title, model_checkpoint=checkpoint_example
             )
         # Start building the docstring
-        docstring = set_min_indent(f"{pre_block}", indent_level)
+        docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
             docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
         # Add the __init__ docstring
@@ -897,7 +927,7 @@ def auto_docstring(obj=None, *, custom_intro=None, checkpoint=None):
         if len(obj.__qualname__.split(".")) > 1:
             return auto_method_docstring(obj, custom_intro=custom_intro, checkpoint=checkpoint)
         else:
-            return auto_class_docstring(obj, custom_intro=custom_intro)
+            return auto_class_docstring(obj, custom_intro=custom_intro, checkpoint=checkpoint)
 
     if obj:
         return auto_docstring_decorator(obj)
