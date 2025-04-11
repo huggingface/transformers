@@ -56,6 +56,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = cls.prepare_processor_dict()
         processor = Gemma3Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.boi_token
 
     @classmethod
     def tearDownClass(cls):
@@ -67,20 +68,6 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<start_of_image>' }}\n            {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
         }  # fmt: skip
-
-    # Override as VLMs need image tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <start_of_image>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <start_of_image>"]
-        return ["lower newer <start_of_image>", "<start_of_image> upper older longer string"] + [
-            "<start_of_image> lower newer"
-        ] * (batch_size - 2)
 
     # Override as Gemma3 needs images to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size: Optional[int] = None):
@@ -123,7 +110,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
