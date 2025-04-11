@@ -16,7 +16,6 @@
 Feature extractor class for Whisper
 """
 
-import warnings
 from typing import List, Optional, Union
 
 import numpy as np
