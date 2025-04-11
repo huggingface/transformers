@@ -1659,6 +1659,12 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values", None)
                 inputs_dict.pop("pixel_values_videos", None)
                 inputs_dict.pop("pixel_values_images", None)
+            # HACK - in the case of granite speech, input_features and inputs_embeds are mutually exclusive;
+            # this is similar to VLMs and should likely be standardized for similar audio models in the future,
+            # then made generic here.
+            if "granitespeech" in model_class.__name__.lower():
+                inputs_dict.pop("input_features", None)
+
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
