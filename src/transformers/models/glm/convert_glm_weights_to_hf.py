@@ -53,7 +53,7 @@ def load_weights(input_dir: str):
     elif bin_files:
         bin_files = sorted(bin_files, key=lambda x: int(x.rsplit("-", 3)[1]))
         for file in bin_files:
-            tensors = torch.load(file, map_location="cpu")
+            tensors = torch.load(file, map_location="cpu", weights_only=True)
             all_weights.update(tensors)
         return all_weights
 
