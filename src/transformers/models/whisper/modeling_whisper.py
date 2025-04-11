@@ -1428,7 +1428,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1879,7 +1879,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
         head_mask: Optional[torch.Tensor] = None,

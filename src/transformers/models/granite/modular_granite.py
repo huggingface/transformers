@@ -25,7 +25,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, logging
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
+)
 from .configuration_granite import GraniteConfig
 
 
@@ -112,6 +118,10 @@ class GraniteDecoderLayer(LlamaDecoderLayer):
         return outputs
 
 
+class GranitePreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
 class GraniteModel(LlamaModel):
     def __init__(self, config: GraniteConfig):
         super().__init__(config)
@@ -122,7 +132,7 @@ class GraniteModel(LlamaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -132,7 +142,7 @@ class GraniteModel(LlamaModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -232,7 +242,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 class GraniteForCausalLM(LlamaForCausalLM):
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -244,7 +254,7 @@ class GraniteForCausalLM(LlamaForCausalLM):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -281,3 +291,6 @@ class GraniteForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["GraniteForCausalLM", "GraniteModel", "GranitePreTrainedModel"]

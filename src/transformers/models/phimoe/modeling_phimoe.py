@@ -42,7 +42,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
 
@@ -51,8 +50,7 @@ if is_flash_attn_available():
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
+_prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
 logger = logging.get_logger(__name__)
@@ -1036,7 +1034,7 @@ class PhimoeModel(PhimoePreTrainedModel):
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1240,7 +1238,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1366,7 +1364,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     # Ignore copy
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,

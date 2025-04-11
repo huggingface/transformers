@@ -77,6 +77,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
+        ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
         ("llava_next", "LlavaNextProcessor"),
         ("llava_next_video", "LlavaNextVideoProcessor"),
@@ -388,3 +389,6 @@ class AutoProcessor:
             processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
+
+
+__all__ = ["PROCESSOR_MAPPING", "AutoProcessor"]

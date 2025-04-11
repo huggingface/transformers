@@ -24,6 +24,7 @@ import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +46,7 @@ MUSTC_LANGS = ["pt", "fr", "ru", "nl", "ro", "it", "es", "de"]
 LANGUAGES = {"mustc": MUSTC_LANGS}
 
 
+@requires(backends=("sentencepiece",))
 class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2Text tokenizer.

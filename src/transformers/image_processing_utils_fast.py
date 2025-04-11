@@ -68,6 +68,8 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+else:
+    pil_torch_interpolation_mapping = None
 
 logger = logging.get_logger(__name__)
 
@@ -573,7 +575,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_input_images(
         self,
         images: ImageInput,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
     ) -> list["torch.Tensor"]:
