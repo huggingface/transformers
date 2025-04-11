@@ -39,6 +39,18 @@ try:
                 layer_name="Llama4TextMoe",
             )
         },
+        "RMSNorm": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/triton-layer-norm",
+                layer_name="LlamaRMSNorm",
+                revision="pure-layer-test",
+            )
+        },
+        "MLP": {
+            "cuda": LayerRepository(
+                repo_id="medmekk/triton-llama-mlp",
+                layer_name="TritonLlamaMLP",
+            )
         },
     }
 
