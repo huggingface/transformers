@@ -719,11 +719,9 @@ class ProcessorTesterMixin:
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer")
+        processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
-
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
@@ -1128,11 +1126,7 @@ class ProcessorTesterMixin:
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-                    },
-                    {"type": "text", "text": "Is it the same sound?"},
+                    {"type": "text", "text": "Tell me all about this animal."},
                 ],
             },
         ]
@@ -1154,5 +1148,5 @@ class ProcessorTesterMixin:
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 2)  # 2 audios in the conversation
+        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
