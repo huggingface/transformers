@@ -789,6 +789,13 @@ if TYPE_CHECKING:
         TorchAoConfig,
         VptqConfig,
     )
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_tokenizers_objects import *
+    else:
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     try:
