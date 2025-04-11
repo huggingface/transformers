@@ -16,10 +16,10 @@
 
 from typing import List, Union
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils import PreTokenizedInput, TextInput
-from transformers.utils import is_torch_available, logging
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():

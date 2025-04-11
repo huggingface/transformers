@@ -19,23 +19,19 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
-from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import (
-    ModelOutput,
-)
-from transformers.modeling_utils import PreTrainedModel
-from transformers.models.auto import AutoModel, AutoModelForCausalLM
-from transformers.utils import (
+from ...generation import GenerationMixin
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_peft_available,
     logging,
     replace_return_docstrings,
 )
-
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import (
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,

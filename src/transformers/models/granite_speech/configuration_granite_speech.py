@@ -14,8 +14,8 @@
 # limitations under the License.
 """Config class for Granite Speech."""
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.models.auto import CONFIG_MAPPING, AutoConfig
+from ...configuration_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
