@@ -60,7 +60,7 @@ _CONFIG_FOR_DOC = "Llama4Config"
 
 
 class Llama4TextExperts(nn.Module):
-    def __init__(self, config: Llama4Config):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
