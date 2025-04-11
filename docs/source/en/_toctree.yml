@@ -163,6 +163,8 @@
     title: Overview
   - local: quantization/selecting
     title: Selecting a quantization method
+  - local: quantization/concept_guide
+    title: Quantization concepts
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/awq
