@@ -623,7 +623,6 @@ class AlbertModel(AlbertPreTrainedModel):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
-
         """
         super().__init__(config)
 

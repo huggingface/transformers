@@ -190,6 +190,19 @@ class ModelArgs:
     - 0 indicates the head is **masked**.
 """
 
+    encoder_hidden_states = r"""of shape `(batch_size, sequence_length, hidden_size)`:
+    Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+    if the model is configured as a decoder.
+    """
+
+    encoder_attention_mask = r""" of shape `(batch_size, sequence_length)`, *optional*):
+    Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+    the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+    - 1 for tokens that are **not masked**,
+    - 0 for tokens that are **masked**.
+    """
+
     token_type_ids = r""" of shape `(batch_size, input_ids_length)`:
     Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
     1]`:
@@ -231,6 +244,16 @@ class ModelArgs:
     Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
     is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
     model's internal embedding lookup matrix.
+    """
+
+    decoder_inputs_embeds = r"""of shape `(batch_size, target_sequence_length, hidden_size)`:
+    Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+    representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+    input (see `past_key_values`). This is useful if you want more control over how to convert
+    `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+    If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+    of `inputs_embeds`.
     """
 
     use_cache = r""":
@@ -342,6 +365,10 @@ class ClassDocstring:
     The bare {model_name} Model outputting raw hidden-states without any specific head on top.
     """
 
+    ForPreTraining = r"""
+    The {model_name} Model with a specified pretraining head on top.
+    """
+
     Decoder = r"""
     The bare {model_name} Decoder outputting raw hidden-states without any specific head on top.
     """
@@ -351,7 +378,7 @@ class ClassDocstring:
     """
 
     ForSequenceClassification = r"""
-    The {model_name} Model with a sequence classification head on top (linear layer).
+    The {model_name} Model with a sequence classification/regression head on top e.g. for GLUE tasks.
 
     [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
@@ -394,9 +421,19 @@ class ClassDocstring:
     Constructs a fast {model_name} image processor.
     """
 
+    Backbone = r"""
+    The {model_name} backbone.
+    """
+
+    ForImageClassification = r"""
+    The {model_name} Model with an image classification head on top e.g. for ImageNet.
+    """
+    ForSemanticSegmentation = r"""
+    The {model_name} Model with a semantic segmentation head on top e.g. for ADE20K, CityScapes.
+    """
     ForAudioClassification = r"""
     The {model_name} Model with an audio classification head on top (a linear layer on top of the pooled
-    output)
+    output).
     """
 
     ForAudioFrameClassification = r"""
@@ -463,16 +500,8 @@ ARGS_TO_IGNORE = {"self", "kwargs", "args", "deprecated_arguments"}
 
 
 def get_indent_level(func):
-    # Get the source code of the function
-    source_code = inspect.getsource(func)
-
-    # Get the first line of the source (the function definition)
-    first_line = source_code.splitlines()[0]
-
-    # Calculate the indentation level (number of spaces at the start)
-    indent_level = len(first_line) - len(first_line.lstrip())
-
-    return indent_level
+    # Use this instead of `inspect.getsource(func)` as getsource can be very slow
+    return (len(func.__qualname__.split(".")) - 1) * 4
 
 
 def equalize_indent(docstring, indent_level):
@@ -520,9 +549,13 @@ def parse_docstring(docstring):
             param_description = match.group(3).strip()
             param_description = equalize_indent(f"\n{param_description}\n", 4)
             params[param_name] = {"type": param_type, "description": param_description}
-    docstring, subs_made = re.subn(r"Args:[\S\s]*(?=Example|Return)", "", docstring)
-    if not subs_made:
-        docstring = re.sub(r"Args:[\S\s]*", "", docstring)
+
+    match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
+    if match:
+        docstring = "\n" + docstring[match.start() :]
+    else:
+        docstring = ""
+
     return params, docstring
 
 
@@ -623,7 +656,8 @@ def get_checkpoint_from_config_class(config_class):
     checkpoint = None
 
     # source code of `config_class`
-    config_source = inspect.getsource(config_class)
+    # config_source = inspect.getsource(config_class)
+    config_source = config_class.__doc__
     checkpoints = _re_checkpoint.findall(config_source)
 
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
@@ -897,15 +931,17 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
     ):
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
-    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)
+    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
     if name == [] and cls.__doc__ is None and custom_intro is None:
         raise ValueError(
             f"`{cls.__name__}` is not part of the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}"
         )
-    if name != []:
-        name = name[0]
+    if name != [] or custom_intro is not None:
+        name = name[0] if name else None
         if custom_intro is not None:
-            pre_block = custom_intro
+            pre_block = equalize_indent(custom_intro, indent_level + 4)
+            if not pre_block.endswith("\n"):
+                pre_block += "\n"
         elif model_name_title is None:
             pre_block = ""
         else:
@@ -933,7 +969,7 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
                     attr_type = "property"
                 else:
                     attr_type = type(attr_value).__name__
-                if "Config" in name:
+                if name and "Config" in name:
                     raise ValueError("Config should have explicit docstring")
                 indented_doc = getattr(ClassAttrs, attr_name, None)
                 if indented_doc is not None:
@@ -941,8 +977,6 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
         if len(attr_docs.replace(" ", "")):
             docstring += set_min_indent("\nAttributes:\n", indent_level)
             docstring += set_min_indent(attr_docs, indent_level + 4)
-    elif custom_intro is not None:
-        docstring = set_min_indent(custom_intro, indent_level)
     else:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"

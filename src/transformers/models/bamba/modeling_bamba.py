@@ -42,14 +42,10 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     auto_docstring,
     can_return_tuple,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
@@ -1033,10 +1029,7 @@ BAMBA_START_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare BambaModel outputting raw hidden-states without any specific head on top.",
-    BAMBA_START_DOCSTRING,
-)
+@auto_docstring
 class BambaPreTrainedModel(PreTrainedModel):
     config_class = BambaConfig
     base_model_prefix = "model"
@@ -1132,10 +1125,7 @@ BAMBA_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare Bamba Model outputting raw hidden-states without any specific head on top.",
-    BAMBA_START_DOCSTRING,
-)
+@auto_docstring
 # Adapted from transformers.models.jamba.modeling_jamba.JambaModel
 class BambaModel(BambaPreTrainedModel):
     """
@@ -1171,7 +1161,7 @@ class BambaModel(BambaPreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1447,10 +1437,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
