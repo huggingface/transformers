@@ -75,43 +75,9 @@ for i, output in enumerate(outputs):
         )
 ```
 
-From the outputs, you can visualize the matches between the two images using the following code:
+You can visualize the matches between the images by providing the original images as well as the outputs to this method:
 ```python
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Create side by side image
-merged_image = np.zeros((max(image1.height, image2.height), image1.width + image2.width, 3))
-merged_image[: image1.height, : image1.width] = np.array(image1) / 255.0
-merged_image[: image2.height, image1.width :] = np.array(image2) / 255.0
-plt.imshow(merged_image)
-plt.axis("off")
-
-# Retrieve the keypoints and matches
-output = outputs[0]
-keypoints0 = output["keypoints0"]
-keypoints1 = output["keypoints1"]
-matching_scores = output["matching_scores"]
-keypoints0_x, keypoints0_y = keypoints0[:, 0].numpy(), keypoints0[:, 1].numpy()
-keypoints1_x, keypoints1_y = keypoints1[:, 0].numpy(), keypoints1[:, 1].numpy()
-
-# Plot the matches
-for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
-        keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, matching_scores
-):
-    plt.plot(
-        [keypoint0_x, keypoint1_x + image1.width],
-        [keypoint0_y, keypoint1_y],
-        color=plt.get_cmap("RdYlGn")(matching_score.item()),
-        alpha=0.9,
-        linewidth=0.5,
-    )
-    plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
-    plt.scatter(keypoint1_x + image1.width, keypoint1_y, c="black", s=2)
-
-# Save the plot
-plt.savefig("matched_image.png", dpi=300, bbox_inches='tight')
-plt.close()
+processor.plot_keypoint_matching(images, outputs)
 ```
 
 ![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/duPp09ty8NRZlMZS18ccP.png)
@@ -129,6 +95,7 @@ The original code can be found [here](https://github.com/cvg/LightGlue).
 
 - preprocess
 - post_process_keypoint_matching
+- plot_keypoint_matching
 
 ## LightGlueForKeypointMatching
 
