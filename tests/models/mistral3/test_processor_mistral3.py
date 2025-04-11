@@ -78,7 +78,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages = [
             {
                 "role": "system",
-                "content": "",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
             },
             {
                 "role": "user",
