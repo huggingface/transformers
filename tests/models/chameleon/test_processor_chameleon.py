@@ -33,11 +33,17 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChameleonProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = ChameleonImageProcessor()
         tokenizer = LlamaTokenizer(vocab_file=SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = self.processor_class(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor = cls.processor_class(image_processor=image_processor, tokenizer=tokenizer, image_seq_length=2)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"image_seq_length": 2}  # fmt: skip
