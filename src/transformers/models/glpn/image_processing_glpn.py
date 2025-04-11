@@ -16,6 +16,8 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -47,6 +49,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class GLPNImageProcessor(BaseImageProcessor):
     r"""
     Constructs a GLPN image processor.
