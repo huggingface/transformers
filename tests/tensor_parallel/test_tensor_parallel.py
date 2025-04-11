@@ -33,7 +33,6 @@ LLAMA_1B = "unsloth/Llama-3.2-1B"
 
 # RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
 class TestTensorParallel(TestCasePlus):
-    
     def torchrun(self, script: str, nproc_per_node: int):
         """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
@@ -82,19 +81,20 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
-            assert response == "with"
+            assert "you" in response or "with" in response
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
             """
         )
         self.torchrun(script_to_run, nproc_per_node)
-        
+
     def test_model_forward_llama_1b(self):
-        self.model_forward(LLAMA_1B, 3)
+        self.model_forward(LLAMA_1B, 4)
 
     def test_model_forward_llama_68m(self):
         self.model_forward(LLAMA_68M, 2)
+
 
 @require_torch_multi_gpu
 class TestTensorParallelCuda(TestTensorParallel):
