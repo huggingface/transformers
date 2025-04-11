@@ -792,7 +792,7 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:

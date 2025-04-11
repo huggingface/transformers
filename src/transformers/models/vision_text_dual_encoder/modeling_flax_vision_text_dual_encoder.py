@@ -273,7 +273,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         attention_mask=None,
         position_ids=None,
         token_type_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -322,7 +322,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         attention_mask=None,
         position_ids=None,
         token_type_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train=False,
     ):
@@ -379,7 +379,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         )
 
     def get_image_features(
-        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self, pixel_values, params: Optional[dict] = None, dropout_rng: jax.random.PRNGKey = None, train=False
     ):
         r"""
         Args:

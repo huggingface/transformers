@@ -1917,7 +1917,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         input_features: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2310,7 +2310,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration._get_decoder_start_token_id
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: Optional[int] = None
+        self, decoder_start_token_id: Optional[Union[int, List[int]]] = None, bos_token_id: Optional[int] = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id

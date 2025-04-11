@@ -59,7 +59,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from git import Repo
 
@@ -621,7 +621,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def extract_imports(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
     """
     Get the imports a given module makes.
 
@@ -703,7 +703,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def get_module_dependencies(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -953,7 +953,7 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
 
 
 def create_module_to_test_map(
-    reverse_map: Dict[str, List[str]] = None, filter_models: bool = False
+    reverse_map: Optional[Dict[str, List[str]]] = None, filter_models: bool = False
 ) -> Dict[str, List[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.

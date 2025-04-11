@@ -107,7 +107,7 @@ class Message:
         ci_title: str,
         model_results: Dict,
         additional_results: Dict,
-        selected_warnings: List = None,
+        selected_warnings: Optional[List] = None,
         prev_ci_artifacts=None,
     ):
         self.title = title
@@ -856,7 +856,7 @@ def retrieve_available_artifacts():
         def __str__(self):
             return self.name
 
-        def add_path(self, path: str, gpu: str = None):
+        def add_path(self, path: str, gpu: Optional[str] = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
     _available_artifacts: Dict[str, Artifact] = {}

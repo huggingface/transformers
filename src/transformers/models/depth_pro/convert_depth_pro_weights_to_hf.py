@@ -15,6 +15,7 @@
 import argparse
 import gc
 import os
+from typing import Optional
 
 import regex as re
 import torch
@@ -93,7 +94,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     output_dict = {}
     if state_dict_keys is not None:
         old_text = "\n".join(state_dict_keys)
