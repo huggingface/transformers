@@ -383,7 +383,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             The `QuantAttentionFused` class as it only supports that class
             for now.
     """
-    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV, WQLinear_IPEX
 
     module_has_been_fused = False
 

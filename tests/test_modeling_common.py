@@ -295,6 +295,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
@@ -3122,9 +3123,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
-            assert num_params < 1000000, (
-                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-            )
+            assert (
+                num_params < 1000000
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
     @require_flash_attn
     @require_torch_gpu

@@ -6829,6 +6829,13 @@ class ModernBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MolmoForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MoonshineForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6836,7 +6843,28 @@ class MoonshineForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MolmoForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MoonshineModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MolmoPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MolmoTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

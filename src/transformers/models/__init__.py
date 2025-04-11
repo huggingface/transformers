@@ -182,6 +182,7 @@ from . import (
     mobilevit,
     mobilevitv2,
     modernbert,
+    molmo,
     moonshine,
     moshi,
     mpnet,
