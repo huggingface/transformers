@@ -50,10 +50,8 @@ def process_file(
     # Check for differences
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
-        original_file_path = None
         if os.path.exists(file_path):
-            original_file_path = file_path + BACKUP_EXT
-            shutil.copy(file_path, original_file_path)
+            shutil.copy(file_path, file_path + BACKUP_EXT)
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type][0])
@@ -63,25 +61,19 @@ def process_file(
             diff_text = "\n".join(diff_list)
             syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
             console.print(syntax)
-        return 1, original_file_path
+        return 1
     else:
         console.print(f"[bold green]No differences found for {file_path}.[/bold green]")
-        return 0, None
+        return 0
 
 
 def compare_files(modular_file_path, show_diff=True):
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
-    original_file_paths = []
     for file_type in generated_modeling_content.keys():
-        is_changed, original_file_path = process_file(
-            modular_file_path, generated_modeling_content, file_type, show_diff
-        )
-        diff += is_changed
-        if original_file_path is not None:
-            original_file_paths.append(original_file_path)
-    return diff, original_file_paths
+        diff += process_file(modular_file_path, generated_modeling_content, file_type, show_diff)
+    return diff
 
 
 def get_models_in_diff():
@@ -172,9 +164,6 @@ if __name__ == "__main__":
     console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
     console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
 
-    # Backups for overwritten files with modular conversion
-    original_file_paths = []
-
     try:
         for dependency_level_files in ordered_files:
             # Filter files guaranteed no diff
@@ -191,17 +180,14 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                outputs = p.map(
+                is_changed_flags = p.map(
                     partial(compare_files, show_diff=not args.fix_and_overwrite),
                     files_to_check,
                 )
 
             # Collect changed files and their original paths
-            for i, file_path in enumerate(files_to_check):
-                is_file_changed, original_file_paths_i = outputs[i]
-                original_file_paths.extend(original_file_paths_i)
-
-                if is_file_changed:
+            for is_changed, file_path in zip(is_changed_flags, files_to_check):
+                if is_changed:
                     non_matching_files.append(file_path)
 
                     # Update changed models, after each round of conversions
