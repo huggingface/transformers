@@ -42,14 +42,10 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -755,10 +751,7 @@ QWEN2MOE_START_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
     config_class = Qwen2MoeConfig
     base_model_prefix = "model"
@@ -859,18 +852,8 @@ QWEN2MOE_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 class Qwen2MoeModel(Qwen2MoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2MoeDecoderLayer`]
-
-    Args:
-        config: Qwen2MoeConfig
-    """
-
     def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -895,7 +878,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1218,9 +1201,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1238,36 +1219,52 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        <<<<<<< HEAD
+        ||||||| 597efd21d2
+                Args:
+                    labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                        Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                        config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                        (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
+                    num_logits_to_keep (`int`, *optional*):
+                        Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                        `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                        token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
-        Returns:
+                Returns:
+        =======
+                    labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                        Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                        config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                        (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        Example:
+                    logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                        If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                        `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                        token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                        If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                        This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-        ```python
-        >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
+                Returns:
+        >>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
 
-        >>> model = Qwen2MoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+                Example:
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+                ```python
+                >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+                >>> model = Qwen2MoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+                >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+
+                >>> prompt = "Hey, are you conscious? Can you talk to me?"
+                >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+                >>> # Generate
+                >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+                >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+                "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+                ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1322,21 +1319,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
-    The Qwen2MoE Model transformer with a sequence classification head on top (linear layer).
-
-    [`Qwen2MoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
@@ -1355,7 +1338,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1369,10 +1352,11 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: MoeModelOutputWithPast = self.model(
@@ -1424,13 +1408,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The Qwen2MoE Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
@@ -1456,12 +1434,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1475,10 +1448,11 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: MoeModelOutputWithPast = self.model(
@@ -1507,13 +1481,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-The Qwen2MoE Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
@@ -1533,7 +1501,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
