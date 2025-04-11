@@ -88,7 +88,7 @@ These are unified under the `HfQuantizer` API and associated `QuantizationConfig
 ### Typical Workflow
 
 1. Choose a quantization method suitable for your hardware and use-case (see the [Overview table](./overview)).
-2. Load a pre-quantized model from the Hugging Face Hub, or loading a `float32`/`float16` model and applying quantization using a specific `QuantizationConfig`.
+2. Load a pre-quantized model from the Hugging Face Hub, or loading a `float32`/`float16`/`bfloat16` model and applying quantization using a specific `QuantizationConfig`.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
