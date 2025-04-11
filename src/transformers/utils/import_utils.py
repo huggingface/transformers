@@ -512,13 +512,17 @@ def is_torch_mps_available(min_version: Optional[str] = None):
     return False
 
 
-def is_torch_bf16_gpu_available():
+def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
-    return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    if torch.xpu.is_available():
+        return torch.xpu.is_bf16_supported()
+    return False
 
 
 def is_torch_bf16_cpu_available() -> bool:
