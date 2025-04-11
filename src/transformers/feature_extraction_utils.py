@@ -89,6 +89,8 @@ class BatchFeature(UserDict):
 
     def __getattr__(self, item: str):
         try:
+            if item == "pixel_values" and "pixel_values_videos" in self.data:
+                return self.data["pixel_values_videos"]
             return self.data[item]
         except KeyError:
             raise AttributeError

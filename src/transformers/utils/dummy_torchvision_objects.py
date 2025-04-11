@@ -93,6 +93,13 @@ class LlavaNextImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class LlavaNextVideoImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class LlavaOnevisionImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
