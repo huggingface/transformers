@@ -72,6 +72,11 @@ This model was contributed by [aps](https://huggingface.co/aps). The original co
 [[autodoc]] FlavaImageProcessor
     - preprocess
 
+## FlavaImageProcessorFast
+
+[[autodoc]] FlavaImageProcessorFast
+    - preprocess
+
 ## FlavaForPreTraining
 
 [[autodoc]] FlavaForPreTraining
