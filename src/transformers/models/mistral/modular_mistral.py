@@ -20,6 +20,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -104,6 +105,10 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MistralMLP(config)
+
+
+class MistralPreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 class MistralModel(LlamaModel):
@@ -344,3 +349,13 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MistralForCausalLM",
+    "MistralForQuestionAnswering",
+    "MistralModel",
+    "MistralPreTrainedModel",
+    "MistralForSequenceClassification",
+    "MistralForTokenClassification",
+]

@@ -741,10 +741,13 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
 
-                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+                new_imported_modules_from_import_structure = define_import_structure(PATH_TO_REPO / module)
 
-                for mapping in new_imported_modules_2.values():
+                for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
+                        # Import Structure returns _module keys as import paths rather than local paths
+                        # We replace with os.path.sep so that it's Windows-compatible
+                        _module = _module.replace(".", os.path.sep)
                         _module = module.replace("__init__.py", f"{_module}.py")
                         new_imported_modules.append((_module, list(_imports)))
 
@@ -1038,17 +1041,17 @@ def infer_tests_to_run(
     """
     if not test_all:
         modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+        reverse_map = create_reverse_dependency_map()
+        impacted_files = modified_files.copy()
+        for f in modified_files:
+            if f in reverse_map:
+                impacted_files.extend(reverse_map[f])
     else:
-        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        impacted_files = modified_files = [
+            str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)
+        ]
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
-
-    # Create the map that will give us all impacted modules.
-    reverse_map = create_reverse_dependency_map()
-    impacted_files = modified_files.copy()
-    for f in modified_files:
-        if f in reverse_map:
-            impacted_files.extend(reverse_map[f])
 
     # Remove duplicates
     impacted_files = sorted(set(impacted_files))
