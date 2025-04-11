@@ -36,13 +36,16 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.image_seq_length = 0  # TODO: raushan fix me in #37342
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     @require_vision

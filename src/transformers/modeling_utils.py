@@ -55,8 +55,9 @@ if is_torchao_available():
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import CompileConfig, GenerationConfig, GenerationMixin
+from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
@@ -101,6 +102,7 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
+    is_kernels_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -131,12 +133,11 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate import dispatch_model, infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         extract_model_from_parallel,
-        find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
         load_offloaded_weights,
@@ -156,6 +157,9 @@ if is_safetensors_available():
 
 if is_deepspeed_available():
     import deepspeed
+
+if is_kernels_available():
+    from kernels import get_kernel
 
 logger = logging.get_logger(__name__)
 
@@ -298,24 +302,6 @@ def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
         return first_tuple[1].device
 
 
-def get_first_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
-    """
-    Returns the first parameter dtype (can be non-floating) or asserts if none were found.
-    """
-    try:
-        return next(parameter.parameters()).dtype
-    except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch > 1.5
-
-        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
-
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        first_tuple = next(gen)
-        return first_tuple[1].dtype
-
-
 def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
@@ -363,17 +349,6 @@ def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
         if t.is_floating_point():
             return t.dtype
     return last_dtype
-
-
-def get_state_dict_float_dtype(state_dict):
-    """
-    Returns the first found floating dtype in `state_dict` or asserts if none were found.
-    """
-    for t in state_dict.values():
-        if t.is_floating_point():
-            return t.dtype
-
-    raise ValueError("couldn't find any floating point dtypes in state_dict")
 
 
 def get_state_dict_dtype(state_dict):
@@ -485,19 +460,14 @@ str_to_torch_dtype = {
     "F64": torch.float64,
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
 }
 
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
 
 if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U16"] = torch.uint16
     str_to_torch_dtype["U32"] = torch.uint32
     str_to_torch_dtype["U64"] = torch.uint64
-
-if is_torch_greater_or_equal("2.1.0"):
-    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
-    str_to_torch_dtype["F8_E5M2"] = torch.float8_e5m2
 
 
 def load_state_dict(
@@ -546,12 +516,7 @@ def load_state_dict(
                 map_location = "cpu"
         extra_args = {}
         # mmap can only be used with files serialized with zipfile-based format.
-        if (
-            isinstance(checkpoint_file, str)
-            and map_location != "meta"
-            and version.parse(torch.__version__) >= version.parse("2.1.0")
-            and is_zipfile(checkpoint_file)
-        ):
+        if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
             extra_args = {"mmap": True}
         return torch.load(
             checkpoint_file,
@@ -1535,7 +1500,6 @@ class ModuleUtilsMixin:
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
         # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-        # causal and attention masks must have same type with pytorch version < 1.3
         causal_mask = causal_mask.to(attention_mask.dtype)
 
         if causal_mask.shape[1] < attention_mask.shape[1]:
@@ -1743,8 +1707,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-# TODO (joao): remove `GenerationMixin` inheritance in v4.50
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -1823,6 +1786,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # by passing `tp_plan` to the init, it should be {"model.language_model.layers.fc1":"colwise"}
     # for example.
     _tp_plan = None
+
+    # tensor parallel degree to which model is sharded to.
+    _tp_size = None
 
     # A pipeline parallel plan specifying the layers which may not be present
     # on all ranks when PP is enabled. For top-level models, this attribute is
@@ -2064,6 +2030,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
+            if isinstance(config._attn_implementation, str) and re.match(
+                r"^[^/:]+/[^/:]+:[^/:]+$", config._attn_implementation
+            ):
+                if not is_kernels_available():
+                    raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
+
+                # Extract repo_id and kernel_name from the string
+                repo_id, kernel_name = config._attn_implementation.split(":")
+                kernel_name = kernel_name.strip()
+                repo_id = repo_id.strip()
+
+                try:
+                    kernel = get_kernel(repo_id)
+                    ALL_ATTENTION_FUNCTIONS.register(
+                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
+                    )
+                    config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                except FileNotFoundError as e:
+                    logger.warning(
+                        f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
+                    )
+                    config._attn_implementation = "eager"
+                except AttributeError:
+                    raise ValueError(
+                        "the kernel function name or class specified in the attn_implementation argument is not valid. \
+                                     Please check the documentation for the correct format, \
+                                     and check that the kernel exports the class and the function correctly."
+                    )
+
             if (
                 not isinstance(config._attn_implementation, dict)
                 and config._attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
@@ -2196,12 +2191,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
             if "PreTrainedModel" not in str(base) and base.can_generate():
                 return True
-        # BC: Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
+        # Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
         # was how we detected whether a model could generate.
-        if "GenerationMixin" not in str(cls.prepare_inputs_for_generation):
-            logger.warning_once(
+        if hasattr(cls, "prepare_inputs_for_generation"):  # implicit: doesn't inherit `GenerationMixin`
+            logger.warning(
                 f"{cls.__name__} has generative capabilities, as `prepare_inputs_for_generation` is explicitly "
-                "overwritten. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, "
+                "defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, "
                 "`PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability "
                 "to call `generate` and other related functions."
                 "\n  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the "
@@ -2211,7 +2206,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "\n  - If you are not the owner of the model architecture class, please contact the model code owner "
                 "to update it."
             )
-            return True
         # Otherwise, can't generate
         return False
 
@@ -3719,19 +3713,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
-        # With deepspeed, we cannot initialize the model on meta device
         if is_deepspeed_zero3_enabled():
             init_contexts = [no_init_weights()]
+            # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                init_contexts.extend(
-                    [
-                        deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                        set_zero3_state(),
-                    ]
-                )
+                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
             elif is_quantized:
-                init_contexts.append(set_quantized_state())
+                init_contexts.extend([init_empty_weights(), set_quantized_state()])
         else:
             init_contexts = [no_init_weights(), init_empty_weights()]
 
@@ -3891,6 +3880,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Currently, it only accepts
                 `tp_plan="auto"` to use predefined plan based on the model. Note that if you use it, you should launch your script accordingly with
                 `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
+            tp_size (`str`, *optional*):
+                A torch tensor parallel degree. If not provided would default to world size.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -3987,6 +3978,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
+        tp_size = kwargs.pop("tp_size", None)
         key_mapping = kwargs.pop("key_mapping", None)
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -3999,7 +3991,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
             )
-
+        if tp_size is not None and tp_plan is None:
+            raise ValueError("tp_plan has to be set when tp_size is passed.")
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
@@ -4035,6 +4028,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     elif device_type == "cpu":
                         cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
                         torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
+                    elif device_type == "xpu":
+                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
+                        torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
 
                 except Exception as e:
                     raise EnvironmentError(
@@ -4043,7 +4039,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ) from e
 
             # Get device with index assuming equal number of devices per host
-            index = None if device_type == "cpu" else torch.cuda.current_device()
+            if device_type == "xpu":
+                index = torch.xpu.current_device()
+            else:
+                index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
 
             if index is not None and index > 0:
@@ -4053,9 +4052,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 sys.stderr = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+
+            # Assuming sharding the model onto the world when tp_size not provided
+            tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4140,6 +4140,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_map is not None:
             if is_deepspeed_zero3_enabled():
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
+            if not is_accelerate_available():
+                raise ValueError(
+                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
+                )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
         if load_in_4bit or load_in_8bit:
@@ -4335,7 +4339,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
-                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
+                config,
+                use_flash_attention_2=use_flash_attention_2,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
             )
 
         with ContextManagers(model_init_context):
@@ -4414,6 +4421,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
+
+        # record tp degree the model sharded to
+        model._tp_size = tp_size
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4498,7 +4508,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif from_flax:
                 loading_info = None
             return model, loading_info
-
         return model
 
     @staticmethod
@@ -4623,6 +4632,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
+        is_hqq = is_quantized and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
         is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in [
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
@@ -4788,7 +4798,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None:
+        if device_map is not None and not is_hqq:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
@@ -4800,7 +4810,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 continue
 
             map_location = "cpu"
-            if shard_file.endswith(".safetensors") and not is_hqq_or_bnb and not is_deepspeed_zero3_enabled():
+            if (
+                shard_file.endswith(".safetensors")
+                and not is_hqq_or_bnb
+                and not (is_deepspeed_zero3_enabled() and not is_quantized)
+            ):
                 map_location = "meta"
             elif (
                 device_map is not None
@@ -4822,7 +4836,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
             # Skip it with fsdp on ranks other than 0
             elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
@@ -5136,6 +5150,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self.base_model, "_tp_plan", None) is not None:
             return True
         return False
+
+    @property
+    def tp_size(self):
+        """
+        Returns the model's tensor parallelism degree.
+        """
+        # if None, the model didn't undergo tensor parallel sharding
+        return self._tp_size
 
     @property
     def supports_pp_plan(self):

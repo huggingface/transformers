@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,8 +36,9 @@ if is_vision_available():
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = GotOcr2ImageProcessor(
             do_resize=True,
@@ -52,15 +52,15 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_convert_rgb=True,
         )
         tokenizer = AutoTokenizer.from_pretrained("CohereForAI/aya-vision-8b", padding_side="left")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = AyaVisionProcessor.from_pretrained(
             "CohereForAI/aya-vision-8b",
             image_processor=image_processor,
             tokenizer=tokenizer,
             **processor_kwargs,
         )
-        processor.save_pretrained(self.tmpdirname)
-        self.image_token = processor.image_token
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
     @staticmethod
     def prepare_processor_dict():
@@ -75,13 +75,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    # todo: yoni, fix this test
-    @unittest.skip("Chat template has long system prompt")
-    def test_chat_template_accepts_processing_kwargs(self, **kwargs):
-        pass
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     def test_process_interleaved_images_videos(self):

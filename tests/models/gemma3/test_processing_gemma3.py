@@ -34,8 +34,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma3Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         gemma3_image_processor_kwargs = {
             "do_pan_and_scan": True,
             "pan_and_scan_min_crop_size": 256,
@@ -52,13 +53,14 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "eoi_token": "<end_of_image>",
         }
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = cls.prepare_processor_dict()
         processor = Gemma3Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
-        self.image_token = processor.boi_token
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.boi_token
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # TODO: raushan or arthur: add the real chat template
     @staticmethod

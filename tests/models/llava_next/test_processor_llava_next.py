@@ -38,7 +38,6 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
 
         image_processor = LlavaNextImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
@@ -72,23 +71,6 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
-        expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_image_token_filling(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
