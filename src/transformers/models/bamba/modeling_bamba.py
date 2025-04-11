@@ -882,7 +882,6 @@ class BambaMixer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
-@use_kernel_forward_from_hub("MLP")
 class BambaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1331,7 +1330,7 @@ class BambaModel(BambaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

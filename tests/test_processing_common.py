@@ -92,7 +92,8 @@ class ProcessorTesterMixin:
     videos_input_name = "pixel_values_videos"
     audio_input_name = "input_features"
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {}
 
     def get_component(self, attribute, **kwargs):
@@ -123,18 +124,23 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    # TODO: raushan unify all these special token LLMs under the general preparation. We can get audio/image token
-    # from tokenizer, so we can generalize instead of overriding
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+    def prepare_text_inputs(self, batch_size: Optional[int] = None, modality: Optional[str] = None):
+        if modality is not None:
+            special_token_to_add = getattr(self, f"{modality}_token", "")
+        else:
+            special_token_to_add = ""
+
         if batch_size is None:
-            return "lower newer"
+            return f"lower newer {special_token_to_add}"
 
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
 
         if batch_size == 1:
-            return ["lower newer"]
-        return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
+            return [f"lower newer {special_token_to_add}"]
+        return [f"lower newer {special_token_to_add}", f" {special_token_to_add} upper older longer string"] + [
+            f"lower newer {special_token_to_add}"
+        ] * (batch_size - 2)
 
     @require_vision
     def prepare_image_inputs(self, batch_size: Optional[int] = None):
@@ -159,6 +165,13 @@ class ProcessorTesterMixin:
         for key, value in self.prepare_processor_dict().items():
             # Chat template is saved as a separate file
             if key not in "chat_template":
+                # json converts dict keys to str, but some processors force convert back to int when init
+                if (
+                    isinstance(obj[key], dict)
+                    and isinstance(list(obj[key].keys())[0], str)
+                    and isinstance(list(value.keys())[0], int)
+                ):
+                    obj[key] = {int(k): v for k, v in obj[key].items()}
                 self.assertEqual(obj[key], value)
                 self.assertEqual(getattr(processor, key, None), value)
 
@@ -206,7 +219,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
@@ -229,7 +242,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
@@ -244,7 +257,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
@@ -264,7 +277,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
@@ -278,7 +291,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -301,7 +314,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
@@ -327,7 +340,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = [self.prepare_text_inputs()]
+        input_str = [self.prepare_text_inputs(modality="image")]
         image_input = self.prepare_image_inputs()
         with self.assertRaises(ValueError):
             _ = processor(
@@ -346,7 +359,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -369,7 +382,7 @@ class ProcessorTesterMixin:
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -396,7 +409,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
@@ -414,7 +427,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
@@ -433,7 +446,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
@@ -452,7 +465,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         with self.assertRaises(ValueError):
@@ -476,7 +489,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
 
@@ -499,7 +512,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
         inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
         self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
@@ -522,7 +535,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
@@ -537,7 +550,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
         inputs = processor(
             text=input_str, videos=video_input, return_tensors="pt", max_length=112, padding="max_length"
@@ -557,7 +570,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
@@ -571,7 +584,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
         inputs = processor(
             text=input_str,
@@ -594,7 +607,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="video")
         video_input = self.prepare_video_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
@@ -620,7 +633,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = [self.prepare_text_inputs()]
+        input_str = [self.prepare_text_inputs(modality="video")]
         video_input = self.prepare_video_inputs()
         with self.assertRaises(ValueError):
             _ = processor(
@@ -639,7 +652,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
         # Define the kwargs for each modality
@@ -662,7 +675,7 @@ class ProcessorTesterMixin:
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
         # Define the kwargs for each modality
@@ -686,7 +699,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modality="image")
         image_input = self.prepare_image_inputs()
 
         with self.assertRaises(ValueError):
@@ -713,7 +726,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=3)
+        input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
         audio_lengths = [4000, 8000, 16000, 32000]
         raw_speech = [np.asarray(audio)[:length] for audio, length in zip(floats_list((3, 32_000)), audio_lengths)]
 

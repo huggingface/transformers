@@ -43,6 +43,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -58,17 +59,9 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-            "patch_size": 3,
+            "patch_size": 128,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
-
-    @unittest.skip(
-        "Skip because the model has no processor kwargs except for chat template and"
-        "chat template is saved as a separate file. Stop skipping this test when the processor"
-        "has new kwargs saved in config file."
-    )
-    def test_processor_to_json_string(self):
-        pass
 
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
