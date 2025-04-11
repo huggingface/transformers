@@ -151,11 +151,10 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         shared_intermediate_size=0,
-        # new variables
         normalization_function=None,
         position_embedding_type="nope",
         init_method="mup",
-        layer_types=List,
+        #layer_types=List,
         # took defaults from bamba config
         mamba_n_heads=128,
         mamba_n_groups=1,
@@ -165,7 +164,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_expand=2,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
-        # TODO this variable will not be needed in future
+        # None or List
         attn_layer_indices = None,
         # confirm this variable if needed or not
         mamba_proj_bias=False,
@@ -214,8 +213,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.init_method = init_method
 
-        self.layer_types = layer_types
-        #mamba2 variables
         mamba_intermediate = mamba_expand * hidden_size
 
         if mamba_intermediate % mamba_n_heads != 0:
@@ -255,11 +252,10 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         rope_config_validation(self)
     
-    # TODO redefine this for use or get rid of it
     @property
     def layers_block_type(self):
         return [
-            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
+            "multihead_latent_attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
             for i in range(self.num_hidden_layers)
         ]
 

@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ..bamba.configuration_bamba import BambaConfig
-from ..bamba.modeling_bamba import BambaMixer
+from ..bamba.modeling_bamba import BambaMixer, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedMLP,
@@ -31,7 +31,6 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedPreTrainedModel
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
-from ..jamba import modeling_jamba
 from ...utils import add_start_docstrings
 
 class GraniteMultiHeadLatentAttention(nn.Module):
@@ -75,8 +74,7 @@ class GraniteMultiHeadLatentAttention(nn.Module):
     ) -> torch.Tensor:
         
         hidden_states = self.c_attn_down_projection(hidden_states)
-        # if self.position_embedding_type == "rope":
-        #     raise NotImplementedError()
+
         query, key, value = hidden_states.split(
                 (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
             )
@@ -126,60 +124,6 @@ class GraniteMultiHeadLatentAttention(nn.Module):
             softmax_scale = self.attention_multiplier
 
         return softmax_scale   
-
-# TODO probably find a better way to re-use existing class in Bamba
-class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynamicCache):
-    """
-    A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
-    (which has a constant shape regardless of seq_len).
-
-    This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
-    and `ssm_states` for mamba cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
-    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
-    while `conv_states` and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
-    For mamba layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
-    while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
-    and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
-    """
-
-    def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(config, batch_size, dtype, device)
-        self.layers_block_type = config.layer_types
-        self.has_previous_state = False  # only used by mamba
-        conv_kernel_size = config.mamba_d_conv
-        ssm_state_size = config.mamba_d_state
-
-        self.conv_states = []
-        self.ssm_states = []
-        self.transformer_layers = []
-        for i in range(config.num_hidden_layers):
-            if self.layers_block_type[i] == "mamba2":
-                self.conv_states += [
-                    torch.zeros(
-                        batch_size,
-                        (config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * ssm_state_size),
-                        conv_kernel_size,
-                        device=device,
-                        dtype=dtype,
-                    )
-                ]
-                self.ssm_states += [
-                    torch.zeros(
-                        batch_size,
-                        config.mamba_n_heads,
-                        config.mamba_d_head,
-                        ssm_state_size,
-                        device=device,
-                        dtype=dtype,
-                    )
-                ]
-            else:
-                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
-                self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
-                self.transformer_layers.append(i)
-
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
  
 class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
@@ -197,10 +141,11 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
-        # to do later on add error handling for not found here 
-        # TODO: rename
-        self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx) if config.layer_types[layer_idx] == "multihead_latent_attention" else GraniteMoeHybridMambaLayer(config, layer_idx)
-        self.self_attn_type = config.layer_types[layer_idx]
+        if config.layers_block_type[layer_idx] == "multihead_latent_attention":
+            self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx)
+        else:
+            self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
+        self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(
         self,
@@ -244,14 +189,19 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # check implementation of this function
-        # TODO - rename to something else
-        hidden_states  = self._self_attn_forward(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-        )
+        if self.layer_type == "mamba":
+            hidden_states = self.mamba(
+                hidden_states=hidden_states,
+                cache_position=cache_position,
+                cache_params=past_key_value,
+                attention_mask=attention_mask,
+            )
+        else: 
+            hidden_states = self.self_attn(
+                hidden_states=hidden_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+            )
 
         hidden_states = residual + hidden_states * self.residual_multiplier
 
@@ -282,30 +232,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             outputs += (router_logits,)
 
         return outputs
-    
-    # TODO : get rid of function and do code inline
-    # TODO doctsring - MambaCache type not Cache
-    def _self_attn_forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ):
-        # TODO add elif and else here for error handling
-        if self.self_attn_type == "multihead_latent_attention":
-            return self.self_attn(
-                hidden_states=hidden_states,
-                past_key_value=past_key_value,
-                attention_mask=attention_mask,
-            )
-        else:
-            return self.self_attn(
-                hidden_states=hidden_states,
-                cache_position=cache_position,
-                cache_params=past_key_value,
-                attention_mask=attention_mask,
-            )
 
 # TO DO update docstring
 GRANITEMOEHYBRID_START_DOCSTRING = r"""
