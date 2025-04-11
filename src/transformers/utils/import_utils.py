@@ -1949,7 +1949,15 @@ class _LazyModule(ModuleType):
                     pass
 
             Placeholder.__name__ = name
-            Placeholder.__module__ = self._class_to_module.get(name, name)
+
+            if name not in self._class_to_module:
+                module_name = f"transformers.{name}"
+            else:
+                module_name = self._class_to_module[name]
+                if not module_name.startswith("transformers."):
+                    module_name = f"transformers.{module_name}"
+
+            Placeholder.__module__ = module_name
 
             value = Placeholder
         elif name in self._class_to_module.keys():
