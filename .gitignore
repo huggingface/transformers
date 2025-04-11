@@ -167,3 +167,6 @@ tags
 
 # ruff
 .ruff_cache
+
+# modular conversion
+*.modular_backup
