@@ -4384,6 +4384,55 @@ class ModelTesterMixin:
                 ),
             )
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attention_2_gradients(self):
+        """Tests that gradients computed with Flash Attention 2 match those computed with eager implementation."""
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            
+            # Create model with eager attention
+            config._attn_implementation = "eager"
+            model_eager = model_class(config).to(device=torch_device, dtype=torch.float32)
+            
+            # Create model with Flash Attention 2
+            config._attn_implementation = "flash_attention_2"
+            model_fa2 = model_class(config).to(device=torch_device, dtype=torch.float32)
+            
+            # Copy weights to ensure same initialization
+            model_fa2.load_state_dict(model_eager.state_dict())
+            
+            # Set both models to train mode
+            model_eager.train()
+            model_fa2.train()
+
+            # Set seed for reproducibility of dropout
+            torch.manual_seed(42)
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss_eager = model_eager(**inputs_dict).loss
+            loss_eager.backward()
+            grads_eager = {name: param.grad.detach().clone() for name, param in model_eager.named_parameters()}
+            
+            # Reset seed for identical dropout
+            torch.manual_seed(42)
+            loss_fa2 = model_fa2(**inputs_dict).loss
+            loss_fa2.backward()
+            grads_fa2 = {name: param.grad.detach().clone() for name, param in model_fa2.named_parameters()}
+
+            # Compare gradients
+            for name in grads_eager:
+                self.assertTrue(
+                    torch.allclose(grads_eager[name], grads_fa2[name], rtol=1e-4, atol=1e-4),
+                    f"Gradients for {name} do not match between eager and FA2 implementations"
+                )
+
 
 global_rng = random.Random()
 
