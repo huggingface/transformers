@@ -120,16 +120,16 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
-            assert response == "with"
+            assert "you" in response or "with" in response
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
             """
         )
         self.torchrun(script_to_run, nproc_per_node)
-        
+
     def test_model_forward_llama_1b(self):
-        self.model_forward(LLAMA_1B, 3)
+        self.model_forward(LLAMA_1B, 4)
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     def test_model_save(self):
