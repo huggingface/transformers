@@ -623,13 +623,19 @@ class ProcessorMixin(PushToHubMixin):
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
+        save_jinja_files = kwargs.get("save_jinja_files", True)
+
         for attribute_name in self.attributes:
             attribute = getattr(self, attribute_name)
             # Include the processor class in the attribute config so this processor can then be reloaded with the
             # `AutoProcessor` API.
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
-            attribute.save_pretrained(save_directory)
+            if attribute_name == "tokenizer":
+                # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
+                attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
+            else:
+                attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -651,15 +657,14 @@ class ProcessorMixin(PushToHubMixin):
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-            save_as_jinja = kwargs.get("save_jinja_files", True)
+            save_jinja_files = kwargs.get("save_jinja_files", True)
             is_single_template = isinstance(self.chat_template, str)
-
-            if save_as_jinja and is_single_template:
+            if save_jinja_files and is_single_template:
                 # New format for single templates is to save them as chat_template.jinja
                 with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
                     f.write(self.chat_template)
                 logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-            elif save_as_jinja and not is_single_template:
+            elif save_jinja_files and not is_single_template:
                 # New format for multiple templates is to save the default as chat_template.jinja
                 # and the other templates in the chat_templates/ directory
                 for template_name, template in self.chat_template.items():
