@@ -329,6 +329,10 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
     @unittest.skip(
         reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
     )
