@@ -3,7 +3,7 @@ from collections import defaultdict
 
 
 # Function to perform topological sorting
-def topological_sort(dependencies: dict):
+def topological_sort(dependencies: dict) -> list[list[str]]:
     # Nodes are the name of the models to convert (we only add those to the graph)
     nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
@@ -20,12 +20,12 @@ def topological_sort(dependencies: dict):
     while len(graph) > 0:
         # Find the nodes with 0 out-degree
         leaf_nodes = {node for node in graph if len(graph[node]) == 0}
-        # Add them to the list
-        sorting_list += list(leaf_nodes)
+        # Add them to the list as next level
+        sorting_list.append([name_mapping[node] for node in leaf_nodes])
         # Remove the leafs from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
 
-    return [name_mapping[x] for x in sorting_list]
+    return sorting_list
 
 
 # Function to extract class and import info from a file
