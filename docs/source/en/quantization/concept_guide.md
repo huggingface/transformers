@@ -18,8 +18,18 @@ The core idea is to map the range of values found in the original `float32` weig
 ### Affine Quantization Scheme
 
 The most common method is the *affine quantization scheme*. For a given `float32` tensor (like a layer's weights), we find its minimum $val_{min}$ and maximum $val_{max}$ values. We then map this range $[val_{min}, val_{max}]$ to the `int8` range $[q_{min}, q_{max}]$, typically $[-128, 127]$.
+ There are two main ways to perform this mapping: Symmetric and Asymmetric.
 
-This mapping is defined by two parameters:
+### Symmetric vs. Asymmetric Quantization
+
+The choice between symmetric and asymmetric quantization determines how the `float32` range is mapped to the `int8` range.
+
+- **Symmetric:** Assumes the original `float32` range is symmetric around zero, i.e., $[ -a, a ]$. This range is then mapped symmetrically to the `int8` range, for example, $[-127, 127]$. A key characteristic is that the `float32` value $0.0$ maps directly to the `int8` value $0$. This requires only one parameter, the **scale ($S$)**, to define the mapping. It can simplify computations but might be less accurate if the original data distribution isn't naturally centered around zero.
+- **Asymmetric (Affine):** This method does not assume the data is centered around zero. It maps the exact range $[val_{min}, val_{max}]$ from `float32` to the full `int8` range, like $[-128, 127]$. This requires two parameters: a **scale ($S$)** and a **zero-point ($Z$)**. 
+
+### Affine Quantization Formula
+
+Affine quantization is defined by two parameters:
 
 1. **Scale ($S$)**: A positive `float32` number representing the ratio between the `float32` range and the `int8` range.
 
@@ -32,6 +42,8 @@ $$
 $$
 Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
 $$
+
+(Note: In symmetric quantization, Z would typically be fixed at 0).
 
 With these parameters, a `float32` value $x$ can be quantized to `int8` ($q$) using:
 
@@ -62,11 +74,6 @@ A key aspect of `int4` quantization is **weight packing**. Since most hardware d
 The primary benefit comes from reduced memory bandwidth. Loading the packed `int4` weights (stored as `int8`) from memory (RAM or VRAM) to the compute units is twice as fast as loading `int8` weights. For large models, memory access is often a significant bottleneck. The speed gain from faster data transfer can outweigh the computational overhead of unpacking and dequantizing on the fly, leading to overall faster inference, especially in memory-bound scenarios.
 
 However, `int4` quantization typically results in a larger accuracy drop compared to `int8`. Advanced quantization techniques like GPTQ or AWQ are often necessary to achieve good performance with `int4`.
-
-### Symmetric vs. Asymmetric Quantization
-
-- **Asymmetric (Affine):** Uses both scale $S$ and zero-point $Z$. This is more flexible, especially if the data range isn't centered around zero.
-- **Symmetric:** Assumes the `float32` range is symmetric around zero, i.e., $[ -a, a ]$, and sets $Z = 0$. This simplifies computations and can be faster, though it's less accurate if the data is not symmetric.
 
 ### Granularity: Per-Tensor vs. Per-Channel/Group
 
