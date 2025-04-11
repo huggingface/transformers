@@ -1083,6 +1083,7 @@ def require_deterministic_for_xpu(test_case):
                 torch.use_deterministic_algorithms(original_state)
         else:
             return test_case(*args, **kwargs)
+
     return wrapper
 
 
