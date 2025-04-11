@@ -919,7 +919,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        labels: Tuple[torch.Tensor] = None,
+        labels: Optional[Tuple[torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

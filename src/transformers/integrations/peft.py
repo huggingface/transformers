@@ -79,7 +79,7 @@ class PeftAdapterMixin:
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
-        peft_config: Dict[str, Any] = None,
+        peft_config: Optional[Dict[str, Any]] = None,
         adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,

@@ -474,7 +474,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,

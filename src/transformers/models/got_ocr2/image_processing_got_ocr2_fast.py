@@ -114,7 +114,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
