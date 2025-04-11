@@ -37,7 +37,8 @@ from .configuration_eomt import EoMTConfig
 
 
 if is_timm_available():
-    from timm import LayerNorm2d, create_model
+    from timm import create_model
+    from timm.layers import LayerNorm2d
 
 
 logger = logging.get_logger(__name__)
