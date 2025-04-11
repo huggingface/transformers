@@ -457,6 +457,7 @@ else:
     ]
 
     _import_structure["modeling_flash_attention_utils"] = []
+    _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
@@ -950,6 +951,7 @@ if TYPE_CHECKING:
             model_addition_debugger,
             model_addition_debugger_context,
         )
+        from .modeling_layers import GradientCheckpointingLayer
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
 
