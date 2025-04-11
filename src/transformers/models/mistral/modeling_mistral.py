@@ -45,7 +45,6 @@ _CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-@use_kernel_forward_from_hub("MLP")
 class MistralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
