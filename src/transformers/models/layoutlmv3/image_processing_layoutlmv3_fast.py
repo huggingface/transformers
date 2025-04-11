@@ -133,7 +133,7 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
             for image in images:
                 if image.is_cuda:
                     logger.warning_once(
-                        "apply_ocr can only performed on cpu tensors, got gpu tensors. Tensors will be converted to cpu before processing."
+                        "apply_ocr can only be performed on cpu. Tensors will be transferred to cpu before processing."
                     )
                 words, boxes = apply_tesseract(
                     image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST
