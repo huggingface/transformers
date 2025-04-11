@@ -51,6 +51,8 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -72,15 +74,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "num_image_tokens": 6,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
-
-    def test_processor_to_json_string(self):
-        processor = self.get_processor()
-        obj = json.loads(processor.to_json_string())
-        for key, value in self.prepare_processor_dict().items():
-            # chat_tempalate are tested as a separate test because they are saved in separate files
-            if key != "chat_template":
-                self.assertEqual(obj[key], value)
-                self.assertEqual(getattr(processor, key, None), value)
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):

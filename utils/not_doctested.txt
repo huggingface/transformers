@@ -953,7 +953,6 @@ src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py
 src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects.py
 src/transformers/utils/dummy_flax_objects.py
-src/transformers/utils/dummy_keras_nlp_objects.py
 src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py
