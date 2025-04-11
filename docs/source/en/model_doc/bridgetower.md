@@ -147,6 +147,11 @@ Tips:
 [[autodoc]] BridgeTowerImageProcessor
     - preprocess
 
+## BridgeTowerImageProcessorFast
+
+[[autodoc]] BridgeTowerImageProcessorFast
+    - preprocess
+
 ## BridgeTowerProcessor
 
 [[autodoc]] BridgeTowerProcessor
