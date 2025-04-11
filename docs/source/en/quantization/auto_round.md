@@ -28,42 +28,15 @@ available.
 Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits or XPU and ITREX(
 intel-extension-for-transformers) for 2/8 bits.
 
-#### Example
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-text = "There is a girl who likes adventure,"
-inputs = tokenizer(text, return_tensors="pt").to(model.device)
-print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
-```
-
 ### XPU
 
-Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits/XPU and ITREX(
-intel-extension-for-transformers) for 2/8 bits.
-
-#### Example
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-text = "There is a girl who likes adventure,"
-inputs = tokenizer(text, return_tensors="pt").to(model.device)
-print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
-```
+Supports 4 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits/XPU and 
 
 ### CUDA
 
-Supports 2,3 4,8 bits, we recommend to use GPTQModel(intel-extension-for-pytorch) for 4,8 bits
+Supports 2,3 4,8 bits, we recommend to use GPTQModel for 4,8 bits
 
-#### Example
+### Example
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
