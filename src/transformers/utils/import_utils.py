@@ -1814,7 +1814,7 @@ class DummyObject(type):
     is_dummy = True
 
     def __getattribute__(cls, key):
-        if (key.startswith("_") and key != "_from_config") or key == "mro" or key == "call":
+        if (key.startswith("_") and key != "_from_config") or key == "is_dummy" or key == "mro" or key == "call":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
 
