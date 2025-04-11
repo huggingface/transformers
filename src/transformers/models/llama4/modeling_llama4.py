@@ -110,7 +110,7 @@ class Llama4TextMLP(nn.Module):
 
 
 class Llama4TextL2Norm(torch.nn.Module):
-    def __init__(self, dim: int = None, eps: float = 1e-6):
+    def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
 
@@ -301,7 +301,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm()
+            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
 
     def forward(
         self,
@@ -467,7 +467,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     config_class = Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -810,7 +810,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and attention_mask.ndim == 4
             and not output_attentions  # Only unmask for 4d masks
         ):
