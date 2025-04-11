@@ -204,7 +204,8 @@ if __name__ == "__main__":
             os.remove(backup_file_path)
 
     if non_matching_files and not args.fix_and_overwrite:
-        models_str = "\n - " + "\n - ".join(sorted(models_in_diff))
+        diff_models = set(file_path.split("/")[-2] for file_path in non_matching_files)
+        models_str = "\n - " + "\n - ".join(sorted(diff_models))
         raise ValueError(f"Some diff and their modeling code did not match. Models in diff:{models_str}")
 
     if skipped_models:
