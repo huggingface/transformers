@@ -27,6 +27,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+    "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
 }
@@ -146,6 +147,13 @@ class ModelArgs:
     [What are input IDs?](../glossary#input-ids)
     """
 
+    input_values = r"""of shape `(batch_size, sequence_length)`:
+    Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+    into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+    soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+    conversion into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    """
+
     attention_mask = r""" of shape `(batch_size, sequence_length)`:
     Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -162,6 +170,25 @@ class ModelArgs:
             - 0 indicates the head is **masked**.
 
     """
+
+    cross_attn_head_mask = r""" of shape `(num_layers, num_heads)`:
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+    """
+
+    decoder_attention_mask = r"""of shape `(batch_size, target_sequence_length)`:
+    Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
+    make sure the model can only look at previous inputs in order to predict the future.
+    """
+
+    decoder_head_mask = r"""of shape `(decoder_layers, decoder_attention_heads)`:
+    Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+    - 1 indicates the head is **not masked**,
+    - 0 indicates the head is **masked**.
+"""
 
     token_type_ids = r""" of shape `(batch_size, input_ids_length)`:
     Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
@@ -222,7 +249,7 @@ class ModelArgs:
     """
 
     return_dict = r""":
-    Whether or not to return a `~utils.ModelOutput` instead of a plain tuple.
+    Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
     """
 
     cache_position = r""":
@@ -260,6 +287,11 @@ class ModelArgs:
     are not taken into account for computing the loss.
     """
 
+    encoder_outputs = r""":
+    Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+    """
     output_router_logits = r""":
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
     should not be returned during inference.
@@ -273,7 +305,7 @@ class ModelArgs:
     This is useful when using packed tensor format (single dimension for batch and sequence length).
     """
 
-    pixel_values = r""" of shape `(batch_size, num_channels, image_size, image_size)):
+    pixel_values = r""" of shape `(batch_size, num_channels, image_size, image_size)`:
     The tensors corresponding to the input images. Pixel values can be obtained using
     [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor_class}`] uses
     [`{image_processor_class}`] for processing images).
@@ -360,6 +392,19 @@ class ClassDocstring:
 
     ImageProcessorFast = r"""
     Constructs a fast {model_name} image processor.
+    """
+
+    ForAudioClassification = r"""
+    The {model_name} Model with an audio classification head on top (a linear layer on top of the pooled
+    output)
+    """
+
+    ForAudioFrameClassification = r"""
+    The {model_name} Model with a frame classification head on top for tasks like Speaker Diarization.
+    """
+
+    ForPrediction = r"""
+    The {model_name} Model with a distribution head on top for time-series forecasting.
     """
 
     Config = r"""
@@ -636,6 +681,12 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         model_name_lowercase = get_model_name(parent_class)
     else:
         model_name_lowercase = get_model_name(func)
+    if model_name_lowercase and model_name_lowercase not in getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    ):
+        model_name_lowercase = model_name_lowercase.replace("_", "-")
+
     class_name = func.__qualname__.split(".")[0]
     if model_name_lowercase is None:
         config_class = None
@@ -840,6 +891,11 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    if model_name_lowercase and model_name_lowercase not in getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    ):
+        model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)
     if name == [] and cls.__doc__ is None and custom_intro is None:
