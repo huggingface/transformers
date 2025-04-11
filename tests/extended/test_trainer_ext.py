@@ -17,7 +17,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -186,7 +185,7 @@ class TestTrainerExt(TestCasePlus):
     def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
 
-        def train_and_return_metrics(optim: str) -> Tuple[int, float]:
+        def train_and_return_metrics(optim: str) -> tuple[int, float]:
             extra_args = "--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(

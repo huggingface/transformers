@@ -31,6 +31,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -106,6 +107,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
+@use_kernel_forward_from_hub("MLP")
 class Gemma3MLP(nn.Module):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__()

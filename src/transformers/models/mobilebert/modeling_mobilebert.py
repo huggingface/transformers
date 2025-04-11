@@ -704,6 +704,8 @@ class MobileBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, NoNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MobileBertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @dataclass

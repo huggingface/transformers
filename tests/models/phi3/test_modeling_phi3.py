@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
-from typing import List
 
 from parameterized import parameterized
 
@@ -71,7 +69,7 @@ if is_torch_available():
             ).logits
 
         @staticmethod
-        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
+        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> list[int]:
             model = Phi3MiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
 
             response_tokens = []

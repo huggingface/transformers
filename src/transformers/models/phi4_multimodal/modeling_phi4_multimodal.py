@@ -33,6 +33,7 @@ from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -1281,6 +1282,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         return audio_embeds
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Phi4MultimodalRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1984,7 +1986,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

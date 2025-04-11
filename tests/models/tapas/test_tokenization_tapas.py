@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -403,7 +401,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
-        tokenizers: List[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 input_table = self.get_table(tokenizer, length=0)
@@ -418,7 +416,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 table = self.get_table(tokenizer, length=0)

@@ -253,6 +253,7 @@ TENSOR_PROCESSORS = {
     "mamba": MambaTensorProcessor,
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
+    "gemma3": Gemma2TensorProcessor,
 }
 
 
@@ -292,6 +293,8 @@ def get_gguf_hf_weights_map(
         model_type = "command-r"
     elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
+    elif model_type == "gemma3_text":
+        model_type = "gemma3"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -437,6 +440,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
+
+    # Gemma3 GGUF checkpoint only contains weights of text backbone
+    if parsed_parameters["config"]["model_type"] == "gemma3":
+        parsed_parameters["config"]["model_type"] = "gemma3_text"
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details

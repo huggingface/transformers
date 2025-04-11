@@ -49,6 +49,10 @@ _CONFIG_FOR_DOC = "DonutSwinConfig"
 _CHECKPOINT_FOR_DOC = "https://huggingface.co/naver-clova-ix/donut-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "eljandoubi/donut-base-encoder"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+
 
 @dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
@@ -116,6 +120,43 @@ class DonutSwinModelOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
+class DonutSwinImageClassifierOutput(ModelOutput):
+    """
+    DonutSwin outputs for image classification.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -845,7 +886,7 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -853,7 +894,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DonutSwinConfig
-    base_model_prefix = "swin"
+    base_model_prefix = "donut"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DonutSwinStage"]
@@ -1015,4 +1056,90 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         )
 
 
-__all__ = ["DonutSwinModel", "DonutSwinPreTrainedModel"]
+@add_start_docstrings(
+    """
+    DonutSwin Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+
+    <Tip>
+
+        Note that it's possible to fine-tune DonutSwin on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
+
+    </Tip>
+    """,
+    SWIN_START_DOCSTRING,
+)
+# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
+class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.donut = DonutSwinModel(config)
+
+        # Classifier head
+        self.classifier = (
+            nn.Linear(self.donut.num_features, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=DonutSwinImageClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, DonutSwinImageClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.donut(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=logits, config=self.config)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return DonutSwinImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
+        )
+
+
+__all__ = ["DonutSwinModel", "DonutSwinPreTrainedModel", "DonutSwinForImageClassification"]

@@ -42,6 +42,7 @@ class MistralMLP(LlamaMLP):
 class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -185,7 +186,7 @@ class MistralModel(LlamaModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

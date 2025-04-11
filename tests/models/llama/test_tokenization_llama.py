@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -417,14 +416,14 @@ class LlamaIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dirname:
             self.rust_tokenizer.save_pretrained(dirname)
 
-            with open(os.path.join(dirname, "tokenizer.json"), "r") as f:
+            with open(os.path.join(dirname, "tokenizer.json")) as f:
                 old_serialized = f.read()
 
         new_tokenizer = convert_slow_tokenizer(self.tokenizer)
         with tempfile.NamedTemporaryFile() as f:
             new_tokenizer.save(f.name)
             # Re-opening since `f` is in bytes.
-            new_serialized = open(f.name, "r").read()
+            new_serialized = open(f.name).read()
             with open("out_tokenizer.json", "w") as g:
                 g.write(new_serialized)
 

@@ -130,7 +130,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
-    "kernels>=0.3.2,<0.4",
+    "kernels>=0.4.3,<0.5",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -187,7 +187,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.0",
+    "torch>=2.1",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",

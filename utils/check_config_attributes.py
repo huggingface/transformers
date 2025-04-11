@@ -244,6 +244,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "output_router_logits",
         "router_aux_loss_coef",
         "router_jitter_noise",
+        "cache_implementation",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }

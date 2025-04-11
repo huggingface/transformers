@@ -150,7 +150,7 @@ class GetFromCacheTests(unittest.TestCase):
             _raise_exceptions_for_connection_errors=False,
         )
         # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
+        config = json.loads(open(resolved_file).read())
         self.assertEqual(config["hidden_size"], 768)
 
     def test_get_file_from_repo_local(self):

@@ -286,7 +286,6 @@ def write_model(
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
-        no_rope_layers=no_rope_layer_interval,
         **config_kwargs,
     )
     # default vision config frmo params

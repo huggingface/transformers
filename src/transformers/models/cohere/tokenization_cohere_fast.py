@@ -23,10 +23,7 @@ from tokenizers import processors
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}

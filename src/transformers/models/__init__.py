@@ -110,6 +110,7 @@ from . import (
     gemma3,
     git,
     glm,
+    glm4,
     glpn,
     got_ocr2,
     gpt2,

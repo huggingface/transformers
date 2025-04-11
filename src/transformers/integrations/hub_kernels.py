@@ -31,7 +31,20 @@ try:
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
             )
-        }
+        },
+        "RMSNorm": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/triton-layer-norm",
+                layer_name="LlamaRMSNorm",
+                revision="pure-layer-test",
+            )
+        },
+        "MLP": {
+            "cuda": LayerRepository(
+                repo_id="medmekk/triton-llama-mlp",
+                layer_name="TritonLlamaMLP",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import json
 import os
 import unittest
 from functools import lru_cache
-from typing import List
 
 from transformers import ClvpTokenizer
 
@@ -90,7 +88,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens
     def test_add_special_tokens(self):
-        tokenizers: List[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"

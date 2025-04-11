@@ -138,7 +138,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
@@ -202,9 +201,11 @@ if is_torch_available():
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
+    IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
+    IS_XPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -1068,14 +1069,6 @@ def require_torch_bf16_gpu(test_case):
     return unittest.skipUnless(
         is_torch_bf16_gpu_available(),
         "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
-    )(test_case)
-
-
-def require_torch_bf16_cpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using CPU."""
-    return unittest.skipUnless(
-        is_torch_bf16_cpu_available(),
-        "test requires torch>=1.10, using CPU",
     )(test_case)
 
 
@@ -3097,6 +3090,14 @@ def get_device_properties() -> DeviceProperties:
             return ("rocm", major)
         else:
             return ("cuda", major)
+    elif IS_XPU_SYSTEM:
+        import torch
+
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        arch = torch.xpu.get_device_capability()["architecture"]
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen)
     else:
         return (torch_device, None)
 

@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallConfig"),
         ("blip", "BlipConfig"),
         ("blip-2", "Blip2Config"),
+        ("blip_2_qformer", "Blip2QFormerConfig"),
         ("bloom", "BloomConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bros", "BrosConfig"),
@@ -129,6 +130,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gemma3_text", "Gemma3TextConfig"),
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
+        ("glm4", "Glm4Config"),
         ("glpn", "GLPNConfig"),
         ("got_ocr2", "GotOcr2Config"),
         ("gpt-sw3", "GPT2Config"),
@@ -391,6 +393,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("blenderbot-small", "BlenderbotSmall"),
         ("blip", "BLIP"),
         ("blip-2", "BLIP-2"),
+        ("blip_2_qformer", "BLIP-2 QFormer"),
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
@@ -476,6 +479,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gemma3_text", "Gemma3ForCausalLM"),
         ("git", "GIT"),
         ("glm", "GLM"),
+        ("glm4", "glm4"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -781,6 +785,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("granitevision", "llava_next"),
         ("sam_vision_model", "sam"),
         ("llama4_text", "llama4"),
+        ("blip_2_qformer", "blip_2"),
     ]
 )
 

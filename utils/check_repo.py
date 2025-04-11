@@ -187,7 +187,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapAudioModelWithProjection",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
-    "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",

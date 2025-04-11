@@ -5,7 +5,7 @@
 #                          modular_multimodal2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -65,7 +65,7 @@ class Multimodal2VisionAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -152,7 +152,7 @@ class Multimodal2VisionSdpaAttention(Multimodal2VisionAttention):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -233,7 +233,7 @@ class Multimodal2VisionFlashAttention2(Multimodal2VisionAttention):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         output_attentions = False
 
         batch_size, q_len, _ = hidden_states.size()
@@ -334,7 +334,7 @@ class Multimodal2VisionEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -392,7 +392,7 @@ class Multimodal2VisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -587,7 +587,7 @@ class Multimodal2VisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
 
@@ -671,7 +671,7 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
 
