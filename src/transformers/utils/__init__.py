@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
@@ -16,7 +15,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import FrozenSet
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
@@ -158,6 +156,7 @@ from .import_utils import (
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
@@ -236,6 +235,7 @@ from .import_utils import (
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_training_run_on_sagemaker,
@@ -299,8 +299,8 @@ def check_min_version(min_version):
         )
 
 
-@lru_cache()
-def get_available_devices() -> FrozenSet[str]:
+@lru_cache
+def get_available_devices() -> frozenset[str]:
     """
     Returns a frozenset of devices available for the current PyTorch installation.
     """
