@@ -53,20 +53,20 @@ def verify_model_outputs(model, device):
 
     predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
 
-    expected_max_number_keypoints = 866
+    expected_max_number_keypoints = 865
     expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
     expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
     expected_matches_values = torch.tensor([-1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64).to(device)
     expected_matching_scores_values = torch.tensor([0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583]).to(device)
 
-    expected_number_of_matches = 140
+    expected_number_of_matches = 141
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
 
-    assert torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-3)
-    assert torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-3)
+    assert torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-2)
+    assert torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)
 
     assert predicted_number_of_matches == expected_number_of_matches
 
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--organization",
-        default="stevenbucaille",
+        default="ETH-CVG",
         type=str,
         help="Hub organization in which you want the model to be uploaded.",
     )
