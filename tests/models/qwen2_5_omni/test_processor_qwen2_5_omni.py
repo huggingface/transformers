@@ -554,66 +554,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_librosa
     @require_av
-    def test_audio_chat_template_from_video(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not suport video inputs")
-
-        if "feature_extractor" not in self.processor_class.attributes:
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video", "path": video_file_path},
-                    {"type": "text", "text": "Which of these animals is making the sound?"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "It is a cow."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Tell me all about this animal."},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
-        out_dict = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="np",
-            load_audio_from_video=True,
-        )
-        self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.videos_input_name in out_dict)
-
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 145912)  # 1 video in the conversation
-
-    @require_librosa
-    @require_av
+    @unittest.skip(
+        "@raushan: librosa can'r decode this audio in CI runner, fix after adding moviepy or another decoder"
+    )
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
