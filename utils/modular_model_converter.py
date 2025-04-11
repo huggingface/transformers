@@ -1763,6 +1763,7 @@ if __name__ == "__main__":
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
     priority_list, _ = find_priority_list(args.files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:
