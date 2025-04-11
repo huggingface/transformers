@@ -74,9 +74,15 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         )
         audio_embed_sizes = self._get_num_audio_features(audio_lengths)
         speech_inputs["audio_embed_sizes"] = audio_embed_sizes
-        # TODO: input_features_mask is not a great name, because
-        # input_features and input_features_mask have different shapes
-        # (before/after the projector)
+        # TODO (@alex-jw-brooks): Currently input_features_mask is not
+        # a great name, because input_features and input_features_mask
+        # have different shapes (before/after the projector).
+        #
+        # We should align this with other multimodal models, e.g,. llava
+        # and qwen2audio and refactor this to ensure input_feature_mask
+        # has the same dimensionality as input_features, or compute it in
+        # the model based on the audio embedding sizes (since we do not
+        # have an attention mask for the audio features to infer padding from).
         speech_inputs["input_features_mask"] = torch.arange(max(audio_embed_sizes)).view(1, -1) < torch.tensor(
             audio_embed_sizes
         ).view(-1, 1)

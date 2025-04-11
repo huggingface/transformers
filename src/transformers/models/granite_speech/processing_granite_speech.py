@@ -62,6 +62,10 @@ class GraniteSpeechProcessor(ProcessorMixin):
             # trigger the conditions due to the way they call multimodal
             # processors, e.g., vLLM.
             audio_inputs = self.audio_processor(audio, device=device)
+
+            # TODO (@alex-jw-brooks); we should add a util to get_num_audio_tokens
+            # from feature lengths and call it here, rather than returning it
+            # from the feature extractor.
             audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
 
             # Expand the audio placeholders to match the feature dims; this
