@@ -148,7 +148,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image, prepared by ConvNextImageProcessor
     size = 224 if "224" in checkpoint_url else 384
-    image_processor = ConvNextImageProcessor(size={'shortest_edge': size})
+    image_processor = ConvNextImageProcessor(size={"shortest_edge": size})
     image = prepare_img()
     pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
