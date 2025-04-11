@@ -971,12 +971,8 @@ class AltCLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
 class AltCLIPPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = AltCLIPConfig
     base_model_prefix = "altclip"
     supports_gradient_checkpointing = True
@@ -1082,6 +1078,7 @@ class AltCLIPVisionTransformer(nn.Module):
         )
 
 
+@auto_docstring
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1213,6 +1210,9 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1309,6 +1309,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         )
 
 
+@auto_docstring
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPTextConfig
 
@@ -1414,6 +1415,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         )
 
 
+@auto_docstring
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPConfig
 
