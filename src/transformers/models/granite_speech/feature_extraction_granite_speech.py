@@ -23,6 +23,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...tokenization_utils_base import AudioInput
 from ...utils import is_torch_available, is_torchaudio_available, logging
+from ...utils.import_utils import requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -66,6 +67,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         audios: AudioInput,
         device: Optional[str] = "cpu",
     ) -> BatchFeature:
+        requires_backends(self, ["torchaudio"])
+
         speech_inputs = {}
         batched_audio, audio_lengths = self._get_audios_and_audio_lengths(audios)
         speech_inputs["input_features"] = self._extract_mel_spectrograms(
@@ -95,15 +98,19 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         We do this for now since some logging explodes since the mel spectrogram
         transform is not JSON serializable.
         """
+        requires_backends(self, ["torchaudio"])
+
         if self.melspec is None:
             # TODO (@alex-jw-brooks / @eustlb) move this to common batch
             # feature extraction in audio utils once they are written!
             self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
 
-    def _extract_mel_spectrograms(self, audio: torch.Tensor, device="cpu"):
+    def _extract_mel_spectrograms(self, audio: "torch.Tensor", device="cpu"):
         """
         Compute the Mel features to be passed to the conformer encoder.
         """
+        requires_backends(self, ["torchaudio"])
+
         # Initialize the mel spectrogram if isn't not already and
         # move the melspec / audio to the computation device.
         self._ensure_melspec_transform_is_initialized()
@@ -156,7 +163,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
 
         return projector_lengths
 
-    def _get_audios_and_audio_lengths(self, audios: AudioInput) -> Sequence[torch.Tensor, Sequence[int]]:
+    def _get_audios_and_audio_lengths(self, audios: AudioInput) -> Sequence["torch.Tensor", Sequence[int]]:
         """
         Coerces audio inputs to torch tensors and extracts audio lengths prior to stacking.
 
@@ -164,6 +171,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             audios (`AudioInput`):
                 Audio sequence, numpy array, or torch tensor.
         """
+        requires_backends(self, ["torch"])
+
         # Coerce to PyTorch tensors if we have numpy arrays, since
         # currently we have a dependency on torch/torchaudio anyway
         if isinstance(audios, np.ndarray):
