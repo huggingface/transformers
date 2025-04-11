@@ -220,6 +220,10 @@ class NougatImageProcessor(BaseImageProcessor):
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
         if input_data_format == ChannelDimension.LAST:
             rot_axes = (0, 1)
         elif input_data_format == ChannelDimension.FIRST:
