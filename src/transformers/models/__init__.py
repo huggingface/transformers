@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .janus import * 
     from .albert import *
     from .align import *
     from .altclip import *

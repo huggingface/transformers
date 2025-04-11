@@ -148,7 +148,8 @@ IGNORE_NON_TESTED = (
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
-        "Emu3TextModel",  # Building part of bigger (tested) model
+        "Emu3TextModel",  # Building part of bigger (tested) model,
+        "JanusVisionModel",  # Building part of bigger (tested) model,
     ]
 )
 
@@ -348,6 +349,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
+    "JanusVQVAE",  # no autoclass for VQ-VAE models
+    "JanusVisionModel",  # Building part of bigger (tested) model
 ]
 
 # DO NOT edit this list!
