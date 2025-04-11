@@ -97,7 +97,7 @@ The 🤗 Transformers library integrates with several quantization backends like
 - `awq`
 - And more...
 
-These are unified under the `HfQuantizer` API and associated `QuantizationConfig` classes.
+These are unified under the `HfQuantizer` API and associated `QuantizationConfig` classes. You can integrate your own custom quantization backends by implementing a custom `HfQuantizer` and `QuantizationConfig`, allowing seamless use within the 🤗 Transformers ecosystem.
 
 ### Typical Workflow
 
