@@ -49,6 +49,20 @@ $$
 
 During inference, computations like matrix multiplication are performed using the `int8` values ($q$), and the result is then dequantized back to `float32` (often using a higher-precision accumulation type like `int32` internally) before being passed to the next layer.
 
+### Quantization to `int4` and Weight Packing
+
+<img width="606" alt="weight packing" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/weight_packing.png" />
+
+Quantizing to `int4` further reduces the model size and memory usage (halving it compared to `int8`). The same affine or symmetric quantization principles apply, mapping the `float32` range to the 16 possible values representable by `int4` (e.g., $[-8, 7]$ for signed `int4`).
+
+A key aspect of `int4` quantization is **weight packing**. Since most hardware doesn't natively handle 4-bit data types in memory, two `int4` values are typically packed together into a single `int8` byte for storage and transfer. For example, the first value might occupy the lower 4 bits and the second value the upper 4 bits of the byte (e.g., `packed_byte = (val1 & 0x0F) | (val2 << 4)`).
+
+**Why is `int4` beneficial even without native `int4` compute?**
+
+The primary benefit comes from reduced memory bandwidth. Loading the packed `int4` weights (stored as `int8`) from memory (RAM or VRAM) to the compute units is twice as fast as loading `int8` weights. For large models, memory access is often a significant bottleneck. The speed gain from faster data transfer can outweigh the computational overhead of unpacking and dequantizing on the fly, leading to overall faster inference, especially in memory-bound scenarios.
+
+However, `int4` quantization typically results in a larger accuracy drop compared to `int8`. Advanced quantization techniques like GPTQ or AWQ are often necessary to achieve good performance with `int4`.
+
 ### Symmetric vs. Asymmetric Quantization
 
 - **Asymmetric (Affine):** Uses both scale $S$ and zero-point $Z$. This is more flexible, especially if the data range isn't centered around zero.
