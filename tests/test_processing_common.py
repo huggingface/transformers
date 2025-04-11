@@ -767,7 +767,7 @@ class ProcessorTesterMixin:
         existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname)
+            processor.save_pretrained(tmpdirname, save_jinja_files=False)
             self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
             self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
@@ -777,7 +777,7 @@ class ProcessorTesterMixin:
             self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_jinja_files=True)
+            processor.save_pretrained(tmpdirname)
             self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
             self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
             self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
@@ -789,7 +789,7 @@ class ProcessorTesterMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.chat_template = {"default": "a", "secondary": "b"}
-            processor.save_pretrained(tmpdirname, save_jinja_files=True)
+            processor.save_pretrained(tmpdirname)
             self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
             self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
             self.assertTrue(Path(tmpdirname, "additional_chat_templates").is_dir())
