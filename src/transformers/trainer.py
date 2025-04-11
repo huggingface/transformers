@@ -2462,7 +2462,7 @@ class Trainer:
         learning_rate = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
-        if args.eval_on_start:
+        if self.control.should_evaluate:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         for epoch in range(epochs_trained, num_train_epochs):
