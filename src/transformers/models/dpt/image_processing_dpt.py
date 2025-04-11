@@ -154,7 +154,7 @@ class DPTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
@@ -299,7 +299,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_reduce_labels: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         keep_aspect_ratio: Optional[bool] = None,
         ensure_multiple_of: Optional[int] = None,
@@ -340,7 +340,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         keep_aspect_ratio: Optional[bool] = None,
         ensure_multiple_of: Optional[int] = None,
@@ -391,7 +391,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         keep_aspect_ratio: Optional[bool] = None,
         ensure_multiple_of: Optional[int] = None,
@@ -592,7 +592,7 @@ class DPTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

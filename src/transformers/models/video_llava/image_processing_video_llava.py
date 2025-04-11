@@ -90,10 +90,10 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -172,10 +172,10 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: List[ImageInput] = None,
-        videos: List[VideoInput] = None,
+        images: Optional[List[ImageInput]] = None,
+        videos: Optional[List[VideoInput]] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,

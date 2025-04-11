@@ -667,7 +667,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         position_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -745,7 +745,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -823,7 +823,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         pixel_values,
         attention_mask=None,
         position_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -867,7 +867,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         position_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train=False,
     ):
@@ -930,7 +930,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         )
 
     def get_image_features(
-        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self, pixel_values, params: Optional[dict] = None, dropout_rng: jax.random.PRNGKey = None, train=False
     ):
         r"""
         Args:
