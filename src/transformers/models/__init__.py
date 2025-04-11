@@ -125,9 +125,9 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite_speech import *
     from .granitemoe import *
     from .granitemoeshared import *
-    from .granite_speech import *
     from .grounding_dino import *
     from .groupvit import *
     from .helium import *
