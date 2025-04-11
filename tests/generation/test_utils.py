@@ -125,6 +125,8 @@ VLM_CLASS_NAMES = [
     "qwen2vl",
     "qwen2_5_vl",
     "ayavision",
+    "deepseek_vl",
+    "deepseekvl",
     "gemma3",
     "mistral3",
     "chameleon",

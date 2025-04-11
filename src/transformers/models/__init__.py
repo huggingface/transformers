@@ -72,6 +72,7 @@ from . import (
     deberta_v2,
     decision_transformer,
     deepseek_v3,
+    deepseek_vl,
     deformable_detr,
     deit,
     deprecated,
