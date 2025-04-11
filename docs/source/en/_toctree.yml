@@ -823,6 +823,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
