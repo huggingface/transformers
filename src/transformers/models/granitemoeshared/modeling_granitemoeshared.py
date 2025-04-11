@@ -1035,7 +1035,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1048,8 +1048,11 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            else:
+                assert isinstance(attention_mask, BlockMask), (
+                    f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
+                )
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
