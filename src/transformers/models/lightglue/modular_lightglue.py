@@ -15,7 +15,6 @@ from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
-from .configuration_lightglue import LightGlueConfig
 
 
 if TYPE_CHECKING:
