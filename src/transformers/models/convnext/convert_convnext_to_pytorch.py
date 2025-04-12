@@ -29,9 +29,7 @@ from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
-from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 logging.set_verbosity_info()
@@ -155,15 +153,8 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
     model.eval()
     model.load_state_dict(state_dict)
 
-    # create image processor
+    # create timm transform
     transform = create_transform(**resolve_data_config({}, model=timm_model))
-    timm_transforms = transform.transforms
-
-    pillow_resamplings = {
-        "bilinear": PILImageResampling.BILINEAR,
-        "bicubic": PILImageResampling.BICUBIC,
-        "nearest": PILImageResampling.NEAREST,
-    }
 
     # Check outputs on an image, prepared by ConvNextImageProcessor
     size = 384 if "384" in timm_model_name else 224
