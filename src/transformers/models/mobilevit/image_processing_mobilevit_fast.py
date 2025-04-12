@@ -14,10 +14,11 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling
 from ...utils import add_start_docstrings
 from ...image_processing_utils import BatchFeature
+
 import torch
 
 
@@ -79,7 +80,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     ):
         processed_images = []
         
-        # 기본값 설정
         if do_normalize is None:
             do_normalize = self.do_normalize
         if image_mean is None and hasattr(self, "image_mean"):
@@ -87,21 +87,48 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         if image_std is None and hasattr(self, "image_std"):
             image_std = self.image_std
         
-        for image in images:
-            if do_resize:
-                image = self.resize(image=image, size=size, interpolation=interpolation)
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor)
-            if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size)
-            if do_flip_channel_order:
-                image = self.flip_channel_order(image=image)
-            if do_normalize and image_mean is not None and image_std is not None:
-                image = self.normalize(image=image, mean=image_mean, std=image_std)
-            if do_convert_rgb:
-                image = self.convert_to_rgb(image)
-            processed_images.append(image)
+        # Group images by shape for more efficient batch processing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
         
-        return BatchFeature(data={"pixel_values": torch.stack(processed_images)}, tensor_type=return_tensors)
+        # Process each group of images with the same shape
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        
+        # Reorder images to original sequence
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+        
+        # Group again after resizing (in case resize produced different sizes)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(image=stacked_images, size=crop_size)
+            if do_rescale:
+                stacked_images = self.rescale(image=stacked_images, scale=rescale_factor)
+            if do_flip_channel_order:
+                # For batched images, we need to handle them all at once
+                if stacked_images.ndim > 3 and stacked_images.shape[1] >= 3:
+                    # Flip RGB → BGR for batched images
+                    flipped = stacked_images.clone()
+                    flipped[:, 0:3] = stacked_images[:, [2, 1, 0], ...]
+                    stacked_images = flipped
+            if do_normalize and image_mean is not None and image_std is not None:
+                stacked_images = self.normalize(image=stacked_images, mean=image_mean, std=image_std)
+            if do_convert_rgb:
+                stacked_images = self.convert_to_rgb(stacked_images)
+            
+            processed_images_grouped[shape] = stacked_images
+            
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+            
+        # Stack all processed images if return_tensors is specified
+        if return_tensors is not None:
+            processed_images = torch.stack(processed_images, dim=0)
+        
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 __all__ = ["MobileViTImageProcessorFast"]
