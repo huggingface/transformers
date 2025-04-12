@@ -833,6 +833,28 @@ class JanusVQVAEConvUpsample(nn.Module):
         return hidden_states
 
 
+class JanusVQVAEMidBlock(nn.Module):
+    def __init__(self, config: JanusVQVAEConfig, channels: int):
+        super().__init__()
+        self.block_1 = JanusVQVAEResnetBlock(
+            config=config,
+            in_channels=channels,
+            out_channels=channels,
+        )
+        self.attn_1 = JanusVQVAEAttnBlock(channels)
+        self.block_2 = JanusVQVAEResnetBlock(
+            config=config,
+            in_channels=channels,
+            out_channels=channels,
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.block_1(hidden_states)
+        hidden_states = self.attn_1(hidden_states)
+        hidden_states = self.block_2(hidden_states)
+        return hidden_states
+
+
 class JanusVQVAEEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -874,18 +896,7 @@ class JanusVQVAEEncoder(nn.Module):
                 down.downsample = JanusVQVAEConvDownsample(block_in)
             self.down.append(down)
 
-        self.mid = nn.Module()
-        self.mid.block_1 = JanusVQVAEResnetBlock(
-            config=config,
-            in_channels=block_in,
-            out_channels=block_in,
-        )
-        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in)
-        self.mid.block_2 = JanusVQVAEResnetBlock(
-            config=config,
-            in_channels=block_in,
-            out_channels=block_in,
-        )
+        self.mid = JanusVQVAEMidBlock(config, block_in)
 
         self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
         self.conv_out = torch.nn.Conv2d(
@@ -912,9 +923,7 @@ class JanusVQVAEEncoder(nn.Module):
 
         # middle
         last_hidden_state = hidden_states[-1]
-        last_hidden_state = self.mid.block_1(last_hidden_state)
-        last_hidden_state = self.mid.attn_1(last_hidden_state)
-        last_hidden_state = self.mid.block_2(last_hidden_state)
+        last_hidden_state = self.mid(last_hidden_state)
 
         # end
         last_hidden_state = self.norm_out(last_hidden_state)
@@ -940,18 +949,7 @@ class JanusVQVAEDecoder(nn.Module):
         self.conv_in = torch.nn.Conv2d(latent_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
-        self.mid = nn.Module()
-        self.mid.block_1 = JanusVQVAEResnetBlock(
-            config=config,
-            in_channels=block_in,
-            out_channels=block_in,
-        )
-        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in)
-        self.mid.block_2 = JanusVQVAEResnetBlock(
-            config=config,
-            in_channels=block_in,
-            out_channels=block_in,
-        )
+        self.mid = JanusVQVAEMidBlock(config, block_in)
 
         # upsampling
         self.up = nn.ModuleList()
@@ -985,9 +983,7 @@ class JanusVQVAEDecoder(nn.Module):
         hidden_state = self.conv_in(hidden_state)
 
         # middle
-        hidden_state = self.mid.block_1(hidden_state)
-        hidden_state = self.mid.attn_1(hidden_state)
-        hidden_state = self.mid.block_2(hidden_state)
+        hidden_state = self.mid(hidden_state)
 
         # upsampling
         for i_level in range(self.num_resolutions):
