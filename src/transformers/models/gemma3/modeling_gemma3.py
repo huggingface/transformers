@@ -778,10 +778,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            else:
-                assert isinstance(attention_mask, BlockMask), (
-                    f"attention_mask must be a torch.Tensor or BlockMask for flex_attention but is {type(attention_mask)}"
-                )
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
