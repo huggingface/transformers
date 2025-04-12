@@ -52,7 +52,6 @@ from transformers import JanusForConditionalGeneration, JanusProcessor
 
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 # Prepare Input for generation.
-image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 messages = [
     {
         "role": "user",

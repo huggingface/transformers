@@ -348,15 +348,7 @@ class JanusConfig(PretrainedConfig):
 
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"](
-                hidden_size=2048,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                intermediate_size=5632,
-                max_position_embeddings=16384,
-                num_key_value_heads=16,
-                vocab_size=102400,
-            )
+            self.text_config = CONFIG_MAPPING["llama"]()
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
@@ -1223,7 +1215,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- extra custom processing
 
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
