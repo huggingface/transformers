@@ -67,7 +67,7 @@ class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """,
 )
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"shortest_edge": 384}
