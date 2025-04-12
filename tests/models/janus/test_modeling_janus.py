@@ -440,7 +440,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out"
+        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
     @slow
     def test_model_text_generation(self):
