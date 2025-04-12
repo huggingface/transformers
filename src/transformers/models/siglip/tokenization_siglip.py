@@ -31,6 +31,7 @@ from ...tokenization_utils_base import AddedToken
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 from ...utils import logging, requires_backends
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -41,6 +42,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class SiglipTokenizer(PreTrainedTokenizer):
     """
     Construct a Siglip tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
