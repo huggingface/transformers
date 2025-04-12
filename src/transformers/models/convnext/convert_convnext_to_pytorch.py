@@ -32,8 +32,10 @@ from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNex
 from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def get_convnext_config(checkpoint_url):
     config = ConvNextConfig()
@@ -143,7 +145,7 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
     # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if not key in ["classifier.weight","classifier.bias"]:
+        if key not in ["classifier.weight", "classifier.bias"]:
             key = "convnext." + key
         state_dict[key] = val
 
@@ -165,10 +167,11 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
     # Check outputs on an image, prepared by ConvNextImageProcessor
     size = 384 if "384" in timm_model_name else 224
     image_processor = ConvNextImageProcessor(
-                                    size={"shortest_edge": size},
-                                    resample=pillow_resamplings[timm_transforms[0].interpolation.value],
-                                    image_mean=timm_transforms[3].mean.tolist(),
-                                    image_std=timm_transforms[3].std.tolist())
+        size={"shortest_edge": size},
+        resample=pillow_resamplings[timm_transforms[0].interpolation.value],
+        image_mean=timm_transforms[3].mean.tolist(),
+        image_std=timm_transforms[3].std.tolist(),
+    )
     image = prepare_img()
     timm_pixel_values = transform(image).unsqueeze(0)
 
@@ -178,7 +181,7 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
 
     logits = model(pixel_values).logits
 
-     # verify logits
+    # verify logits
     with torch.no_grad():
         outputs = model(pixel_values)
         logits = outputs.logits
