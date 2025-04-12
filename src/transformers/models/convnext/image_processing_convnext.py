@@ -26,8 +26,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -78,10 +78,10 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -97,8 +97,8 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
+        image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
