@@ -148,7 +148,7 @@ IGNORE_NON_TESTED = (
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
-        "Emu3TextModel",  # Building part of bigger (tested) model,
+        "Emu3TextModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model,
     ]
 )

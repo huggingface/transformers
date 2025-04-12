@@ -685,7 +685,6 @@ class JanusVQVAEVectorQuantizer(nn.Module):
         self.beta = getattr(config, "beta", 0.25)
 
         self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
-        self.re_embed = self.num_embeddings
         self.quant_state_dims = [config.num_patches] * 2
 
     def forward(self, hidden_state: torch.Tensor):
