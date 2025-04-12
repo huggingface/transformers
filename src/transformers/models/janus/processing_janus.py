@@ -63,7 +63,7 @@ class JanusProcessor(ProcessorMixin):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        use_default_system_prompt (`str`, *optional*, defaults to `True`):
+        use_default_system_prompt (`str`, *optional*, defaults to `False`):
             Use default system prompt for Text Generation.
     """
 
@@ -72,7 +72,7 @@ class JanusProcessor(ProcessorMixin):
     image_processor_class = "JanusImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
+    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
         self.num_image_tokens = 576
         self.image_token = tokenizer.image_token
         self.image_start_token = tokenizer.boi_token

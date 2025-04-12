@@ -293,7 +293,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
         - VQ model, as its training is not supported.
         - A few other modules used for image generation.
         """
-        skip_patterns = ["vqmodel", "gen_embed", "gen_aligner", "gen_head"]
+        skip_patterns = ["vqmodel", "generation_embeddings", "generation_aligner", "generation_head"]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
@@ -440,7 +440,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
+        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out"
 
     @slow
     def test_model_text_generation(self):

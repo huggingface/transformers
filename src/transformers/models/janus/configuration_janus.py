@@ -156,8 +156,6 @@ class JanusVQVAEConfig(PretrainedConfig):
             Number of residual blocks.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate.
-        attn_type (`str`, *optional*, defaults to `"vanilla"`):
-            Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         projection_dim (`int`, *optional*, defaults to 2048):
@@ -187,7 +185,6 @@ class JanusVQVAEConfig(PretrainedConfig):
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
         dropout: float = 0.0,
-        attn_type: str = "vanilla",
         initializer_range=0.02,
         projection_dim=2048,
         num_hidden_layers=2,
@@ -205,7 +202,6 @@ class JanusVQVAEConfig(PretrainedConfig):
         self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
         self.dropout = dropout
-        self.attn_type = attn_type
         self.initializer_range = initializer_range
         self.num_patches = num_patches
         self.out_channels = out_channels
@@ -273,15 +269,7 @@ class JanusConfig(PretrainedConfig):
 
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"](
-                hidden_size=2048,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                intermediate_size=5632,
-                max_position_embeddings=16384,
-                num_key_value_heads=16,
-                vocab_size=102400,
-            )
+            self.text_config = CONFIG_MAPPING["llama"]()
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:

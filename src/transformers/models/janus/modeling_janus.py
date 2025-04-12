@@ -880,7 +880,7 @@ class JanusVQVAEEncoder(nn.Module):
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in)
         self.mid.block_2 = JanusVQVAEResnetBlock(
             config=config,
             in_channels=block_in,
@@ -946,7 +946,7 @@ class JanusVQVAEDecoder(nn.Module):
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.attn_1 = JanusVQVAEAttnBlock(block_in)
         self.mid.block_2 = JanusVQVAEResnetBlock(
             config=config,
             in_channels=block_in,
@@ -1230,11 +1230,11 @@ class JanusModel(JanusPreTrainedModel):
 
         self.vqmodel = JanusVQVAE._from_config(config.vq_config)
 
-        # Below gen_* modules are used for image generation.
+        # Below generation_* modules are used for Image generation.
         # Embeddings used for image generation, instead of Janus vision embeddings.
-        self.gen_embed = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
-        self.gen_aligner = JanusVQVAEAlignerMLP(self.vqmodel.config)
-        self.gen_head = JanusVQVAEHead(self.vqmodel.config)
+        self.generation_embeddings = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
+        self.generation_aligner = JanusVQVAEAlignerMLP(self.vqmodel.config)
+        self.generation_head = JanusVQVAEHead(self.vqmodel.config)
 
         self.language_model = AutoModel.from_config(config=config.text_config)
 
@@ -1350,8 +1350,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.model.language_model.set_input_embeddings(value)
 
     def prepare_embeddings_for_image_generation(self, inputs: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.model.gen_embed(inputs)
-        hidden_state = self.model.gen_aligner(hidden_state)
+        hidden_state = self.model.generation_embeddings(inputs)
+        hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
 
     def get_output_embeddings(self):
@@ -1632,7 +1632,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head (Not using above defined LM Head)
-            scores = self.model.gen_head(hidden_state)
+            scores = self.model.generation_head(hidden_state)
             next_token_scores = logits_processor(input_ids, scores)
 
             # Sample next token.
