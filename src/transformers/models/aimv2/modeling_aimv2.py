@@ -33,6 +33,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     ModelOutput,
@@ -81,6 +82,7 @@ class AIMv2Output(ModelOutput):
         )
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class AIMv2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
