@@ -226,9 +226,10 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             positions = []
             special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
             pattern = "|".join(special_tokens)
-            positions = sorted([match.group() for match in re.finditer(pattern, sample)])
+            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
+            positions.sort(key=lambda x: x[0])
 
-            for special_token in positions:
+            for _, special_token in positions:
                 if special_token == self.audio_token:
                     sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
                 elif special_token == self.image_token:
