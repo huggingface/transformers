@@ -433,3 +433,6 @@ class TvltImageProcessor(BaseImageProcessor):
             data = {"pixel_values": videos, "pixel_mask": video_masks}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["TvltImageProcessor"]

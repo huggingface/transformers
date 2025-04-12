@@ -45,6 +45,7 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_bf16_gpu_available,
+    is_torch_cuda_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -1683,11 +1684,12 @@ class TrainingArguments:
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available():
+                        error_message = "Your setup doesn't support bf16/gpu."
+                        if is_torch_cuda_available():
+                            error_message += " You need Ampere+ GPU with cuda>=11.0"
                         # gpu
-                        raise ValueError(
-                            "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
-                        )
+                        raise ValueError(error_message)
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
