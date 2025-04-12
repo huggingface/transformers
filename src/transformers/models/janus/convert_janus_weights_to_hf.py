@@ -326,6 +326,7 @@ def convert_model(
         image_processor=image_processor,
         tokenizer=tokenizer,
         chat_template=CHAT_TEMPLATE,
+        use_default_system_prompt=True,
     )
 
     if output_dir:
