@@ -55,24 +55,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
-    "agents": [
-        "Agent",
-        "CodeAgent",
-        "HfApiEngine",
-        "ManagedAgent",
-        "PipelineTool",
-        "ReactAgent",
-        "ReactCodeAgent",
-        "ReactJsonAgent",
-        "Tool",
-        "Toolbox",
-        "ToolCollection",
-        "TransformersEngine",
-        "launch_gradio_demo",
-        "load_tool",
-        "stream_to_gradio",
-        "tool",
-    ],
     "audio_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -565,25 +547,6 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
-    # Agents
-    from .agents import (
-        Agent,
-        CodeAgent,
-        HfApiEngine,
-        ManagedAgent,
-        PipelineTool,
-        ReactAgent,
-        ReactCodeAgent,
-        ReactJsonAgent,
-        Tool,
-        Toolbox,
-        ToolCollection,
-        TransformersEngine,
-        launch_gradio_demo,
-        load_tool,
-        stream_to_gradio,
-        tool,
-    )
     from .configuration_utils import PretrainedConfig
 
     # Data

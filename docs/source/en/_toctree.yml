@@ -308,8 +308,6 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: main_classes/agent
-      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/backbones
