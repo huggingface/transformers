@@ -220,8 +220,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
-            # self.assertTrue(encoding["labels"].min().item() >= 0)
-            # self.assertTrue(encoding["labels"].max().item() <= 255)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched
             # encoding = image_processor(image_inputs, maps, return_tensors="pt")
