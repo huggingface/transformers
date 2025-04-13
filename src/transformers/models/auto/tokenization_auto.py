@@ -1084,3 +1084,6 @@ class AutoTokenizer:
                 fast_tokenizer_class = existing_fast
 
         TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class), exist_ok=exist_ok)
+
+
+__all__ = ["TOKENIZER_MAPPING", "AutoTokenizer"]

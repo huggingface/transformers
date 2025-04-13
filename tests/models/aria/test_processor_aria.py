@@ -16,7 +16,6 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
-from typing import Optional
 
 import numpy as np
 import requests
@@ -41,7 +40,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", image_seq_len=2)
+        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2})
         processor.save_pretrained(cls.tmpdirname)
         cls.image1 = Image.open(
             BytesIO(
@@ -74,7 +73,14 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
-        cls.image_seq_len = 256
+        cls.image_seq_len = 2
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
+            "size_conversion": {490: 2, 980: 2},
+        }  # fmt: skip
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -88,24 +94,6 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=1
-        )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_process_interleaved_images_prompts_image_splitting(self):
         processor = self.get_processor()
@@ -236,7 +224,6 @@ And who is that?<|im_end|>
 """
         self.assertEqual(rendered, expected_rendered)
 
-    # Override as AriaImageProcessor doesn't accept `do_rescale`
     def test_image_chat_template_accepts_processing_kwargs(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -284,156 +271,3 @@ And who is that?<|im_end|>
             return_tensors="np",
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
-
-    # Override as AriaProcessor needs image tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <|img|>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <|img|>"]
-        return ["lower newer <|img|>", "<|img|> upper older longer string"] + ["<|img|> lower newer"] * (
-            batch_size - 2
-        )
-
-    # Override tests as inputs_ids padded dimension is the second one but not the last one
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=30)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=30)
-        self.assertEqual(len(inputs["input_ids"][0]), 30)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            common_kwargs={"return_tensors": "pt"},
-            images_kwargs={"max_image_size": 980},
-            text_kwargs={"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(inputs["pixel_values"].shape[3], 980)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_image_size": 980},
-            "text_kwargs": {"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[3], 980)
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
-
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=30)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 30)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        image_input = self.prepare_image_inputs(batch_size=2)
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            padding="longest",
-            max_length=76,
-            truncation=True,
-            max_image_size=980,
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[1], 3)
-        self.assertEqual(inputs["pixel_values"].shape[3], 980)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_image_size=980,
-            padding="max_length",
-            max_length=120,
-            truncation="longest_first",
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[3], 980)
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
