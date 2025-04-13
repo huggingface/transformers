@@ -160,22 +160,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         # here, images are a list of length 1, then inside, shape num_channels, height, width
         # images = make_list_of_images(images)
-        if segmentation_maps is not None:
-            # TODO: turns out this bit isn't needed
-            if isinstance(segmentation_maps, list) and len(segmentation_maps) == 0:
-                processed_maps = []
-            else:
-                if(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
-                    segmentation_maps = segmentation_maps.unsqueeze(0)
-                    added_dimension = True
-                else:
-                    added_dimension = False
-                # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
-                # TODO: this assumes there are channel dimensions
-                segmentation_maps = self._prepare_input_images(segmentation_maps)
-                processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
-                if added_dimension:
-                    processed_maps = processed_maps.squeeze(0)
         # Group images by size for batched resizing
         processed_images = self._preprocess_images(
             images=images,
@@ -197,6 +181,34 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             **kwargs,
         )
 
+        data = {"pixel_values": processed_images}
+
+        if segmentation_maps is not None:
+            # TODO: turns out this bit isn't needed
+            if isinstance(segmentation_maps, list) and len(segmentation_maps) == 0:
+                processed_maps = []
+            else:
+                if(is_pil_image(segmentation_maps)):
+                   added_dimension = True
+                elif(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
+                    segmentation_maps = segmentation_maps.unsqueeze(0)
+                    added_dimension = True
+                else:
+                    added_dimension = False
+                # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+                # !!! WE NEED A NEW VESION OF _prepare_input_images THAT HANDLES SEGMENTATION MAPS
+                #  in particular it should removethe extra channel dimension from the maps. This gets given to them inside _process_image,
+                # , which is called by _prepare_input_images
+                # JUST AS IMPORTANTLY, the labels are ciming back as torch.unit8 and ot int64. Find out why
+                #  Perhaps images are getting this sorted inside preprocess of the base class ??
+                segmentation_maps = self._prepare_input_images(segmentation_maps)
+                # TODO for some reason self._prepare_input_images put segmentation maps in a list, with inner dims 1,h,w
+                # then self._preprocess_images changes it to tensor 1,1,18,18
+                processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+                if added_dimension:
+                    processed_maps = processed_maps.squeeze(0).long()
+            data["labels"] = processed_maps
+
         # segmentation_maps = segmentation_maps.unsqueeze(0)
 
         # I previously had this and processed_images as a list comprehension but there was no need - it was causesing the error below with BatchFeatures
@@ -209,7 +221,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         # PREVIOUSLY BOTH MAPS AND IMAGES HAVE EXTRA DIM LIKE 1,2,18,18, or 1,18,18
 
-        return BatchFeature(data={"pixel_values": processed_images, "labels": processed_maps}, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors)
     
     def _preprocess_images(
             self,
