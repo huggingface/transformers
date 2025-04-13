@@ -142,6 +142,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
+        ("granite_speech", "GraniteSpeechConfig"),
         ("granitemoe", "GraniteMoeConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
         ("granitevision", "LlavaNextConfig"),
@@ -491,6 +492,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
+        ("granite_speech", "GraniteSpeech"),
         ("granitemoe", "GraniteMoeMoe"),
         ("granitemoeshared", "GraniteMoeSharedMoe"),
         ("granitevision", "LLaVA-NeXT"),
@@ -1173,3 +1175,6 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+
+
+__all__ = ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"]

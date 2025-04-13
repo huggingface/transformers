@@ -16,7 +16,6 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
-from typing import Optional
 
 import requests
 
@@ -83,6 +82,10 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"image_seq_len": 2}
 
     @classmethod
     def tearDownClass(cls):
@@ -329,17 +332,3 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
-
-    # Override as Idefics2Processor needs image tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <image>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <image>"]
-        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
-            batch_size - 2
-        )

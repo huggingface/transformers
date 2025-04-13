@@ -123,7 +123,7 @@ def prepare_img():
 def convert_efficientformer_checkpoint(
     checkpoint_path: Path, efficientformer_config_file: Path, pytorch_dump_path: Path, push_to_hub: bool
 ):
-    orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    orig_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
     model = EfficientFormerForImageClassificationWithTeacher(config)
     model_name = "_".join(checkpoint_path.split("/")[-1].split(".")[0].split("_")[:-1])
