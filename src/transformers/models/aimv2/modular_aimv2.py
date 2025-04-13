@@ -84,8 +84,6 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
-        is_causal (`bool`, *optional*, defaults to `False`):
-            Whether to apply causal masking in scaled dot-product attention.
     Example:
 
     ```python
@@ -118,7 +116,6 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
-        is_causal: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -141,7 +138,6 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal = is_causal
 
         del self.layer_norm_eps
 
@@ -192,8 +188,6 @@ class AIMv2TextConfig(SiglipTextConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the for initializing all weight matrices.
-        is_causal (`bool`, *optional*, defaults to `True`):
-            Whether to apply causal masking in scaled dot-product attention.
     """
 
     def __init__(
@@ -214,7 +208,6 @@ class AIMv2TextConfig(SiglipTextConfig):
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
-        is_causal: bool = True,
         **kwargs,
     ):
         super().__init__(
@@ -237,7 +230,6 @@ class AIMv2TextConfig(SiglipTextConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal = is_causal
 
         del self.bos_token_id
         del self.pad_token_id
@@ -441,7 +433,7 @@ class AIMv2Attention(nn.Module):
         self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
-        self.is_causal = config.is_causal
+        self.is_causal = False
 
     def forward(
         self,
@@ -621,7 +613,6 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )

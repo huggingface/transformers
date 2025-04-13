@@ -276,7 +276,7 @@ class AIMv2Attention(nn.Module):
         self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
-        self.is_causal = config.is_causal
+        self.is_causal = False
 
     def forward(
         self,
@@ -539,7 +539,6 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )

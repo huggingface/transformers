@@ -68,8 +68,6 @@ class AIMv2VisionConfig(PretrainedConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
-        is_causal (`bool`, *optional*, defaults to `False`):
-            Whether to apply causal masking in scaled dot-product attention.
     Example:
 
     ```python
@@ -105,7 +103,6 @@ class AIMv2VisionConfig(PretrainedConfig):
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
-        is_causal: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,7 +123,6 @@ class AIMv2VisionConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal = is_causal
 
 
 class AIMv2TextConfig(PretrainedConfig):
@@ -175,8 +171,6 @@ class AIMv2TextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the for initializing all weight matrices.
-        is_causal (`bool`, *optional*, defaults to `True`):
-            Whether to apply causal masking in scaled dot-product attention.
     """
 
     model_type = "aimv2_text_model"
@@ -200,7 +194,6 @@ class AIMv2TextConfig(PretrainedConfig):
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
-        is_causal: bool = True,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -219,7 +212,6 @@ class AIMv2TextConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal = is_causal
 
 
 class AIMv2Config(PretrainedConfig):
