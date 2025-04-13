@@ -544,8 +544,11 @@ class Message:
                 if "https://github.com/huggingface/transformers/actions/runs" in line:
                     pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                     items = re.findall(pattern, line)
-                elif "tests/models/" in line:
-                    model = line.split("/")[2]
+                elif "tests/" in line:
+                    if "tests/models/" in line:
+                        model = line.split("/")[2]
+                    else:
+                        model = line.split("/")[1]
                     if model not in new_failed_tests:
                         new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
                     for url, device in items:
@@ -942,7 +945,6 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
@@ -994,6 +996,8 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
+    # `title` will be updated at the end before calling `Message()`.
+    title = f"🤗 Results of {ci_event}"
     if runner_not_available or runner_failed or setup_failed:
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
@@ -1041,6 +1045,11 @@ if __name__ == "__main__":
         "Unclassified",
     ]
 
+    job_name = os.getenv("CI_TEST_JOB")
+    report_name_prefix = "run_models_gpu"
+    if job_name == "run_trainer_and_fsdp_gpu":
+        report_name_prefix = job_name
+
     # This dict will contain all the information relative to each model:
     # - Failures: the total, as well as the number of failures per-category defined above
     # - Success: total
@@ -1055,13 +1064,13 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for model in models
-        if f"run_models_gpu_{model}_test_reports" in available_artifacts
+        if f"{report_name_prefix}_{model}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
+        for artifact_path in available_artifacts[f"{report_name_prefix}_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1123,7 +1132,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
         "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
-        "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
+        "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1132,7 +1141,7 @@ if __name__ == "__main__":
         del additional_files["TensorFlow pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["TensorFlow pipelines"]
-        del additional_files["Torch CUDA extension tests"]
+        del additional_files["DeepSpeed"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
 
@@ -1143,12 +1152,11 @@ if __name__ == "__main__":
         "run_pipelines_torch_gpu": "PyTorch pipelines",
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
-        "run_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+        "run_torch_cuda_extensions_gpu": "DeepSpeed",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.
     test_name = None
-    job_name = os.getenv("CI_TEST_JOB")
     if job_name in job_to_test_map:
         test_name = job_to_test_map[job_name]
     additional_files = {k: v for k, v in additional_files.items() if k == test_name}
@@ -1243,7 +1251,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "torch_pipeline",
         "TensorFlow pipelines": "tf_pipeline",
         "Examples directory": "example",
-        "Torch CUDA extension tests": "deepspeed",
+        "DeepSpeed": "deepspeed",
     }
     for job, job_result in additional_results.items():
         with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
@@ -1269,6 +1277,19 @@ if __name__ == "__main__":
             prev_ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
+
+    job_to_test_map.update(
+        {
+            "run_models_gpu": "Models",
+            "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+        }
+    )
+
+    ci_name_in_report = ""
+    if job_name in job_to_test_map:
+        ci_name_in_report = job_to_test_map[job_name]
+
+    title = f"🤗 Results of {ci_event}: {ci_name_in_report}"
 
     message = Message(
         title,
