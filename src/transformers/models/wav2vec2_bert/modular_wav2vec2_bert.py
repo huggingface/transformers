@@ -59,7 +59,6 @@ _CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we 
 _CTC_EXPECTED_LOSS = 17.04
 
 
-
 class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding, nn.Module):
     def __init__(self, config):
         nn.Module.__init__()
