@@ -6,8 +6,12 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from ...modeling_outputs import CausalLMOutput, ModelOutput, SequenceClassifierOutput, Wav2Vec2BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import (
+    CausalLMOutput,
+    ModelOutput,
+    SequenceClassifierOutput,
+    Wav2Vec2BaseModelOutput,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -15,6 +19,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..hubert.modeling_hubert import HubertPreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -147,7 +152,7 @@ class UniSpeechGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
         return codevectors, perplexity
 
 
-class UniSpeechPreTrainedModel(PreTrainedModel):
+class UniSpeechPreTrainedModel(HubertPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -192,21 +197,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
