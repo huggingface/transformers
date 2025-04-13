@@ -158,8 +158,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional[ImageInput] = None,
         **kwargs,
     ) -> BatchFeature:
-        # here, images are a list of length 1, then inside, shape num_channels, height, width
-        # images = make_list_of_images(images)
         # Group images by size for batched resizing
         processed_images = self._preprocess_images(
             images=images,
@@ -184,32 +182,30 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         data = {"pixel_values": processed_images}
 
         if segmentation_maps is not None:
-            if(is_pil_image(segmentation_maps)):
+            isList = False
+            added_dimension = False
+            if isinstance(segmentation_maps, list):
+                isList = True
+                # Batched input as a list of PIL images, no added dimension is needed.
+                if not is_pil_image(segmentation_maps[0]) and segmentation_maps[0].ndim == 2:
+                    segmentation_maps = [map.unsqueeze(0) for map in segmentation_maps]
+                    added_dimension = True
+                elif is_pil_image(segmentation_maps[0]):
+                    added_dimension = True
+            elif is_pil_image(segmentation_maps):
                 added_dimension = True
-            elif(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
+            elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
                 segmentation_maps = segmentation_maps.unsqueeze(0)
                 added_dimension = True
-            else:
-                added_dimension = False
-            # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+                
 
             segmentation_maps = self._prepare_input_images(segmentation_maps)
             processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
-            if added_dimension:
+            if added_dimension and isList:
+                processed_maps = processed_maps.squeeze(1).long()
+            elif added_dimension:
                 processed_maps = processed_maps.squeeze(0).long()
             data["labels"] = processed_maps
-
-        # segmentation_maps = segmentation_maps.unsqueeze(0)
-
-        # I previously had this and processed_images as a list comprehension but there was no need - it was causesing the error below with BatchFeatures
-
-        # here I want to do the same transformation as I did for the images, with the exception that the images start of as a list of 1 tensor that has dims [channels, height, width]
-        # whereas the segementation_maps start as are a tensors with dims [height, width] (NB: so far we are dealing with unbatched input)
-
-        # so, because images are being transformed to a tensor of dims [1, channels, new_height, new_width], I need to the segmentation maps to have the same transformation excpet they 
-        #  end up with dims [1, height, width]
-
-        # PREVIOUSLY BOTH MAPS AND IMAGES HAVE EXTRA DIM LIKE 1,2,18,18, or 1,18,18
 
         return BatchFeature(data=data, tensor_type=return_tensors)
     
