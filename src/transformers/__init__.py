@@ -841,6 +841,7 @@ if TYPE_CHECKING:
             SinkCache,
             SlidingWindowCache,
             StaticCache,
+            xLSTMCache,
         )
         from .data.datasets import (
             GlueDataset,
