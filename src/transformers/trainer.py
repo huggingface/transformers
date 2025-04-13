@@ -3756,7 +3756,7 @@ class Trainer:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+            loss = loss.mean() if num_items_in_batch is None else loss.sum()  # average on multi-gpu parallel training
 
         if self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
