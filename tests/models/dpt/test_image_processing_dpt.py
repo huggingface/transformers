@@ -259,17 +259,17 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.image_processor_tester.size["width"],
                 ),
             )
-            # self.assertEqual(
-            #     encoding["labels"].shape,
-            #     (
-            #         1,
-            #         self.image_processor_tester.size["height"],
-            #         self.image_processor_tester.size["width"],
-            #     ),
-            # )
-            # self.assertEqual(encoding["labels"].dtype, torch.long)
-            # self.assertTrue(encoding["labels"].min().item() >= 0)
-            # self.assertTrue(encoding["labels"].max().item() <= 255)
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    1,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
             # images, segmentation_maps = prepare_semantic_batch_inputs()
