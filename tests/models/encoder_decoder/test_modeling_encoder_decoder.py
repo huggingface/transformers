@@ -936,6 +936,7 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         }
 
     @slow
+    @require_deterministic_for_xpu
     def test_roberta2roberta_summarization(self):
         model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_bbc")
         model.to(torch_device)
@@ -1080,6 +1081,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         pass
 
     @slow
+    @require_deterministic_for_xpu
     def test_bert2gpt2_summarization(self):
         model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
 

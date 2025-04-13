@@ -19,7 +19,8 @@ from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_MASK_GENERATION_MAPPING,
-    TF_MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_tf_available,
+    is_torch_available,
     is_vision_available,
     pipeline,
 )
@@ -32,6 +33,17 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
+
+
+if is_tf_available():
+    from transformers import TF_MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    TF_MODEL_FOR_MASK_GENERATION_MAPPING = None
+
+if is_torch_available():
+    from transformers import MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
 if is_vision_available():
