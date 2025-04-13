@@ -184,29 +184,19 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         data = {"pixel_values": processed_images}
 
         if segmentation_maps is not None:
-            # TODO: turns out this bit isn't needed
-            if isinstance(segmentation_maps, list) and len(segmentation_maps) == 0:
-                processed_maps = []
+            if(is_pil_image(segmentation_maps)):
+                added_dimension = True
+            elif(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
+                segmentation_maps = segmentation_maps.unsqueeze(0)
+                added_dimension = True
             else:
-                if(is_pil_image(segmentation_maps)):
-                   added_dimension = True
-                elif(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
-                    segmentation_maps = segmentation_maps.unsqueeze(0)
-                    added_dimension = True
-                else:
-                    added_dimension = False
-                # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
-                # !!! WE NEED A NEW VESION OF _prepare_input_images THAT HANDLES SEGMENTATION MAPS
-                #  in particular it should removethe extra channel dimension from the maps. This gets given to them inside _process_image,
-                # , which is called by _prepare_input_images
-                # JUST AS IMPORTANTLY, the labels are ciming back as torch.unit8 and ot int64. Find out why
-                #  Perhaps images are getting this sorted inside preprocess of the base class ??
-                segmentation_maps = self._prepare_input_images(segmentation_maps)
-                # TODO for some reason self._prepare_input_images put segmentation maps in a list, with inner dims 1,h,w
-                # then self._preprocess_images changes it to tensor 1,1,18,18
-                processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
-                if added_dimension:
-                    processed_maps = processed_maps.squeeze(0).long()
+                added_dimension = False
+            # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+
+            segmentation_maps = self._prepare_input_images(segmentation_maps)
+            processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+            if added_dimension:
+                processed_maps = processed_maps.squeeze(0).long()
             data["labels"] = processed_maps
 
         # segmentation_maps = segmentation_maps.unsqueeze(0)
