@@ -22,7 +22,7 @@ from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import get_resize_output_image_size, get_size_with_aspect_ratio, group_images_by_shape, reorder_images
 from transformers.processing_utils import Unpack
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format, make_list_of_images, to_numpy_array
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format, is_pil_image, make_list_of_images, to_numpy_array
 from ...utils import TensorType, add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available
 
 import numpy as np
@@ -160,9 +160,22 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         # here, images are a list of length 1, then inside, shape num_channels, height, width
         # images = make_list_of_images(images)
-
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            # TODO: turns out this bit isn't needed
+            if isinstance(segmentation_maps, list) and len(segmentation_maps) == 0:
+                processed_maps = []
+            else:
+                if(not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2):
+                    segmentation_maps = segmentation_maps.unsqueeze(0)
+                    added_dimension = True
+                else:
+                    added_dimension = False
+                # segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+                # TODO: this assumes there are channel dimensions
+                segmentation_maps = self._prepare_input_images(segmentation_maps)
+                processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+                if added_dimension:
+                    processed_maps = processed_maps.squeeze(0)
         # Group images by size for batched resizing
         processed_images = self._preprocess_images(
             images=images,
@@ -187,7 +200,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         # segmentation_maps = segmentation_maps.unsqueeze(0)
 
         # I previously had this and processed_images as a list comprehension but there was no need - it was causesing the error below with BatchFeatures
-        processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
 
         # here I want to do the same transformation as I did for the images, with the exception that the images start of as a list of 1 tensor that has dims [channels, height, width]
         # whereas the segementation_maps start as are a tensors with dims [height, width] (NB: so far we are dealing with unbatched input)
