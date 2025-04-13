@@ -224,27 +224,27 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched
-            # encoding = image_processor(image_inputs, maps, return_tensors="pt")
-            # self.assertEqual(
-            #     encoding["pixel_values"].shape,
-            #     (
-            #         self.image_processor_tester.batch_size,
-            #         self.image_processor_tester.num_channels,
-            #         self.image_processor_tester.size["height"],
-            #         self.image_processor_tester.size["width"],
-            #     ),
-            # )
-            # self.assertEqual(
-            #     encoding["labels"].shape,
-            #     (
-            #         self.image_processor_tester.batch_size,
-            #         self.image_processor_tester.size["height"],
-            #         self.image_processor_tester.size["width"],
-            #     ),
-            # )
-            # self.assertEqual(encoding["labels"].dtype, torch.long)
-            # self.assertTrue(encoding["labels"].min().item() >= 0)
-            # self.assertTrue(encoding["labels"].max().item() <= 255)
+            encoding = image_processor(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
             image, segmentation_map = prepare_semantic_single_inputs()
@@ -272,29 +272,29 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            # images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = prepare_semantic_batch_inputs()
 
-            # encoding = image_processor(images, segmentation_maps, return_tensors="pt")
-            # self.assertEqual(
-            #     encoding["pixel_values"].shape,
-            #     (
-            #         2,
-            #         self.image_processor_tester.num_channels,
-            #         self.image_processor_tester.size["height"],
-            #         self.image_processor_tester.size["width"],
-            #     ),
-            # )
-            # self.assertEqual(
-            #     encoding["labels"].shape,
-            #     (
-            #         2,
-            #         self.image_processor_tester.size["height"],
-            #         self.image_processor_tester.size["width"],
-            #     ),
-            # )
-            # self.assertEqual(encoding["labels"].dtype, torch.long)
-            # self.assertTrue(encoding["labels"].min().item() >= 0)
-            # self.assertTrue(encoding["labels"].max().item() <= 255)
+            encoding = image_processor(images, segmentation_maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    2,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    2,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
 
     # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_reduce_labels
     def test_reduce_labels(self):
