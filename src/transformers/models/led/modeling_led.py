@@ -136,6 +136,7 @@ class LEDEncoderSelfAttention(nn.Module):
         assert attention_window > 0, (
             f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
         )
+
         self.one_sided_attn_window_size = attention_window // 2
 
         self.config = config
