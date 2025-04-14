@@ -187,7 +187,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
     gdown.cached_download(checkpoint_url, output, quiet=False)
-    files = torch.load(output, map_location="cpu")
+    files = torch.load(output, map_location="cpu", weights_only=True)
     if "model" in files:
         state_dict = files["model"]
     else:
@@ -204,7 +204,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
 
     if "finetuned" not in model_name:
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
     outputs = model(**inputs)
     logits = outputs.logits
