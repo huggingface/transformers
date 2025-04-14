@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Dino DETR model."""
 
 import inspect
+import math
 import unittest
 from typing import Dict, List, Tuple
 
@@ -60,7 +61,7 @@ class DinoDetrModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=32,
+        hidden_size=256,
         num_hidden_layers=6,
         num_attention_heads=8,
         intermediate_size=4,
@@ -95,6 +96,15 @@ class DinoDetrModelTester:
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
+
+        # we also set the expected seq length for both encoder and decoder
+        self.encoder_seq_length = (
+            math.ceil(self.image_size / 8) ** 2
+            + math.ceil(self.image_size / 16) ** 2
+            + math.ceil(self.image_size / 32) ** 2
+            + math.ceil(self.image_size / 64) ** 2
+        )
+        self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -139,7 +149,7 @@ class DinoDetrModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
+            result.hidden_states[-1].shape,
             (self.batch_size, self.num_queries, self.hidden_size),
         )
 
