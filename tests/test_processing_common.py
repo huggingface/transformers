@@ -917,7 +917,7 @@ class ProcessorTesterMixin:
         )
 
     @require_librosa
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor suports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
@@ -929,6 +929,7 @@ class ProcessorTesterMixin:
             "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
         )
 
+    @require_torch
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
 
@@ -964,7 +965,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -978,7 +979,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

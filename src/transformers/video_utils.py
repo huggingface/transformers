@@ -169,7 +169,7 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
     elif is_valid_video(videos):
         videos = [videos]
     # only one frame passed, thus we unsqueeze time dim
-    elif is_valid_image(videos) and not isinstance(videos, PIL.Image.Image):
+    elif is_valid_image(videos):
         videos = [np.array(videos)[None, ...]]
     # nested batch so we need to unflatten
     elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):

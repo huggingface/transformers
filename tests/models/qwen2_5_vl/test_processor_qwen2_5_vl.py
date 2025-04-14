@@ -145,6 +145,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     @require_torch
+    @require_av
     def _test_apply_chat_template(
         self,
         modality: str,
@@ -227,7 +228,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-        self.assertEqual(len(out_dict[input_name]), batch_size * 192)
+
+        video_len = 360 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
+        self.assertEqual(len(out_dict[input_name]), video_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:

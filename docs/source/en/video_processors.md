@@ -19,9 +19,9 @@ rendered properly in your Markdown viewer.
 
 A **Video Processor** is a utility responsible for preparing input features for video models, as well as handling the post-processing of their outputs. It provides transformations such as resizing, normalization, and conversion into PyTorch. 
 
-The video processor extends the functionality of image processors by allowing Vision Large Language Models (VLMs) to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
+The video processor extends the functionality of image processors by allowing the models to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
 
-When adding a new VLM or updating an existing one to enable distinct video preprocessing, saving and reloading the processor configuration will store the video related arguments in a dedicated file named `video_preprocessing_config.json`. Don't worry if you haven't upadted your VLM, the processor will try to load video related configurations from a file named `preprocessing_config.json`.
+Use [`~BaseVideoProcessorFast.from_pretrained`] to load a video processors configuration (image size, whether to normalize and rescale, etc.) from a video model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model should be saved in a [video_preprocessor_config.json] file but older models might have the config saved in [preprocessor_config.json](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf/blob/main/preprocessor_config.json) file. Note that the latter is less preferred and will be removed in the future.
 
 
 ### Usage Example
@@ -47,9 +47,3 @@ processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0
 processor = torch.compile(processor)
 processed_video = processor(video, return_tensors="pt")
 ```
-
-
-## BaseVideoProcessorFast
-
-[[autodoc]] video_processing_utils_fast.BaseVideoProcessorFast
-

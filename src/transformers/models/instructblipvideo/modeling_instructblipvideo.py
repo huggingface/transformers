@@ -56,39 +56,6 @@ from .configuration_instructblipvideo import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
-    """
-    Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Language modeling loss from the language model.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head of the language model.
-        vision_outputs (`BaseModelOutputWithPooling`):
-            Outputs of the vision encoder.
-        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
-            Outputs of the Q-Former (Querying Transformer).
-        language_model_outputs (`CausalLMOutputWithPast` or `Seq2SeqLMOutput`):
-            Outputs of the language model.
-    """
-
-    loss: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    vision_outputs: Optional[torch.FloatTensor] = None
-    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
-    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k]
-            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
-            else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
-
-
 class InstructBlipVideoVisionEmbeddings(nn.Module):
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__()
@@ -1184,6 +1151,39 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings
+
+
+@dataclass
+class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
+    """
+    Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
+
+    Args:
+        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Language modeling loss from the language model.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head of the language model.
+        vision_outputs (`BaseModelOutputWithPooling`):
+            Outputs of the vision encoder.
+        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+            Outputs of the Q-Former (Querying Transformer).
+        language_model_outputs (`CausalLMOutputWithPast` or `Seq2SeqLMOutput`):
+            Outputs of the language model.
+    """
+
+    loss: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    vision_outputs: Optional[torch.FloatTensor] = None
+    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
+    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k]
+            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
+            else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 INSTRUCTBLIPVIDEO_START_DOCSTRING = r"""

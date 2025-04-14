@@ -1114,7 +1114,6 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
-    "VideoProcessor": "video_processing",
     "VideoProcessorFast": "video_processing*_fast",
     "FastVideoProcessorInitKwargs": "video_processing*_fast",
     "FastVideoProcessorPreprocessKwargs": "video_processing*_fast",
