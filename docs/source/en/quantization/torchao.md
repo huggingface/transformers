@@ -369,13 +369,91 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 </hfoptions>
 
-## Loading Quantized Models Examples
+
+## Serialization
+
+torchao implements [torch.Tensor subclasses](https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor) for maximum flexibility in supporting new quantized torch.Tensor formats. [Safetensors](https://huggingface.co/docs/safetensors/en/index) serialization and deserialization does not work with torchao.
+
+To avoid arbitrary user code execution, torchao sets `weights_only=True` in [torch.load](https://pytorch.org/docs/stable/generated/torch.load.html) to ensure only tensors are loaded. Any known user functions can be whitelisted with [add_safe_globals](https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals).
 
 ```py
-
+# don't serialize model with Safetensors
+output_dir = "llama3-8b-int4wo-128"
+quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
 ```
 
+## Loading Quantized Models Examples
 
+For int8 and float8, all combinations of device are possible, you can quantize on cpu and load on cuda or cpu or vice versa.
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int8WeightOnlyConfig
+
+quant_config = Int8WeightOnlyConfig(group_size=128)
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B-Instruct",
+    torch_dtype="auto",
+    device_map="cpu",
+    quantization_config=quantization_config
+)
+# save the quantized model
+output_dir = "llama-3.1-8b-torchao-int8-cuda"
+quantized_model.save_pretrained(output_dir, safe_serialization=False)
+
+# reload the quantized model
+reloaded_model = AutoModelForCausalLM.from_pretrained(
+    output_dir, 
+    device_map="auto", 
+    torch_dtype=torch.bfloat16
+)
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+output = reloaded_model.generate(**input_ids, max_new_tokens=10)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+
+```
+For int4, you can only load on the same device you quantized on because the layout is specific to the device. For cpu for example, it will look like this:
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import Int4CPULayout
+
+quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B-Instruct",
+    torch_dtype="auto",
+    device_map="cpu",
+    quantization_config=quantization_config
+)
+# save the quantized model
+output_dir = "llama-3.1-8b-torchao-int4-cpu"
+quantized_model.save_pretrained(output_dir, safe_serialization=False)
+
+# reload the quantized model
+reloaded_model = AutoModelForCausalLM.from_pretrained(
+    output_dir, 
+    device_map="cpu", 
+    torch_dtype=torch.bfloat16
+)
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt")
+
+output = reloaded_model.generate(**input_ids, max_new_tokens=10)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+
+```
 
 ## Benchmark
 
@@ -401,21 +479,13 @@ print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_toke
 > For best performance, you can use recommended settings by calling `torchao.quantization.utils.recommended_inductor_config_setter()`
 
 
-
-## Serialization
-
-torchao implements [torch.Tensor subclasses](https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor) for maximum flexibility in supporting new quantized torch.Tensor formats. [Safetensors](https://huggingface.co/docs/safetensors/en/index) serialization and deserialization does not work with torchao.
-
-To avoid arbitrary user code execution, torchao sets `weights_only=True` in [torch.load](https://pytorch.org/docs/stable/generated/torch.load.html) to ensure only tensors are loaded. Any known user functions can be whitelisted with [add_safe_globals](https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals).
-
-```py
-# don't serialize model with Safetensors
-output_dir = "llama3-8b-int4wo-128"
-quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
-```
-
 ## Resources
 
 For a better sense of expected performance, view the [benchmarks](https://github.com/pytorch/ao/tree/main/torchao/quantization#benchmarks) for various models with CUDA and XPU backends.
 
 Refer to [Other Available Quantization Techniques](https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques) for more examples and documentation.
+
+## Issues
+
+If you encounter any issues with the transformers integration, please open an issue on the [transformers](https://github.com/huggingface/transformers/issues) repository.  
+If you encounter any issues with torchao, please open an issue on the [torchao](https://github.com/pytorch/ao/issues) repository.
