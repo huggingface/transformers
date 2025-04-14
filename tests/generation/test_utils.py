@@ -4285,6 +4285,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
     @require_read_token
+    @slow
     def test_assisted_generation_early_exit(self):
         """
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
