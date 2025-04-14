@@ -233,7 +233,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -732,12 +732,12 @@ class DecisionTransformerOutput(ModelOutput):
             heads.
     """
 
-    state_preds: torch.FloatTensor = None
-    action_preds: torch.FloatTensor = None
-    return_preds: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    state_preds: Optional[torch.FloatTensor] = None
+    action_preds: Optional[torch.FloatTensor] = None
+    return_preds: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[torch.FloatTensor] = None
+    attentions: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
 
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
