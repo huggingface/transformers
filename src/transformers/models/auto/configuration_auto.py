@@ -413,7 +413,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("colpali", "ColPali"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
-        ("csm", "Csm"),
+        ("csm", "CSM"),
         ("convnext", "ConvNeXT"),
         ("convnextv2", "ConvNeXTV2"),
         ("cpm", "CPM"),

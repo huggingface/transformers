@@ -635,9 +635,10 @@ _import_structure = {
         "MoshiConfig",
         "MoshiDepthConfig",
     ],
-    "models.conversational_speech_model": [
-        "ConversationalSpeechModelConfig",
-        "ConversationalSpeechModelDepthDecoderConfig",
+    "models.csm": [
+        "CsmConfig",
+        "CsmBackboneConfig",
+        "CsmDepthDecoderConfig",
     ],
     "models.mpnet": [
         "MPNetConfig",
@@ -913,6 +914,13 @@ _import_structure = {
         "WhisperFeatureExtractor",
         "WhisperProcessor",
         "WhisperTokenizer",
+    ],
+    "models.csm": [
+        "CsmConfig",
+        "CsmBackboneConfig",
+        "CsmDepthDecoderConfig",
+        "CsmAudioTokenizer",
+        "CsmProcessor",
     ],
     "models.x_clip": [
         "XCLIPConfig",
@@ -3082,12 +3090,12 @@ else:
             "MoshiPreTrainedModel",
         ]
     )
-    _import_structure["models.conversational_speech_model"].extend(
+    _import_structure["models.csm"].extend(
         [
-            "ConversationalSpeechModelForCausalLM",
-            "ConversationalSpeechModelDepthDecoderForCausalLM",
-            "ConversationalSpeechModelDepthDecoder",
-            "ConversationalSpeechModelBackbone",
+            "CsmForCausalLM",
+            "CsmDepthDecoderForCausalLM",
+            "CsmDepthDecoderModel",
+            "CsmBackboneModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5553,9 +5561,9 @@ if TYPE_CHECKING:
         ConvBertConfig,
         ConvBertTokenizer,
     )
-    from .models.conversational_speech_model import (
-        ConversationalSpeechModelConfig,
-        ConversationalSpeechModelDepthDecoderConfig,
+    from .models.csm import (
+        CsmConfig,
+        CsmDepthDecoderConfig,
     )
     from .models.convnext import ConvNextConfig
     from .models.convnextv2 import (
@@ -6227,6 +6235,11 @@ if TYPE_CHECKING:
         XCLIPProcessor,
         XCLIPTextConfig,
         XCLIPVisionConfig,
+    )
+    from .models.csm import (
+        CsmConfig,
+        CsmAudioTokenizer,
+        CsmProcessor,
     )
     from .models.xglm import XGLMConfig
     from .models.xlm import XLMConfig, XLMTokenizer
@@ -7139,11 +7152,13 @@ if TYPE_CHECKING:
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
         )
-        from .models.conversational_speech_model import (
-            ConversationalSpeechModelForCausalLM,
-            ConversationalSpeechModelDepthDecoderForCausalLM,
-            ConversationalSpeechModelDepthDecoder,
-            ConversationalSpeechModelBackbone,
+        from .models.csm import (
+            CsmForCausalLM,
+            CsmDepthDecoderForCausalLM,
+            CsmDepthDecoder,
+            CsmBackbone,
+            CsmAudioTokenizer,
+            CsmProcessor,
         )
         from .models.convnext import (
             ConvNextBackbone,
