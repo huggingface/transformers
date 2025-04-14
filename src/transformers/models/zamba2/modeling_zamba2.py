@@ -1225,10 +1225,9 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (Zamba2RMSNorm, Zamba2RMSNormGated)):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, Zamba2MambaMixer):
-            module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True
-
             dt = torch.exp(
                 torch.rand(self.config.n_mamba_heads)
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
@@ -1236,10 +1235,11 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
+            module.dt_bias.data.copy_(inv_dt)
 
-            with torch.no_grad():
-                module.dt_bias.copy_(inv_dt)
-            module.dt_bias._no_reinit = True
+            A = torch.arange(1, module.num_heads + 1)
+            module.A_log.data.copy_(torch.log(A))
+            module.D.data.fill_(1.0)
 
 
 ZAMBA2_START_DOCSTRING = r"""
@@ -1529,7 +1529,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.

@@ -16,7 +16,6 @@ import json
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 import numpy as np
 
@@ -333,20 +332,6 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=None, padding=True)
 
-    # Override as MllamaProcessor needs image tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <|image|>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <|image|>"]
-        return ["lower newer <|image|>", "<|image|> upper older longer string"] + ["<|image|> lower newer"] * (
-            batch_size - 2
-        )
-
     def test_unstructured_kwargs_batched(self):
         # Overriden because Mllama expects images in nested format. For 2 images it can't infer
         # the correct nesting, so we better throw an error
@@ -357,7 +342,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
