@@ -231,7 +231,6 @@ class GenerationTesterMixin:
                 "audio_token_index",
                 "audio_start_token_id",
                 "audio_end_token_id",
-                "vision_start_token_id",
                 "vision_end_token_id",
             ]:
                 token_index = getattr(config, key, None)
