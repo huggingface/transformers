@@ -1116,7 +1116,6 @@ class DFineCSPRepLayer(nn.Module):
 
 
 class DFineRepNCSPELAN4(nn.Module):
-    # csp-elan
     def __init__(self, config: DFineConfig, act: str = "silu", numb_blocks: int = 3):
         super().__init__()
         conv1_dim = config.encoder_hidden_dim * 2
