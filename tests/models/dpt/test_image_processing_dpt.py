@@ -298,16 +298,17 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_reduce_labels
     def test_reduce_labels(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processor
+            image_processor = image_processing_class(**self.image_processor_dict)
 
-        # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-        image, map = prepare_semantic_single_inputs()
-        encoding = image_processor(image, map, return_tensors="pt")
-        self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 150)
+            # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
+            image, map = prepare_semantic_single_inputs()
+            encoding = image_processor(image, map, return_tensors="pt")
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        image_processor.do_reduce_labels = True
-        encoding = image_processor(image, map, return_tensors="pt")
-        self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 255)
+            image_processor.do_reduce_labels = True
+            encoding = image_processor(image, map, return_tensors="pt")
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
