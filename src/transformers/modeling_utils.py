@@ -287,12 +287,17 @@ def restore_default_torch_dtype(func):
     return _wrapper
 
 
-def get_torch_device_context_manager():
+def get_torch_context_manager_or_global_device():
     """
-    Test if a device context manager is currently in use.
+    Test if a device context manager is currently in use, or if it is not the case, check if the default device
+    is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
     """
     device_in_context = torch.tensor([]).device
-    if device_in_context == torch.get_default_device():
+    default_device = torch.get_default_device()
+    # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
+    if device_in_context == default_device:
+        if default_device != torch.device("cpu"):
+            return default_device
         return None
     return device_in_context
 
@@ -4163,14 +4168,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         else:
             _adapter_model_path = None
 
-        # Potentially detect device context manager and use it
+        # Potentially detect context manager or global device, and use it (only if no device_map was provided)
         if device_map is None:
-            device_in_context = get_torch_device_context_manager()
+            device_in_context = get_torch_context_manager_or_global_device()
             if device_in_context == torch.device("meta"):
                 raise ValueError(
                     (
-                        "`from_pretrained` is not compatible with a meta device context manager as its purpose is to load weights. If "
-                        "you want to initialize a model on the meta device, use the context manager with `from_config`, or `ModelClass(config)`"
+                        "`from_pretrained` is not compatible with a meta device context manager or `torch.set_default_device('meta')` "
+                        "as its purpose is to load weights. If you want to initialize a model on the meta device, use the context manager "
+                        "or global device with `from_config`, or `ModelClass(config)`"
                     )
                 )
             device_map = device_in_context
@@ -4199,7 +4205,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
             if not is_accelerate_available():
                 raise ValueError(
-                    "Using a `device_map`, `tp_plan` or a `torch.device` context manager requires `accelerate`. You can install it with `pip install accelerate`"
+                    (
+                        "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
+                        "requires `accelerate`. You can install it with `pip install accelerate`"
+                    )
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
