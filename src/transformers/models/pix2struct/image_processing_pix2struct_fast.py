@@ -14,7 +14,12 @@
 # limitations under the License.
 """Fast Image processor class for Pix2Struct."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS
+    )
 from ...utils import add_start_docstrings
 
 import torch
@@ -35,6 +40,47 @@ from ...image_transforms import (
     reorder_images,
 )
 
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    ImageType,
+    SizeDict,
+    get_image_size,
+    get_image_size_for_max_height_width,
+    get_image_type,
+    infer_channel_dimension_format,
+    make_flat_list_of_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
+)
+
+from collections.abc import Iterable
+from functools import lru_cache, partial
+from typing import Any, Optional, TypedDict, Union
+
+import numpy as np
+
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    get_size_dict,
+)
+from ...processing_utils import Unpack
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    is_vision_available,
+    logging,
+)
+
+class Pix2StructFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    patch_size: Optional[dict[str, int]]
+    max_patches: Optional[int]
+    is_vqa: Optional[bool]
+
 @add_start_docstrings(
     "Constructs a fast Pix2Struct image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -50,17 +96,28 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
 
     # Default values should be checked against the slow image processor
     # None values left after checking can be removed
-    resample = None
-    image_mean = None
-    image_std = None
-    size = None
-    default_to_square = None
-    crop_size = None
-    do_resize = None
-    do_center_crop = None
-    do_rescale = None
+
     do_normalize = True
     do_convert_rgb = True
+    patch_size = {"height": 16, "width": 16}
+    max_patches = 2048
+    is_vqa = False
+
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+            patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+                The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+            max_patches (`int`, *optional*, defaults to 2048):
+                The maximum number of patches to extract from the image as per the [Pix2Struct
+                paper](https://arxiv.org/pdf/2210.03347.pdf).
+            is_vqa (`bool`, *optional*, defaults to `False`):
+                Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
+                rendered onto the input images.
+        """,
+    )
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Pix2StructFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
@@ -85,13 +142,14 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         # 
         # convert numpy array
         # 
-        # render header if is_vqa
+        # render header if is_vqa, render-text first, resize original image accordingly and paste with the header part 
+        # header-image可以批量生产，size需要由image与header-image一起决定，resize只有在image shape相同，resize shape也相同的情况下才能使用v2的api
         # 
         # normalize if needed
         # 
         # extract flattened patches 
 
-
+        # images 为经过rgb转化，input-format调整，并且放置到device上的list tensor
 
 
         # Group images by size for batched resizing
