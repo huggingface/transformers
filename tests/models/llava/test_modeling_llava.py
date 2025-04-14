@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -160,19 +159,6 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = LlavaForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -198,13 +184,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         )
 
     def test_config(self):
-        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
-        # TODO: avoid overwritten once there is a better fix for #36077
-        def check_config_can_be_init_without_params():
-            config = self.config_tester.config_class()
-            self.config_tester.parent.assertIsNotNone(config)
-
-        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs

@@ -20,7 +20,8 @@ from typing import Optional, Union
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from .... import AutoTokenizer
+from transformers import AutoTokenizer
+
 from ....utils import logging, strtobool
 
 
@@ -170,3 +171,6 @@ class RealmRetriever:
                 start_pos_ += padded
                 end_pos_ += padded
         return has_answers, start_pos, end_pos
+
+
+__all__ = ["RealmRetriever"]

@@ -1,11 +1,11 @@
 # https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-11.html#rel-23-11
-FROM nvcr.io/nvidia/pytorch:23.11-py3
+FROM nvcr.io/nvidia/pytorch:24.08-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu121'
+ARG CUDA='cu126'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -21,7 +21,8 @@ RUN python3 -m pip uninstall -y torch torchvision torchaudio
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
 RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+# `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 

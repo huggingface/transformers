@@ -228,3 +228,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs
+
+
+__all__ = ["TvltFeatureExtractor"]
