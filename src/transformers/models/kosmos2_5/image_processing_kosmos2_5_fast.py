@@ -15,6 +15,7 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
+import os
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -221,8 +222,12 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             # TODO: if it's possible to do in batch mode
             if do_normalize:
-                stacked_images = [self.normalize(x.unsqueeze(0), **kwargs) for x in stacked_images]
-                stacked_images = torch.cat(stacked_images, dim=0)
+                if os.environ.get("batch", None) is not None:
+                    stacked_images = self.normalize(stacked_images, **kwargs)
+                else:
+                    # iterate over each images
+                    stacked_images = [self.normalize(x.unsqueeze(0), **kwargs) for x in stacked_images]
+                    stacked_images = torch.cat(stacked_images, dim=0)
 
             # TODO: we need this to be in batch from
             # convert to torch tensor and permute
