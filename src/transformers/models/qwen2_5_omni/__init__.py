@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,12 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_flava import *
-    from .feature_extraction_flava import *
-    from .image_processing_flava import *
-    from .image_processing_flava_fast import *
-    from .modeling_flava import *
-    from .processing_flava import *
+    from .configuration_qwen2_5_omni import *
+    from .modeling_qwen2_5_omni import *
+    from .processing_qwen2_5_omni import *
 else:
     import sys
 
