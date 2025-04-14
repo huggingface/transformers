@@ -410,6 +410,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_segments: bool = False,
         return_dict_in_generate: Optional[bool] = None,
         force_unique_generate_call: Optional[bool] = None,
+        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
         **kwargs,
     ):
         """
@@ -533,6 +534,11 @@ class WhisperGenerationMixin(GenerationMixin):
             force_unique_generate_call (`bool`, *optional*):
                 Whether to force a unique call to the underlying GenerationMixin's [`~generation.GenerationMixin.generate`] method. This is useful for assisted decoding and testing purposes to ensure
                 that only one call to [`~generation.GenerationMixin.generate`] is made and therefore decoder input token ids and eos token ids are returned.
+            monitor_progress (`Callable[[torch.Tensor], None]`, *optional*):
+                If provided, this function is called to report the progress of the audio transcription. The function
+                takes one tensor argument p of shape (n, 2), where n is the batch size. p[i, 0]  contains the
+                index of the audio frame that is currently being transcribed for batch item i. p[i, 1] contains
+                the total number of frames for batch item i. No return value is expected.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -763,6 +769,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
+            if monitor_progress is not None:
+                monitor_progress(torch.stack((seek, max_frames), dim=1))
+
             # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
