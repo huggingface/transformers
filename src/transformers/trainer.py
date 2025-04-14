@@ -164,7 +164,6 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
-    is_torch_compile_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -178,6 +177,7 @@ from .utils import (
     strtobool,
 )
 from .utils.deprecation import deprecate_kwarg
+from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -257,7 +257,7 @@ if is_accelerate_available("0.28.0"):
 
 def _is_peft_model(model):
     if is_peft_available():
-        classes_to_check = (PeftModel,) if is_peft_available() else ()
+        classes_to_check = (PeftModel,)
         # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
         if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
             from peft import PeftMixedModel
@@ -313,6 +313,12 @@ SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
+@requires(
+    backends=(
+        "torch",
+        "accelerate",
+    )
+)
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -459,7 +465,7 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
-
+        self.model = model
         self.create_accelerator_and_postprocess()
 
         # memory metrics - must set up as early as possible
@@ -796,10 +802,6 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
-
-        # torch.compile
-        if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
         self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
@@ -1361,7 +1363,6 @@ class Trainer:
                 and args.optim_target_modules.replace("_", "-") == "all-linear"
             )
 
-            target_params = []
             target_params_names = []
             for module_name, module in model.named_modules():
                 target_module_exists, is_regex = check_target_module_exists(
@@ -1378,12 +1379,12 @@ class Trainer:
                 if not target_module_exists and not all_linear:
                     continue
 
-                target_params.append(module.weight)
                 target_params_names.append(module_name + ".weight")
 
-            if len(target_params) == 0:
+            if len(target_params_names) == 0:
                 raise ValueError(f"No target modules found for {optimizer_name} ({args.optim_target_modules}).")
 
+            target_params = [p for n, p in model.named_parameters() if n in target_params_names]
             non_target_params = [p for n, p in model.named_parameters() if n not in target_params_names]
             optim_kwargs.update(optim_args)
 
@@ -1987,7 +1988,7 @@ class Trainer:
         if self.accelerator.unwrap_model(model) is not model:
             return model
 
-        # Mixed precision training with apex (torch < 1.6)
+        # Mixed precision training with apex
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
@@ -3224,9 +3225,8 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
-            # Solely rely on numerical checkpoint id for rotation.
-            # mtime is not reliable especially on some fuse fs in cloud environments.
-            self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
+            # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -3689,7 +3689,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            ctx_manager = torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
@@ -3740,7 +3740,7 @@ class Trainer:
                 torch.musa.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_mps_available(min_version="2.0"):
+            elif is_torch_mps_available():
                 torch.mps.empty_cache()
             elif is_torch_hpu_available():
                 logger.warning(
@@ -4039,7 +4039,17 @@ class Trainer:
                     ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
 
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+        # mtime is not reliable on all filesystems, especially on some fuse fs in cloud environments
+        # so we check if the mtime is fake and fallback to numerical ordering if needed
+        if use_mtime and len(ordering_and_checkpoint_path) > 1:
+            mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
+            if mtime_diff < 1.0:  # less than 1 second, which is almost impossible when mtime works fine
+                warnings.warn("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+                return self._sorted_checkpoints(
+                    use_mtime=False, output_dir=output_dir, checkpoint_prefix=checkpoint_prefix
+                )
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+
         # Make sure we don't delete the best model.
         if (
             self.state.best_model_checkpoint is not None
@@ -5137,10 +5147,10 @@ class Trainer:
             args.update(accelerator_config)
         # tp is initialized at Accelerator init phase so
         # args should be prepared here
-        if self.args.tp_size > 1:
+        if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.args.tp_size)
+                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
             else:
                 raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
 
