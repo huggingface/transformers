@@ -1,4 +1,5 @@
-# Copyright 2022 HuggingFace Inc.
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
@@ -22,13 +22,13 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_vision_available():
-    from transformers import OwlViTImageProcessor
+    from transformers import BitImageProcessor
 
     if is_torchvision_available():
-        from transformers import OwlViTImageProcessorFast
+        from transformers import BitImageProcessorFast
 
 
-class OwlViTImageProcessingTester:
+class BitImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -46,6 +46,9 @@ class OwlViTImageProcessingTester:
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
+        super().__init__()
+        size = size if size is not None else {"shortest_edge": 20}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -53,9 +56,9 @@ class OwlViTImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 18, "width": 18}
+        self.size = size
         self.do_center_crop = do_center_crop
-        self.crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -90,13 +93,13 @@ class OwlViTImageProcessingTester:
 
 @require_torch
 @require_vision
-class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = OwlViTImageProcessor if is_vision_available() else None
-    fast_image_processing_class = OwlViTImageProcessorFast if is_torchvision_available() else None
+class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = BitImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BitImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = OwlViTImageProcessingTester(self)
+        self.image_processor_tester = BitImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -117,9 +120,9 @@ class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+            self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
