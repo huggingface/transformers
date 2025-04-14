@@ -17,14 +17,9 @@
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
 )
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...utils import add_start_docstrings
-
-
-class PvtFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    pass
 
 
 @add_start_docstrings(
