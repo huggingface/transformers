@@ -171,18 +171,6 @@ class InstructBlipVideoConfig(PretrainedConfig):
         )
 
 
-class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
-    pass
-
-
-class InstructBlipVideoVisionModel(InstructBlipVisionModel):
-    pass
-
-
-class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
-    pass
-
-
 @dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
     pass

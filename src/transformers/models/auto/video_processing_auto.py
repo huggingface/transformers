@@ -31,6 +31,7 @@ from ...utils import (
     is_torchvision_available,
     logging,
 )
+from ...utils.import_utils import requires
 from ...video_processing_utils_fast import BaseVideoProcessorFast
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -196,6 +197,7 @@ def get_video_processor_config(
         return json.load(reader)
 
 
+@requires(backends=("vision", "torchvision"))
 class AutoVideoProcessor:
     r"""
     This is a generic video processor class that will be instantiated as one of the video processor classes of the
@@ -377,3 +379,6 @@ class AutoVideoProcessor:
                 The video processor to register.
         """
         VIDEO_PROCESSOR_MAPPING.register(config_class, video_processor_class, exist_ok=exist_ok)
+
+
+__all__ = ["VIDEO_PROCESSOR_MAPPING", "AutoVideoProcessor"]

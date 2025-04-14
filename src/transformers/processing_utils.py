@@ -1255,6 +1255,7 @@ class ProcessorMixin(PushToHubMixin):
             return getattr(transformers_module, module_name)
         lookup_locations = [
             transformers_module.IMAGE_PROCESSOR_MAPPING,
+            transformers_module.VIDEO_PROCESSOR_MAPPING,
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
         ]

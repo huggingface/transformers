@@ -334,6 +334,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["video_processing_utils_fast"] = ["BaseVideoProcessorFast"]
 
 # PyTorch-backed objects
 try:
@@ -808,6 +809,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .video_processing_utils_fast import BaseVideoProcessorFast
 
     try:
         if not (is_torchvision_available() and is_timm_available()):

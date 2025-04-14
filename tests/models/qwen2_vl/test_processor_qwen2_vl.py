@@ -23,7 +23,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import AutoProcessor, Qwen2Tokenizer
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 

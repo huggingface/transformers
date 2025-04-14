@@ -47,11 +47,11 @@ from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...modeling_flash_attention_utils import is_flash_attn_available
-from ...video_utils import VideoInput
 from ...utils import logging
+from ...video_utils import VideoInput
 
 
 if is_flash_attn_available():

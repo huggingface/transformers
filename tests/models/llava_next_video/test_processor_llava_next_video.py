@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin

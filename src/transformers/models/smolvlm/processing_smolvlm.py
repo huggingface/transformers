@@ -27,7 +27,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, logging
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput, load_video, make_batched_videos
 from .video_processing_smolvlm import (
     DEFAULT_MEDIA_OUTTRO,
     DEFAULT_VIDEO_INTRO,
