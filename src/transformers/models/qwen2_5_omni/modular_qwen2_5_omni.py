@@ -36,6 +36,7 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
+    Qwen2RMSNorm,
 )
 from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
@@ -1039,7 +1040,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
-        elif isinstance(module, Qwen2RMSNorm):  # noqa: F821
+        elif isinstance(module, Qwen2RMSNorm):
             module.weight.data.fill_(1.0)
 
 

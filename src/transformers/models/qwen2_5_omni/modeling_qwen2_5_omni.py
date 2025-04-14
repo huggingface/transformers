@@ -143,7 +143,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
-        elif isinstance(module, Qwen2RMSNorm):  # noqa: F821
+        elif isinstance(module, Qwen2RMSNorm):
             module.weight.data.fill_(1.0)
 
 
