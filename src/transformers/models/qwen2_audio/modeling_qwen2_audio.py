@@ -471,7 +471,11 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
-        std = self.config.init_std if hasattr(self.config, "init_std") else self.config.audio_config.init_std
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.audio_config.initializer_range
+        )
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
