@@ -144,10 +144,6 @@ class MLCDVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class MLCDConfig(MLCDVisionConfig):
-    pass
-
-
 class MLCDMLP(CLIPMLP):
     pass
 
@@ -321,6 +317,18 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
 
 
 class MLCDEncoder(CLIPEncoder):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`MLCDEncoderLayer`].
+
+    Args:
+        config: MLCDVisionConfig
+    """
+
+    def __init__(self, config: MLCDVisionConfig):
+        """Overwrite dummy `MLCDConfig` to `MLCDVisionConfig`."""
+        super().__init__(config)
+
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,

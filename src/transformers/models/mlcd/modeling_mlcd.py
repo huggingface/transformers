@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from .configuration_mlcd import MLCDConfig, MLCDVisionConfig
+from .configuration_mlcd import MLCDVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -377,10 +377,11 @@ class MLCDEncoder(nn.Module):
     [`MLCDEncoderLayer`].
 
     Args:
-        config: MLCDConfig
+        config: MLCDVisionConfig
     """
 
-    def __init__(self, config: MLCDConfig):
+    def __init__(self, config: MLCDVisionConfig):
+        """Overwrite dummy `MLCDConfig` to `MLCDVisionConfig`."""
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])

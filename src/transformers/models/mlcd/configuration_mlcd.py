@@ -114,8 +114,4 @@ class MLCDVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class MLCDConfig(MLCDVisionConfig):
-    pass
-
-
 __all__ = ["MLCDVisionConfig"]
