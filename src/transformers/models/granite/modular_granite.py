@@ -25,7 +25,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, logging
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
+)
 from .configuration_granite import GraniteConfig
 
 
@@ -110,6 +116,10 @@ class GraniteDecoderLayer(LlamaDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class GranitePreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 class GraniteModel(LlamaModel):
@@ -281,3 +291,6 @@ class GraniteForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["GraniteForCausalLM", "GraniteModel", "GranitePreTrainedModel"]
