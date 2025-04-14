@@ -124,7 +124,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=False, max_new_tokens=10)
+        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -134,12 +134,37 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "What’s the difference between these two images?"},
-                                {"type": "image"},
-                                {"type": "image"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
                             ],
                         }
                     ],
-                    "generated_text": "The first image shows a statue of Liberty in the",
+                    "generated_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
+                            ],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "The first image shows a statue of Liberty in the",
+                        },
+                    ],
                 }
             ],
         )
