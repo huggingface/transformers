@@ -49,14 +49,12 @@ class AutoRoundQuantizer(HfQuantizer):
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
             )
-
+        ## AutoRound offer on-demand reminders to install necessary packages, such as IPEX.
         autoround_version = version.parse(importlib.metadata.version("auto_round"))
         if autoround_version < version.parse("0.5.0"):
             raise ImportError(
                 "You need a version of auto_round >= 0.5.0 to use AutoRound: `pip install --upgrade auto-round`"
             )
-
-        ## In AutoRound, we offer on-demand reminders to install necessary packages, such as IPEX.
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -68,7 +66,7 @@ class AutoRoundQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if model.__class__.main_input_name != "input_ids":
-            logger.warning("We provide limited support for models that are not purely text-based.")
+            logger.warning("AutoRound offers only limited support for models that are not strictly text-based.")
         from auto_round.inference.convert_model import convert_hf_model, infer_target_device
 
         if self.pre_quantized:

@@ -199,7 +199,8 @@ class AutoHfQuantizer:
             warning_msg = ""
 
         if isinstance(quantization_config, dict):
-            if quantization_config_from_args.__class__.__name__ == "AutoRoundConfig":
+            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configration dispatch.
+            if isinstance(quantization_config_from_args, AutoRoundConfig):
                 quantization_config = AutoRoundConfig.from_dict(quantization_config)
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
