@@ -41,28 +41,26 @@ class GraniteMultiHeadLatentAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         # TO DO add this bias later
-        #self.add_bias = config.add_bias
+        self.add_bias = config.attention_bias
         self.query_compression_size = config.mla_query_comp_size
         self.key_value_compression_size = config.mla_key_value_comp_size
 
         self.head_dim = self.hidden_size // self.num_heads 
-        # self.position_embedding_type = config.position_embedding_type
         self.attention_multiplier = config.attention_multiplier
         self.layer_idx = layer_idx
 
         # TO DO- will bias be a flag in config?
-        # self.position_embedding_type == "rope": not implemented so went to else
-        self.c_attn_down_projection = nn.Linear(self.hidden_size, self.query_compression_size + 2 * self.key_value_compression_size, bias=False)
+        self.c_attn_down_projection = nn.Linear(self.hidden_size, self.query_compression_size + 2 * self.key_value_compression_size, bias=self.add_bias)
         self.query_up_projection = nn.Linear(
-                self.query_compression_size, self.hidden_size, bias=False
+                self.query_compression_size, self.hidden_size, bias=self.add_bias
             )
         self.key_up_projection = nn.Linear(
-                self.key_value_compression_size, self.hidden_size, bias=False
+                self.key_value_compression_size, self.hidden_size, bias=self.add_bias
             )
         self.value_up_projection = nn.Linear(
-                self.key_value_compression_size, self.hidden_size, bias=False
+                self.key_value_compression_size, self.hidden_size, bias=self.add_bias
             )
-        self.c_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.c_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=self.add_bias)
         # TO confirm the softmax_dropout and dropout variable names
         self.softmax_dropout_p = config.mla_softmax_dropout
         self.softmax_dropout = nn.Identity() if config.mla_softmax_dropout == 0 else nn.Dropout(config.mla_softmax_dropout)
@@ -127,7 +125,6 @@ class GraniteMultiHeadLatentAttention(nn.Module):
  
 class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        # TO DO map variables here
         super().__init__(
             BambaConfig(config),
             layer_idx
@@ -141,6 +138,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        self.self_attn = None
         if config.layers_block_type[layer_idx] == "multihead_latent_attention":
             self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx)
         elif config.layers_block_type[layer_idx] == "mamba2":

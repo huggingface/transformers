@@ -163,7 +163,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_expand=2,
         mamba_chunk_size=256,
         mamba_conv_bias=True,
-        # confirm this variable if needed or not
         mamba_proj_bias=False,
         logits_to_keep=1,
         # mla variables
@@ -172,7 +171,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mla_softmax_dropout=0.0,
         mla_query_comp_size = 384,
         mla_key_value_comp_size = 96,
-        # does mla add_bias need to be considered?
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -204,7 +202,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
-        # moe add_bias missing
         # new variables
         self.normalization_function = normalization_function
         self.position_embedding_type = position_embedding_type
