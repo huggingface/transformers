@@ -877,7 +877,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their'  # fmt: skip
+        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,

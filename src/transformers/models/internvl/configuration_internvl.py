@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+import collections.abc
+
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -45,9 +47,9 @@ class InternVLVisionConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 448):
+        image_size (`int`, *optional*, defaults to `[448, 448]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to `[14, 14]`):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -90,8 +92,8 @@ class InternVLVisionConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-06,
-        image_size=448,
-        patch_size=14,
+        image_size=[448, 448],
+        patch_size=[14, 14],
         num_channels=3,
         use_mask_token=False,
         use_absolute_position_embeddings=True,
@@ -111,8 +113,11 @@ class InternVLVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
 
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         self.image_size = image_size
         self.patch_size = patch_size
+
         self.num_channels = num_channels
         self.use_mask_token = use_mask_token
         self.use_absolute_position_embeddings = use_absolute_position_embeddings

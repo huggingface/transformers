@@ -39,17 +39,13 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
+    can_return_tuple,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
     torch_int,
 )
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
-
-
-if is_flash_attn_2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -86,7 +82,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class InternVLVisionSelfAttention(nn.Module):
+class InternVLVisionAttention(nn.Module):
     def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.config = config
@@ -106,11 +102,12 @@ class InternVLVisionSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -123,11 +120,9 @@ class InternVLVisionSelfAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, self.num_attention_heads, self.attention_head_size)
 
-        query_layer = self.query(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
-        key_layer = self.key(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
-        value_layer = self.value(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
-
-        attention_mask = None
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -145,7 +140,7 @@ class InternVLVisionSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            attention_mask,
+            None,
             output_attentions=output_attentions,
             dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
             scaling=self.scaling,
@@ -155,6 +150,8 @@ class InternVLVisionSelfAttention(nn.Module):
 
         new_context_layer_shape = attn_output.size()[:-2] + (self.all_head_size,)
         attn_output = attn_output.view(*new_context_layer_shape)
+        attn_output = self.output(attn_output)
+        attn_output = self.dropout(attn_output)
         return attn_output, attn_weights
 
 
@@ -188,6 +185,15 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, InternVLVisionEmbeddings):
+            module.cls_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, InternVLVisionLayer):
+            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @dataclass
@@ -228,8 +234,6 @@ class InternVLVisionPatchEmbeddings(nn.Module):
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
@@ -357,67 +361,21 @@ class InternVLVisionEmbeddings(nn.Module):
         return embeddings, (patch_height, patch_width)
 
 
-class InternVLVisionSelfOutput(nn.Module):
-    """
-    The residual connection is defined in InternVLVisionLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
+class InternVLVisionMLP(nn.Module):
     def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor, gamma=None) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-class InternVLVisionAttention(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
-        super().__init__()
-        self.attention = InternVLVisionSelfAttention(config)
-        self.output = InternVLVisionSelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-class InternVLVisionIntermediate(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-
-        return hidden_states
-
-
-class InternVLVisionOutput(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
@@ -431,17 +389,13 @@ class InternVLVisionLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = InternVLVisionAttention(config)
-        self.intermediate = InternVLVisionIntermediate(config)
-        self.output = InternVLVisionOutput(config)
+        self.mlp = InternVLVisionMLP(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
-        if init_values > 0:
-            self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-            self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-        else:
-            self.lambda_1, self.lambda_2 = None, None
+        self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
 
     def forward(
         self,
@@ -455,9 +409,7 @@ class InternVLVisionLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # apply lambda_1 if present
-        if self.lambda_1 is not None:
-            attention_output = self.lambda_1 * attention_output
+        attention_output = self.lambda_1 * attention_output
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -465,8 +417,7 @@ class InternVLVisionLayer(nn.Module):
         # in InternVLVision, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        layer_output = self.intermediate(layer_output)
-        layer_output = self.output(layer_output)
+        layer_output = self.mlp(layer_output)
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
@@ -486,12 +437,12 @@ class InternVLVisionEncoder(nn.Module):
         self.layer = nn.ModuleList([InternVLVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -515,8 +466,6 @@ class InternVLVisionEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -578,6 +527,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -592,7 +542,6 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -602,7 +551,6 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
@@ -610,14 +558,9 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
             embedding_output,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-
-        if not return_dict:
-            head_outputs = (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
 
         return InternVLVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -630,7 +573,16 @@ _CONFIG_FOR_DOC = "InternVLConfig"
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 INTERNVL_INPUTS_DOCSTRING = r"""
@@ -812,6 +764,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         return vision_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -828,7 +781,6 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
@@ -888,7 +840,6 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -928,7 +879,6 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
@@ -953,10 +903,6 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
             loss = loss_fct(
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return InternVLCausalLMOutputWithPast(
             loss=loss,

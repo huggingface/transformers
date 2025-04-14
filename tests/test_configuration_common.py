@@ -89,7 +89,8 @@ class ConfigTester:
             json_file_path = os.path.join(tmpdirname, "config.json")
             config_first.to_json_file(json_file_path)
             config_second = self.config_class.from_json_file(json_file_path)
-
+        print(f"config_first: {config_first.to_dict()}")
+        print(f"config_second: {config_second.to_dict()}")
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def create_and_test_config_from_and_save_pretrained(self):

@@ -64,9 +64,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"position_embedding":                          r"position_embeddings",
     r"patch_embedding":                             r"patch_embeddings.projection",
     r"ls(\d+)":                                     r"lambda_\1",
-    r"attn.proj":                                   r"attention.output.dense",
-    r"mlp.fc1":                                     r"intermediate.dense",
-    r"mlp.fc2":                                     r"output.dense",
+    r"attn.proj":                                   r"attention.output",
+    r"mlp.fc1":                                     r"mlp.up_proj",
+    r"mlp.fc2":                                     r"mlp.down_proj",
     r"norm1":                                       r"layernorm_before",
     r"norm2":                                       r"layernorm_after",
 
@@ -216,13 +216,13 @@ def write_model(
     for key in all_keys:
         new_key = new_keys[key]
         if "attn.qkv" in key:
-            new_key_query = new_key.replace("attn.qkv", "attention.attention.query")
+            new_key_query = new_key.replace("attn.qkv", "attention.query")
             state_dict[new_key_query] = state_dict_old[key][:dim]
 
-            new_key_key = new_key.replace("attn.qkv", "attention.attention.key")
+            new_key_key = new_key.replace("attn.qkv", "attention.key")
             state_dict[new_key_key] = state_dict_old[key][dim : 2 * dim]
 
-            new_key_value = new_key.replace("attn.qkv", "attention.attention.value")
+            new_key_value = new_key.replace("attn.qkv", "attention.value")
             state_dict[new_key_value] = state_dict_old[key][-dim:]
         elif "attention.wqkv" in key:
             num_key_value_groups = config.text_config.num_attention_heads // config.text_config.num_key_value_heads
