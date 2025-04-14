@@ -42,7 +42,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
 from .configuration_phimoe import PhimoeConfig
 
 
