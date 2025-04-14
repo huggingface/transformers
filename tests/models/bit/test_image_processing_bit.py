@@ -1,4 +1,5 @@
-# Copyright 2022 HuggingFace Inc.
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
@@ -22,13 +22,13 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_vision_available():
-    from transformers import MobileNetV2ImageProcessor
+    from transformers import BitImageProcessor
 
     if is_torchvision_available():
-        from transformers import MobileNetV2ImageProcessorFast
+        from transformers import BitImageProcessorFast
 
 
-class MobileNetV2ImageProcessingTester:
+class BitImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -41,7 +41,12 @@ class MobileNetV2ImageProcessingTester:
         size=None,
         do_center_crop=True,
         crop_size=None,
+        do_normalize=True,
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
+        do_convert_rgb=True,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -54,6 +59,10 @@ class MobileNetV2ImageProcessingTester:
         self.size = size
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.do_convert_rgb = do_convert_rgb
 
     def prepare_image_processor_dict(self):
         return {
@@ -61,6 +70,10 @@ class MobileNetV2ImageProcessingTester:
             "size": self.size,
             "do_center_crop": self.do_center_crop,
             "crop_size": self.crop_size,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
+            "do_convert_rgb": self.do_convert_rgb,
         }
 
     def expected_output_image_shape(self, images):
@@ -80,13 +93,13 @@ class MobileNetV2ImageProcessingTester:
 
 @require_torch
 @require_vision
-class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = MobileNetV2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = MobileNetV2ImageProcessorFast if is_torchvision_available() else None
+class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = BitImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BitImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = MobileNetV2ImageProcessingTester(self)
+        self.image_processor_tester = BitImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -94,11 +107,15 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "do_center_crop"))
-            self.assertTrue(hasattr(image_processor, "crop_size"))
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "center_crop"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
