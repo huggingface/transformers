@@ -45,11 +45,11 @@ from ...video_processing_utils_fast import (
     BaseVideoProcessorFast,
 )
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .image_processing_qwen2_vl import smart_resize
 
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
+    from .image_processing_qwen2_vl import smart_resize
 
     if is_torchvision_available():
         if is_torchvision_v2_available():

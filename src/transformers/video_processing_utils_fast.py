@@ -50,6 +50,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -140,6 +141,7 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     "Constructs a fast base VideoProcessor.",
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
 )
+@requires(backends=("vision", "torchvision"))
 class BaseVideoProcessorFast(BaseImageProcessorFast):
     _auto_class = None
 
