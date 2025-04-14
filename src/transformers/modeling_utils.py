@@ -291,10 +291,10 @@ def get_torch_device_context_manager():
     """
     Test if a device context manager is currently in use.
     """
-    test = torch.zeros(1)
-    if test.device == torch.get_default_device():
+    device_in_context = torch.tensor([]).device
+    if device_in_context == torch.get_default_device():
         return None
-    return test.device
+    return device_in_context
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -4166,6 +4166,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Potentially detect device context manager and use it
         if device_map is None:
             device_in_context = get_torch_device_context_manager()
+            if device_in_context == torch.device("meta"):
+                raise ValueError(
+                    (
+                        "`from_pretrained` is not compatible with a meta device context manager as its purpose is to load weights. If "
+                        "you want to initialize a model on the meta device, use the context manager with `from_config`, or `ModelClass(config)`"
+                    )
+                )
             device_map = device_in_context
 
         # change device_map into a map if we passed an int, a str or a torch.device
@@ -4192,7 +4199,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
             if not is_accelerate_available():
                 raise ValueError(
-                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
+                    "Using a `device_map`, `tp_plan` or a `torch.device` context manager requires `accelerate`. You can install it with `pip install accelerate`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.

@@ -4454,6 +4454,39 @@ class ModelTesterMixin:
                 ),
             )
 
+    @require_torch_accelerator
+    def test_can_load_with_device_context_manager(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        device = torch.device(torch_device)
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                with device:
+                    new_model = model_class.from_pretrained(tmpdirname)
+                unique_devices = {param.device for param in new_model.parameters()} | {
+                    buffer.device for buffer in new_model.buffers()
+                }
+
+            self.assertEqual(
+                unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
+            )
+
+    def test_cannot_load_with_meta_device_context_manager(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # This should raise an error with meta device
+                with self.assertRaises(ValueError, msg="`from_pretrained` is not compatible with a meta device"):
+                    with torch.device("meta"):
+                        _ = model_class.from_pretrained(tmpdirname)
+
 
 global_rng = random.Random()
 
