@@ -14,18 +14,45 @@
 # limitations under the License.
 """Fast Image processor class for DPT."""
 
-from collections.abc import Iterable
 import math
-from typing import Dict, Optional, Tuple, Union
-
-from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import get_resize_output_image_size, get_size_with_aspect_ratio, group_images_by_shape, reorder_images
-from transformers.processing_utils import Unpack
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format, is_pil_image, make_list_of_images, to_numpy_array
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available
+from collections.abc import Iterable
+from typing import Optional, Tuple, Union
 
 import numpy as np
+
+from transformers.image_processing_base import BatchFeature
+from transformers.image_transforms import (
+    get_resize_output_image_size,
+    get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
+)
+
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    get_image_size_for_max_height_width,
+    infer_channel_dimension_format,
+    is_pil_image,
+)
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
 
 if is_torch_available():
     import torch
@@ -35,6 +62,7 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+
 
 def get_output_image_size_for_ensure_multiple(
     # TODO type should be torch.Tensor
@@ -78,23 +106,27 @@ def get_output_image_size_for_ensure_multiple(
 
     return (new_height, new_width)
 
+
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     size_divisor: Optional[int]
     do_pad: Optional[bool]
     ensure_multiple_of: Optional[int]
     keep_aspect_ratio: Optional[bool]
-    segmentation_maps: Optional[ImageInput] = None,
+    segmentation_maps: Optional[ImageInput] = (None,)
 
-DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = f"""
+
+DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = """
  Args:
     ensure_multiple_of (`int`, *optional*, defaults to 1):
     If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
     by `ensure_multiple_of` in `preprocess`.
 """
+
+
 @add_start_docstrings(
     "Constructs a fast DPT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING
+    DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING,
 )
 class DPTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
@@ -121,7 +153,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     size_divisor = None
 
     valid_kwargs = DPTFastImageProcessorKwargs
-
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
     def __call__(self, images, segmentation_maps=None, **kwargs):
@@ -189,10 +220,26 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
                 segmentation_maps = segmentation_maps.unsqueeze(0)
                 added_dimension = True
-                
 
             segmentation_maps = self._prepare_input_images(segmentation_maps)
-            processed_maps = self._preprocess_images(images=segmentation_maps, do_resize=do_resize, size=size, interpolation=interpolation, do_center_crop=do_center_crop, crop_size=crop_size, do_rescale=False, rescale_factor=rescale_factor, do_normalize=False, image_mean=image_mean, image_std=image_std, return_tensors=return_tensors, size_divisor=size_divisor, do_pad=do_pad, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+            processed_maps = self._preprocess_images(
+                images=segmentation_maps,
+                do_resize=do_resize,
+                size=size,
+                interpolation=interpolation,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=False,
+                rescale_factor=rescale_factor,
+                do_normalize=False,
+                image_mean=image_mean,
+                image_std=image_std,
+                return_tensors=return_tensors,
+                size_divisor=size_divisor,
+                do_pad=do_pad,
+                ensure_multiple_of=ensure_multiple_of,
+                keep_aspect_ratio=keep_aspect_ratio,
+            )
             if added_dimension and isList:
                 processed_maps = processed_maps.squeeze(1).long()
             elif added_dimension:
@@ -200,32 +247,38 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = processed_maps
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-    
+
     def _preprocess_images(
-            self,
-            images: list["torch.Tensor"],
-            do_resize: bool,
-            do_center_crop: bool,
-            do_pad: bool,
-            return_tensors: bool,
-            do_rescale: bool,
-            rescale_factor: float,
-            size: SizeDict,
-            interpolation: Optional["F.InterpolationMode"],
-            ensure_multiple_of: Optional[int],
-            keep_aspect_ratio: bool,
-            crop_size: SizeDict,
-            do_normalize: bool,
-            image_mean: Optional[Union[float, list[float]]],
-            image_std: Optional[Union[float, list[float]]],
-            size_divisor: Optional[int],
-            **kwargs,
-        ) -> "torch.Tensor":
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        do_center_crop: bool,
+        do_pad: bool,
+        return_tensors: bool,
+        do_rescale: bool,
+        rescale_factor: float,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        ensure_multiple_of: Optional[int],
+        keep_aspect_ratio: bool,
+        crop_size: SizeDict,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        size_divisor: Optional[int],
+        **kwargs,
+    ) -> "torch.Tensor":
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=size,
+                    interpolation=interpolation,
+                    ensure_multiple_of=ensure_multiple_of,
+                    keep_aspect_ratio=keep_aspect_ratio,
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -238,7 +291,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # TODO: use batched tensor method, eg pad_images, or a version of pad_image that can detect if images are batched
             if do_pad:
-                stacked_images = torch.stack([self.pad_image(image, size_divisor ) for image in stacked_images])
+                stacked_images = torch.stack([self.pad_image(image, size_divisor) for image in stacked_images])
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -283,7 +336,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
-        
+
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -321,7 +374,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 Whether to use antialiasing when resizing the image
             ensure_multiple_of (`int`, *optional*):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value
-            
+
         Returns:
             `torch.Tensor`: The resized image.
         """
@@ -344,7 +397,9 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         elif size.max_height and size.max_width:
             new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
         elif ensure_multiple_of > 1:
-            new_size = get_output_image_size_for_ensure_multiple(image, (size.height, size.width), keep_aspect_ratio=keep_aspect_ratio, multiple=ensure_multiple_of)
+            new_size = get_output_image_size_for_ensure_multiple(
+                image, (size.height, size.width), keep_aspect_ratio=keep_aspect_ratio, multiple=ensure_multiple_of
+            )
         elif size.height and size.width:
             new_size = (size.height, size.width)
 
@@ -354,5 +409,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 f" {size}."
             )
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+
 
 __all__ = ["DPTImageProcessorFast"]
