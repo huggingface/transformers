@@ -28,7 +28,6 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    PILImageResampling,
     SizeDict,
     get_image_size,
 )
@@ -39,6 +38,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    is_vision_available,
 )
 from ...video_processing_utils_fast import (
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
@@ -48,14 +48,18 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
+if is_vision_available():
+    from ...image_utils import PILImageResampling
+
+    if is_torchvision_available():
+        if is_torchvision_v2_available():
+            from torchvision.transforms.v2 import functional as F
+        else:
+            from torchvision.transforms import functional as F
+
+
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
@@ -155,7 +159,7 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
             if patches.shape[1] % self.temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=0)
+                patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // self.temporal_patch_size

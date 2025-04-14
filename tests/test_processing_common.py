@@ -1026,6 +1026,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
 
     @require_av
+    @require_torch
     def test_apply_chat_template_video_special_processing(self):
         """
         Tests that models can use their own preprocessing to preprocess conversations.
@@ -1083,7 +1084,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
 
