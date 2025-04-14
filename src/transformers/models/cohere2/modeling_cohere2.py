@@ -28,7 +28,6 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -268,7 +267,6 @@ class Cohere2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("MLP")
 class Cohere2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -426,6 +424,8 @@ class Cohere2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Cohere2LayerNorm):
+            module.weight.data.fill_(1.0)
 
 
 COHERE2_INPUTS_DOCSTRING = r"""

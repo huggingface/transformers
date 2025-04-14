@@ -32,6 +32,13 @@ try:
                 layer_name="MultiScaleDeformableAttention",
             )
         },
+        "Llama4TextMoe": {
+            "cuda": LayerRepository(
+                # Move to kernels-community/moe once we release.
+                repo_id="kernels-community/moe",
+                layer_name="Llama4TextMoe",
+            )
+        },
         "RMSNorm": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/triton-layer-norm",
