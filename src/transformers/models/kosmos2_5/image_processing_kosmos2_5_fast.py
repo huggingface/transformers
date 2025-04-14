@@ -223,7 +223,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         if kwargs.get("data_format", None) is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
-        flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
+        width, height, rows, cols, attention_masks = [], [], [], [], []
 
         # Group images by size for batched resizing
         processed_image_patches_grouped = {}
@@ -240,31 +240,33 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
                 max_patches=max_patches,
                 patch_size=patch_size,
             )
+
+            # we need to reorder this too!
             n_of_stacked_images = stacked_images.size()[0]
-            flattened_patches.extend([x for x in f])
             width.extend([w] * n_of_stacked_images)
             height.extend([h] * n_of_stacked_images)
             rows.extend([r] * n_of_stacked_images)
             cols.extend([c] * n_of_stacked_images)
             # create attention mask in numpy
             attention_masks.extend([x for x in (f.sum(axis=-1) != 0).to(dtype=torch.float32)])
+
             processed_image_patches_grouped[shape] = f
 
-        processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_images_index)
+        flattened_patches = reorder_images(processed_image_patches_grouped, grouped_images_index)
 
-        # encoded_outputs = BatchFeature(
-        #     data={
-        #         "flattened_patches": flattened_patches,
-        #         "attention_mask": attention_masks,
-        #         "width": width,
-        #         "height": height,
-        #         "rows": rows,
-        #         "cols": cols,
-        #     },
-        #     tensor_type=return_tensors,
-        # )
-        #
-        # return encoded_outputs
+        encoded_outputs = BatchFeature(
+            data={
+                "flattened_patches": flattened_patches,
+                "attention_mask": attention_masks,
+                "width": width,
+                "height": height,
+                "rows": rows,
+                "cols": cols,
+            },
+            tensor_type=return_tensors,
+        )
+
+        return encoded_outputs
 
 
 __all__ = ["Kosmos2_5ImageProcessorFast"]
