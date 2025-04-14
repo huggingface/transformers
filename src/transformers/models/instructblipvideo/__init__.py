@@ -18,9 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_instructblip import *
-    from .modeling_instructblip import *
-    from .processing_instructblip import *
+    from .configuration_instructblipvideo import *
+    from .image_processing_instructblipvideo import *
+    from .modeling_instructblipvideo import *
+    from .processing_instructblipvideo import *
+    from .video_processing_instructblipvideo import *
 else:
     import sys
 

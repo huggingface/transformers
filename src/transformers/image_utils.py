@@ -66,6 +66,8 @@ if is_vision_available():
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
+    else:
+        pil_torch_interpolation_mapping = {}
 
 if TYPE_CHECKING:
     if is_torch_available():

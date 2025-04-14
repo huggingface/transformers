@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,17 @@
 # limitations under the License.
 
 
+import copy
 import json
 import os
 import unittest
+from functools import lru_cache
 
 from transformers import AddedToken, Qwen2Tokenizer, Qwen2TokenizerFast
 from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
 from transformers.testing_utils import require_tokenizers, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_tokenizers
@@ -36,8 +37,9 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_kwargs = None
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # this make sure the vocabuary is complete at the byte level.
         vocab = list(bytes_to_unicode().values())
@@ -81,22 +83,34 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "# #",
         ]
 
-        self.special_tokens_map = {"eos_token": "<|endoftext|>"}
+        cls.special_tokens_map = {"eos_token": "<|endoftext|>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Qwen2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        _kwargs = copy.deepcopy(cls.special_tokens_map)
+        _kwargs.update(kwargs)
+        kwargs = _kwargs
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Qwen2Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Qwen2TokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        _kwargs = copy.deepcopy(cls.special_tokens_map)
+        _kwargs.update(kwargs)
+        kwargs = _kwargs
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Qwen2TokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         # this case should cover

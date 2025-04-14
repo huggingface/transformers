@@ -56,39 +56,6 @@ from .configuration_instructblipvideo import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
-    """
-    Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Language modeling loss from the language model.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head of the language model.
-        vision_outputs (`BaseModelOutputWithPooling`):
-            Outputs of the vision encoder.
-        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
-            Outputs of the Q-Former (Querying Transformer).
-        language_model_outputs (`CausalLMOutputWithPast` or `Seq2SeqLMOutput`):
-            Outputs of the language model.
-    """
-
-    loss: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    vision_outputs: Optional[torch.FloatTensor] = None
-    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
-    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k]
-            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
-            else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
-
-
 class InstructBlipVideoVisionEmbeddings(nn.Module):
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__()
@@ -201,8 +168,161 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+class InstructBlipVideoAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = nn.Dropout(config.attention_dropout)
+
+        # small tweak here compared to CLIP, no bias here
+        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
+
+        if config.qkv_bias:
+            q_bias = nn.Parameter(torch.zeros(self.embed_dim))
+            v_bias = nn.Parameter(torch.zeros(self.embed_dim))
+        else:
+            q_bias = None
+            v_bias = None
+
+        if q_bias is not None:
+            qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+            self.qkv.bias = nn.Parameter(qkv_bias)
+
+        self.projection = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        mixed_qkv = self.qkv(hidden_states)
+
+        mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
+            2, 0, 3, 1, 4
+        )
+        query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+
+        attention_scores = attention_scores * self.scale
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        output = self.projection(context_layer)
+
+        outputs = (output, attention_probs) if output_attentions else (output, None)
+
+        return outputs
+
+
+class InstructBlipVideoMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class InstructBlipVideoEncoderLayer(nn.Module):
+    def __init__(self, config: InstructBlipVideoConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = InstructBlipVideoAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = InstructBlipVideoMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            head_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = hidden_states + residual
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+
+        hidden_states = hidden_states + residual
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class InstructBlipVideoEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`InstructBlipVideoEncoderLayer`].
+
+    Args:
+        config (`InstructBlipVideoConfig`):
+            The corresponding vision configuration for the `InstructBlipVideoEncoder`.
+    """
+
+    def __init__(self, config: InstructBlipVideoConfig):
         super().__init__()
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -1186,6 +1306,39 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
         return self.embeddings
 
 
+@dataclass
+class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
+    """
+    Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
+
+    Args:
+        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Language modeling loss from the language model.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head of the language model.
+        vision_outputs (`BaseModelOutputWithPooling`):
+            Outputs of the vision encoder.
+        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+            Outputs of the Q-Former (Querying Transformer).
+        language_model_outputs (`CausalLMOutputWithPast` or `Seq2SeqLMOutput`):
+            Outputs of the language model.
+    """
+
+    loss: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    vision_outputs: Optional[torch.FloatTensor] = None
+    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
+    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k]
+            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
+            else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
 INSTRUCTBLIPVIDEO_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1680,8 +1833,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
 
 __all__ = [
-    "InstructBlipVideoQFormerModel",
-    "InstructBlipVideoPreTrainedModel",
     "InstructBlipVideoVisionModel",
+    "InstructBlipVideoPreTrainedModel",
+    "InstructBlipVideoQFormerModel",
     "InstructBlipVideoForConditionalGeneration",
 ]

@@ -161,6 +161,8 @@
   sections:
   - local: quantization/overview
     title: Overview
+  - local: quantization/selecting
+    title: Selecting a quantization method
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/awq
@@ -306,8 +308,6 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: main_classes/agent
-      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/backbones
@@ -417,6 +417,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
@@ -461,6 +463,8 @@
         title: Gemma2
       - local: model_doc/glm
         title: GLM
+      - local: model_doc/glm4
+        title: glm4
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -507,6 +511,8 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/llama4
+        title: Llama4
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -603,6 +609,10 @@
         title: Qwen2
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -813,6 +823,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -1068,6 +1080,8 @@
       title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/import_utils
+      title: Importing Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers
