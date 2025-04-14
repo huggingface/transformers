@@ -57,7 +57,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent.parent / "kernels" / "deta"
     src_files = [
         root / filename
         for filename in [
@@ -2822,3 +2822,6 @@ class DetaStage1Assigner(nn.Module):
 
     def postprocess_indices(self, pr_inds, gt_inds, iou):
         return sample_topk_per_gt(pr_inds, gt_inds, iou, self.k)
+
+
+__all__ = ["DetaForObjectDetection", "DetaModel", "DetaPreTrainedModel"]
