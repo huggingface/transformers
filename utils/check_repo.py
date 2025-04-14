@@ -38,11 +38,12 @@ import types
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import List, Tuple
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
-from transformers.models.auto import get_values
+from transformers.models.auto.auto_factory import get_values
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
@@ -192,7 +193,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapAudioModelWithProjection",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
-    "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",
@@ -419,6 +419,8 @@ def check_model_list():
     Checks the model listed as subfolders of `models` match the models available in `transformers.models`.
     """
     # Get the models from the directory structure of `src/transformers/models/`
+    import transformers as tfrs
+
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
@@ -426,10 +428,15 @@ def check_model_list():
             continue
         model_dir = os.path.join(models_dir, model)
         if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+            # If the init is empty, and there are only two files, it's likely that there's just a conversion
+            # script. Those should not be in the init.
+            if (Path(model_dir) / "__init__.py").read_text().strip() == "":
+                continue
+
             _models.append(model)
 
     # Get the models in the submodule `transformers.models`
-    models = [model for model in dir(transformers.models) if not model.startswith("__")]
+    models = [model for model in dir(tfrs.models) if not model.startswith("__")]
 
     missing_models = sorted(set(_models).difference(models))
     if missing_models:
@@ -461,7 +468,7 @@ def get_model_modules() -> List[str]:
     modules = []
     for model in dir(transformers.models):
         # There are some magic dunder attributes in the dir, we ignore them
-        if model == "deprecated" or model.startswith("__"):
+        if "deprecated" in model or model.startswith("__"):
             continue
 
         model_module = getattr(transformers.models, model)
@@ -843,6 +850,8 @@ def check_objects_being_equally_in_main_init():
     failures = []
     for attr in attrs:
         obj = getattr(transformers, attr)
+        if hasattr(obj, "__module__") and isinstance(obj.__module__, ModuleSpec):
+            continue
         if not hasattr(obj, "__module__") or "models.deprecated" in obj.__module__:
             continue
 
@@ -1017,6 +1026,7 @@ UNDOCUMENTED_OBJECTS = [
     "AltRobertaModel",  # Internal module
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
+    "get_values",  # Internal object
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
@@ -1060,6 +1070,7 @@ def ignore_undocumented(name: str) -> bool:
         or name.endswith("Layer")
         or name.endswith("Embeddings")
         or name.endswith("Attention")
+        or name.endswith("OnnxConfig")
     ):
         return True
     # Submodules are not documented.

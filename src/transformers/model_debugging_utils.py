@@ -21,7 +21,7 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
-from transformers.utils.import_utils import export
+from transformers.utils.import_utils import requires
 
 from .utils import is_torch_available
 
@@ -296,7 +296,7 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
     model.forward = top_wrapped_forward
 
 
-@export(backends=("torch",))
+@requires(backends=("torch",))
 def model_addition_debugger(cls):
     """
     # Model addition debugger - a model adder tracer
@@ -353,7 +353,7 @@ def model_addition_debugger(cls):
     return cls
 
 
-@export(backends=("torch",))
+@requires(backends=("torch",))
 @contextmanager
 def model_addition_debugger_context(model, debug_path: Optional[str] = None):
     """
