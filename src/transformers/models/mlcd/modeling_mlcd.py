@@ -590,6 +590,8 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+        if isinstance(module, nn.Parameter):
+            module.data.fill_(1.0)
 
 
 MLCD_START_DOCSTRING = r"""
