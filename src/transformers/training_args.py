@@ -294,6 +294,9 @@ class TrainingArguments:
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
             For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
             `max_steps` is reached.
+        max_eval_batches (`int`, *optional*, defaults to -1)
+            The maximum number of evaluation samples batches to be used per epoch during training only.
+           The whole evaluation dataset will be used during training by default
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
         lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
@@ -902,6 +905,12 @@ class TrainingArguments:
     max_steps: int = field(
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
+    )
+    max_eval_batches: int = field(
+        default=-1,
+        metadata={
+            "help": "If > 0: sets the number of evaluation samples batches used per epoch during training. If not set, evaluation during training will use all evaluation samples."
+        },
     )
     lr_scheduler_type: Union[SchedulerType, str] = field(
         default="linear",
