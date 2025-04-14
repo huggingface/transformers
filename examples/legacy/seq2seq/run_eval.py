@@ -20,7 +20,6 @@ import time
 import warnings
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
 
 import torch
 from tqdm import tqdm
@@ -36,7 +35,7 @@ DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def generate_summaries_or_translations(
-    examples: List[str],
+    examples: list[str],
     out_file: str,
     model_name: str,
     batch_size: int = 8,
@@ -45,7 +44,7 @@ def generate_summaries_or_translations(
     task="summarization",
     prefix=None,
     **generate_kwargs,
-) -> Dict:
+) -> dict:
     """Save model.generate results to <out_file>, and return how long it took."""
     fout = Path(out_file).open("w", encoding="utf-8")
     model_name = str(model_name)

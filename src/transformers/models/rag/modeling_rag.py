@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -1122,7 +1122,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
-class RagTokenForGeneration(RagPreTrainedModel):
+class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,

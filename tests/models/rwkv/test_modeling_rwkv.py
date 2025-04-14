@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -252,7 +251,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
 
         if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            standardMsg = f"{safe_repr(member)} not found in {safe_repr(container)}"
             self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):

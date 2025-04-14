@@ -30,6 +30,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import requires
 from ..xlm_roberta.tokenization_xlm_roberta import (
     SPIECE_UNDERLINE,
     VOCAB_FILES_NAMES,
@@ -143,6 +144,7 @@ LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("sentencepiece",))
 class LayoutXLMTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
