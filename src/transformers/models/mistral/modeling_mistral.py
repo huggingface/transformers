@@ -318,6 +318,8 @@ class MistralPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MistralRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class MistralRotaryEmbedding(nn.Module):

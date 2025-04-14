@@ -358,6 +358,8 @@ class Qwen3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Qwen3RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class Qwen3RotaryEmbedding(nn.Module):
