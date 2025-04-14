@@ -4483,12 +4483,13 @@ class ModelTesterMixin:
         # Need to specify index 0 here, as `torch_device` is simply the str of the type, e.g. "cuda"
         device = torch.device(torch_device, index=0)
         default_device = torch.get_default_device()
-        # set a global gpu device
-        torch.set_default_device(device)
         for model_class in self.all_model_classes:
             # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
             # is not supported for e.g. dpt_hybrid)
             model = model_class(copy.deepcopy(config))
+
+            # set a global gpu device
+            torch.set_default_device(device)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
