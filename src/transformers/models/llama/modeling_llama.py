@@ -160,7 +160,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_forward_from_hub("MLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -390,6 +389,8 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, LlamaRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 LLAMA_INPUTS_DOCSTRING = r"""

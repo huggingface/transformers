@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -58,7 +57,6 @@ class OlmoLayerNorm(nn.Module):
         )
 
 
-@use_kernel_forward_from_hub("MLP")
 class OlmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -824,3 +822,6 @@ class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]

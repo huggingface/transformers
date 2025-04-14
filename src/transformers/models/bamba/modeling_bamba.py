@@ -882,7 +882,6 @@ class BambaMixer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
-@use_kernel_forward_from_hub("MLP")
 class BambaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1053,10 +1052,16 @@ class BambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, (BambaRMSNormGated, BambaRMSNorm)):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, BambaMixer):
+            module.dt_bias.data.fill_(1.0)
+            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
+            module.D.data.fill_(1.0)
 
 
 BAMBA_INPUTS_DOCSTRING = r"""

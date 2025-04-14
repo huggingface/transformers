@@ -27,7 +27,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -85,7 +84,6 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-@use_kernel_forward_from_hub("MLP")
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -383,6 +381,8 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, GemmaRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 GEMMA_INPUTS_DOCSTRING = r"""

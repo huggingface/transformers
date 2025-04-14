@@ -218,7 +218,6 @@ class Olmo2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("MLP")
 class Olmo2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -366,6 +365,8 @@ class Olmo2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Olmo2RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 OLMO2_INPUTS_DOCSTRING = r"""
