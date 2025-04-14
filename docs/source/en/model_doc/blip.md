@@ -88,6 +88,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] BlipTextModel
     - forward
 
+## BlipTextLMHeadModel
+
+[[autodoc]] BlipTextLMHeadModel
+- forward
+
 ## BlipVisionModel
 
 [[autodoc]] BlipVisionModel
@@ -122,6 +127,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] TFBlipTextModel
     - call
+
+## TFBlipTextLMHeadModel
+
+[[autodoc]] TFBlipTextLMHeadModel
+- forward
 
 ## TFBlipVisionModel
 

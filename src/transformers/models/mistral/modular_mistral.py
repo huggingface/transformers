@@ -20,6 +20,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -42,6 +43,7 @@ class MistralMLP(LlamaMLP):
 class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -103,6 +105,10 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MistralMLP(config)
+
+
+class MistralPreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 class MistralModel(LlamaModel):
@@ -185,7 +191,7 @@ class MistralModel(LlamaModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -343,3 +349,13 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MistralForCausalLM",
+    "MistralForQuestionAnswering",
+    "MistralModel",
+    "MistralPreTrainedModel",
+    "MistralForSequenceClassification",
+    "MistralForTokenClassification",
+]
