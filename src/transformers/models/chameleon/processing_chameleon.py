@@ -22,10 +22,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):

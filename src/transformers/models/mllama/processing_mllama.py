@@ -26,10 +26,6 @@ from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):

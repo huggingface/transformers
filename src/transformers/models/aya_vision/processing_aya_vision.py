@@ -29,10 +29,6 @@ from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
 )
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class AyaVisionImagesKwargs(ImagesKwargs, total=False):
@@ -149,16 +145,13 @@ class AyaVisionProcessor(ProcessorMixin):
 
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"
-        num_image_token = 1
         if num_patches > 1:
             for idx in range(1, num_patches):
                 img_string += f"{self.tile_token}_{idx}" + f"{self.img_patch_token}" * img_patches_per_tile
-                num_image_token += img_patches_per_tile + 1
 
         img_string += f"{self.tile_global_token}" + f"{self.img_patch_token}" * img_patches_per_tile
         img_string += f"{self.end_of_img_token}"
-        num_image_token += img_patches_per_tile + 2
-        return img_string, num_image_token
+        return img_string
 
     def __call__(
         self,
@@ -222,7 +215,7 @@ class AyaVisionProcessor(ProcessorMixin):
                 new_prompt = prompt
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
-                    image_tokens, num_image_token = self._prompt_split_image(num_patches[image_index])
+                    image_tokens = self._prompt_split_image(num_patches[image_index])
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
                     image_index += 1
                 processed_text.append(new_prompt)

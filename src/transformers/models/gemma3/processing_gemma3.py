@@ -22,10 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging, to_py_obj
-
-
-logger = logging.get_logger(__name__)
+from ...utils import to_py_obj
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):

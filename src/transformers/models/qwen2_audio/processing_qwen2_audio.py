@@ -24,11 +24,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
-
-
-logger = logging.get_logger(__name__)
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
