@@ -125,7 +125,7 @@ def is_scaled_video(video: np.ndarray) -> bool:
     return np.min(video) >= 0 and np.max(video) <= 1
 
 
-def convert_videos_to_array(videos: List[VideoInput]) -> List[Union["np.ndarray", "torch.Tensor"]]:
+def convert_pil_frames_to_video(videos: List[VideoInput]) -> List[Union["np.ndarray", "torch.Tensor"]]:
     """
     Given a batch of videos, converts each video to a 4D array. If video is already in array type,
     it is simply returned. We assume that all inputs in the list are in the same format, based on the type of the first element.
@@ -168,10 +168,13 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
         pass
     elif is_valid_video(videos):
         videos = [videos]
-    # only one frame passed, thus we make a batched video
-    elif is_valid_image(videos):
-        videos = [[videos]]
-    return convert_videos_to_array(videos)
+    # only one frame passed, thus we unsqueeze time dim
+    elif is_valid_image(videos) and not isinstance(videos, PIL.Image.Image):
+        videos = [np.array(videos)[None, ...]]
+    # nested batch so we need to unflatten
+    elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
+        return [video for sublist in videos for video in sublist]
+    return convert_pil_frames_to_video(videos)
 
 
 def infer_channel_dimension_format(
