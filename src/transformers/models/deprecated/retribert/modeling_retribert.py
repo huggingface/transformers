@@ -212,3 +212,6 @@ class RetriBertModel(RetriBertPreTrainedModel):
         loss_aq = self.ce_loss(compare_scores.t(), torch.arange(compare_scores.shape[0]).to(device))
         loss = (loss_qa + loss_aq) / 2
         return loss
+
+
+__all__ = ["RetriBertModel", "RetriBertPreTrainedModel"]

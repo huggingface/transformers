@@ -849,6 +849,22 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
     supports_binary_output=True,
 )
 
+SUPPORTED_PEFT_TASKS = {
+    "document-question-answering": ["PeftModelForQuestionAnswering"],
+    "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
+    "question-answering": ["PeftModelForQuestionAnswering"],
+    "summarization": ["PeftModelForSeq2SeqLM"],
+    "table-question-answering": ["PeftModelForQuestionAnswering"],
+    "text2text-generation": ["PeftModelForSeq2SeqLM"],
+    "text-classification": ["PeftModelForSequenceClassification"],
+    "sentiment-analysis": ["PeftModelForSequenceClassification"],
+    "text-generation": ["PeftModelForCausalLM"],
+    "token-classification": ["PeftModelForTokenClassification"],
+    "ner": ["PeftModelForTokenClassification"],
+    "translation": ["PeftModelForSeq2SeqLM"],
+    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
+    "zero-shot-classification": ["PeftModelForSequenceClassification"],
+}
 
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
@@ -1209,6 +1225,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
             supported_models_names = []
+            if self.task in SUPPORTED_PEFT_TASKS:
+                supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
+
             for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):

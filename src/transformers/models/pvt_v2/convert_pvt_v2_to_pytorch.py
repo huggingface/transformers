@@ -207,7 +207,7 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
         )
     config = PvtV2Config.from_pretrained(config_path)
     # load original model from https://github.com/whai362/PVT
-    state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu")
+    state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu", weights_only=True)
 
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -341,7 +340,7 @@ class TFVisionEncoderDecoderMixin:
         self.check_encoder_decoder_model_generate(**config_inputs_dict)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
 
     @slow

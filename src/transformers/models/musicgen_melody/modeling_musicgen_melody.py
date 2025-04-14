@@ -2563,3 +2563,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             return outputs
         else:
             return output_values
+
+
+__all__ = [
+    "MusicgenMelodyForConditionalGeneration",
+    "MusicgenMelodyForCausalLM",
+    "MusicgenMelodyModel",
+    "MusicgenMelodyPreTrainedModel",
+]

@@ -301,10 +301,8 @@ class SwitchTransformersSparseMLP(nn.Module):
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
-
-        next_states = hidden_states.clone()
+        # If a token gets dropped, we just set it to zero such that it does not get updated.
+        next_states = torch.zeros(hidden_states.shape, device=hidden_states.device, dtype=hidden_states.dtype)
 
         router_mask = router_mask.bool()
         batch_size, seq_len, num_experts = router_mask.shape
@@ -1193,7 +1191,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

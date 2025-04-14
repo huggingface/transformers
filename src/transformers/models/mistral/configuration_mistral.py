@@ -143,7 +143,7 @@ class MistralConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
-        self.head_dim = head_dim or hidden_size // num_attention_heads
+        self.head_dim = head_dim
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -164,3 +164,6 @@ class MistralConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["MistralConfig"]

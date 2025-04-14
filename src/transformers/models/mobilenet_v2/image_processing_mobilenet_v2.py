@@ -44,9 +44,13 @@ if is_torch_available():
     import torch
 
 
+from ...utils.import_utils import requires
+
+
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileNetV2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileNetV2 image processor.

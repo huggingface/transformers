@@ -51,7 +51,7 @@ def convert_FastSpeech2ConformerWithHifiGan_checkpoint(
 
     model = FastSpeech2ConformerModel(model_config)
 
-    espnet_checkpoint = torch.load(checkpoint_path)
+    espnet_checkpoint = torch.load(checkpoint_path, weights_only=True)
     hf_compatible_state_dict = convert_espnet_state_dict_to_hf(espnet_checkpoint)
     model.load_state_dict(hf_compatible_state_dict)
 

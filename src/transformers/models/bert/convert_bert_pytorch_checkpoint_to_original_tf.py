@@ -101,7 +101,7 @@ def main(raw_args=None):
 
     model = BertModel.from_pretrained(
         pretrained_model_name_or_path=args.model_name,
-        state_dict=torch.load(args.pytorch_model_path),
+        state_dict=torch.load(args.pytorch_model_path, weights_only=True),
         cache_dir=args.cache_dir,
     )
 

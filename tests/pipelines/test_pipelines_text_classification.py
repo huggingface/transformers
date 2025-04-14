@@ -48,9 +48,9 @@ class TextClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    if model_mapping is not None:
+    if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if tf_model_mapping is not None:
+    if not hasattr(tf_model_mapping, "is_dummy"):
         tf_model_mapping = {
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }

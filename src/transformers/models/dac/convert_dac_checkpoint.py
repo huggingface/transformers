@@ -205,7 +205,7 @@ def convert_checkpoint(
     sample_rate=16000,
     repo_id=None,
 ):
-    model_dict = torch.load(checkpoint_path, "cpu")
+    model_dict = torch.load(checkpoint_path, "cpu", weights_only=True)
 
     config = DacConfig()
 

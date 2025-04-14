@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ from __future__ import annotations
 
 import inspect
 import unittest
-from typing import List, Tuple
 
 from transformers import SegformerConfig
 from transformers.file_utils import is_tf_available, is_vision_available
@@ -147,7 +145,7 @@ class TFSegformerModelTester:
         if for_segmentation:
             inputs_dict = {"pixel_values": pixel_values, "labels": seg_labels}
         else:
-            inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros((self.batch_size))}
+            inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros(self.batch_size)}
         return config, inputs_dict
 
 
@@ -298,7 +296,7 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
             dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
             def recursive_check(tuple_object, dict_object):
-                if isinstance(tuple_object, (List, Tuple)):
+                if isinstance(tuple_object, (list, tuple)):
                     for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                         recursive_check(tuple_iterable_value, dict_iterable_value)
                 elif tuple_object is None:

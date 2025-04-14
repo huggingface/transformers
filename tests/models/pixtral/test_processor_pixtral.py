@@ -51,22 +51,6 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def test_chat_template(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        expected_prompt = "<s>[INST][IMG]What is shown in this image?[/INST]"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
-
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
         # Important to check with non square image

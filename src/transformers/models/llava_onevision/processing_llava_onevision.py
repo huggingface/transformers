@@ -298,13 +298,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.video_processor.save_pretrained(video_processor_path)
 
         video_processor_present = "video_processor" in self.attributes
-        if video_processor_present:
-            self.attributes.remove("video_processor")
+        try:
+            if video_processor_present:
+                self.attributes.remove("video_processor")
 
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if video_processor_present:
-            self.attributes += ["video_processor"]
+            outputs = super().save_pretrained(save_directory, **kwargs)
+        finally:
+            if video_processor_present:
+                self.attributes += ["video_processor"]
         return outputs
 
     # override to load video-config from a separate config file

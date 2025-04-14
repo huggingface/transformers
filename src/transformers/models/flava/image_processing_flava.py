@@ -37,6 +37,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -133,6 +134,7 @@ class FlavaMaskingGenerator:
         return mask
 
 
+@requires(backends=("vision",))
 class FlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Flava image processor.

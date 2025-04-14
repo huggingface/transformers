@@ -40,7 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_vision_available, requires
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@requires(backends=("vision",))
 class DonutImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Donut image processor.

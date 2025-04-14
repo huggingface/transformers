@@ -22,6 +22,7 @@ from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
 from .image_utils import ChannelDimension, get_image_size
 from .utils import logging
+from .utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +34,7 @@ INIT_SERVICE_KWARGS = [
 ]
 
 
+@requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

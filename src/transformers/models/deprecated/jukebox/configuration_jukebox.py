@@ -608,3 +608,6 @@ class JukeboxConfig(PretrainedConfig):
         result = super().to_dict()
         result["prior_config_list"] = [config.to_dict() for config in result.pop("prior_configs")]
         return result
+
+
+__all__ = ["JukeboxConfig", "JukeboxPriorConfig", "JukeboxVQVAEConfig"]

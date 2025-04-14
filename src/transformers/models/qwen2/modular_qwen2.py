@@ -17,6 +17,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaMLP,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -114,6 +115,10 @@ class Qwen2DecoderLayer(LlamaDecoderLayer):
             )
 
 
+class Qwen2PreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
 class Qwen2Model(MistralModel):
     pass
 
@@ -132,3 +137,13 @@ class Qwen2ForTokenClassification(LlamaForTokenClassification):
 
 class Qwen2ForQuestionAnswering(LlamaForQuestionAnswering):
     pass
+
+
+__all__ = [
+    "Qwen2PreTrainedModel",
+    "Qwen2Model",
+    "Qwen2ForCausalLM",
+    "Qwen2ForSequenceClassification",
+    "Qwen2ForTokenClassification",
+    "Qwen2ForQuestionAnswering",
+]

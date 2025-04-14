@@ -539,11 +539,11 @@ class DebertaLayer(nn.Module):
             return (layer_output, None)
 
 
-class DebertaEncoder(PreTrainedModel):
+class DebertaEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.layer = nn.ModuleList([DebertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.relative_attention = getattr(config, "relative_attention", False)
         if self.relative_attention:
@@ -655,6 +655,14 @@ class DebertaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, DebertaLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, DisentangledSelfAttention):
+            module.q_bias.data.zero_()
+            module.v_bias.data.zero_()
+        elif isinstance(module, (LegacyDebertaLMPredictionHead, DebertaLMPredictionHead)):
+            module.bias.data.zero_()
 
 
 DEBERTA_START_DOCSTRING = r"""

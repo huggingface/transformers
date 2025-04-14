@@ -816,3 +816,6 @@ def get_lm_corpus(datadir, dataset):
         torch.save(corpus, fn)
 
     return corpus
+
+
+__all__ = ["TransfoXLCorpus", "TransfoXLTokenizer"]

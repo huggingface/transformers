@@ -797,3 +797,11 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "EfficientFormerForImageClassification",
+    "EfficientFormerForImageClassificationWithTeacher",
+    "EfficientFormerModel",
+    "EfficientFormerPreTrainedModel",
+]

@@ -22,6 +22,7 @@ import sentencepiece as sp
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
 
 
+@requires(backends=("sentencepiece",))
 class DebertaV2Tokenizer(PreTrainedTokenizer):
     r"""
     Constructs a DeBERTa-v2 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).

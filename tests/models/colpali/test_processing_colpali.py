@@ -8,7 +8,6 @@ from transformers import GemmaTokenizer
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
-from transformers.utils.dummy_vision_objects import SiglipImageProcessor
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -27,16 +26,18 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColPaliProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.image_seq_length = 0
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     @require_vision

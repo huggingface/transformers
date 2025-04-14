@@ -140,7 +140,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     logger.info("Converting model...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
 
     # rename keys
     state_dict = rename_keys(state_dict)

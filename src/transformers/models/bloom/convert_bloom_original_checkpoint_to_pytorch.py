@@ -104,7 +104,7 @@ def convert_bloom_checkpoint_to_pytorch(
             for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu", weights_only=True)
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())
@@ -164,7 +164,7 @@ def convert_bloom_checkpoint_to_pytorch(
             for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu", weights_only=True)
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())

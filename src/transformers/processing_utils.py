@@ -23,10 +23,11 @@ import sys
 import typing
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
@@ -52,6 +53,9 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -63,6 +67,7 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     logging,
 )
 
@@ -415,7 +420,6 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
     sampling_rate: Optional[int] = 16_000
-    sample_indices_fn: Optional[Callable] = None
     load_audio_from_video: Optional[bool] = False
 
 
@@ -435,7 +439,16 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
 
 class AllKwargsForChatTemplate(
     TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, ProcessorChatTemplateKwargs
-): ...
+):
+    processor_kwargs: ProcessingKwargs = {
+        **ProcessingKwargs.__annotations__,
+    }
+    mm_load_kwargs: ChatTemplateLoadKwargs = {
+        **TextKwargs.__annotations__,
+    }
+    template_kwargs: ProcessorChatTemplateKwargs = {
+        **ProcessorChatTemplateKwargs.__annotations__,
+    }
 
 
 class ProcessorMixin(PushToHubMixin):
@@ -610,13 +623,19 @@ class ProcessorMixin(PushToHubMixin):
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
+        save_jinja_files = kwargs.get("save_jinja_files", True)
+
         for attribute_name in self.attributes:
             attribute = getattr(self, attribute_name)
             # Include the processor class in the attribute config so this processor can then be reloaded with the
             # `AutoProcessor` API.
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
-            attribute.save_pretrained(save_directory)
+            if attribute_name == "tokenizer":
+                # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
+                attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
+            else:
+                attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -628,24 +647,52 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
-        output_chat_template_file = os.path.join(save_directory, "chat_template.json")
+        output_chat_template_file_jinja = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
+        output_chat_template_file_legacy = os.path.join(
+            save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
+        )  # Legacy filename
+        chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-            if kwargs.get("save_raw_chat_template", False):
-                with open(output_raw_chat_template_file, "w", encoding="utf-8") as writer:
-                    writer.write(self.chat_template)
-                logger.info(f"chat template saved in {output_raw_chat_template_file}")
-            else:
+            save_jinja_files = kwargs.get("save_jinja_files", True)
+            is_single_template = isinstance(self.chat_template, str)
+            if save_jinja_files and is_single_template:
+                # New format for single templates is to save them as chat_template.jinja
+                with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                    f.write(self.chat_template)
+                logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+            elif save_jinja_files and not is_single_template:
+                # New format for multiple templates is to save the default as chat_template.jinja
+                # and the other templates in the chat_templates/ directory
+                for template_name, template in self.chat_template.items():
+                    if template_name == "default":
+                        with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                            f.write(self.chat_template["default"])
+                        logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+                    else:
+                        os.makedirs(chat_template_dir, exist_ok=True)
+                        template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                        with open(template_filepath, "w", encoding="utf-8") as f:
+                            f.write(template)
+                        logger.info(f"chat template saved in {template_filepath}")
+            elif is_single_template:
+                # Legacy format for single templates: Put them in chat_template.json
                 chat_template_json_string = (
                     json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
                 )
-                with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
                     writer.write(chat_template_json_string)
-                logger.info(f"chat template saved in {output_chat_template_file}")
+                logger.info(f"chat template saved in {output_chat_template_file_legacy}")
+            elif self.chat_template is not None:
+                # At this point we have multiple templates in the legacy format, which is not supported
+                # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
+                raise ValueError(
+                    "Multiple chat templates are not supported in the legacy format. Please save them as "
+                    "separate files using the `save_jinja_files` argument."
+                )
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
@@ -709,6 +756,8 @@ class ProcessorMixin(PushToHubMixin):
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
 
+        additional_chat_template_files = {}
+        resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             # cant't load chat-template when given a file as pretrained_model_name_or_path
@@ -722,9 +771,25 @@ class ProcessorMixin(PushToHubMixin):
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
         else:
+            if is_local:
+                template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                if template_dir.is_dir():
+                    for template_file in template_dir.glob("*.jinja"):
+                        template_name = template_file.stem
+                        additional_chat_template_files[template_name] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+            else:
+                try:
+                    for template in list_repo_templates(
+                        pretrained_model_name_or_path,
+                        local_files_only=local_files_only,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                    ):
+                        additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
+                except EntryNotFoundError:
+                    pass  # No template dir means no template files
             processor_file = PROCESSOR_NAME
-            chat_template_file = "chat_template.json"
-            raw_chat_template_file = "chat_template.jinja"
+
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -742,12 +807,11 @@ class ProcessorMixin(PushToHubMixin):
                     _raise_exceptions_for_missing_entries=False,
                 )
 
-                # Load chat template from a separate json if exists
-                # because making it part of processor-config break BC.
-                # Processors in older version do not accept any kwargs
+                # chat_template.json is a legacy file used by the processor class
+                # a raw chat_template.jinja is preferred in future
                 resolved_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    chat_template_file,
+                    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -762,7 +826,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 resolved_raw_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    raw_chat_template_file,
+                    CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -774,6 +838,24 @@ class ProcessorMixin(PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
+
+                resolved_additional_chat_template_files = {
+                    template_name: cached_file(
+                        pretrained_model_name_or_path,
+                        template_file,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
+                    for template_name, template_file in additional_chat_template_files.items()
+                }
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -788,15 +870,31 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Add chat template as kwarg before returning because most models don't have processor config
-        if resolved_raw_chat_template_file is not None:
-            with open(resolved_raw_chat_template_file, encoding="utf-8") as reader:
-                chat_template = reader.read()
-            kwargs["chat_template"] = chat_template
-        elif resolved_chat_template_file is not None:
+        if resolved_chat_template_file is not None:
+            # This is the legacy path
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
-                text = reader.read()
-            chat_template = json.loads(text)["chat_template"]
-            kwargs["chat_template"] = chat_template
+                chat_template_json = json.loads(reader.read())
+                chat_templates = {"default": chat_template_json["chat_template"]}
+                if resolved_additional_chat_template_files:
+                    raise ValueError(
+                        "Cannot load chat template due to conflicting files - this checkpoint combines "
+                        "a legacy chat_template.json file with separate template files, which is not "
+                        "supported. To resolve this error, replace the legacy chat_template.json file "
+                        "with a modern chat_template.jinja file."
+                    )
+        else:
+            chat_templates = {
+                template_name: open(template_file, "r", encoding="utf-8").read()
+                for template_name, template_file in resolved_additional_chat_template_files.items()
+            }
+            if resolved_raw_chat_template_file is not None:
+                with open(resolved_raw_chat_template_file, "r", encoding="utf-8") as reader:
+                    chat_templates["default"] = reader.read()
+        if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
+            chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
+
+        if chat_templates:
+            kwargs["chat_template"] = chat_templates
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
@@ -1078,7 +1176,6 @@ class ProcessorMixin(PushToHubMixin):
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict.keys()})
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1306,28 +1403,42 @@ class ProcessorMixin(PushToHubMixin):
         """
 
         if chat_template is None:
-            if self.chat_template is not None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    " which one to use by passing the `chat_template` argument. Available templates are: "
+                    f"{', '.join(self.chat_template.keys())}"
+                )
+            elif self.chat_template is not None:
                 chat_template = self.chat_template
             else:
                 raise ValueError(
-                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
-                    "or provide a chat template as an argument. See "
-                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
                 )
+        else:
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+                # It's the name of a template, not a full template string
+                chat_template = self.chat_template[chat_template]
+            else:
+                # It's a template string, render it directly
+                chat_template = chat_template
 
-        # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
-        # and for multimodal data loading. Everything else will be used in `__call__`
-        tokenizer_template_kwargs = {}
-        for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
-            default_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
-            value = kwargs.pop(tokenizer_key, default_value)
-            tokenizer_template_kwargs[tokenizer_key] = value
+        # Fill sets of kwargs that should be used by different parts of template
+        processed_kwargs = {
+            "processor_kwargs": {},
+            "mm_load_kwargs": {},
+            "template_kwargs": {},
+        }
 
-        mm_load_kwargs = {}
-        for mm_load_key in ChatTemplateLoadKwargs.__annotations__.keys():
-            default_value = getattr(ChatTemplateLoadKwargs, mm_load_key, None)
-            value = kwargs.pop(mm_load_key, default_value)
-            mm_load_kwargs[mm_load_key] = value
+        for kwarg_type in processed_kwargs:
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
+                default_value = getattr(kwarg_type_defaults, key, None)
+                value = kwargs.pop(key, default_value)
+                if value is not None and not isinstance(value, dict):
+                    processed_kwargs[kwarg_type][key] = value
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1338,8 +1449,9 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        tokenize = kwargs.pop("tokenize", False)
-        return_dict = kwargs.pop("return_dict", False)
+        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
+        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
+        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1382,7 +1494,7 @@ class ProcessorMixin(PushToHubMixin):
 
                     for fname in video_fnames:
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
-                            video = [np.array(load_image(image_fname)).T for image_fname in fname]
+                            video = [np.array(load_image(image_fname)) for image_fname in fname]
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                             metadata = None
@@ -1391,12 +1503,13 @@ class ProcessorMixin(PushToHubMixin):
                                 "If your model uses this metadata during processing, please load the whole video and let the model sample frames instead."
                             )
                         else:
-                            video, metadata = load_video(
+                            # TODO: raushan, should be `self.video_processor.load_video_for_model` when API is added
+                            video, metadata = self._load_video_for_model(
                                 fname,
-                                num_frames=mm_load_kwargs["num_frames"],
-                                fps=mm_load_kwargs["video_fps"],
+                                num_frames=mm_load_kwargs.get("num_frames", None),
+                                fps=mm_load_kwargs.get("video_fps", None),
                                 backend=mm_load_kwargs["video_load_backend"],
-                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"],
+                                **kwargs,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
@@ -1415,7 +1528,7 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images=batch_images,
                 batch_videos=batch_videos,
                 batch_video_metadata=batch_video_metadata,
-                **mm_load_kwargs,
+                **processed_kwargs["mm_load_kwargs"],
             )
 
         prompt = self.tokenizer.apply_chat_template(
@@ -1423,7 +1536,7 @@ class ProcessorMixin(PushToHubMixin):
             chat_template=chat_template,
             tokenize=False,
             return_dict=False,
-            **tokenizer_template_kwargs,
+            **processed_kwargs["template_kwargs"],
         )
 
         if not is_batched:
@@ -1438,20 +1551,51 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                kwargs["add_special_tokens"] = False
+                processed_kwargs["processor_kwargs"]["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                **kwargs,
+                **processed_kwargs["processor_kwargs"],
             )
             if return_dict:
                 return out
             else:
                 return out["input_ids"]
         return prompt
+
+    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
+    # Keep private so we can simply remove when needed
+    def _load_video_for_model(
+        self,
+        video: Union[str, "VideoInput"],
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        backend: str = "opencv",
+    ) -> np.array:
+        """
+        Loads `video` to a numpy array.
+
+        Args:
+            video (`str` or `VideoInput`):
+                The video to convert to the numpy array format. Can be a link to video or local path.
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly. If not passed, the whole video is loaded.
+            fps (`int`, *optional*):
+                Number of frames to sample per second. Should be passed only when `num_frames=None`.
+                If not specified and `num_frames==None`, all frames are sampled.
+            backend (`str`, *optional*, defaults to `"opencv"`):
+                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+
+        Returns:
+            Tuple[`np.array`, Dict]: A tuple containing:
+                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
+                - Metadata dictionary.
+        """
+        video, metadata = load_video(video, num_frames, fps=fps, backend=backend)
+        return video, metadata
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """

@@ -239,7 +239,7 @@ class RobertaBertDummyModel:
 
 
 def replace_in_file(filename, old, new):
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, encoding="utf-8") as f:
         content = f.read()
 
     content = content.replace(old, new)
@@ -328,7 +328,7 @@ class CopyCheckTester(unittest.TestCase):
 
                 _ = is_copy_consistent(file_to_check, overwrite=True)
 
-                with open(file_to_check, "r", encoding="utf-8") as f:
+                with open(file_to_check, encoding="utf-8") as f:
                     self.assertEqual(f.read(), MOCK_BERT_COPY_CODE)
 
     def test_is_copy_consistent_with_ignored_match(self):
@@ -364,7 +364,7 @@ class CopyCheckTester(unittest.TestCase):
 
                 _ = is_copy_consistent(file_to_check, overwrite=True)
 
-                with open(file_to_check, "r", encoding="utf-8") as f:
+                with open(file_to_check, encoding="utf-8") as f:
                     self.assertEqual(f.read(), EXPECTED_REPLACED_CODE)
 
     def test_convert_to_localized_md(self):

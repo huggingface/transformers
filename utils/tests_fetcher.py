@@ -736,19 +736,28 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = extract_imports(module, cache=cache)
+                new_imported_modules = dict(extract_imports(module, cache=cache))
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
 
-                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+                new_imported_modules_from_import_structure = define_import_structure(PATH_TO_REPO / module)
 
-                for mapping in new_imported_modules_2.values():
+                for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
+                        # Import Structure returns _module keys as import paths rather than local paths
+                        # We replace with os.path.sep so that it's Windows-compatible
+                        _module = _module.replace(".", os.path.sep)
                         _module = module.replace("__init__.py", f"{_module}.py")
-                        new_imported_modules.append((_module, list(_imports)))
+                        if _module not in new_imported_modules:
+                            new_imported_modules[_module] = list(_imports)
+                        else:
+                            original_imports = new_imported_modules[_module]
+                            for potential_new_item in list(_imports):
+                                if potential_new_item not in original_imports:
+                                    new_imported_modules[_module].append(potential_new_item)
 
-                for new_module, new_imports in new_imported_modules:
+                for new_module, new_imports in new_imported_modules.items():
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
@@ -1043,7 +1052,6 @@ def infer_tests_to_run(
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
-    # Create the map that will give us all impacted modules.
     reverse_map = create_reverse_dependency_map()
     impacted_files = modified_files.copy()
     for f in modified_files:

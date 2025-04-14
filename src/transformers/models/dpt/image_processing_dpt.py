@@ -17,6 +17,8 @@
 import math
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
+from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -102,6 +104,7 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
+@requires(backends=("vision",))
 class DPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DPT image processor.

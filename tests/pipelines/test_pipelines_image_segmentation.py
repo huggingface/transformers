@@ -14,7 +14,6 @@
 
 import tempfile
 import unittest
-from typing import Dict
 
 import datasets
 import numpy as np
@@ -65,14 +64,14 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     white_pixels = (npimg == 255).sum()
     shape = npimg.shape
     return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
-def mask_to_test_readable_only_shape(mask: Image) -> Dict:
+def mask_to_test_readable_only_shape(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"shape": shape}

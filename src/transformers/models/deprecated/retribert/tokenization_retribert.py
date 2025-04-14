@@ -499,3 +499,6 @@ class WordpieceTokenizer:
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["RetriBertTokenizer"]

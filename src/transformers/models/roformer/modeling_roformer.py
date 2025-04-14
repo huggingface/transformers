@@ -699,6 +699,8 @@ class RoFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, RoFormerLMPredictionHead):
+            module.bias.data.zero_()
 
 
 ROFORMER_START_DOCSTRING = r"""

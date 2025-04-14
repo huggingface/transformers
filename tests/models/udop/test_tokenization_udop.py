@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import (
     AddedToken,
@@ -162,7 +160,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == text + [1] + text_2 + [1]
 
     def test_add_special_tokens(self):
-        tokenizers: List[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -178,7 +176,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size

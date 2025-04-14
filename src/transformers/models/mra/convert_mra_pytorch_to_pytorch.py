@@ -77,7 +77,7 @@ def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
 
 
 def convert_mra_checkpoint(checkpoint_path, mra_config_file, pytorch_dump_path):
-    orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
+    orig_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model_state_dict"]
     config = MraConfig.from_json_file(mra_config_file)
     model = MraForMaskedLM(config)
 

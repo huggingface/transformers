@@ -121,7 +121,7 @@ def convert_state_dict(orig_state_dict, model):
 
 
 def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     config = get_swin_config(model_name)
     model = SwinForMaskedImageModeling(config)

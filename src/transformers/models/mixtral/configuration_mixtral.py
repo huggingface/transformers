@@ -172,7 +172,7 @@ class MixtralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.head_dim = head_dim
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
@@ -186,3 +186,6 @@ class MixtralConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["MixtralConfig"]

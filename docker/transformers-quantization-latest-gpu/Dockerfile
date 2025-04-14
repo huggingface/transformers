@@ -12,6 +12,8 @@ SHELL ["sh", "-lc"]
 ARG PYTORCH='2.6.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu121'
+# Disable kernel mapping for quantization tests
+ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg

@@ -441,9 +441,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             raise ValueError("Image size not supported")
 
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
-        original_pixel_values = torch.load(filepath)
+        original_pixel_values = torch.load(filepath, weights_only=True)
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
-        original_input_ids = torch.load(filepath)
+        original_input_ids = torch.load(filepath, weights_only=True)
 
         if "i18n" not in model_name:
             assert inputs.input_ids.tolist() == original_input_ids.tolist()

@@ -38,11 +38,13 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileNetV1ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileNetV1 image processor.
