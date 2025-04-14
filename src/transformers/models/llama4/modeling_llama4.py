@@ -1290,7 +1290,7 @@ class Llama4VisionEncoderLayer(nn.Module):
         hidden_state: torch.Tensor,
         freqs_ci: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: Optional[bool] = None,
     ):
         # Self Attention
         residual = hidden_state

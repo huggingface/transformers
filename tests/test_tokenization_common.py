@@ -28,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from parameterized import parameterized
 
@@ -173,7 +173,7 @@ def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: str = None,
+    text: Optional[str] = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -321,9 +321,9 @@ class TokenizerTesterMixin:
         self,
         expected_encoding: dict,
         model_name: str,
-        revision: str = None,
-        sequences: list[str] = None,
-        decode_kwargs: dict[str, Any] = None,
+        revision: Optional[str] = None,
+        sequences: Optional[list[str]] = None,
+        decode_kwargs: Optional[dict[str, Any]] = None,
         padding: bool = True,
     ):
         """

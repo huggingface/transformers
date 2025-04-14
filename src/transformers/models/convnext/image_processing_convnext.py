@@ -91,7 +91,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_pct: Optional[float] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
@@ -190,7 +190,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_pct: Optional[float] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,

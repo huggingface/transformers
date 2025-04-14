@@ -1375,7 +1375,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         doc_scores: Optional[torch.FloatTensor] = None,
         n_docs: Optional[int] = None,
         generation_config: Optional[GenerationConfig] = None,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         **kwargs,
