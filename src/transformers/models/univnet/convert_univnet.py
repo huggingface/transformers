@@ -106,7 +106,7 @@ def convert_univnet_checkpoint(
     repo_id=None,
     safe_serialization=False,
 ):
-    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     # Get the generator's state dict
     state_dict = model_state_dict_base["model_g"]
 

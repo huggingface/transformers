@@ -74,7 +74,6 @@ _CHECKPOINT_FOR_DOC = "kajuma/DiffLlama-0.3B-handcut"
 _CONFIG_FOR_DOC = "DiffLlamaConfig"
 
 
-@use_kernel_forward_from_hub("MLP")
 class DiffLlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
