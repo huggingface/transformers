@@ -238,10 +238,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         intermediate_embeddings = model_inputs.pop("intermediate_embeddings", None)
 
         # Only pass intermediate_embeddings if it exists
-        if intermediate_embeddings is not None:
-            model_outputs = self.model(**model_inputs, intermediate_embeddings=intermediate_embeddings)
-        else:
-            model_outputs = self.model(**model_inputs)
+        model_outputs = self.model(**model_inputs, intermediate_embeddings=intermediate_embeddings)
 
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]

@@ -17,13 +17,13 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import numpy as np
 
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import is_torch_available
 
 
@@ -90,9 +90,6 @@ class SamHQProcessor(ProcessorMixin):
         # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
         *args,  # to be deprecated
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
-        video: Optional[VideoInput] = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -151,54 +148,9 @@ class SamHQProcessor(ProcessorMixin):
         """
         Normalize and convert the image processor output to the expected format.
         """
-
-        # Helper function to convert arrays to tensors with proper dimensions
-        def to_tensor(array, min_dim):
-            """
-            Convert numpy array to tensor and ensure proper dimensionality.
-
-            Args:
-                array: The numpy array to convert
-                min_dim: The minimum number of dimensions the result should have
-
-            Returns:
-                The converted array or tensor with proper dimensions
-            """
-            if return_tensors == "pt":
-                array = torch.from_numpy(array)
-                return array.unsqueeze(1) if array.ndim < min_dim else array
-            return array
-
-        # Helper function to normalize coordinates for multiple inputs
-        def normalize_batch_coordinates(inputs, is_bounding_box=False):
-            """
-            Normalize coordinates based on original sizes.
-
-            Args:
-                inputs: List of coordinate arrays
-                is_bounding_box: Whether inputs are bounding boxes
-
-            Returns:
-                Normalized coordinates as list
-            """
-            if len(original_sizes) != len(inputs):
-                # Use first original size for all inputs
-                return [
-                    self._normalize_coordinates(
-                        self.target_size, item, original_sizes[0], is_bounding_box=is_bounding_box
-                    )
-                    for item in inputs
-                ]
-            else:
-                # Use paired original sizes for each input
-                return [
-                    self._normalize_coordinates(self.target_size, item, size, is_bounding_box=is_bounding_box)
-                    for item, size in zip(inputs, original_sizes)
-                ]
-
         # Process input points
         if input_points is not None:
-            input_points = normalize_batch_coordinates(input_points)
+            input_points = self._normalize_batch_coordinates(input_points, original_sizes)
 
             if not all(point.shape == input_points[0].shape for point in input_points):
                 if input_labels is not None:
@@ -214,16 +166,16 @@ class SamHQProcessor(ProcessorMixin):
 
         # Process input boxes
         if input_boxes is not None:
-            input_boxes = normalize_batch_coordinates(input_boxes, is_bounding_box=True)
+            input_boxes = self._normalize_batch_coordinates(input_boxes, original_sizes, is_bounding_box=True)
             input_boxes = np.array(input_boxes)
 
         # Update processor with converted inputs
         if input_boxes is not None:
-            encoding_image_processor["input_boxes"] = to_tensor(input_boxes, 3)
+            encoding_image_processor["input_boxes"] = self._to_tensor(input_boxes, 3, return_tensors)
         if input_points is not None:
-            encoding_image_processor["input_points"] = to_tensor(input_points, 4)
+            encoding_image_processor["input_points"] = self._to_tensor(input_points, 4, return_tensors)
         if input_labels is not None:
-            encoding_image_processor["input_labels"] = to_tensor(input_labels, 3)
+            encoding_image_processor["input_labels"] = self._to_tensor(input_labels, 3, return_tensors)
 
         return encoding_image_processor
 
@@ -264,6 +216,42 @@ class SamHQProcessor(ProcessorMixin):
 
         return coords
 
+    def _preprocess_input(self, inp, error_message, expected_nesting=1, dtype=None):
+        """
+        Preprocess input by converting torch tensors to numpy arrays and validating structure.
+
+        Args:
+            inp: The input to process
+            error_message: Error message if validation fails
+            expected_nesting: Expected nesting level (1 for points/labels, 2 for boxes)
+            dtype: Optional data type for numpy array conversion
+
+        Returns:
+            Processed input as list of numpy arrays or None
+        """
+        if inp is None:
+            return None
+
+        # Convert torch tensor to list if applicable
+        if hasattr(inp, "numpy"):
+            inp = inp.numpy().tolist()
+
+        # Validate structure based on expected nesting
+        valid = isinstance(inp, list)
+        current = inp
+
+        for _ in range(expected_nesting):
+            if not valid or not current:
+                break
+            valid = valid and isinstance(current[0], list)
+            current = current[0] if current else None
+
+        if not valid:
+            raise ValueError(error_message)
+
+        # Convert to numpy arrays
+        return [np.array(item, dtype=dtype) for item in inp]
+
     def _check_and_preprocess_points(
         self,
         input_points=None,
@@ -275,49 +263,12 @@ class SamHQProcessor(ProcessorMixin):
         are, it converts the coordinates of the points and bounding boxes. If a user passes directly a `torch.Tensor`,
         it is converted to a `numpy.ndarray` and then to a `list`.
         """
-
-        def preprocess_input(inp, error_message, expected_nesting=1, dtype=None):
-            """
-            Preprocess input by converting torch tensors to numpy arrays and validating structure.
-
-            Args:
-                inp: The input to process
-                error_message: Error message if validation fails
-                expected_nesting: Expected nesting level (1 for points/labels, 2 for boxes)
-                dtype: Optional data type for numpy array conversion
-
-            Returns:
-                Processed input as list of numpy arrays or None
-            """
-            if inp is None:
-                return None
-
-            # Convert torch tensor to list if applicable
-            if hasattr(inp, "numpy"):
-                inp = inp.numpy().tolist()
-
-            # Validate structure based on expected nesting
-            valid = isinstance(inp, list)
-            current = inp
-
-            for _ in range(expected_nesting):
-                if not valid or not current:
-                    break
-                valid = valid and isinstance(current[0], list)
-                current = current[0] if current else None
-
-            if not valid:
-                raise ValueError(error_message)
-
-            # Convert to numpy arrays
-            return [np.array(item, dtype=dtype) for item in inp]
-
         # Process each input type
-        input_points = preprocess_input(input_points, "Input points must be a list of list of floating points.")
+        input_points = self._preprocess_input(input_points, "Input points must be a list of list of floating points.")
 
-        input_labels = preprocess_input(input_labels, "Input labels must be a list of list integers.")
+        input_labels = self._preprocess_input(input_labels, "Input labels must be a list of list integers.")
 
-        input_boxes = preprocess_input(
+        input_boxes = self._preprocess_input(
             input_boxes,
             "Input boxes must be a list of list of list of floating points.",
             expected_nesting=2,
@@ -333,6 +284,44 @@ class SamHQProcessor(ProcessorMixin):
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
+
+    def _to_tensor(self, array, min_dim, return_tensors):
+        """
+        Convert numpy array to tensor and ensure proper dimensionality.
+        Args:
+            array: The numpy array to convert
+            min_dim: The minimum number of dimensions the result should have
+            return_tensors: The type of tensors to return (e.g., "pt" for PyTorch tensors)
+        Returns:
+            The converted array or tensor with proper dimensions
+        """
+        if return_tensors == "pt":
+            array = torch.from_numpy(array)
+            return array.unsqueeze(1) if array.ndim < min_dim else array
+        return array
+
+    def _normalize_batch_coordinates(self, inputs, original_sizes, is_bounding_box=False):
+        """
+        Normalize coordinates based on original sizes.
+        Args:
+            inputs: List of coordinate arrays
+            original_sizes: Original sizes of the images
+            is_bounding_box: Whether inputs are bounding boxes
+        Returns:
+            Normalized coordinates as list
+        """
+        if len(original_sizes) != len(inputs):
+            # Use first original size for all inputs
+            return [
+                self._normalize_coordinates(self.target_size, item, original_sizes[0], is_bounding_box=is_bounding_box)
+                for item in inputs
+            ]
+        else:
+            # Use paired original sizes for each input
+            return [
+                self._normalize_coordinates(self.target_size, item, size, is_bounding_box=is_bounding_box)
+                for item, size in zip(inputs, original_sizes)
+            ]
 
 
 __all__ = ["SamHQProcessor"]
