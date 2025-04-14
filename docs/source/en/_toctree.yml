@@ -308,8 +308,6 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: main_classes/agent
-      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/backbones
@@ -825,6 +823,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -995,6 +995,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/qwen2_5_omni
+        title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl
         title: Qwen2.5-VL
       - local: model_doc/qwen2_audio
@@ -1080,6 +1082,8 @@
       title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/import_utils
+      title: Importing Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers

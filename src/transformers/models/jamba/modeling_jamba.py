@@ -1115,6 +1115,13 @@ class JambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JambaRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JambaMambaMixer):
+            A = torch.arange(1, module.ssm_state_size + 1)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.data.copy_(torch.log(A))
+            module.D.data.fill_(1.0)
 
 
 JAMBA_INPUTS_DOCSTRING = r"""
@@ -1372,7 +1379,7 @@ class JambaModel(JambaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.

@@ -208,6 +208,11 @@ print(answer)
 [[autodoc]] DonutImageProcessor
     - preprocess
 
+## DonutImageProcessorFast
+
+[[autodoc]] DonutImageProcessorFast
+    - preprocess
+
 ## DonutFeatureExtractor
 
 [[autodoc]] DonutFeatureExtractor
@@ -225,4 +230,9 @@ print(answer)
 ## DonutSwinModel
 
 [[autodoc]] DonutSwinModel
+    - forward
+
+## DonutSwinForImageClassification
+
+[[autodoc]] transformers.DonutSwinForImageClassification
     - forward

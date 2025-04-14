@@ -28,6 +28,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -277,6 +278,7 @@ class Glm4Attention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
@@ -305,6 +307,7 @@ class Glm4Attention(nn.Module):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Glm4RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -404,6 +407,8 @@ class Glm4PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Glm4RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 GLM4_INPUTS_DOCSTRING = r"""
@@ -675,7 +680,7 @@ class Glm4Model(Glm4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
