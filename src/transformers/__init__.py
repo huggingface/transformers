@@ -904,6 +904,7 @@ if TYPE_CHECKING:
             WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
@@ -912,8 +913,6 @@ if TYPE_CHECKING:
         from .model_debugging_utils import (
             model_addition_debugger,
             model_addition_debugger_context,
-        )
-            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 
