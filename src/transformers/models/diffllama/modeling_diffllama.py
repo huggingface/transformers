@@ -61,7 +61,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@use_kernel_forward_from_hub("MLP")
 class DiffLlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
