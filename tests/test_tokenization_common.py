@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -124,11 +123,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: Dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
-    tokenizer_mapping: Dict["PretrainedConfig", Tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
-) -> Dict[
+    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    Tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -260,13 +259,13 @@ class TokenizerTesterMixin:
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
         toks = [
             (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
@@ -294,7 +293,7 @@ class TokenizerTesterMixin:
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
 
-    def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, fast=True, **kwargs) -> list[PreTrainedTokenizerBase]:
         if fast and self.test_rust_tokenizer and self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
         elif fast and self.test_rust_tokenizer:
@@ -320,11 +319,11 @@ class TokenizerTesterMixin:
 
     def tokenizer_integration_test_util(
         self,
-        expected_encoding: Dict,
+        expected_encoding: dict,
         model_name: str,
         revision: str = None,
-        sequences: List[str] = None,
-        decode_kwargs: Dict[str, Any] = None,
+        sequences: list[str] = None,
+        decode_kwargs: dict[str, Any] = None,
         padding: bool = True,
     ):
         """
@@ -1152,7 +1151,7 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
                     # Check we aren't saving a chat_template.jinja file
                     self.assertFalse(any(file.endswith("chat_template.jinja") for file in save_files))
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
@@ -1164,7 +1163,7 @@ class TokenizerTesterMixin:
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name)
                     # Check we are saving a chat_template.jinja file
                     self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
                     chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
@@ -1180,6 +1179,49 @@ class TokenizerTesterMixin:
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 # Check that no error raised
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    @require_jinja
+    def test_chat_template_save_loading(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            signature = inspect.signature(tokenizer.__init__)
+            if "chat_template" not in {*signature.parameters.keys()}:
+                self.skipTest("tokenizer doesn't accept chat templates at input")
+            tokenizer.chat_template = "test template"
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.save_pretrained(tmpdirname)
+                self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmpdirname)
+                self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertTrue(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmpdirname, save_jinja_files=False)
+                self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -1670,21 +1712,29 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                for save_raw_chat_template in (True, False):
-                    tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                for save_jinja_files in (True, False):
+                    tokenizer.chat_template = {"default": dummy_template_1, "template2": dummy_template_2}
                     with tempfile.TemporaryDirectory() as tmp_dir_name:
-                        # Test that save_raw_chat_template is ignored when there's a dict of multiple templates
-                        tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=save_raw_chat_template)
-                        config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
-                        # Assert that chat templates are correctly serialized as lists of dictionaries
-                        self.assertEqual(
-                            config_dict["chat_template"],
-                            [
-                                {"name": "template1", "template": "{{'a'}}"},
-                                {"name": "template2", "template": "{{'b'}}"},
-                            ],
-                        )
-                        self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                        # Test that save_jinja_files is ignored when there's a dict of multiple templates
+                        tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
+                        if save_jinja_files:
+                            config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                            self.assertNotIn("chat_template", config_dict)
+                            self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                            self.assertTrue(
+                                os.path.exists(os.path.join(tmp_dir_name, "additional_chat_templates/template2.jinja"))
+                            )
+                        else:
+                            config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                            # Assert that chat templates are correctly serialized as lists of dictionaries
+                            self.assertEqual(
+                                config_dict["chat_template"],
+                                [
+                                    {"name": "default", "template": "{{'a'}}"},
+                                    {"name": "template2", "template": "{{'b'}}"},
+                                ],
+                            )
+                            self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                         new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                     # Assert that the serialized list is correctly reconstructed as a single dict
                     self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
@@ -1698,7 +1748,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.chat_template = dummy_template1
-                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
                     with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
                         f.write(dummy_template2)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
@@ -4485,7 +4535,7 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
-                    except EnvironmentError as e:
+                    except OSError as e:
                         # Some tokenizer will raised an error before reaching the logged warning because there are no
                         # corresponding files to load
                         error_message = str(e)

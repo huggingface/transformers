@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
@@ -34,11 +35,19 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
 from ..phi3.configuration_phi3 import Phi3Config
-from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
+from ..phi3.modeling_phi3 import (
+    Phi3DecoderLayer,
+    Phi3ForCausalLM,
+    Phi3Model,
+    Phi3PreTrainedModel,
+    Phi3RMSNorm,
+    Phi3RotaryEmbedding,
+)
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
@@ -668,13 +677,11 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         patch_attention_mask: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
@@ -703,24 +710,20 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
                 else patch_attention_mask
             )
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         pooled_output = self.head(
             hidden_state=last_hidden_state,
             attention_mask=patch_attention_mask,
         )
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1137,6 +1140,9 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+            module.b1.data.zero_()
+            module.b2.data.zero_()
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
@@ -1523,6 +1529,28 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
 """
 
 
+class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
+    pass
+
+
+class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Phi4MultimodalRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalImageEmbedding):
+            module.global_img_feature_extensor.data.zero_()
+            module.sub_img_feature_extensor.data.zero_()
+
+
 class Phi4MultimodalModel(Phi3Model, nn.Module):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
@@ -1549,10 +1577,11 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1566,17 +1595,14 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1665,13 +1691,12 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
@@ -1686,11 +1711,12 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=Phi4MultimodalConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1705,11 +1731,10 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1741,10 +1766,9 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1759,12 +1783,11 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -1772,10 +1795,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1842,7 +1861,7 @@ __all__ = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionPreTrainedModel",
     "Phi4MultimodalVisionModel",
-    "Phi4MultimodalPreTrainedModel",  # noqa
+    "Phi4MultimodalPreTrainedModel",
     "Phi4MultimodalModel",
     "Phi4MultimodalForCausalLM",
     "Phi4MultimodalVisionConfig",

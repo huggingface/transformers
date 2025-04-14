@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -135,24 +134,6 @@ class BioGptModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = BioGptForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_biogpt_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -363,7 +344,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 

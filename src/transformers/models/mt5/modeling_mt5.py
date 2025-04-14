@@ -1248,7 +1248,7 @@ class MT5Stack(MT5PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -2183,7 +2183,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -2566,5 +2566,4 @@ __all__ = [
     "MT5ForTokenClassification",
     "MT5Model",
     "MT5PreTrainedModel",
-    "MT5Stack",
 ]
