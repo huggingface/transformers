@@ -224,7 +224,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
         width, height, rows, cols, attention_masks = [], [], [], [], []
-        obj_id_to_new_index_map = {}
+        obj_idx_to_new_index_map = {}
         current_index = -1
 
         # Group images by size for batched resizing
@@ -249,19 +249,19 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             cols.extend([c] * n_of_stacked_images)
             # create attention mask in numpy
             attention_masks.extend([x for x in (f.sum(axis=-1) != 0).to(dtype=torch.float32)])
-            processed_image_patches_grouped[shape] = f
-            for x in f:
+            processed_image_patches_grouped[shape] = [x for x in f]
+            for x in processed_image_patches_grouped[shape]:
                 current_index += 1
-                obj_id_to_new_index_map[id(x)] = current_index
+                obj_idx_to_new_index_map[id(x)] = current_index
 
         processed_images = reorder_images(processed_image_patches_grouped, grouped_images_index)
-        orig_idx_to_new_idx_map = {orig_idx: obj_id_to_new_index_map[id(image)] for orig_idx, image in enumerate(processed_images)}
+        orig_idx_to_new_idx_map = {orig_idx: obj_idx_to_new_index_map[id(image)] for orig_idx, image in enumerate(processed_images)}
 
         flattened_patches = processed_images
-        width = [width[orig_idx] for orig_idx in orig_idx_to_new_idx_map]
-        height = [height[orig_idx] for orig_idx in orig_idx_to_new_idx_map]
-        rows = [rows[orig_idx] for orig_idx in orig_idx_to_new_idx_map]
-        cols = [cols[orig_idx] for orig_idx in orig_idx_to_new_idx_map]
+        width = [width[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        height = [height[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        rows = [rows[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
+        cols = [cols[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
 
         encoded_outputs = BatchFeature(
             data={
