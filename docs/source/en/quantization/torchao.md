@@ -47,7 +47,6 @@ TorchAO supports several quantization techniques:
 
 
 
-# Use in transformers
 
 ## Installation
 
