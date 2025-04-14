@@ -21,7 +21,7 @@ import logging
 import re
 from typing import List, Optional, Union
 
-import torch
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput, make_batched_videos
@@ -240,11 +240,11 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         video_seq_length = next(video_grid_thw).prod() // merge_length
                         sample = sample.replace(self.video_token, "<|video_placeholder|>" * video_seq_length, 1)
                     else:
-                        audio_token_indices = torch.arange(next(audio_lengths))
+                        audio_token_indices = np.arange(next(audio_lengths))
                         curr_video_grid_thw = next(video_grid_thw)
                         height = curr_video_grid_thw[1] // self.image_processor.merge_size
                         width = curr_video_grid_thw[2] // self.image_processor.merge_size
-                        video_token_indices = torch.arange(curr_video_grid_thw[0]).view(-1, 1, 1)
+                        video_token_indices = np.arange(curr_video_grid_thw[0]).view(-1, 1, 1)
                         video_token_indices = video_token_indices.expand(-1, height, width).flatten()
                         video_token_indices = (
                             video_token_indices * next(video_second_per_grid) * position_id_per_seconds
@@ -275,7 +275,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             processed_text.append(sample)
         return processed_text
 
-    def get_chunked_index(self, token_indices: torch.Tensor, tokens_per_chunk: int) -> list[tuple[int, int]]:
+    def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
         Splits token index list into chunks based on token value ranges.
 
