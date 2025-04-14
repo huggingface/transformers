@@ -14,6 +14,7 @@
 
 import unittest
 
+import datasets
 import numpy as np
 from huggingface_hub import AudioClassificationOutputElement
 
@@ -44,6 +45,15 @@ if is_torch_available():
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
 
     def get_test_pipeline(
         self,
@@ -94,11 +104,9 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
-        import datasets
-
+        self._load_dataset()
         # test with a local file
-        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        audio = dataset[0]["audio"]["array"]
+        audio = self._dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(
             output,
@@ -168,8 +176,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_large_model_pt(self):
-        import datasets
-
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)

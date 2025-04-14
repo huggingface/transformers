@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -129,7 +129,7 @@ def convert_weight_and_push(
     print(f"Downloading weights for {name}...")
     checkpoint_path = cached_download(checkpoint)
     print(f"Converting {name}...")
-    from_state_dict = torch.load(checkpoint_path)["state_dict"]
+    from_state_dict = torch.load(checkpoint_path, weights_only=True)["state_dict"]
     from_model.load_state_dict(from_state_dict)
     from_model.eval()
     with torch.no_grad():
@@ -163,7 +163,7 @@ def convert_weight_and_push(
         print(f"Pushed {checkpoint_name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 

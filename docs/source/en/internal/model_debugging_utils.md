@@ -26,7 +26,7 @@ Most of those are only useful if you are adding new models in the library.
 
 ### Model addition debugger - context manager for model adders
 
-This context manager is a power user tool intended for model adders. 
+This context manager is a power user tool intended for model adders.
 It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
 To note, this context manager enforces `torch.inference_mode()`.
 
@@ -66,6 +66,6 @@ with model_addition_debugger_context(model, "optional_path_to_your_output_file.j
 ```
 
 
-[[autodoc]] utils.model_addition_debugger
+[[autodoc]] model_addition_debugger
 
-[[autodoc]] utils.model_addition_debugger_context
+[[autodoc]] model_addition_debugger_context

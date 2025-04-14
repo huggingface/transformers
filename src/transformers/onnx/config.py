@@ -291,7 +291,7 @@ class OnnxConfig(ABC):
         sampling_rate: int = 22050,
         time_duration: float = 5.0,
         frequency: int = 220,
-        tokenizer: "PreTrainedTokenizerBase" = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -337,7 +337,7 @@ class OnnxConfig(ABC):
                 " `preprocessor` instead.",
                 FutureWarning,
             )
-            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
             preprocessor = tokenizer
         if isinstance(preprocessor, PreTrainedTokenizerBase):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
@@ -445,7 +445,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self,
         config: "PretrainedConfig",
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
@@ -639,7 +639,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: "PreTrainedTokenizerBase",
+        tokenizer: Optional["PreTrainedTokenizerBase"],
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

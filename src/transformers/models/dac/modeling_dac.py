@@ -53,11 +53,11 @@ class DacOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor = None
-    audio_values: torch.FloatTensor = None
-    quantized_representation: torch.FloatTensor = None
-    audio_codes: torch.LongTensor = None
-    projected_latents: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
+    quantized_representation: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.LongTensor] = None
+    projected_latents: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -74,10 +74,10 @@ class DacEncoderOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor = None
-    quantized_representation: torch.FloatTensor = None
-    audio_codes: torch.FloatTensor = None
-    projected_latents: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    quantized_representation: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.FloatTensor] = None
+    projected_latents: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -89,7 +89,7 @@ class DacDecoderOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Dac.
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class Snake1d(nn.Module):
@@ -287,7 +287,7 @@ class DacResidualVectorQuantize(nn.Module):
         self.quantizers = nn.ModuleList([DacVectorQuantize(config) for i in range(config.n_codebooks)])
         self.quantizer_dropout = quantizer_dropout
 
-    def forward(self, hidden_state, n_quantizers: int = None):
+    def forward(self, hidden_state, n_quantizers: Optional[int] = None):
         """
         Quantizes the input tensor using a fixed set of codebooks and returns corresponding codebook vectors.
         Args:
@@ -608,7 +608,7 @@ class DacModel(DacPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        n_quantizers: int = None,
+        n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
     ):
         """
@@ -681,7 +681,7 @@ class DacModel(DacPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        n_quantizers: int = None,
+        n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
     ):
         """

@@ -492,8 +492,8 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache_position: torch.Tensor = None,
-        use_cache: bool = None,
+        cache_position: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
@@ -677,7 +677,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     @add_start_docstrings_to_model_forward(RECURRENTGEMMA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -764,7 +764,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu"]:
+        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu", "npu"]:
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
