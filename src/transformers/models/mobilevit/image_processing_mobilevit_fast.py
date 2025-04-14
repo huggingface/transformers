@@ -81,7 +81,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         return_tensors=None,
         do_normalize=None,
         image_mean=None,
-        image_std=None
+        image_std=None,
     ):
         processed_images = []
 
@@ -135,5 +135,9 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             processed_images = torch.stack(processed_images, dim=0)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+    def post_process_semantic_segmentation(self, *args, **kwargs):
+        raise NotImplementedError("This method is not implemented for MobileViTImageProcessorFast.")
+
 
 __all__ = ["MobileViTImageProcessorFast"]
