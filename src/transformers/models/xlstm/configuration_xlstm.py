@@ -287,3 +287,6 @@ class xLSTMConfig(PretrainedConfig):
             )
         else:
             return self
+
+
+__all__ = ["xLSTMConfig"]
