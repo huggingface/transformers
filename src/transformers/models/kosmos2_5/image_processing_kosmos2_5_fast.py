@@ -121,12 +121,12 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         num_elements = torch.tensor(torch.numel(image[0]))
         adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
 
-        # image: [batch_size, n_channels, width, height]
-        # mean / std: [batch_size]
-        # normalize: only acts to channel dimension
+        # change `image` from [batch_size, n_channels, width, height] to [n_channels, batch_size, width, height]
         image = torch.transpose(image, 0, 1)
-        
-        normalized_image = super().normalize(
+
+        # 'torchvision.transforms.Normalize` works on the usual channel dimension (dim=1) which is the batch
+        # dimension before we use `transpose`.
+        image = super().normalize(
             image,
             mean=mean,
             std=adjusted_stddev,
@@ -231,12 +231,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             # TODO: if it's possible to do in batch mode
             if do_normalize:
-                if os.environ.get("batch", None) is not None:
-                    stacked_images = self.normalize(stacked_images, **kwargs)
-                else:
-                    # iterate over each images
-                    stacked_images = [self.normalize(x.unsqueeze(0), **kwargs) for x in stacked_images]
-                    stacked_images = torch.cat(stacked_images, dim=0)
+                stacked_images = self.normalize(stacked_images, **kwargs)
 
             # TODO: we need this to be in batch from
             # convert to torch tensor and permute
@@ -255,9 +250,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             attention_masks.extend([x for x in (f.sum(axis=-1) != 0).to(dtype=torch.float32)])
             processed_image_patches_grouped[shape] = f
 
-        breakpoint()
         processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_images_index)
-
 
         # encoded_outputs = BatchFeature(
         #     data={
