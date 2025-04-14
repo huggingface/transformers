@@ -35,14 +35,11 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -829,12 +826,8 @@ class JetMoeBlock(nn.Module):
         return outputs
 
 
+@auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
@@ -867,73 +860,8 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-JETMOE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`JetMoeConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-JETMOE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoProcenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_dim)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_router_logits (`bool`, *optional*):
-            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
-            should not be returned during inference.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare JetMoe Model outputting raw hidden-states without any specific head on top.",
-    JETMOE_START_DOCSTRING,
-)
+@auto_docstring
 class JetMoeModel(JetMoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JetMoeBlock`]
-
-    Args:
-        config:
-            JetMoeConfig
-    """
-
     def __init__(self, config: JetMoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -957,7 +885,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1261,9 +1189,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1360,21 +1286,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
-    The JetMoe Model transformer with a sequence classification head on top (linear layer).
-
-    [`JetMoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    JETMOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
     def __init__(self, config):
@@ -1393,7 +1305,7 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1407,10 +1319,11 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: MoeModelOutputWithPast = self.model(

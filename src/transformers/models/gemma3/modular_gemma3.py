@@ -35,13 +35,11 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -59,7 +57,6 @@ from ..siglip import SiglipVisionConfig
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma-3-4b"
-_CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
@@ -535,9 +532,6 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-GEMMA3_START_DOCSTRING = None
-
-
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "language_model"
     _no_split_modules = [
@@ -598,6 +592,10 @@ class Gemma3TextModel(Gemma2Model):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -849,9 +847,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         return causal_mask
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -870,6 +866,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -881,46 +878,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
-
-        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
-
-        >>> messages = [
-        ...     {
-        ...         "role": "system",
-        ...         "content": [
-        ...             {"type": "text", "text": "You are a helpful assistant."}
-        ...         ]
-        ...     },
-        ...     {
-        ...         "role": "user", "content": [
-        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        ...             {"type": "text", "text": "Where is the cat standing?"},
-        ...         ]
-        ...     },
-        ... ]
-
-        >>> inputs = processor.apply_chat_template(
-        ...     messages,
-        ...     tokenizer=True,
-        ...     return_dict=True,
-        ...     return_tensors="pt",
-        ...     add_generation_prompt=True
-        ... )
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
-        ```
         """
 
         if (input_ids is None) ^ (inputs_embeds is not None):

@@ -42,6 +42,7 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
     logging,
@@ -261,6 +262,7 @@ class Emu3DecoderLayer(nn.Module):
         self.post_attention_layernorm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = nn.Dropout(config.attention_dropout)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1315,18 +1317,8 @@ EMU3_TEXT_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare Emu3Text Model outputting raw hidden-states without any specific head on top.",
-    EMU3_START_DOCSTRING,
-)
+@auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Emu3TextDecoderLayer`]
-
-    Args:
-        config: Emu3TextConfig
-    """
-
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1590,6 +1582,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
+@auto_docstring
 class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

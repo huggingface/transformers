@@ -40,15 +40,11 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_stablelm import StableLmConfig
 
 
@@ -640,10 +636,7 @@ STABLELM_START_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
-    STABLELM_START_DOCSTRING,
-)
+@auto_docstring
 class StableLmPreTrainedModel(PreTrainedModel):
     config_class = StableLmConfig
     base_model_prefix = "model"
@@ -743,18 +736,8 @@ STABLELM_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
-    STABLELM_START_DOCSTRING,
-)
+@auto_docstring
 class StableLmModel(StableLmPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLmDecoderLayer`]
-
-    Args:
-        config: StableLmConfig
-    """
-
     def __init__(self, config: StableLmConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -779,7 +762,7 @@ class StableLmModel(StableLmPreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1070,10 +1053,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1102,23 +1082,21 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-        Returns:
-
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, StableLmForCausalLM
 
-        >>> model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
-        >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+        >>> model = StableLmForCausalLM.from_pretrained("adept/persimmon-8b-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-base")
 
-        >>> prompt = "The weather is always wonderful in"
+        >>> prompt = "human: Hey, what should I eat for dinner?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'The weather is always wonderful in the summer in the city of San Diego. The city is located on the coast of the Pacific Ocean and is surrounded by'
+        'human: Hey, what should I eat for dinner?\n\ncat: 🐱\n\nhuman: 😐\n\n'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1126,6 +1104,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1161,21 +1140,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
-    The StableLm transformer with a sequence classification head on top (linear layer).
-
-    [`StableLmForSequenceClassification`] uses the last token in order to do the classification, as other causal
-    models (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    STABLELM_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
 class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
@@ -1194,7 +1159,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1208,10 +1173,11 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -1263,13 +1229,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The StableLm Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    STABLELM_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
 class StableLmForTokenClassification(StableLmPreTrainedModel):
     def __init__(self, config):
@@ -1295,12 +1255,7 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1314,10 +1269,11 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: BaseModelOutputWithPast = self.model(

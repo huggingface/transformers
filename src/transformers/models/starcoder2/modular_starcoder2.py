@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -156,7 +156,7 @@ class Starcoder2Model(MistralModel):
         self.embedding_dropout = config.embedding_dropout
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
