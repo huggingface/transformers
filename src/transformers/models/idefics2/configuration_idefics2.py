@@ -130,6 +130,8 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             Number of key-value heads in the perceiver attention block.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation for initializing all weight matrices in the model.
     """
 
     model_type = "idefics2_perceiver"
@@ -145,6 +147,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         resampler_head_dim=96,
         num_key_value_heads=4,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.hidden_act = hidden_act
@@ -156,6 +159,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.resampler_head_dim = resampler_head_dim
         self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
