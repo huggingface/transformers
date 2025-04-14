@@ -760,8 +760,8 @@ class NezhaForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1682,3 +1682,16 @@ class NezhaForQuestionAnswering(NezhaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "NezhaForNextSentencePrediction",
+    "NezhaForMaskedLM",
+    "NezhaForPreTraining",
+    "NezhaForMultipleChoice",
+    "NezhaForQuestionAnswering",
+    "NezhaForSequenceClassification",
+    "NezhaForTokenClassification",
+    "NezhaModel",
+    "NezhaPreTrainedModel",
+]

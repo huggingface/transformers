@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, List, Tuple
 
 import numpy as np
 from packaging import version
@@ -74,6 +72,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    get_device_properties,
     hub_retry,
     is_flaky,
     require_accelerate,
@@ -102,7 +101,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
-    is_torch_fx_available,
     is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
@@ -121,13 +119,13 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
-    from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers import MODEL_MAPPING
     from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
-if is_torch_fx_available():
-    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
 
 if is_deepspeed_available():
     import deepspeed
@@ -505,60 +503,6 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
-    @is_flaky(description="low likelihood of failure, reason not yet discovered")
-    def test_save_load_fast_init_from_base(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            if config.__class__ not in MODEL_MAPPING:
-                self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
-
-            base_class = MODEL_MAPPING[config.__class__]
-
-            if isinstance(base_class, tuple):
-                base_class = base_class[0]
-
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(model_class):
-                pass
-
-            model_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            model_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = _mock_init_weights
-            model_class_copy.init_weights = _mock_all_init_weights
-
-            model = base_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-                # Before we test anything
-
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
-                    else:
-                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
     @slow
     @require_accelerate
     @mark.accelerate_tests
@@ -639,62 +583,6 @@ class ModelTesterMixin:
         tied_params2 = [names for _, names in tensor_ptrs2.items() if len(names) > 1]
 
         self.assertEqual(tied_params1, tied_params2)
-
-    def test_save_load_fast_init_to_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
-
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(base_class):
-                pass
-
-            base_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            base_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = _mock_init_weights
-            base_class_copy.init_weights = _mock_all_init_weights
-
-            model = model_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.config.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = torch.max(
-                            model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
-                        ).item()
-                    else:
-                        max_diff = torch.max(
-                            torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                        ).item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -970,11 +858,12 @@ class ModelTesterMixin:
                         model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
-                    with torch.device(torch_device):
-                        model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
-                        inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
-                        inputs_dict["labels"] = inputs_dict["input_ids"]
-                        _ = model(**inputs_dict, return_dict=False)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        tmpdir, torch_dtype=torch.float32, device_map=torch_device
+                    )
+                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                    inputs_dict["labels"] = inputs_dict["input_ids"]
+                    _ = model(**inputs_dict, return_dict=False)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
@@ -1300,10 +1189,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(
-                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
-            )
+        if not self.fx_compatible:
+            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -2087,7 +1974,7 @@ class ModelTesterMixin:
             self.test_resize_tokens_embeddings()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2193,7 +2080,7 @@ class ModelTesterMixin:
             self.test_resize_embeddings_untied()
 
     @require_deepspeed
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
             "zero_optimization": {
@@ -2208,7 +2095,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            self.assertIsInstance(model.get_input_embeddings(), nn.Embedding)
 
             new_input_embedding_layer = nn.Embedding(10, 10)
             model.set_input_embeddings(new_input_embedding_layer)
@@ -2442,10 +2329,10 @@ class ModelTesterMixin:
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -2564,7 +2451,7 @@ class ModelTesterMixin:
         return new_tf_outputs, new_pt_outputs
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     def test_inputs_embeds(self):
@@ -2765,7 +2652,7 @@ class ModelTesterMixin:
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
                     torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
-                elif isinstance(value, (Tuple, List)):
+                elif isinstance(value, (tuple, list)):
                     for value_, parallel_value_ in zip(value, parallel_value):
                         torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
 
@@ -3189,7 +3076,7 @@ class ModelTesterMixin:
         # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
         # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
         # for `linear` part.
-        with ContextManagers([no_init_weights(True)]):
+        with ContextManagers([no_init_weights()]):
             target_model = MyClass(config=config)
         target_model.apply(target_model._initialize_weights)
 
@@ -3567,7 +3454,7 @@ class ModelTesterMixin:
     ):
         # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
         # models have a custom mixin, which we detect to skip this test.
-        if not any(".ModelTesterMixin" in str(base) for base in self.__class__.__bases__):
+        if any(".CLIPModelTesterMixin" in str(base) for base in self.__class__.__bases__):
             self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
 
         if not self.has_attentions:
@@ -3659,206 +3546,213 @@ class ModelTesterMixin:
                 model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
 
-                set_model_for_less_flaky_test(model_eager)
-                set_model_for_less_flaky_test(model_sdpa)
+            set_model_for_less_flaky_test(model_eager)
+            set_model_for_less_flaky_test(model_sdpa)
 
-                can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                if not (self.has_attentions and can_output_attn) and output_attentions:
-                    self.skipTest(reason="Model does not support output_attentions")
+            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+            if not (self.has_attentions and can_output_attn) and output_attentions:
+                self.skipTest(reason="Model does not support output_attentions")
 
-                # TODO: if we can also check with `batch_size=1` without being flaky?
-                for batch_size in [7]:
-                    # musicgen decoder models; TODO: find better abstraction
-                    if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+            # TODO: if we can also check with `batch_size=1` without being flaky?
+            for batch_size in [7]:
+                # musicgen decoder models; TODO: find better abstraction
+                if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+                    input_data_batch_size = batch_size * self.model_tester.num_codebooks
+                else:
+                    input_data_batch_size = batch_size
+
+                processed_inputs = {}
+                processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
+
+                for key in getattr(self, "additional_model_inputs", []):
+                    processed_inputs[key] = inputs_dict[key]
+
+                for key, value in processed_inputs.items():
+                    if torch.is_floating_point(value):
+                        value = value.to(torch_dtype)
+
+                    # extend value to have at least `input_data_batch_size` elements
+                    if value.shape[0] < input_data_batch_size:
+                        size = (input_data_batch_size - value.shape[0], *value.shape[1:])
+                        if torch.is_floating_point(value):
+                            extension = torch.rand(size=size, dtype=value.dtype, device=torch_device)
+                        else:
+                            extension = torch.randint(high=5, size=size, dtype=value.dtype, device=torch_device)
+                        value = torch.cat((value, extension), dim=0).to(torch_device)
+
+                    processed_inputs[key] = value[:input_data_batch_size]
+
+                if not use_attention_mask:
+                    dummy_attention_mask = None
+                else:
+                    dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                    if dummy_attention_mask is None:
+                        if is_encoder_decoder:
+                            seqlen = inputs_dict.get(
+                                "decoder_input_ids", processed_inputs[model.main_input_name]
+                            ).shape[-1]
+                        else:
+                            seqlen = processed_inputs[model.main_input_name].shape[-1]
+                        dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
+
+                    # extend dummy_attention_mask to have at least `batch_size` elements
+                    if dummy_attention_mask.shape[0] < batch_size:
+                        size = (batch_size - dummy_attention_mask.shape[0], *dummy_attention_mask.shape[1:])
+                        extension = torch.ones(size=size, dtype=dummy_attention_mask.dtype, device=torch_device)
+                        dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
+
+                    dummy_attention_mask = dummy_attention_mask[:batch_size].to(torch_device)
+
+                    dummy_attention_mask[:] = 1
+                    if padding_side == "left":
+                        dummy_attention_mask[-1, :2] = 0
+                        dummy_attention_mask[-1, 2:] = 1
+                    elif padding_side == "right":
+                        dummy_attention_mask[-1, -2:] = 0
+                        dummy_attention_mask[-1, :-2] = 1
+
+                if is_encoder_decoder:
+                    # musicgen encoder-decoder models; TODO: find better abstraction
+                    if hasattr(self.model_tester, "num_codebooks"):
                         input_data_batch_size = batch_size * self.model_tester.num_codebooks
                     else:
                         input_data_batch_size = batch_size
 
-                    dummy_input = inputs_dict[model.main_input_name]
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name])
+                    decoder_input_ids = decoder_input_ids[:input_data_batch_size]
+                    if decoder_input_ids.shape[0] != input_data_batch_size:
+                        extension = torch.ones(
+                            input_data_batch_size - decoder_input_ids.shape[0],
+                            *decoder_input_ids.shape[1:],
+                            dtype=decoder_input_ids.dtype,
+                            device=torch_device,
+                        )
+                        decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
+                        decoder_input_ids = decoder_input_ids.to(torch_device)
 
-                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                        dummy_input = dummy_input.to(torch_dtype)
-
-                    dummy_input = dummy_input[:input_data_batch_size]
-                    if dummy_input.shape[0] != input_data_batch_size:
-                        if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                            extension = torch.rand(
-                                input_data_batch_size - dummy_input.shape[0],
-                                *dummy_input.shape[1:],
-                                dtype=torch_dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                        else:
-                            extension = torch.randint(
-                                high=5,
-                                size=(input_data_batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                dtype=dummy_input.dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-
-                    if not use_attention_mask:
-                        dummy_attention_mask = None
-                    else:
-                        dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                        if dummy_attention_mask is None:
-                            if is_encoder_decoder:
-                                seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
-                            else:
-                                seqlen = dummy_input.shape[-1]
-                            dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-
-                        dummy_attention_mask = dummy_attention_mask[:batch_size]
-                        if dummy_attention_mask.shape[0] != batch_size:
-                            extension = torch.ones(
-                                batch_size - dummy_attention_mask.shape[0],
-                                *dummy_attention_mask.shape[1:],
-                                dtype=dummy_attention_mask.dtype,
-                                device=torch_device,
-                            )
-                            dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                            dummy_attention_mask = dummy_attention_mask.to(torch_device)
-
-                        dummy_attention_mask[:] = 1
-                        if padding_side == "left":
-                            dummy_attention_mask[-1, :2] = 0
-                            dummy_attention_mask[-1, 2:] = 1
-                        elif padding_side == "right":
-                            dummy_attention_mask[-1, -2:] = 0
-                            dummy_attention_mask[-1, :-2] = 1
-
-                    if is_encoder_decoder:
-                        # musicgen encoder-decoder models; TODO: find better abstraction
-                        if hasattr(self.model_tester, "num_codebooks"):
-                            input_data_batch_size = batch_size * self.model_tester.num_codebooks
-                        else:
-                            input_data_batch_size = batch_size
-
-                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:input_data_batch_size]
-                        if decoder_input_ids.shape[0] != input_data_batch_size:
-                            extension = torch.ones(
-                                input_data_batch_size - decoder_input_ids.shape[0],
-                                *decoder_input_ids.shape[1:],
-                                dtype=decoder_input_ids.dtype,
-                                device=torch_device,
-                            )
-                            decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                            decoder_input_ids = decoder_input_ids.to(torch_device)
-
-                        # TODO: never an `attention_mask` arg here?
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
+                    # TODO: never an `attention_mask` arg here?
+                    processed_inputs.update(
+                        {
                             "decoder_input_ids": decoder_input_ids,
                             "decoder_attention_mask": dummy_attention_mask,
                             "output_hidden_states": True,
                         }
-                    else:
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
+                    )
+                else:
+                    processed_inputs.update(
+                        {
                             "output_hidden_states": True,
                         }
+                    )
 
-                        # Otherwise fails for e.g. WhisperEncoderModel
-                        if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                            processed_inputs["attention_mask"] = dummy_attention_mask
+                    # Otherwise fails for e.g. WhisperEncoderModel
+                    if "attention_mask" in inspect.signature(model_eager.forward).parameters:
+                        processed_inputs["attention_mask"] = dummy_attention_mask
 
-                        if (
-                            self.has_attentions
-                            and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                        ):
-                            processed_inputs["output_attentions"] = output_attentions
-                    if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
-                        dummy_mask = torch.ones((self.model_tester.num_masks,))
+                    if self.has_attentions and "output_attentions" in inspect.signature(model_sdpa.forward).parameters:
+                        processed_inputs["output_attentions"] = output_attentions
+                if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
+                    dummy_mask = torch.ones((self.model_tester.num_masks,))
 
-                        # In case of additional token (like class) we define a custom `mask_length`
-                        if hasattr(self.model_tester, "mask_length"):
-                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
-                        else:
-                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
-                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
-
-                    if "noise" in inspect.signature(model_eager.forward).parameters:
-                        np.random.seed(2)
-                        num_patches = int((self.model_tester.image_size // self.model_tester.patch_size) ** 2)
-                        noise = np.random.uniform(size=(batch_size, num_patches))
-                        processed_inputs["noise"] = torch.from_numpy(noise)
-
-                    # TODO: test gradients as well (& for FA2 as well!)
-                    with torch.no_grad():
-                        with sdpa_kernel(
-                            enable_flash=enable_kernels,
-                            enable_math=True,
-                            enable_mem_efficient=enable_kernels,
-                        ):
-                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                            outputs_eager = model_eager(**prepared_inputs)
-                            outputs_sdpa = model_sdpa(**prepared_inputs)
-
-                    # TODO: rename logits -> hidden_states
-                    if hasattr(outputs_eager, "vision_hidden_states"):
-                        logits_eager = outputs_eager.vision_hidden_states[-1]
-                        logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
-                    elif hasattr(outputs_eager, "audio_values"):
-                        logits_eager = outputs_eager.audio_values
-                        logits_sdpa = outputs_sdpa.audio_values
+                    # In case of additional token (like class) we define a custom `mask_length`
+                    if hasattr(self.model_tester, "mask_length"):
+                        mask_length = self.model_tester.mask_length - dummy_mask.size(0)
                     else:
-                        logits_eager = (
-                            outputs_eager.decoder_hidden_states[-1]
-                            if hasattr(outputs_eager, "decoder_hidden_states")
-                            else outputs_eager.hidden_states[-1]
-                        )
-                        logits_sdpa = (
-                            outputs_sdpa.decoder_hidden_states[-1]
-                            if hasattr(outputs_sdpa, "decoder_hidden_states")
-                            else outputs_sdpa.hidden_states[-1]
-                        )
+                        mask_length = self.model_tester.seq_length - dummy_mask.size(0)
+                    dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
+                    dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                    processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
 
-                    if torch_device in ["cpu", "cuda"]:
-                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                    elif torch_device == "xpu":
-                        # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
-                        # which is implemented on PyTorch level using aten operators and is
-                        # device agnostic with respect to implementation of each aten operator.
-                        atol = atols["cuda", False, torch_dtype]
-                        rtol = rtols["cuda", False, torch_dtype]
-                    else:
-                        atol = 1e-7
-                        rtol = 1e-4
+                if "noise" in inspect.signature(model_eager.forward).parameters:
+                    np.random.seed(2)
+                    num_patches = int((self.model_tester.image_size // self.model_tester.patch_size) ** 2)
+                    noise = np.random.uniform(size=(batch_size, num_patches))
+                    processed_inputs["noise"] = torch.from_numpy(noise)
 
-                    # Masked tokens output slightly deviates - we don't mind that.
-                    if use_attention_mask:
-                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
-                        _logits_eager = torch.zeros_like(input=logits_eager)
+                # TODO: test gradients as well (& for FA2 as well!)
+                with torch.no_grad():
+                    with sdpa_kernel(
+                        enable_flash=enable_kernels,
+                        enable_math=True,
+                        enable_mem_efficient=enable_kernels,
+                    ):
+                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                        prepared_inputs = {
+                            k: v.to(torch_device) if isinstance(v, torch.Tensor) else v
+                            for k, v in prepared_inputs.items()
+                        }
+                        outputs_eager = model_eager(**prepared_inputs)
+                        outputs_sdpa = model_sdpa(**prepared_inputs)
 
-                        _logits_sdpa[:-1] = logits_sdpa[:-1]
-                        _logits_eager[:-1] = logits_eager[:-1]
+                if "logits_per_text" in outputs_eager:
+                    key = "logits_per_text"
+                elif "vision_hidden_states" in outputs_eager:
+                    key = "vision_hidden_states"
+                elif "audio_values" in outputs_eager:
+                    key = "audio_values"
+                elif "decoder_hidden_states" in outputs_eager:
+                    key = "decoder_hidden_states"
+                elif "logits" in outputs_eager and "Classification" in model_class.__name__:
+                    key = "logits"
+                else:
+                    key = "hidden_states"
 
-                        if padding_side == "left":
-                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
-                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
+                # TODO: rename logits -> hidden_states
+                logits_eager = outputs_eager[key]
+                logits_sdpa = outputs_sdpa[key]
 
-                        elif padding_side == "right":
-                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
-                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
+                if key in ["vision_hidden_states", "decoder_hidden_states", "hidden_states"]:
+                    logits_eager = logits_eager[-1]
+                    logits_sdpa = logits_sdpa[-1]
 
-                        logits_sdpa = _logits_sdpa
-                        logits_eager = _logits_eager
+                if key == "logits_per_text":
+                    nan_mask = torch.isnan(logits_eager)
+                    logits_eager[nan_mask] = 0
+                    logits_sdpa[nan_mask] = 0
 
-                    results = [
-                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
-                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
-                    ]
-                    # If 80% batch elements have matched results, it's fine
-                    if np.mean(results) < 0.8:
-                        mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
-                        raise ValueError(
-                            f"mean relative difference: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
-                            f"{rtol}"
-                        )
+                if torch_device in ["cpu", "cuda"]:
+                    atol = atols[torch_device, enable_kernels, torch_dtype]
+                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                elif torch_device == "xpu":
+                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                    # which is implemented on PyTorch level using aten operators and is
+                    # device agnostic with respect to implementation of each aten operator.
+                    atol = atols["cuda", False, torch_dtype]
+                    rtol = rtols["cuda", False, torch_dtype]
+                else:
+                    atol = 1e-7
+                    rtol = 1e-4
+
+                # Masked tokens output slightly deviates - we don't mind that.
+                if use_attention_mask:
+                    _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                    _logits_eager = torch.zeros_like(input=logits_eager)
+
+                    _logits_sdpa[:-1] = logits_sdpa[:-1]
+                    _logits_eager[:-1] = logits_eager[:-1]
+
+                    if padding_side == "left":
+                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                        _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
+
+                    elif padding_side == "right":
+                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                        _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
+
+                    logits_sdpa = _logits_sdpa
+                    logits_eager = _logits_eager
+
+                results = [
+                    torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                    for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                ]
+                # If 80% batch elements have matched results, it's fine
+                if np.mean(results) < 0.8:
+                    mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
+                    raise ValueError(
+                        f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
+                        f"{rtol}"
+                    )
 
     @require_torch_sdpa
     @require_torch_gpu
@@ -3867,12 +3761,15 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -3912,13 +3809,16 @@ class ModelTesterMixin:
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-        torch.compiler.reset()
-        if "cuda" in torch_device:
-            compute_capability = torch.cuda.get_device_capability()
-            major, _ = compute_capability
 
-            if not torch.version.cuda or major < 8:
-                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -4341,7 +4241,7 @@ class ModelTesterMixin:
         loss = model(**inputs).loss
         loss.backward()
 
-        params = {name: param.grad.clone().detach().cpu() for name, param in model.named_parameters()}
+        params = {name: param.grad.detach().to(device="cpu", copy=True) for name, param in model.named_parameters()}
         model.zero_grad()
         del loss
 

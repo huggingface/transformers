@@ -309,7 +309,7 @@ class Kosmos2ModelOutput(ModelOutput):
             input) to speed up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -367,7 +367,7 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -837,10 +837,10 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        input_ids: torch.Tensor = None,
-        inputs_embeds: torch.Tensor = None,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         if input_ids is not None:
             bsz, seq_len = input_ids.size()
@@ -1187,11 +1187,11 @@ class Kosmos2TextTransformer(nn.Module):
     def forward_embedding(
         self,
         input_ids,
-        inputs_embeds: torch.Tensor = None,
-        image_embeds: torch.Tensor = None,
-        img_input_mask: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        img_input_mask: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`.
         if inputs_embeds is None:

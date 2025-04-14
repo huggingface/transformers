@@ -28,11 +28,13 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import (
@@ -43,6 +45,7 @@ from ...utils import (
     TensorType,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -493,6 +496,12 @@ class AriaImageProcessor(BaseImageProcessor):
             Whether to split the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+            the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+            method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
         resample (PILImageResampling, *optional*, defaults to `BICUBIC`):
@@ -510,6 +519,8 @@ class AriaImageProcessor(BaseImageProcessor):
         split_resolutions: Optional[List[Tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: Optional[bool] = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
@@ -530,6 +541,8 @@ class AriaImageProcessor(BaseImageProcessor):
             split_resolutions = [(el[0] * 490, el[1] * 490) for el in split_resolutions]
         self.split_resolutions = split_resolutions
         self.do_convert_rgb = do_convert_rgb
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.resample = resample
 
@@ -542,6 +555,8 @@ class AriaImageProcessor(BaseImageProcessor):
         min_image_size: Optional[int] = None,
         split_image: Optional[bool] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         resample: PILImageResampling = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
@@ -566,6 +581,10 @@ class AriaImageProcessor(BaseImageProcessor):
                 Whether to split the image.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb` (True)):
                 Whether to convert the image to RGB.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize` (True)):
                 Whether to normalize the image.
             resample (PILImageResampling, *optional*, defaults to `self.resample` (BICUBIC)):
@@ -606,6 +625,8 @@ class AriaImageProcessor(BaseImageProcessor):
         min_image_size = min_image_size if min_image_size is not None else self.min_image_size
         split_image = split_image if split_image is not None else self.split_image
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
 
@@ -625,6 +646,8 @@ class AriaImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
         )
 
         if do_convert_rgb:
@@ -632,6 +655,12 @@ class AriaImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if do_rescale and is_scaled_image(images[0]):
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
@@ -686,9 +715,14 @@ class AriaImageProcessor(BaseImageProcessor):
                 pixel_mask[: new_size[0], : new_size[1]] = 1
                 pixel_masks.append(pixel_mask)
 
+                if do_rescale:
+                    crop_image_padded = self.rescale(
+                        image=crop_image_padded, scale=rescale_factor, input_data_format=input_data_format
+                    )
+
                 if do_normalize:
                     crop_image_padded = self.normalize(
-                        crop_image_padded / 255.0,
+                        crop_image_padded,
                         self.image_mean,
                         self.image_std,
                         data_format=input_data_format,
@@ -1400,7 +1434,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor = None,
+        pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
     ):
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
@@ -1416,14 +1450,15 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
+    @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1432,11 +1467,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
         **loss_kwargs,
-    ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
+    ) -> AriaCausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1502,7 +1536,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1533,7 +1566,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1541,22 +1574,17 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             logits_to_keep=logits_to_keep,
             cache_position=cache_position,
         )
 
-        logits = outputs[0]
+        logits = outputs.logits
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return AriaCausalLMOutputWithPast(
             loss=loss,

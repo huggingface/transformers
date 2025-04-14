@@ -152,3 +152,6 @@ class GPTSanJapaneseConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+
+__all__ = ["GPTSanJapaneseConfig"]
