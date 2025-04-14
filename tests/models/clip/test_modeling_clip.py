@@ -216,13 +216,6 @@ class CLIPModelTesterMixin(ModelTesterMixin):
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                     raise ValueError("The eager model should not have SDPA attention layers")
 
-            has_sdpa = False
-            for name, submodule in model_sdpa.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
@@ -1060,7 +1053,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
+        model = CLIPModel.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()

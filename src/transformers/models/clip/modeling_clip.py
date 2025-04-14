@@ -23,10 +23,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
-from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -38,10 +36,6 @@ from ...utils import (
     torch_int,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -315,8 +309,8 @@ def eager_attention_forward(
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
+
 
 class CLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -359,6 +353,11 @@ class CLIPAttention(nn.Module):
         queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
+        if attention_mask is not None and causal_attention_mask is not None:
+            attention_mask = attention_mask + causal_attention_mask
+        elif causal_attention_mask is not None:
+            attention_mask = causal_attention_mask
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -384,11 +383,13 @@ class CLIPAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
+        if not output_attentions:
+            attn_weights = None
         return attn_output, attn_weights
 
 
 class CLIPMLP(nn.Module):
-    def __init__(self, config: Union[CLIPVisionConfig, CLIPTextConfig]):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]

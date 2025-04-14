@@ -281,7 +281,6 @@ class Idefics2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipMLP with Siglip->Idefics2Vision
 class Idefics2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

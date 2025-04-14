@@ -571,7 +571,6 @@ class ChineseCLIPTextOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->ChineseCLIPVision
 class ChineseCLIPVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

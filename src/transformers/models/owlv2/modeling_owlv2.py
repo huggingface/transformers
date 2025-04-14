@@ -489,7 +489,6 @@ class Owlv2Attention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Owlv2
 class Owlv2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

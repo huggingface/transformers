@@ -398,7 +398,6 @@ class BlipAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Blip
 class BlipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
