@@ -40,7 +40,14 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..phi3.configuration_phi3 import Phi3Config
-from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
+from ..phi3.modeling_phi3 import (
+    Phi3DecoderLayer,
+    Phi3ForCausalLM,
+    Phi3Model,
+    Phi3PreTrainedModel,
+    Phi3RMSNorm,
+    Phi3RotaryEmbedding,
+)
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
@@ -1133,6 +1140,9 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+            module.b1.data.zero_()
+            module.b2.data.zero_()
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
@@ -1519,6 +1529,28 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
 """
 
 
+class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
+    pass
+
+
+class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Phi4MultimodalRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalImageEmbedding):
+            module.global_img_feature_extensor.data.zero_()
+            module.sub_img_feature_extensor.data.zero_()
+
+
 class Phi4MultimodalModel(Phi3Model, nn.Module):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
@@ -1549,7 +1581,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
     @add_start_docstrings_to_model_forward(PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1684,7 +1716,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=Phi4MultimodalConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1829,7 +1861,7 @@ __all__ = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionPreTrainedModel",
     "Phi4MultimodalVisionModel",
-    "Phi4MultimodalPreTrainedModel",  # noqa
+    "Phi4MultimodalPreTrainedModel",
     "Phi4MultimodalModel",
     "Phi4MultimodalForCausalLM",
     "Phi4MultimodalVisionConfig",

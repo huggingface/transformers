@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -409,7 +408,7 @@ class FSMTHeadTests(unittest.TestCase):
 
     def test_prepare_fsmt_decoder_inputs(self):
         config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor(([4, 4, 2]))
+        input_ids = _long_tensor([4, 4, 2])
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
         causal_mask_dtype = torch.float32
         ignore = torch.finfo(causal_mask_dtype).min

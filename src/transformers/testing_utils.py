@@ -138,9 +138,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -202,9 +200,11 @@ if is_torch_available():
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
+    IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
+    IS_XPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -1071,21 +1071,20 @@ def require_torch_bf16_gpu(test_case):
     )(test_case)
 
 
-def require_torch_bf16_cpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using CPU."""
-    return unittest.skipUnless(
-        is_torch_bf16_cpu_available(),
-        "test requires torch>=1.10, using CPU",
-    )(test_case)
-
-
 def require_deterministic_for_xpu(test_case):
-    if is_torch_xpu_available():
-        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
-            test_case
-        )
-    else:
-        return test_case
+    @wraps(test_case)
+    def wrapper(*args, **kwargs):
+        if is_torch_xpu_available():
+            original_state = torch.are_deterministic_algorithms_enabled()
+            try:
+                torch.use_deterministic_algorithms(True)
+                return test_case(*args, **kwargs)
+            finally:
+                torch.use_deterministic_algorithms(original_state)
+        else:
+            return test_case(*args, **kwargs)
+
+    return wrapper
 
 
 def require_torch_tf32(test_case):
@@ -2538,9 +2537,11 @@ class RequestCounter:
 
     def __exit__(self, *args, **kwargs) -> None:
         assert len(self.mock.call_args_list) == len(self._extra_info)
-
         for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
             if thread_id != self._thread_id:
+                continue
+            # code 307: the URL being requested by the user has moved to a temporary location
+            if call.args[-2] == 307:
                 continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
@@ -3003,6 +3004,8 @@ if is_torch_available():
 
         # Try to strip extension for later import – also verifies we are importing a
         # python file.
+        device_spec_dir, _ = os.path.split(os.path.realpath(device_spec_path))
+        sys.path.append(device_spec_dir)
         try:
             import_name = device_spec_path[: device_spec_path.index(".py")]
         except ValueError as e:
@@ -3073,6 +3076,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+    torch._dynamo.reset()
 
 
 # Type definition of key used in `Expectations` class.
@@ -3092,6 +3096,14 @@ def get_device_properties() -> DeviceProperties:
             return ("rocm", major)
         else:
             return ("cuda", major)
+    elif IS_XPU_SYSTEM:
+        import torch
+
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        arch = torch.xpu.get_device_capability()["architecture"]
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen)
     else:
         return (torch_device, None)
 
