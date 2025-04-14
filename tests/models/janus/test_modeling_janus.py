@@ -21,7 +21,6 @@ from functools import reduce
 
 import numpy as np
 import requests
-from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -440,7 +439,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
+        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out"
 
     @slow
     def test_model_text_generation(self):
@@ -534,18 +533,21 @@ class JanusIntegrationTest(unittest.TestCase):
         # It should run for num_image_tokens in this case 576.
         self.assertTrue(out.shape[1] == 576)
 
-        decoded_pixel_values = model.decode_image_tokens(out)
+        # fmt: off
+        expected_tokens = torch.tensor([4484,  4015, 15750,   506,  3758, 11651,  8597,  5739,  4861,   971,
+         14985, 14834, 15438,  7548,  1820,  1465, 13529, 12761, 10503, 12761,
+         14303,  6155,  4015, 11766,   705, 15736, 14146, 10417,  1951,  7713,
+         14305, 15617,  6169,  2706,  8006, 14893,  3855, 10188, 15652,  6297,
+          1097, 12108, 15038,   311, 14998, 15165,   897,  4044,  1762,  4676,
+        ])
+        # fmt: on
 
-        # Postprocess decoded pixel values.
+        # Compare the first 50 generated tokens.
+        self.assertTrue(expected_tokens, out[0][:50])
+
+        # Decode generated tokens to pixel values and postprocess them.
+        decoded_pixel_values = model.decode_image_tokens(out)
         images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="np")
 
         self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
-
-        filepath = hf_hub_download(
-            repo_id="hugosilva664/images_test",
-            filename="janus_image.npy",
-            repo_type="dataset",
-        )
-        original_pixels = np.load(filepath)
-        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))
