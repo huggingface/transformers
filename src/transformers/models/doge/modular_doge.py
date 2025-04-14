@@ -319,10 +319,10 @@ def flex_attention_forward(
     return attn_output, attention_weights
 
 
-ALL_ATTENTION_FUNCTIONS.update({"flex_attention": flex_attention_forward})
-
-
 class DogeAttention(nn.Module):
+    DOGE_ATTENTION_FUNCTIONS = dict(ALL_ATTENTION_FUNCTIONS)
+    DOGE_ATTENTION_FUNCTIONS.update({"flex_attention": flex_attention_forward})
+
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -397,7 +397,7 @@ class DogeAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = self.DOGE_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -498,7 +498,8 @@ class DogeCDMoE(nn.Module):
         all_indices = indices_x.unsqueeze(-1) * self.num_keys + indices_y.unsqueeze(-2)
         all_scores = all_scores.view(*all_scores.shape[:-2], -1)
         all_indices = all_indices.view(*all_indices.shape[:-2], -1)
-        scores, indices = all_scores.topk(self.top_k, dim=-1)
+        scores, position_indices = all_scores.topk(self.top_k, dim=-1)
+        indices = all_indices.gather(-1, position_indices)
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
 
