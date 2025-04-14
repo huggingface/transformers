@@ -52,10 +52,10 @@ async def homepage(request):
     return JSONResponse(output)
 
 async def server_loop(q):
-    p = pipeline(task="fill-mask",model="google-bert/bert-base-uncased")
+    pipe = pipeline(task="fill-mask",model="google-bert/bert-base-uncased")
     while True:
         (string, response_q) = await q.get()
-        out = p(string)
+        out = pipe(string)
         await response_q.put(out)
 
 app = Starlette(
@@ -120,7 +120,7 @@ The example below is written in pseudocode for readability rather than performan
 
 ```py
 async def server_loop(q):
-    p = pipeline(task="fill-mask", model="google-bert/bert-base-uncased")
+    pipe = pipeline(task="fill-mask", model="google-bert/bert-base-uncased")
     while True:
         (string, rq) = await q.get()
         strings = []
@@ -134,7 +134,7 @@ async def server_loop(q):
                 break
             strings.append(string)
             queues.append(rq)
-        outs = p(strings, batch_size=len(strings))
+        outs = pipe(strings, batch_size=len(strings))
         for rq, out in zip(queues, outs):
             await rq.put(out)
 ```
