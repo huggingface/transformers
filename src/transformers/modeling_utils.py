@@ -2982,6 +2982,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
+        # Add after new_lm_head creation:
+        new_lm_head._is_hf_initialized = True
+
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
