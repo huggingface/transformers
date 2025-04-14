@@ -1033,13 +1033,6 @@ class BambaPreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Adapted from transformers.models.jamba.modeling_jamba.JambaModel
 class BambaModel(BambaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`BambaDecoderLayer`]
-
-    Args:
-        config: BambaConfig
-    """
-
     def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

@@ -689,6 +689,7 @@ class Glm4ForCausalLM(Glm4PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -700,8 +701,6 @@ class Glm4ForCausalLM(Glm4PreTrainedModel, GenerationMixin):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
 
         Example:
 

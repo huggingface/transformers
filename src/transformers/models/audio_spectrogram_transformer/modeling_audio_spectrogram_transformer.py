@@ -539,7 +539,6 @@ class ASTForAudioClassification(ASTPreTrainedModel):
     @auto_docstring
     @add_code_sample_docstrings(
         checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,

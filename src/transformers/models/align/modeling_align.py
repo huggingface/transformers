@@ -1312,10 +1312,6 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`AlignTextModel`].
-
         Examples:
 
         ```python
@@ -1359,10 +1355,6 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`AlignVisionModel`].
-
         Examples:
 
         ```python

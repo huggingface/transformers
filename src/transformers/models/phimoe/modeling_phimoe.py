@@ -1289,7 +1289,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
                 Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-        Returns:
 
         Example:
 

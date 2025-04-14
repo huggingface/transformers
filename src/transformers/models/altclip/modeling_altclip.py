@@ -1462,10 +1462,6 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`AltCLIPTextModel`].
-
         Example:
 
         ```python

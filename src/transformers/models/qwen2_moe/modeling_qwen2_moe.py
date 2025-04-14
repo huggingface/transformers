@@ -1219,52 +1219,34 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        <<<<<<< HEAD
-        ||||||| 597efd21d2
-                Args:
-                    labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                        Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                        config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                        (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-                    num_logits_to_keep (`int`, *optional*):
-                        Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                        `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                        token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*):
+            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+            This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-                Returns:
-        =======
-                    labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                        Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                        config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                        (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        Example:
 
-                    logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                        If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                        `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                        token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                        If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                        This is useful when using packed tensor format (single dimension for batch and sequence length).
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
 
-                Returns:
-        >>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
+        >>> model = Qwen2MoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
-                Example:
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
 
-                ```python
-                >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
-
-                >>> model = Qwen2MoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-                >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
-
-                >>> prompt = "Hey, are you conscious? Can you talk to me?"
-                >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-                >>> # Generate
-                >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-                >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-                "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-                ```"""
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
