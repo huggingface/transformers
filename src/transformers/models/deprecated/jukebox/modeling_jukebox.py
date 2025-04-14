@@ -148,7 +148,7 @@ def get_alignment(music_tokens, labels, prior, config):
             del w_hop
         weights = torch.cat(w_hops, dim=0)
         del w_hops
-        alignment_hop = weights.float().cpu().numpy()
+        alignment_hop = weights.to(device="cpu", dtype=torch.float).numpy()
         del weights
 
         # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
@@ -2665,3 +2665,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+
+__all__ = ["JukeboxModel", "JukeboxPreTrainedModel", "JukeboxVQVAE", "JukeboxPrior"]
