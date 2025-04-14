@@ -229,7 +229,8 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
         video_len = 360 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
-        self.assertEqual(len(out_dict[input_name]), video_len)
+        mm_len = batch_size * 192 if modality == "image" else video_len
+        self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:

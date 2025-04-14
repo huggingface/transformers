@@ -954,7 +954,10 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        return BatchFeature(
+            data={**text_inputs, **image_inputs, **videos_inputs},
+            tensor_type=output_kwargs["common_kwargs"].get("return_tensors", None),
+        )
 
 
 __all__ = [
