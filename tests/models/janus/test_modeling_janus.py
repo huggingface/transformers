@@ -439,7 +439,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out"
+        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
     @slow
     def test_model_text_generation(self):
@@ -539,11 +539,11 @@ class JanusIntegrationTest(unittest.TestCase):
          14303,  6155,  4015, 11766,   705, 15736, 14146, 10417,  1951,  7713,
          14305, 15617,  6169,  2706,  8006, 14893,  3855, 10188, 15652,  6297,
           1097, 12108, 15038,   311, 14998, 15165,   897,  4044,  1762,  4676,
-        ])
+        ]).to(model.device)
         # fmt: on
 
         # Compare the first 50 generated tokens.
-        self.assertTrue(expected_tokens, out[0][:50])
+        self.assertTrue(torch.allclose(expected_tokens, out[0][:50]))
 
         # Decode generated tokens to pixel values and postprocess them.
         decoded_pixel_values = model.decode_image_tokens(out)
