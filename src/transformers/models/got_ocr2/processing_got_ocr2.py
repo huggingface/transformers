@@ -107,6 +107,8 @@ class GotOcr2Processor(ProcessorMixin):
         self.img_start_token = "<img>"
         self.img_end_token = "</img>"
         self.img_pad_token = "<imgpad>"
+        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def _make_list_of_inputs(self, images, text, box, color, multi_page):

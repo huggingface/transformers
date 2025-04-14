@@ -60,7 +60,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-            "patch_size": 28,
+            "patch_size": 128,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
 
@@ -104,5 +104,5 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
                 truncation=True,
                 padding=True,
-                max_length=20,
+                max_length=5,
             )
