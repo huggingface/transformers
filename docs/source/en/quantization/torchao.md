@@ -13,26 +13,6 @@ rendered properly in your Markdown viewer.
 
 [torchao](https://github.com/pytorch/ao) is a PyTorch architecture optimization library with support for custom high performance data types, quantization, and sparsity. It is composable with native PyTorch features such as [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training. You can checkout torchao [README](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for an overall introduction to the library and recent highlights and updates.
 
-## Main Functionalities
-
-| Feature | Description |
-|--------|-------------|
-| **Post-Training Quantization (PTQ)** | Quantize weights and activations  with just one line, see below for examples |
-| **Quantization Aware Training (QAT)** | Train quantized models with minimal accuracy loss, for more details see [QAT README](https://github.com/pytorch/ao/blob/main/torchao/quantization/qat/README.md) |
-| **Float8 Training** | High-throughput training with float8 formats, for more details see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/docs/float8.md) |
-| **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference, details in the [blog](https://pytorch.org/blog/accelerating-neural-network-training/) |
-| **Optimizer Quantization** | Reduce optimizer state memory with 4/8-bit variants of Adam. |
-| **KV Cache Quantization** | Enables long context inference with lower memory, some details [here](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md) |
-| **Custom Kernels Support** | use your own ops compatible with `torch.compile`. |
-| **FSDP2** | Composable with FSDP2 for training|
-
-## Hardware Compatibility
-
-| Component | Compatibility |
-|----------|----------------|
-| **CUDA Versions** | ✅ cu118, cu124, cu126, cu128 |
-| **CPU** | ✅ Quantization on cpu is supported (different layouts for Int4, see below) |
-| **CPU / GPU Offloading** | ✅ Optimizers and gradients can be offloaded |
 
 ## Supported Quantization techniques
 
@@ -42,19 +22,23 @@ TorchAO supports several quantization techniques:
 - **Int4 Weight Only**
 - **Int8 Dynamic Quantization**
 - **Float8 (E4M3 / E5M2)**
-- **KV Cache Quantization**
-- **Custom intx**: Support for int2, int3, etc., via pure PyTorch bitpacking (alpha feature)
+- **AutoQuant**
 
+## Hardware Compatibility
 
+| Component | Compatibility |
+|----------|----------------|
+| **CUDA Versions** | ✅ cu118, cu124, cu126, cu128 |
+| **CPU** | ✅ Quantization on cpu is supported (different layouts for Int4, see below) |
 
 
 ## Installation
 
 Install torchao with the following command.
 
-Stable release from Pypi which will default to CUDA 12.4
 ```bash
 # Updating 🤗 Transformers to the latest version, as the example script below uses the new auto compilation
+# Stable release from Pypi which will default to CUDA 12.4
 pip install --upgrade torchao transformers
 ```
 Stable Release from the PyTorch index
@@ -198,7 +182,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only cpu">
 
 > [!TIP]
-> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`. This is only available in torchao 0.8.0+.
+> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
 
 ```py
 import torch
@@ -476,6 +460,18 @@ print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_toke
 
 > [!TIP]
 > For best performance, you can use recommended settings by calling `torchao.quantization.utils.recommended_inductor_config_setter()`
+
+## Other Features proposed by torchao
+
+| Feature | Description |
+|--------|-------------|
+| **Quantization Aware Training (QAT)** | Train quantized models with minimal accuracy loss, for more details see [QAT README](https://github.com/pytorch/ao/blob/main/torchao/quantization/qat/README.md) |
+| **Float8 Training** | High-throughput training with float8 formats, for more details see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/docs/float8.md) |
+| **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference, details in the [blog](https://pytorch.org/blog/accelerating-neural-network-training/) |
+| **Optimizer Quantization** | Reduce optimizer state memory with 4/8-bit variants of Adam. |
+| **KV Cache Quantization** | Enables long context inference with lower memory, some details [here](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md) |
+| **Custom Kernels Support** | use your own ops compatible with `torch.compile`. |
+| **FSDP2** | Composable with FSDP2 for training|
 
 
 ## Resources
