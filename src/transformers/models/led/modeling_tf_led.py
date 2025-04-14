@@ -129,7 +129,7 @@ class TFLEDLearnedPositionalEmbedding(keras.layers.Embedding):
 
         return super().call(tf.cast(position_ids, dtype=tf.int32))
 
-
+# Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerSelfAttention with TFLongformer->TFLEDEncoder
 class TFLEDEncoderSelfAttention(keras.layers.Layer):
     def __init__(self, config, layer_id, **kwargs):
         super().__init__(**kwargs)
@@ -181,13 +181,13 @@ class TFLEDEncoderSelfAttention(keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
 
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
         self.one_sided_attn_window_size = attention_window // 2
 
     def build(self, input_shape=None):
