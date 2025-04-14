@@ -407,6 +407,8 @@ class Glm4PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Glm4RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 GLM4_INPUTS_DOCSTRING = r"""
@@ -678,7 +680,7 @@ class Glm4Model(Glm4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

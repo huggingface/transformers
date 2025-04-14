@@ -71,10 +71,13 @@ from .generic import (
     working_or_temp_dir,
 )
 from .hub import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     CLOUDFRONT_DISTRIB_PREFIX,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
     S3_BUCKET_PREFIX,
@@ -94,6 +97,7 @@ from .hub import (
     http_user_agent,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
 )
@@ -268,9 +272,9 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 PROCESSOR_NAME = "processor_config.json"
-CHAT_TEMPLATE_NAME = "chat_template.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
+
 
 SENTENCEPIECE_UNDERLINE = "▁"
 SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
