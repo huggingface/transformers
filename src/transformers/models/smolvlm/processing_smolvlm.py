@@ -436,6 +436,7 @@ class SmolVLMProcessor(ProcessorMixin):
         fps: Optional[int] = None,
         backend: str = "opencv",
         skip_secs: int = 0.0,
+        **kwargs,
     ) -> np.array:
         """
         Loads `video` to a numpy array.
