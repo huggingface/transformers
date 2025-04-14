@@ -1060,7 +1060,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name).to(torch_device)
+        model = CLIPModel.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
