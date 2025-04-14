@@ -23,8 +23,9 @@ from ...image_processing_utils_fast import (
 from ...utils import add_start_docstrings
 
 import torch
+import torchvision.transforms.v2.functional as F
 
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union, List
 
 from ...image_processing_utils import (
     BaseImageProcessor,
@@ -80,6 +81,9 @@ class Pix2StructFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     patch_size: Optional[dict[str, int]]
     max_patches: Optional[int]
     is_vqa: Optional[bool]
+    header_text: Optional[Union[List[str], str]]
+    font_bytes: Optional[str]
+    font_path: Optional[str]
 
 @add_start_docstrings(
     "Constructs a fast Pix2Struct image processor.",
@@ -102,6 +106,11 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     patch_size = {"height": 16, "width": 16}
     max_patches = 2048
     is_vqa = False
+    input_data_format = None
+    return_tensors = None
+    header_text = None
+    font_bytes = None
+    font_path = None
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -114,7 +123,15 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
             is_vqa (`bool`, *optional*, defaults to `False`):
                 Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
                 rendered onto the input images.
-        """,
+            header_text (`Union[List[str], str]`, *optional*):
+                Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
+            font_bytes (`str`, *optional*, default to `None`):
+                The font bytes to use for rendering the header text. Only has an effect if `image_processor.is_vqa` is
+                `True`.
+            font_path (`str`, *optional*, default to `None`):
+                The path to the font file to use for rendering the header text. Only has an effect if
+                `image_processor.is_vqa` is `True`.
+        """
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Pix2StructFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
@@ -133,7 +150,12 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
+        patch_size: Optional[dict[str, int]],
+        max_patches: Optional[int],
+        is_vqa: Optional[bool],
+        header_text: Optional[Union[List[str], str]],
+        font_bytes: Optional[str],
+        font_path: Optional[str]
     ) -> BatchFeature:
 
         # make image list
