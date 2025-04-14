@@ -30,6 +30,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
@@ -169,6 +170,7 @@ class MolmoTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class MolmoTextLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -684,6 +686,7 @@ class MolmoTextModel(MolmoPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -694,7 +697,6 @@ class MolmoTextModel(MolmoPreTrainedModel):
         self.norm = MolmoTextLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.rotary_emb = MolmoTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -873,7 +875,7 @@ class MolmoTextModel(MolmoPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1702,6 +1704,7 @@ class MolmoVisionModel(MolmoPreTrainedModel):
     config_class = MolmoVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MolmoVisionEncoderLayer"]
+    _supports_flex_attn = False
 
     def __init__(self, config: MolmoVisionConfig):
         super().__init__(config)

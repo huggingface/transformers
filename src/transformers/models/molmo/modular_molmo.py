@@ -833,21 +833,13 @@ class MolmoTextPreTrainedModel(PreTrainedModel):
 class MolmoTextModel(CohereModel):
 
     def __init__(self, config):
-        super().__init__(config)
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        super().__init__(config)
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = MolmoTextLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.rotary_emb = MolmoTextRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
