@@ -10,7 +10,7 @@ Reducing the precision of a model offers several significant advantages:
 2.  **Faster Inference:** Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for `int8` operations). This leads to lower latency.
 4.  **Reduced Energy Consumption:** Faster computations and smaller memory transfers often translate to lower power usage.
 
-## How Quantization Works (Focus on `int8`)
+## How Quantization Works
 
 The core idea is to map the range of values found in the original `float32` weights and activations to the much smaller range representable by `int8` (typically $[-128, 127]$).
 <img width="606" alt="quant_visual" src="https://gist.github.com/user-attachments/assets/b45773d8-762a-4223-b1b4-bc15456ca64e" />
@@ -104,7 +104,7 @@ The 🤗 Transformers library integrates with several quantization backends like
 - `awq`
 - And more...
 
-These are unified under the `HfQuantizer` API and associated `QuantizationConfig` classes. You can integrate your own custom quantization backends by implementing a custom `HfQuantizer` and `QuantizationConfig`, allowing seamless use within the 🤗 Transformers ecosystem.
+These are unified under the `HfQuantizer` API and associated `QuantizationConfig` classes. You can integrate your own custom quantization backends by implementing a custom `HfQuantizer` and `QuantizationConfig`, allowing seamless use within the 🤗 Transformers ecosystem, for more details you can check out this [example](https://github.com/huggingface/transformers/blob/main/examples/quantization/custom_quantization_int8_example.py).
 
 ### Typical Workflow
 
