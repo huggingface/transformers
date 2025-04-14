@@ -114,24 +114,16 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-
-    # SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT, NOT INCLUDED IN GENERATED:
-    # rescaled factiore is specified in BaseImageProcessorFast, do_pad is not given default value there
     do_pad = False
     rescale_factor = 1 / 255
-    # In BaseImageProcessorFast this is called size_divisibility (I think)
-    size_divisor = None
     ensure_multiple_of = 1
+    keep_aspect_ratio = False
+    size_divisor = None
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
-    # NOT SPECIFIED IN SLOW IMAGE PROCESSOR FOR DPT:
-    # default_to_square = None (<-- this broke one of the tests as it override this value to None)
-    # crop_size = None
-    # do_center_crop = None
-    # do_convert_rgb = None
 
-        # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
         # be passed in as positional arguments.
