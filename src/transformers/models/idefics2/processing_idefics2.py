@@ -98,8 +98,8 @@ class Idefics2Processor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         if not hasattr(tokenizer, "image_token"):
-            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
-            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
+            self.image_token = AddedToken("<image>", normalized=False, special=True).content
             tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
             self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -192,6 +192,7 @@ class Idefics2Processor(ProcessorMixin):
         )
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
         inputs = {}
@@ -203,8 +204,8 @@ class Idefics2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-            fake_image_token = self.fake_image_token.content
-            image_token = self.image_token.content
+            fake_image_token = self.fake_image_token
+            image_token = self.image_token
             image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
 
             if self.image_processor.do_image_splitting:
@@ -220,7 +221,6 @@ class Idefics2Processor(ProcessorMixin):
                 sample = sample.replace(f"{fake_image_token}{fake_image_token}", f"{fake_image_token}")
                 prompt_strings.append(sample)
 
-            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
             inputs.update(text_inputs)

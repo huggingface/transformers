@@ -39,6 +39,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.image_seq_length = 0  # TODO: raushan fix me in #37342
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
