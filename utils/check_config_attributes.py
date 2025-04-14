@@ -355,6 +355,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",
