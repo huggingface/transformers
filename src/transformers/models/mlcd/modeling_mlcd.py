@@ -584,15 +584,14 @@ class MLCDPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-
-        if isinstance(module, nn.Parameter):
-            nn.init.normal_(module, mean=0.0, std=0.02)
-
-        if isinstance(module, nn.LayerNorm):
+        elif isinstance(module, MLCDVisionTransformer):
+            factor = self.config.initializer_factor
+            pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
+            nn.init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
 
