@@ -91,7 +91,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
 
     # Not sharded
     # (The sharded implementation would also work, but this is simpler.)
-    loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu")
+    loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu", weights_only=True)
 
     param_count = 0
     index_dict = {"weight_map": {}}

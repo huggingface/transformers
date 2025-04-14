@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -22,7 +21,6 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_accelerate,
     require_fp8,
-    require_fsdp,
     require_torch_multi_accelerator,
     run_first,
     torch_device,
@@ -69,7 +67,6 @@ if is_torch_available():
 class TestFSDPTrainer(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
@@ -96,7 +93,6 @@ class TestFSDPTrainer(TestCasePlus):
 class TestFSDPTrainerFP8(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @require_fp8
     @run_first
     def test_trainer(self):
@@ -126,7 +122,6 @@ class TestFSDPTrainerFP8(TestCasePlus):
 class TestFSDPTrainerWrap(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
@@ -166,7 +161,7 @@ if __name__ == "__main__":
     device = torch.device(torch.distributed.get_rank())
     model = AutoModelForCausalLM.from_pretrained(pretrained_model_name).to(device)
 
-    def compute_metrics(p: EvalPrediction) -> Dict[str, bool]:
+    def compute_metrics(p: EvalPrediction) -> dict[str, bool]:
         return {"accuracy": (p.predictions == p.label_ids).mean()}
 
     trainer = Seq2SeqTrainer(
