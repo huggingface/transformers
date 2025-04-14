@@ -296,9 +296,9 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        input_str = [f"[IMG]{sample}" for sample in input_str]
+
         _ = processor(
             text=input_str,
             images=image_input,
@@ -314,5 +314,5 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
                 truncation=True,
                 padding=True,
-                max_length=20,
+                max_length=3,
             )

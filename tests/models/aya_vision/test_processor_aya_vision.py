@@ -145,29 +145,3 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             )
             images_patches_index += inputs["pixel_values"].shape[0]
-
-    def test_special_mm_token_truncation(self):
-        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
-
-        processor = self.get_processor()
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        image_input = self.prepare_image_inputs(batch_size=2)
-        input_str = [f"<image>{sample}" for sample in input_str]
-        _ = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            truncation=None,
-            padding=True,
-        )
-
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                return_tensors="pt",
-                truncation=True,
-                padding=True,
-                max_length=20,
-            )

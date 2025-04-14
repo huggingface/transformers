@@ -80,3 +80,29 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor = LlavaProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=20,
+            )

@@ -403,9 +403,8 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        input_str = [f"<|image_pad|>{sample}" for sample in input_str]
 
         _ = processor(
             text=input_str,

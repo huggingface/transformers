@@ -366,7 +366,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
