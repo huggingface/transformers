@@ -121,7 +121,7 @@ class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
 @require_torch
 @require_vision
-class PoolFormerImageProcessingCropPctTest(PoolFormerImageProcessingTest):
+class PoolFormerImageProcessingNoCropPctTest(PoolFormerImageProcessingTest):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PoolFormerImageProcessingTester(self, crop_pct=None)
