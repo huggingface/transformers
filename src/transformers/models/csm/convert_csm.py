@@ -23,7 +23,7 @@ from transformers import (
     CsmConfig,
     CsmForCausalLM,
 )
-from transformers.utils.hub import get_file_from_repo
+from transformers.utils.hub import cached_file
 
 
 # fmt: off
@@ -96,7 +96,7 @@ def write_model(
         },
     }
 
-    model_path = get_file_from_repo(
+    model_path = cached_file(
         input_path_or_repo,
         model_name,
     )
