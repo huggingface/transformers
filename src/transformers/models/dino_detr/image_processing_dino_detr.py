@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for Deformable DETR."""
+"""Image processor class for Dino DETR."""
 
 import io
 import pathlib
@@ -342,7 +342,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by DeformableDetr.
+    Convert the target in COCO format into the format expected by DinoDetr.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
@@ -442,7 +442,7 @@ def prepare_coco_panoptic_annotation(
     input_data_format: Union[ChannelDimension, str] = None,
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for DeformableDetr.
+    Prepare a coco panoptic annotation for DinoDetr.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -826,7 +826,7 @@ def compute_segments(
 
 class DinoDetrImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Deformable DETR image processor.
+    Constructs a Dino DETR image processor.
 
     Args:
         format (`str`, *optional*, defaults to `"coco_detection"`):
@@ -955,7 +955,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `DeformableDetrImageProcessor.from_pretrained(checkpoint, size=600,
+        created using from_dict and kwargs e.g. `DinoDetrImageProcessor.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -976,7 +976,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into DeformableDetr model.
+        Prepare an annotation for feeding into DinoDetr model.
         """
         format = format if format is not None else self.format
 
@@ -1585,11 +1585,11 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
     def post_process(self, outputs, target_sizes):
         """
-        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        Converts the raw output of [`DinoDetrForObjectDetection`] into final bounding boxes in (top_left_x,
         top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
-            outputs ([`DeformableDetrObjectDetectionOutput`]):
+            outputs ([`DinoDetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
