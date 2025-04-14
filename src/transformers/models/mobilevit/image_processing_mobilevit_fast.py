@@ -14,12 +14,17 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, group_images_by_shape, reorder_images
+import torch
+
+from ...image_processing_utils import BatchFeature
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import PILImageResampling
 from ...utils import add_start_docstrings
-from ...image_processing_utils import BatchFeature
-
-import torch
 
 
 @add_start_docstrings(
@@ -79,31 +84,31 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         image_std=None
     ):
         processed_images = []
-        
+
         if do_normalize is None:
             do_normalize = self.do_normalize
         if image_mean is None and hasattr(self, "image_mean"):
             image_mean = self.image_mean
         if image_std is None and hasattr(self, "image_std"):
             image_std = self.image_std
-        
+
         # Group images by shape for more efficient batch processing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
-        
+
         # Process each group of images with the same shape
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
-        
+
         # Reorder images to original sequence
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-        
+
         # Group again after resizing (in case resize produced different sizes)
         grouped_images, grouped_images_index = group_images_by_shape(resized_images)
         processed_images_grouped = {}
-        
+
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(image=stacked_images, size=crop_size)
@@ -120,15 +125,15 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.normalize(image=stacked_images, mean=image_mean, std=image_std)
             if do_convert_rgb:
                 stacked_images = self.convert_to_rgb(stacked_images)
-            
+
             processed_images_grouped[shape] = stacked_images
-            
+
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-            
+
         # Stack all processed images if return_tensors is specified
         if return_tensors is not None:
             processed_images = torch.stack(processed_images, dim=0)
-        
+
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 __all__ = ["MobileViTImageProcessorFast"]
