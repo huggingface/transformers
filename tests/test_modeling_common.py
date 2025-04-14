@@ -4499,7 +4499,7 @@ class ModelTesterMixin:
                     buffer.device for buffer in new_model.buffers()
                 }
 
-            # set back the correct device to avoid polluting other tests
+            # set back the correct device
             torch.set_default_device(default_device)
 
             self.assertEqual(
