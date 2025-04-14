@@ -149,7 +149,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=2050,
+        pad_token_id=None,
         bos_token_id=None,
         eos_token_id=None,
         rope_theta=500000,
@@ -166,6 +166,9 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         head_dim=None,
         **kwargs,
     ):
+        if kwargs.pop("tie_word_embeddings", False):
+            raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
+        
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -381,6 +384,9 @@ class CsmBackboneConfig(PretrainedConfig):
         head_dim=None,
         **kwargs,
     ):
+        if kwargs.pop("tie_word_embeddings", False):
+            raise ValueError("`tie_word_embeddings=True` is not supported for CsmBackboneConfig")
+        
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -461,6 +467,8 @@ class CsmConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         depth_decoder_config (`Union[AutoConfig, dict]`, *optional*, defaults to `CsmDepthDecoderConfig`):
             The config object or dictionary of the text backbone.
+        tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie the codebooks embeddings from the backbone model and the depth decoder model.
 
     Example:
 
@@ -483,19 +491,21 @@ class CsmConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     
-    model_type = "csm_model"
-    sub_model_type = {
+    model_type = "csm"
+    sub_configs = {
         "backbone_config": CsmBackboneConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
     }
 
-    def get_text_config(self, decoder=False):
-        return self.backbone_config
+    # does not really make sense to have a text config for csm
+    # def get_text_config(self, decoder=False):
+    #     return self.backbone_config
 
     def __init__(
         self,
         backbone_config=None,
         depth_decoder_config=None,
+        tie_codebooks_embeddings=True,
         **kwargs,
     ):
         if backbone_config is None:
@@ -519,8 +529,17 @@ class CsmConfig(PretrainedConfig):
         self.num_codebooks = self.backbone_config.num_codebooks
         self.initializer_range = self.backbone_config.initializer_range
         self.max_position_embeddings = self.backbone_config.max_position_embeddings
+        self.num_attention_heads = self.backbone_config.num_attention_heads
+        self.num_hidden_layers = self.backbone_config.num_hidden_layers
 
-        super().__init__(**kwargs)
+        self.tie_codebooks_embeddings = tie_codebooks_embeddings
+
+        if kwargs.pop("tie_word_embeddings", False):
+            raise ValueError("`tie_word_embeddings=True` is not supported for CsmConfig")
+
+        # TODO: ensure parameters that need to shared are the same across sub-configs
+
+        super().__init__(**{**kwargs, "tie_word_embeddings": False})
 
 
 __all__ = [
