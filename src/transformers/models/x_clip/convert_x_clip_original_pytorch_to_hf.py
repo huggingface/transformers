@@ -279,7 +279,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     if "drive" in checkpoint_url:
         output = "pytorch_model.bin"
         gdown.cached_download(checkpoint_url, output, quiet=False)
-        state_dict = torch.load(output, map_location="cpu")["model"]
+        state_dict = torch.load(output, map_location="cpu", weights_only=True)["model"]
     else:
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
 
