@@ -118,7 +118,6 @@ class AutoRoundTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=40, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    #
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """
