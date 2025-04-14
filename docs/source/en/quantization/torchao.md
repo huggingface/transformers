@@ -64,7 +64,7 @@ TorchAO provides a variety of quantization configurations:
 
 Each configuration can be further customized with parameters such as `group_size`, `scheme`, and `layout` to optimize for specific hardware and model architectures.
 
-For a complete list of available configurations, see our [quantization API documentation](https://github.com/pytorch/ao/blob/main/torchao/quantization/quant_api.py).
+For a complete list of available configurations, see the [quantization API documentation](https://github.com/pytorch/ao/blob/main/torchao/quantization/quant_api.py).
 
 > **⚠️ DEPRECATION WARNING**
 >
@@ -99,7 +99,7 @@ For a complete list of available configurations, see our [quantization API docum
 
 You can manually choose the quantization types and settings or automatically select the quantization types.
 
-Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
+Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize (for int8 weight only and int4 weight only). Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
 
 <hfoptions id="examples">
 <hfoption id="int8-weight-only cuda">
