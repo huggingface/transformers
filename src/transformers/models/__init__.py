@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .bigbird_pegasus import *
     from .biogpt import *
     from .bit import *
+    from .bitnet import *
     from .blenderbot import *
     from .blenderbot_small import *
     from .blip import *
