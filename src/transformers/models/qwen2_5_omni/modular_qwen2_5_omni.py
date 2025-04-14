@@ -917,6 +917,7 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "qwen2_5_omni_token2wav"
