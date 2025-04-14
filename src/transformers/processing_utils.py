@@ -1427,7 +1427,6 @@ class ProcessorMixin(PushToHubMixin):
 
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
-            "processor_kwargs": {},
             "mm_load_kwargs": {},
             "template_kwargs": {},
         }
@@ -1551,14 +1550,14 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                processed_kwargs["processor_kwargs"]["add_special_tokens"] = False
+                kwargs["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                **processed_kwargs["processor_kwargs"],
+                **kwargs,
             )
             if return_dict:
                 return out
@@ -1574,6 +1573,7 @@ class ProcessorMixin(PushToHubMixin):
         num_frames: Optional[int] = None,
         fps: Optional[int] = None,
         backend: str = "opencv",
+        **kwargs,
     ) -> np.array:
         """
         Loads `video` to a numpy array.
