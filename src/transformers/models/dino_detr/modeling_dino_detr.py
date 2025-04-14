@@ -91,7 +91,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DinoDetrConfig"
-_CHECKPOINT_FOR_DOC = "dino-detr"
+_CHECKPOINT_FOR_DOC = "dino_detr"
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -133,14 +133,16 @@ class MultiScaleDeformableAttentionFunction(Function):
             sampling_locations,
             attention_weights,
         ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
+        grad_value, grad_sampling_loc, grad_attn_weight = (
+            MultiScaleDeformableAttention.ms_deform_attn_backward(
+                value,
+                value_spatial_shapes,
+                value_level_start_index,
+                sampling_locations,
+                attention_weights,
+                grad_output,
+                context.im2col_step,
+            )
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
@@ -154,7 +156,9 @@ def multi_scale_deformable_attention(
 ) -> Tensor:
     batch_size, _, num_heads, d_model = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+    value_list = value.split(
+        [height * width for height, width in value_spatial_shapes], dim=1
+    )
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -163,12 +167,17 @@ def multi_scale_deformable_attention(
         # -> batch_size, num_heads*d_model, height*width
         # -> batch_size*num_heads, d_model, height, width
         value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, d_model, height, width)
+            value_list[level_id]
+            .flatten(2)
+            .transpose(1, 2)
+            .reshape(batch_size * num_heads, d_model, height, width)
         )
         # batch_size, num_queries, num_heads, num_points, 2
         # -> batch_size, num_heads, num_queries, num_points, 2
         # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        sampling_grid_l_ = (
+            sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        )
         # batch_size*num_heads, d_model, num_queries, num_points
         sampling_value_l_ = nn.functional.grid_sample(
             value_l_,
@@ -205,7 +214,9 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+                logger.warning(
+                    f"Could not load the custom kernel for multi-scale deformable attention: {e}"
+                )
 
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -227,14 +238,20 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         self.num_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.num_feature_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.num_feature_levels * n_points)
+        self.sampling_offsets = nn.Linear(
+            config.d_model, num_heads * self.num_feature_levels * n_points * 2
+        )
+        self.attention_weights = nn.Linear(
+            config.d_model, num_heads * self.num_feature_levels * n_points
+        )
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -266,7 +283,9 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         if attention_mask is not None:
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.num_heads, self.d_model // self.num_heads)
+        value = value.view(
+            batch_size, sequence_length, self.num_heads, self.d_model // self.num_heads
+        )
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size,
             num_queries,
@@ -291,7 +310,9 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         # batch_size, num_queries, num_heads, num_feature_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack(
+                [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -299,12 +320,21 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+                + sampling_offsets
+                / self.n_points
+                * reference_points[:, :, None, :, None, 2:]
+                * 0.5
             )
         else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            raise ValueError(
+                f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+            )
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
+        if (
+            self.disable_custom_kernels
+            or MultiScaleDeformableAttention is None
+            or is_torchdynamo_compiling()
+        ):
             # PyTorch implementation
             output = multi_scale_deformable_attention(
                 value, spatial_shapes_list, sampling_locations, attention_weights
@@ -331,7 +361,9 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
+        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (
+            2.0 * math.pi / self.num_heads
+        )
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -522,9 +554,13 @@ def inverse_sigmoid(x, eps=1e-3):
     return torch.log(x1 / x2)
 
 
-class RandomBoxPerturber:
-    def __init__(self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2) -> None:
-        self.noise_scale = torch.Tensor([x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale])
+class DinoDetrRandomBoxPerturber:
+    def __init__(
+        self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2
+    ) -> None:
+        self.noise_scale = torch.Tensor(
+            [x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale]
+        )
 
     def __call__(self, refanchors: Tensor) -> Tensor:
         nq, bs, query_dim = refanchors.shape
@@ -655,7 +691,9 @@ class DinoDetrConvEncoder(nn.Module):
             replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+            self.model.feature_info.channels()
+            if config.use_timm_backbone
+            else self.model.channels
         )
         self.out_indices = out_indices
 
@@ -665,26 +703,42 @@ class DinoDetrConvEncoder(nn.Module):
         elif config.backbone_config is not None:
             backbone_model_type = config.backbone_config.model_type
         else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+            raise ValueError(
+                "Either `backbone` or `backbone_config` should be provided in the config"
+            )
 
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                    if (
+                        "layer2" not in name
+                        and "layer3" not in name
+                        and "layer4" not in name
+                    ):
                         parameter.requires_grad_(False)
                 else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    if (
+                        "stage.1" not in name
+                        and "stage.2" not in name
+                        and "stage.3" not in name
+                    ):
                         parameter.requires_grad_(False)
 
     # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DinoDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = (
+            self.model(pixel_values)
+            if self.config.use_timm_backbone
+            else self.model(pixel_values).feature_maps
+        )
 
         out = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            mask = nn.functional.interpolate(
+                pixel_mask[None].float(), size=feature_map.shape[-2:]
+            ).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
 
@@ -716,14 +770,16 @@ class DinoDetrConvModel(nn.Module):
         return out, pos
 
 
-class MLP(nn.Module):
+class DinoDetrMLP(nn.Module):
     """Very simple multi-layer perceptron (also called FFN)"""
 
     def __init__(self, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -731,105 +787,9 @@ class MLP(nn.Module):
         return x
 
 
-class NestedTensor(object):
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-        if mask == "auto":
-            self.mask = torch.zeros_like(tensors).to(tensors.device)
-            if self.mask.dim() == 3:
-                self.mask = self.mask.sum(0).to(bool)
-            elif self.mask.dim() == 4:
-                self.mask = self.mask.sum(1).to(bool)
-            else:
-                raise ValueError(
-                    "tensors dim must be 3 or 4 but {}({})".format(self.tensors.dim(), self.tensors.shape)
-                )
-
-    def imgsize(self):
-        res = []
-        for i in range(self.tensors.shape[0]):
-            mask = self.mask[i]
-            maxH = (~mask).sum(0).max()
-            maxW = (~mask).sum(1).max()
-            res.append(torch.Tensor([maxH, maxW]))
-        return res
-
-    def to(self, device):
-        # type: (Device) -> NestedTensor # noqa
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            assert mask is not None
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def to_img_list_single(self, tensor, mask):
-        assert tensor.dim() == 3, "dim of tensor should be 3 but {}".format(tensor.dim())
-        maxH = (~mask).sum(0).max()
-        maxW = (~mask).sum(1).max()
-        img = tensor[:, :maxH, :maxW]
-        return img
-
-    def to_img_list(self):
-        """remove the padding and convert to img list
-
-        Returns:
-            [type]: [description]
-        """
-        if self.tensors.dim() == 3:
-            return self.to_img_list_single(self.tensors, self.mask)
-        else:
-            res = []
-            for i in range(self.tensors.shape[0]):
-                tensor_i = self.tensors[i]
-                mask_i = self.mask[i]
-                res.append(self.to_img_list_single(tensor_i, mask_i))
-            return res
-
-    @property
-    def device(self):
-        return self.tensors.device
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
-
-    @property
-    def shape(self):
-        return {"tensors.shape": self.tensors.shape, "mask.shape": self.mask.shape}
-
-
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    def _max_by_axis(the_list):
-        # type: (List[List[int]]) -> List[int]
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
-
-    if tensor_list[0].ndim == 3:
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("not supported")
-    return NestedTensor(tensor, mask)
-
-
-def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_enc, device):
+def prepare_for_cdn(
+    dn_args, training, num_queries, num_classes, d_model, label_enc, device
+):
     """
     A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding in its detector
     forward function and use learnable tgt embedding, so we change this function a little bit.
@@ -860,7 +820,12 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
         unmask_bbox = unmask_label = torch.cat(known)
         labels = torch.cat([t["class_labels"] for t in targets])
         boxes = torch.cat([t["boxes"] for t in targets])
-        batch_idx = torch.cat([torch.full_like(t["class_labels"].long(), i) for i, t in enumerate(targets)])
+        batch_idx = torch.cat(
+            [
+                torch.full_like(t["class_labels"].long(), i)
+                for i, t in enumerate(targets)
+            ]
+        )
 
         known_indice = torch.nonzero(unmask_label + unmask_bbox)
         known_indice = known_indice.view(-1)
@@ -874,14 +839,29 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
 
         if label_noise_ratio > 0:
             p = torch.rand_like(known_labels_expaned.float())
-            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(-1)  # half of bbox prob
-            new_label = torch.randint_like(chosen_indice, 0, num_classes)  # randomly put a new one here
+            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(
+                -1
+            )  # half of bbox prob
+            new_label = torch.randint_like(
+                chosen_indice, 0, num_classes
+            )  # randomly put a new one here
             known_labels_expaned.scatter_(0, chosen_indice, new_label)
         single_pad = int(max(known_num))
 
         pad_size = int(single_pad * 2 * dn_number)
-        positive_idx = torch.tensor(range(len(boxes))).long().to(device).unsqueeze(0).repeat(dn_number, 1)
-        positive_idx += (torch.tensor(range(dn_number)) * len(boxes) * 2).long().to(device).unsqueeze(1)
+        positive_idx = (
+            torch.tensor(range(len(boxes)))
+            .long()
+            .to(device)
+            .unsqueeze(0)
+            .repeat(dn_number, 1)
+        )
+        positive_idx += (
+            (torch.tensor(range(dn_number)) * len(boxes) * 2)
+            .long()
+            .to(device)
+            .unsqueeze(1)
+        )
         positive_idx = positive_idx.flatten()
         negative_idx = positive_idx + len(boxes)
         if box_noise_scale > 0:
@@ -893,11 +873,17 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
             diff[:, :2] = known_bboxs[:, 2:] / 2
             diff[:, 2:] = known_bboxs[:, 2:] / 2
 
-            rand_sign = torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
+            rand_sign = (
+                torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32)
+                * 2.0
+                - 1.0
+            )
             rand_part = torch.rand_like(known_bboxs)
             rand_part[negative_idx] += 1.0
             rand_part *= rand_sign
-            known_bbox_ = known_bbox_ + torch.mul(rand_part, diff).to(device) * box_noise_scale
+            known_bbox_ = (
+                known_bbox_ + torch.mul(rand_part, diff).to(device) * box_noise_scale
+            )
             known_bbox_ = known_bbox_.clamp(min=0.0, max=1.0)
             known_bbox_expand[:, :2] = (known_bbox_[:, :2] + known_bbox_[:, 2:]) / 2
             known_bbox_expand[:, 2:] = known_bbox_[:, 2:] - known_bbox_[:, :2]
@@ -914,8 +900,12 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
 
         map_known_indice = torch.tensor([]).to(device)
         if len(known_num):
-            map_known_indice = torch.cat([torch.tensor(range(num)) for num in known_num])  # [1,2, 1,2,3]
-            map_known_indice = torch.cat([map_known_indice + single_pad * i for i in range(2 * dn_number)]).long()
+            map_known_indice = torch.cat(
+                [torch.tensor(range(num)) for num in known_num]
+            )  # [1,2, 1,2,3]
+            map_known_indice = torch.cat(
+                [map_known_indice + single_pad * i for i in range(2 * dn_number)]
+            ).long()
         if len(known_bid):
             input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
             input_query_bbox[(known_bid.long(), map_known_indice)] = input_bbox_embed
@@ -932,13 +922,17 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
                     single_pad * 2 * (i + 1) : pad_size,
                 ] = True
             if i == dn_number - 1:
-                attn_mask[single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * i * 2] = True
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * i * 2
+                ] = True
             else:
                 attn_mask[
                     single_pad * 2 * i : single_pad * 2 * (i + 1),
                     single_pad * 2 * (i + 1) : pad_size,
                 ] = True
-                attn_mask[single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * 2 * i] = True
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * 2 * i
+                ] = True
 
         dn_meta = {
             "pad_size": pad_size,
@@ -1017,8 +1011,12 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
         dim_ty = self.temperatureH ** (2 * (dim_ty // 2) / self.num_pos_feats)
         pos_y = y_embed[:, :, :, None] / dim_ty
 
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_x = torch.stack(
+            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
+        pos_y = torch.stack(
+            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
 
         return pos
@@ -1103,18 +1101,26 @@ def gen_sineembed_for_position(pos_tensor):
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
     pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+    pos_x = torch.stack(
+        (pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3
+    ).flatten(2)
+    pos_y = torch.stack(
+        (pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3
+    ).flatten(2)
     if pos_tensor.size(-1) == 2:
         pos = torch.cat((pos_y, pos_x), dim=2)
     elif pos_tensor.size(-1) == 4:
         w_embed = pos_tensor[:, :, 2] * scale
         pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_w = torch.stack(
+            (pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3
+        ).flatten(2)
 
         h_embed = pos_tensor[:, :, 3] * scale
         pos_h = h_embed[:, :, None] / dim_t
-        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_h = torch.stack(
+            (pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3
+        ).flatten(2)
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
@@ -1122,7 +1128,9 @@ def gen_sineembed_for_position(pos_tensor):
     return pos
 
 
-def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None):
+def gen_encoder_output_proposals(
+    memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None
+):
     r"""
     Input:
         - memory: bs, \sum{hw}, d_model
@@ -1137,7 +1145,9 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
     proposals = []
     _cur = 0
     for lvl, (H_, W_) in enumerate(spatial_shapes):
-        mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(N_, H_, W_, 1)
+        mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(
+            N_, H_, W_, 1
+        )
         valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
         valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -1147,7 +1157,9 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
         )
         grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)  # H_, W_, 2
 
-        scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 2)
+        scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(
+            N_, 1, 1, 2
+        )
         grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
 
         if learnedwh is not None:
@@ -1160,13 +1172,21 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
         _cur += H_ * W_
 
     output_proposals = torch.cat(proposals, 1)
-    output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+    output_proposals_valid = (
+        (output_proposals > 0.01) & (output_proposals < 0.99)
+    ).all(-1, keepdim=True)
     output_proposals = torch.log(output_proposals / (1 - output_proposals))  # unsigmoid
-    output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
-    output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+    output_proposals = output_proposals.masked_fill(
+        memory_padding_mask.unsqueeze(-1), float("inf")
+    )
+    output_proposals = output_proposals.masked_fill(
+        ~output_proposals_valid, float("inf")
+    )
 
     output_memory = memory
-    output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
+    output_memory = output_memory.masked_fill(
+        memory_padding_mask.unsqueeze(-1), float(0)
+    )
     output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
 
     return output_memory, output_proposals
@@ -1204,9 +1224,15 @@ class DinoDetrMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -1230,7 +1256,9 @@ class DinoDetrMultiheadAttention(nn.Module):
         value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
+        query_states = self._shape(query_states, target_len, batch_size).view(
+            *proj_shape
+        )
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -1247,7 +1275,9 @@ class DinoDetrMultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_states.dtype
+            )
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
@@ -1255,8 +1285,13 @@ class DinoDetrMultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights = (
+                attn_weights.view(batch_size, self.num_heads, target_len, source_len)
+                + attention_mask
+            )
+            attn_weights = attn_weights.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -1265,12 +1300,18 @@ class DinoDetrMultiheadAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights_reshaped = attn_weights.view(
+                batch_size, self.num_heads, target_len, source_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -1284,7 +1325,9 @@ class DinoDetrMultiheadAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        attn_output = attn_output.view(
+            batch_size, self.num_heads, target_len, self.head_dim
+        )
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
 
@@ -1313,9 +1356,9 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.num_heads
-            )
+            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(
+                default_dtype
+            ) * (2.0 * math.pi / module.num_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -1411,16 +1454,22 @@ class DinoDetrEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -1428,7 +1477,9 @@ class DinoDetrEncoderLayer(nn.Module):
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+                hidden_states = torch.clamp(
+                    hidden_states, min=-clamp_value, max=clamp_value
+                )
 
         outputs = (hidden_states,)
 
@@ -1458,18 +1509,24 @@ class DinoDetrDecoderLayer(nn.Module):
         self.module_seq = config.module_seq
         assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
         # cross attention
-        self.cross_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
+        self.cross_attn = DinoDetrMultiscaleDeformableAttention(
+            config, config.num_heads, config.decoder_n_points
+        )
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.d_model)
 
         # self attention
-        self.self_attn = nn.MultiheadAttention(config.d_model, config.num_heads, dropout=config.dropout)
+        self.self_attn = nn.MultiheadAttention(
+            config.d_model, config.num_heads, dropout=config.dropout
+        )
         self.dropout2 = nn.Dropout(config.dropout)
         self.norm2 = nn.LayerNorm(config.d_model)
 
         # ffn
         self.linear1 = nn.Linear(config.d_model, config.d_ffn)
-        self.activation = _get_activation_fn(config.activation, d_model=config.d_ffn, batch_dim=1)
+        self.activation = _get_activation_fn(
+            config.activation, d_model=config.d_ffn, batch_dim=1
+        )
         self.dropout3 = nn.Dropout(config.dropout)
         self.linear2 = nn.Linear(config.d_ffn, config.d_model)
         self.dropout4 = nn.Dropout(config.dropout)
@@ -1481,7 +1538,9 @@ class DinoDetrDecoderLayer(nn.Module):
         assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
 
         if config.decoder_sa_type == "ca_content":
-            self.self_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
+            self.self_attn = DinoDetrMultiscaleDeformableAttention(
+                config, config.num_heads, config.decoder_n_points
+            )
 
     def rm_self_attn_modules(self):
         self.self_attn = None
@@ -1532,7 +1591,9 @@ class DinoDetrDecoderLayer(nn.Module):
                 tgt = self.norm2(tgt)
             elif self.decoder_sa_type == "ca_content":
                 tgt2, attn_weights = self.self_attn(
-                    hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
+                    hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(
+                        0, 1
+                    ),
                     reference_point=tgt_reference_points.transpose(0, 1).contiguous(),
                     encoder_hidden_states=memory.transpose(0, 1),
                     spatial_shapes=memory_spatial_shapes,
@@ -1544,7 +1605,9 @@ class DinoDetrDecoderLayer(nn.Module):
                 tgt = tgt + self.dropout2(tgt2)
                 tgt = self.norm2(tgt)
             else:
-                raise NotImplementedError("Unknown decoder_sa_type {}".format(self.decoder_sa_type))
+                raise NotImplementedError(
+                    "Unknown decoder_sa_type {}".format(self.decoder_sa_type)
+                )
 
         return tgt
 
@@ -1574,7 +1637,9 @@ class DinoDetrDecoderLayer(nn.Module):
             elif self.key_aware_type == "proj_mean":
                 tgt = tgt + self.key_aware_proj(memory).mean(0, keepdim=True)
             else:
-                raise NotImplementedError("Unknown key_aware_type: {}".format(self.key_aware_type))
+                raise NotImplementedError(
+                    "Unknown key_aware_type: {}".format(self.key_aware_type)
+                )
         tgt2, attn_weights = self.cross_attn(
             hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
             reference_points=tgt_reference_points.transpose(0, 1).contiguous(),
@@ -1663,7 +1728,9 @@ class DinoDetrMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1719,10 +1786,16 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                 self.enc_proj = nn.ModuleList([_proj_layer])
             else:
                 self.enc_norm = nn.ModuleList(
-                    [copy.deepcopy(_norm_layer) for i in range(config.num_encoder_layers - 1)]
+                    [
+                        copy.deepcopy(_norm_layer)
+                        for i in range(config.num_encoder_layers - 1)
+                    ]
                 )
                 self.enc_proj = nn.ModuleList(
-                    [copy.deepcopy(_proj_layer) for i in range(config.num_encoder_layers - 1)]
+                    [
+                        copy.deepcopy(_proj_layer)
+                        for i in range(config.num_encoder_layers - 1)
+                    ]
                 )
 
         self.post_init()
@@ -1778,12 +1851,16 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         # preparation and reshape
         if self.num_encoder_layers > 0:
             if self.deformable_encoder:
-                reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+                reference_points = self.get_reference_points(
+                    spatial_shapes, valid_ratios, device=src.device
+                )
 
         intermediate_output = []
         intermediate_ref = []
         if ref_token_index is not None:
-            out_i = torch.gather(output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model))
+            out_i = torch.gather(
+                output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model)
+            )
             intermediate_output.append(out_i)
             intermediate_ref.append(ref_token_coord)
 
@@ -1823,19 +1900,29 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                 output_memory, output_proposals = gen_encoder_output_proposals(
                     output, key_padding_mask, spatial_shapes
                 )
-                output_memory = self.enc_norm[layer_id](self.enc_proj[layer_id](output_memory))
+                output_memory = self.enc_norm[layer_id](
+                    self.enc_proj[layer_id](output_memory)
+                )
 
                 # gather boxes
                 topk = self.num_queries
                 enc_outputs_class = self.class_embed[layer_id](output_memory)
-                ref_token_index = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]  # bs, nq
-                ref_token_coord = torch.gather(output_proposals, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, 4))
+                ref_token_index = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[
+                    1
+                ]  # bs, nq
+                ref_token_coord = torch.gather(
+                    output_proposals, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, 4)
+                )
 
                 output = output_memory
 
             # aux loss
-            if (layer_id != self.num_encoder_layers - 1) and ref_token_index is not None:
-                out_i = torch.gather(output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model))
+            if (
+                layer_id != self.num_encoder_layers - 1
+            ) and ref_token_index is not None:
+                out_i = torch.gather(
+                    output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model)
+                )
                 intermediate_output.append(out_i)
                 intermediate_ref.append(ref_token_coord)
 
@@ -1843,7 +1930,9 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             output = self.norm(output)
 
         if ref_token_index is not None:
-            intermediate_output = torch.stack(intermediate_output)  # n_enc/n_enc-1, bs, \sum{hw}, d_model
+            intermediate_output = torch.stack(
+                intermediate_output
+            )  # n_enc/n_enc-1, bs, \sum{hw}, d_model
             intermediate_ref = torch.stack(intermediate_ref)
         else:
             intermediate_output = intermediate_ref = None
@@ -1884,13 +1973,19 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.return_intermediate = config.return_intermediate
         assert config.return_intermediate, "support return_intermediate only"
         self.query_dim = config.query_dim
-        assert config.query_dim in [2, 4], "query_dim should be 2/4 but {}".format(config.query_dim)
+        assert config.query_dim in [2, 4], "query_dim should be 2/4 but {}".format(
+            config.query_dim
+        )
         self.num_feature_levels = config.num_feature_levels
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
 
-        self.ref_point_head = MLP(config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2)
+        self.ref_point_head = DinoDetrMLP(
+            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
+        )
         if not config.deformable_decoder:
-            self.query_pos_sine_scale = MLP(config.d_model, config.d_model, config.d_model, 2)
+            self.query_pos_sine_scale = DinoDetrMLP(
+                config.d_model, config.d_model, config.d_model, 2
+            )
         else:
             self.query_pos_sine_scale = None
 
@@ -1907,7 +2002,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.deformable_decoder = config.deformable_decoder
 
         if not config.deformable_decoder and config.modulate_hw_attn:
-            self.ref_anchor_head = MLP(config.d_model, config.d_model, 2, 2)
+            self.ref_anchor_head = DinoDetrMLP(config.d_model, config.d_model, 2, 2)
         else:
             self.ref_anchor_head = None
 
@@ -1962,20 +2057,31 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
         for layer_id, layer in enumerate(self.layers):
             # preprocess ref points
-            if self.training and self.decoder_query_perturber is not None and layer_id != 0:
+            if (
+                self.training
+                and self.decoder_query_perturber is not None
+                and layer_id != 0
+            ):
                 reference_points = self.decoder_query_perturber(reference_points)
 
             if self.deformable_decoder:
                 if reference_points.shape[-1] == 4:
                     reference_points_input = (
-                        reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
+                        reference_points[:, :, None]
+                        * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
                     )  # nq, bs, nlevel, 4
                 else:
                     assert reference_points.shape[-1] == 2
-                    reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
-                query_sine_embed = gen_sineembed_for_position(reference_points_input[:, :, 0, :])  # nq, bs, 256*2
+                    reference_points_input = (
+                        reference_points[:, :, None] * valid_ratios[None, :]
+                    )
+                query_sine_embed = gen_sineembed_for_position(
+                    reference_points_input[:, :, 0, :]
+                )  # nq, bs, 256*2
             else:
-                query_sine_embed = gen_sineembed_for_position(reference_points)  # nq, bs, 256*2
+                query_sine_embed = gen_sineembed_for_position(
+                    reference_points
+                )  # nq, bs, 256*2
                 reference_points_input = None
 
             # conditional query
@@ -1983,7 +2089,9 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             pos_scale = self.query_scale(output) if self.query_scale is not None else 1
             query_pos = pos_scale * raw_query_pos
             if not self.deformable_decoder:
-                query_sine_embed = query_sine_embed[..., : self.d_model] * self.query_pos_sine_scale(output)
+                query_sine_embed = query_sine_embed[
+                    ..., : self.d_model
+                ] * self.query_pos_sine_scale(output)
 
             # modulated HW attentions
             if not self.deformable_decoder and self.modulate_hw_attn:
@@ -2026,12 +2134,21 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                 new_reference_points = outputs_unsig.sigmoid()
 
                 # select # ref points
-                if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
+                if (
+                    self.dec_layer_number is not None
+                    and layer_id != self.num_decoder_layers - 1
+                ):
                     nq_now = new_reference_points.shape[0]
                     select_number = self.dec_layer_number[layer_id + 1]
                     if nq_now != select_number:
-                        class_unselected = self.class_embed[layer_id](output)  # nq, bs, 91
-                        topk_proposals = torch.topk(class_unselected.max(-1)[0], select_number, dim=0)[1]  # new_nq, bs
+                        class_unselected = self.class_embed[layer_id](
+                            output
+                        )  # nq, bs, 91
+                        topk_proposals = torch.topk(
+                            class_unselected.max(-1)[0], select_number, dim=0
+                        )[
+                            1
+                        ]  # new_nq, bs
                         new_reference_points = torch.gather(
                             new_reference_points,
                             0,
@@ -2048,7 +2165,10 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                     ref_points.append(new_reference_points)
 
             intermediate.append(self.norm(output))
-            if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
+            if (
+                self.dec_layer_number is not None
+                and layer_id != self.num_decoder_layers - 1
+            ):
                 if nq_now != select_number:
                     output = torch.gather(
                         output,
@@ -2062,7 +2182,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         ]
 
 
-class DinoDeformableTransformer(DinoDetrPreTrainedModel):
+class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
     def __init__(self, config):
         """
         d_model=256,
@@ -2117,7 +2237,7 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
         """
         super().__init__(config)
         if config.decoder_layer_noise:
-            self.decoder_query_perturber = RandomBoxPerturber(
+            self.decoder_query_perturber = DinoDetrRandomBoxPerturber(
                 x_noise_scale=config.dln_xy_noise,
                 y_noise_scale=config.dln_xy_noise,
                 w_noise_scale=config.dln_hw_noise,
@@ -2139,7 +2259,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
         assert config.query_dim == 4
 
         if config.num_feature_levels > 1:
-            assert config.deformable_encoder, "only support deformable_encoder for num_feature_levels > 1"
+            assert (
+                config.deformable_encoder
+            ), "only support deformable_encoder for num_feature_levels > 1"
         if config.use_deformable_box_attn:
             assert config.deformable_encoder or config.deformable_encoder
 
@@ -2186,19 +2308,25 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
         self.num_queries = config.num_queries  # useful for single stage model only
         self.num_patterns = config.num_patterns
         if not isinstance(config.num_patterns, int):
-            Warning("num_patterns should be int but {}".format(type(config.num_patterns)))
+            Warning(
+                "num_patterns should be int but {}".format(type(config.num_patterns))
+            )
             self.num_patterns = 0
 
         if config.num_feature_levels > 1:
             if self.num_encoder_layers > 0:
-                self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+                self.level_embed = nn.Parameter(
+                    torch.Tensor(config.num_feature_levels, config.d_model)
+                )
             else:
                 self.level_embed = None
 
         self.learnable_tgt_init = config.learnable_tgt_init
         assert config.learnable_tgt_init, "why not learnable_tgt_init"
         self.embed_init_tgt = config.embed_init_tgt
-        if (config.two_stage_type != "no" and config.embed_init_tgt) or (config.two_stage_type == "no"):
+        if (config.two_stage_type != "no" and config.embed_init_tgt) or (
+            config.two_stage_type == "no"
+        ):
             self.tgt_embed = nn.Embedding(self.num_queries, config.d_model)
             nn.init.normal_(self.tgt_embed.weight.data)
         else:
@@ -2219,11 +2347,15 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
             self.enc_output_norm = nn.LayerNorm(config.d_model)
 
             if config.two_stage_pat_embed > 0:
-                self.pat_embed_for_2stage = nn.Parameter(torch.Tensor(config.two_stage_pat_embed, config.d_model))
+                self.pat_embed_for_2stage = nn.Parameter(
+                    torch.Tensor(config.two_stage_pat_embed, config.d_model)
+                )
                 nn.init.normal_(self.pat_embed_for_2stage)
 
             if config.two_stage_add_query_num > 0:
-                self.tgt_embed = nn.Embedding(self.two_stage_add_query_num, config.d_model)
+                self.tgt_embed = nn.Embedding(
+                    self.two_stage_add_query_num, config.d_model
+                )
 
             if config.two_stage_learn_wh:
                 self.two_stage_wh_embedding = nn.Embedding(1, 2)
@@ -2245,14 +2377,19 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
                 ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries})"
             else:
                 assert (
-                    config.dec_layer_number[0] == config.num_queries * config.num_patterns
+                    config.dec_layer_number[0]
+                    == config.num_queries * config.num_patterns
                 ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries}) * num_patterns({config.num_patterns})"
 
         # self._reset_parameters()
 
         self.rm_self_attn_layers = config.rm_self_attn_layers
         if config.rm_self_attn_layers is not None:
-            print("Removing the self-attn in {} decoder layers".format(config.rm_self_attn_layers))
+            print(
+                "Removing the self-attn in {} decoder layers".format(
+                    config.rm_self_attn_layers
+                )
+            )
             for lid, dec_layer in enumerate(self.decoder.layers):
                 if lid in config.rm_self_attn_layers:
                     dec_layer.rm_self_attn_modules()
@@ -2276,7 +2413,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
             nn.init.normal_(self.level_embed)
 
         if self.two_stage_learn_wh:
-            nn.init.constant_(self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05)))
+            nn.init.constant_(
+                self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05))
+            )
 
     def get_valid_ratio(self, mask):
         _, H, W = mask.shape
@@ -2292,7 +2431,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
 
         if self.random_refpoints_xy:
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
     def forward(self, srcs, masks, refpoint_embed, pos_embeds, tgt, attn_mask=None):
@@ -2328,8 +2469,12 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
         src_flatten = torch.cat(src_flatten, 1)  # bs, \sum{hxw}, c
         mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # bs, \sum{hxw}, c
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=src_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes_list, dtype=torch.long, device=src_flatten.device
+        )
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         # two stage
@@ -2375,7 +2520,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
                 output_memory = output_memory.repeat(1, self.two_stage_pat_embed, 1)
                 _pats = self.pat_embed_for_2stage.repeat_interleave(nhw, 0)
                 output_memory = output_memory + _pats
-                output_proposals = output_proposals.repeat(1, self.two_stage_pat_embed, 1)
+                output_proposals = output_proposals.repeat(
+                    1, self.two_stage_pat_embed, 1
+                )
 
             if self.two_stage_add_query_num > 0:
                 assert refpoint_embed is not None
@@ -2387,7 +2534,11 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
                 self.enc_out_bbox_embed(output_memory) + output_proposals
             )  # (bs, \sum{hw}, 4) unsigmoid
             topk = self.num_queries
-            topk_proposals = torch.topk(enc_outputs_class_unselected.max(-1)[0], topk, dim=1)[1]  # bs, nq
+            topk_proposals = torch.topk(
+                enc_outputs_class_unselected.max(-1)[0], topk, dim=1
+            )[
+                1
+            ]  # bs, nq
 
             # gather boxes
             refpoint_embed_undetach = torch.gather(
@@ -2407,7 +2558,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
                 topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
             )
             if self.embed_init_tgt:
-                tgt_ = self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, d_model
+                tgt_ = (
+                    self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+                )  # nq, bs, d_model
             else:
                 tgt_ = tgt_undetach.detach()
 
@@ -2418,8 +2571,12 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
                 refpoint_embed, tgt = refpoint_embed_, tgt_
 
         elif self.two_stage_type == "no":
-            tgt_ = self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, d_model
-            refpoint_embed_ = self.refpoint_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, 4
+            tgt_ = (
+                self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+            )  # nq, bs, d_model
+            refpoint_embed_ = (
+                self.refpoint_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+            )  # nq, bs, 4
 
             if refpoint_embed is not None:
                 refpoint_embed = torch.cat([refpoint_embed, refpoint_embed_], dim=1)
@@ -2438,7 +2595,9 @@ class DinoDeformableTransformer(DinoDetrPreTrainedModel):
             init_box_proposal = refpoint_embed_.sigmoid()
 
         else:
-            raise NotImplementedError("unknown two_stage_type {}".format(self.two_stage_type))
+            raise NotImplementedError(
+                "unknown two_stage_type {}".format(self.two_stage_type)
+            )
         #########################################################
         # End preparing tgt
         # - tgt: bs, NQ, d_model
@@ -2586,7 +2745,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         """
         super().__init__(config)
         # create deformable transformer
-        self.transformer = DinoDeformableTransformer(config=config)
+        self.transformer = DinoDetrDeformableTransformer(config=config)
         self.num_queries = config.num_queries
         self.num_classes = config.num_classes
         self.d_model = d_model = self.transformer.d_model
@@ -2640,11 +2799,15 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 in_channels = d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            assert config.two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1 !!!"
+            assert (
+                config.two_stage_type == "no"
+            ), "two_stage_type should be no if num_feature_levels=1 !!!"
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(self.backbone.num_channels[-1], d_model, kernel_size=1),
+                        nn.Conv2d(
+                            self.backbone.num_channels[-1], d_model, kernel_size=1
+                        ),
                         nn.GroupNorm(32, d_model),
                     )
                 ]
@@ -2661,7 +2824,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
         # prepare class & box embed
         _class_embed = nn.Linear(config.d_model, config.num_classes)
-        _bbox_embed = MLP(d_model, d_model, 4, 3)
+        _bbox_embed = DinoDetrMLP(d_model, d_model, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -2670,13 +2833,23 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
 
         if config.dec_pred_bbox_embed_share:
-            box_embed_layerlist = [_bbox_embed for _ in range(self.transformer.num_decoder_layers)]
+            box_embed_layerlist = [
+                _bbox_embed for _ in range(self.transformer.num_decoder_layers)
+            ]
         else:
-            box_embed_layerlist = [copy.deepcopy(_bbox_embed) for _ in range(self.transformer.num_decoder_layers)]
+            box_embed_layerlist = [
+                copy.deepcopy(_bbox_embed)
+                for _ in range(self.transformer.num_decoder_layers)
+            ]
         if config.dec_pred_class_embed_share:
-            class_embed_layerlist = [_class_embed for _ in range(self.transformer.num_decoder_layers)]
+            class_embed_layerlist = [
+                _class_embed for _ in range(self.transformer.num_decoder_layers)
+            ]
         else:
-            class_embed_layerlist = [copy.deepcopy(_class_embed) for _ in range(self.transformer.num_decoder_layers)]
+            class_embed_layerlist = [
+                copy.deepcopy(_class_embed)
+                for _ in range(self.transformer.num_decoder_layers)
+            ]
         self.transformer.decoder.bbox_embed = nn.ModuleList(box_embed_layerlist)
         self.transformer.decoder.class_embed = nn.ModuleList(class_embed_layerlist)
 
@@ -2689,13 +2862,19 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         ], "unknown param {} of two_stage_type".format(config.two_stage_type)
         if config.two_stage_type != "no":
             if config.two_stage_bbox_embed_share:
-                assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
+                assert (
+                    config.dec_pred_class_embed_share
+                    and config.dec_pred_bbox_embed_share
+                )
                 self.transformer.enc_out_bbox_embed = _bbox_embed
             else:
                 self.transformer.enc_out_bbox_embed = copy.deepcopy(_bbox_embed)
 
             if config.two_stage_class_embed_share:
-                assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
+                assert (
+                    config.dec_pred_class_embed_share
+                    and config.dec_pred_bbox_embed_share
+                )
                 self.transformer.enc_out_class_embed = _class_embed
             else:
                 self.transformer.enc_out_class_embed = copy.deepcopy(_class_embed)
@@ -2728,14 +2907,18 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.refpoint_embed = nn.Embedding(use_num_queries, self.query_dim)
         if self.random_refpoints_xy:
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
         if self.fix_refpoints_hw > 0:
             print("fix_refpoints_hw: {}".format(self.fix_refpoints_hw))
             assert self.random_refpoints_xy
             self.refpoint_embed.weight.data[:, 2:] = self.fix_refpoints_hw
-            self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(self.refpoint_embed.weight.data[:, 2:])
+            self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, 2:]
+            )
             self.refpoint_embed.weight.data[:, 2:].requires_grad = False
         elif int(self.fix_refpoints_hw) == -1:
             pass
@@ -2744,14 +2927,20 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             assert self.random_refpoints_xy
             self.refpoint_embed = nn.Embedding(use_num_queries, 2)
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
             self.hw_embed = nn.Embedding(1, 1)
         else:
-            raise NotImplementedError("Unknown fix_refpoints_hw {}".format(self.fix_refpoints_hw))
+            raise NotImplementedError(
+                "Unknown fix_refpoints_hw {}".format(self.fix_refpoints_hw)
+            )
 
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(self, pixel_values, pixel_mask=None, labels: List = None):
         """
         Returns:
@@ -2766,8 +2955,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("dino-detr")
-        >>> model = DinoDetrModel.from_pretrained("dino-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("dino_detr")
+        >>> model = DinoDetrModel.from_pretrained("dino_detr")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -2782,7 +2971,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+            pixel_mask = torch.ones(
+                ((batch_size, height, width)), dtype=torch.long, device=device
+            )
 
         features, poss = self.backbone(pixel_values, pixel_mask)
         srcs = []
@@ -2799,7 +2990,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 else:
                     src = self.input_proj[l](srcs[-1])
                 m = pixel_mask
-                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(
+                    torch.bool
+                )[0]
                 pos_l = self.backbone.position_embedding(src, mask).to(src.dtype)
                 srcs.append(src)
                 masks.append(mask)
@@ -2826,7 +3019,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(
             srcs, masks, input_query_bbox, poss, input_query_label, attn_mask
         )
-        return DinoDetrModelOutput(hs, reference, hs_enc, ref_enc, init_box_proposal, dn_meta)
+        return DinoDetrModelOutput(
+            hs, reference, hs_enc, ref_enc, init_box_proposal, dn_meta
+        )
 
 
 @add_start_docstrings(
@@ -2852,7 +3047,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(self, pixel_values, pixel_mask=None, labels: List = None):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2873,8 +3070,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("dino-detr")
-        >>> model = DinoDetrForObjectDetection.from_pretrained("dino-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("dino_detr")
+        >>> model = DinoDetrForObjectDetection.from_pretrained("dino_detr")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2899,10 +3096,14 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+            pixel_mask = torch.ones(
+                ((batch_size, height, width)), dtype=torch.long, device=device
+            )
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
-        outs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        outs = self.model(
+            pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels
+        )
         hs = outs.hs
         reference = outs.reference
         hs_enc = outs.hs_enc
@@ -2927,7 +3128,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         outputs_class = torch.stack(
             [
                 layer_cls_embed(layer_hs)
-                for layer_cls_embed, layer_hs in zip(self.model.transformer.decoder.class_embed, hs)
+                for layer_cls_embed, layer_hs in zip(
+                    self.model.transformer.decoder.class_embed, hs
+                )
             ]
         )
         if self.model.dn_number > 0 and dn_meta is not None:
@@ -2974,7 +3177,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     )
                 ):
                     layer_enc_delta_unsig = layer_box_embed(layer_hs_enc)
-                    layer_enc_outputs_coord_unsig = layer_enc_delta_unsig + inverse_sigmoid(layer_ref_enc)
+                    layer_enc_outputs_coord_unsig = (
+                        layer_enc_delta_unsig + inverse_sigmoid(layer_ref_enc)
+                    )
                     layer_enc_outputs_coord = layer_enc_outputs_coord_unsig.sigmoid()
 
                     layer_enc_outputs_class = layer_class_embed(layer_hs_enc)
@@ -2982,7 +3187,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     enc_outputs_class.append(layer_enc_outputs_class)
 
                 out["enc_outputs"] = [
-                    {"logits": a, "pred_boxes": b} for a, b in zip(enc_outputs_class, enc_outputs_coord)
+                    {"logits": a, "pred_boxes": b}
+                    for a, b in zip(enc_outputs_class, enc_outputs_coord)
                 ]
 
         out["dn_meta"] = dn_meta
@@ -3018,7 +3224,10 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [
+            {"logits": a, "pred_boxes": b}
+            for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
+        ]
 
 
 __all__ = [
