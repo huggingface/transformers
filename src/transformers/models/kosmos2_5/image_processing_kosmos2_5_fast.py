@@ -121,12 +121,21 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         num_elements = torch.tensor(torch.numel(image[0]))
         adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
 
-        return super().normalize(
+        # image: [batch_size, n_channels, width, height]
+        # mean / std: [batch_size]
+        # normalize: only acts to channel dimension
+        image = torch.transpose(image, 0, 1)
+        
+        normalized_image = super().normalize(
             image,
             mean=mean,
             std=adjusted_stddev,
             **kwargs,
         )
+        # back to [batch_size, n_channels, width, height]
+        normalized_image = torch.transpose(image, 0, 1)
+
+        return normalized_image
 
     def extract_flattened_patches(
         self,
