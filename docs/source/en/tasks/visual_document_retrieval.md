@@ -124,7 +124,7 @@ print(indices, scores)
   12.9899320602417])
 ```
 
-Now displaying the images we can see the model has returned Mars related documents.
+Display the images to view the Mars related documents.
 
 ```python
 for i in indices:
