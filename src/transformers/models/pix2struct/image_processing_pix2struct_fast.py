@@ -33,6 +33,8 @@ from ...image_processing_utils import (
     get_size_dict,
 )
 
+from .image_processing_pix2struct import render_text
+
 from ...image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
@@ -82,7 +84,7 @@ class Pix2StructFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     max_patches: Optional[int]
     is_vqa: Optional[bool]
     header_text: Optional[Union[List[str], str]]
-    font_bytes: Optional[str]
+    font_bytes: Optional[bytes]
     font_path: Optional[str]
 
 @add_start_docstrings(
@@ -125,7 +127,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
                 rendered onto the input images.
             header_text (`Union[List[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
-            font_bytes (`str`, *optional*, default to `None`):
+            font_bytes (`bytes`, *optional*, default to `None`):
                 The font bytes to use for rendering the header text. Only has an effect if `image_processor.is_vqa` is
                 `True`.
             font_path (`str`, *optional*, default to `None`):
@@ -172,6 +174,26 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         # extract flattened patches 
 
         # images 为经过rgb转化，input-format调整，并且放置到device上的list tensor
+
+        if is_vqa:
+            if header_text is None:
+                raise ValueError("A header text must be provided for VQA models.")
+
+            if isinstance(header_text, str):
+                header_text = [header_text] * len(images)
+
+            header_images = [render_text(t, font_bytes=font_bytes, font_path=font_path) for t in header_text]
+            header_images = [self._process_image(img) for img in header_images]
+            
+
+            header_images = []
+            for i, text in enumerate(header_text):
+                image = images[i]
+                header_image = self._process_image(render_text(text, font_bytes=font_bytes, font_path=font_path))
+                new_width = max(header_image.width, image.width)
+
+                new_height = int(image.height * (new_width / image.width))
+                new_header_height = int(header_image.height * (new_width / header_image.width))
 
 
         # Group images by size for batched resizing
