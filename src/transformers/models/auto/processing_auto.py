@@ -70,6 +70,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("git", "GitProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
+        ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
@@ -103,6 +104,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "Pix2StructProcessor"),
         ("pixtral", "PixtralProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
+        ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
         ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
@@ -419,3 +421,6 @@ class AutoProcessor:
             processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
+
+
+__all__ = ["PROCESSOR_MAPPING", "AutoProcessor"]
