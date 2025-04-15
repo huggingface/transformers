@@ -337,6 +337,35 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
             torch.mean(torch.abs(encoding_slow.flattened_patches - encoding_fast.flattened_patches)).item(), 1e-3
         )
 
+    # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
+    # TODO: enhance the common test to avoid overwriting
+    @unittest.skip(reason="Kosmos2_5ImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self.assertTrue(torch.allclose(encoding_slow.flattened_patches, encoding_fast.flattened_patches, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.flattened_patches - encoding_fast.flattened_patches)).item(), 1e-3
+        )
+
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_normalize"))
