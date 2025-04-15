@@ -30,7 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import is_torch_flex_attn_available, logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -45,6 +45,13 @@ from ..gemma.modeling_gemma import (
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+
 
 logger = logging.get_logger(__name__)
 
@@ -535,7 +542,7 @@ class Gemma2Model(GemmaModel):
     @torch.no_grad()
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: HybridCache,
@@ -546,6 +553,10 @@ class Gemma2Model(GemmaModel):
         # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
         # as it doesn't cause dynamic control issues.
         if self.config._attn_implementation == "flash_attention_2":
+            return attention_mask
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
