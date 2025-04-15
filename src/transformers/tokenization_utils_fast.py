@@ -132,8 +132,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif self.vocab_file is not None:
-            fast_tokenizer = convert_slow_tokenizer(self)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
             self.vocab_file = kwargs.get("vocab_file", None)
