@@ -19,7 +19,7 @@ Documents can contain multimodal data if they include charts, tables, and visual
 
 Visual document retrieval can help retrieve information from all types of documents, including multimodal retrieval augmented generation (RAG). These models accept documents (as images) and texts and calculates the similarity scores between them.
 
-This task guide aims to demonstrate how to index and retrieve documents using [ColPali](https://huggingface.co/vidore/colpali-v1.2-hf) with transformers.  
+This guide demonstrates how to index and retrieve documents with [ColPali](../model_doc/colpali).  
 
 <Tip>
 
