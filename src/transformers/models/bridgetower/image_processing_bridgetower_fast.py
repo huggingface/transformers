@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for BridgeTower."""
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -26,9 +26,9 @@ from ...image_processing_utils_fast import (
     SizeDict,
     TensorType,
     Unpack,
+    get_max_height_width,
     group_images_by_shape,
     reorder_images,
-    get_max_height_width,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available

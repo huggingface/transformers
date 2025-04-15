@@ -28,7 +28,6 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
     is_scaled_image,
     make_flat_list_of_images,
     to_numpy_array,
