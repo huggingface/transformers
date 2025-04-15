@@ -94,6 +94,11 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 
 [[autodoc]] OwlViTImageProcessor
     - preprocess
+
+## OwlViTImageProcessorFast
+
+[[autodoc]] OwlViTImageProcessorFast
+    - preprocess
     - post_process_object_detection
     - post_process_image_guided_detection
 
