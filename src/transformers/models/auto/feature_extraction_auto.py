@@ -63,7 +63,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaFeatureExtractor"),
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
-        ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
@@ -414,6 +413,3 @@ class AutoFeatureExtractor:
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
-
-
-__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"]

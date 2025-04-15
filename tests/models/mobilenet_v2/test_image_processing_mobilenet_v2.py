@@ -18,15 +18,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
-<<<<<<< HEAD
-<<<<<<< HEAD
-from transformers.utils import is_torchvision_available, is_vision_available
-=======
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
->>>>>>> 0a5dfe4954 (Add `segmentation_maps` support to mobilenet_v2 image processor and `reduce_labels` to mobilevit)
-=======
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
->>>>>>> bdbdb26043 (Changed mobilenetv2 tests to support fastimageprocessor)
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -38,8 +30,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import MobileNetV2ImageProcessor
-    if is_torchvision_available():
-        from transformers import MobileNetV2ImageProcessorFast
 
     if is_torchvision_available():
         from transformers import MobileNetV2ImageProcessorFast
@@ -133,32 +123,6 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> bdbdb26043 (Changed mobilenetv2 tests to support fastimageprocessor)
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "do_center_crop"))
-            self.assertTrue(hasattr(image_processor, "crop_size"))
-<<<<<<< HEAD
-=======
-            self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
->>>>>>> bdbdb26043 (Changed mobilenetv2 tests to support fastimageprocessor)
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 20})
-            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-<<<<<<< HEAD
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-            self.assertEqual(image_processor.size, {"shortest_edge": 42})
-            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-=======
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
@@ -174,10 +138,6 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
             self.assertEqual(image_processor.do_reduce_labels, False)
 
-=======
-            self.assertEqual(image_processor.do_reduce_labels, False)
-
->>>>>>> bdbdb26043 (Changed mobilenetv2 tests to support fastimageprocessor)
             image_processor = image_processing_class.from_dict(
                 self.image_processor_dict, size=42, crop_size=84, do_reduce_labels=True
             )
@@ -307,7 +267,3 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
-<<<<<<< HEAD
->>>>>>> 0a5dfe4954 (Add `segmentation_maps` support to mobilenet_v2 image processor and `reduce_labels` to mobilevit)
-=======
->>>>>>> bdbdb26043 (Changed mobilenetv2 tests to support fastimageprocessor)

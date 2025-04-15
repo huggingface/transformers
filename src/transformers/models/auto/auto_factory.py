@@ -759,6 +759,7 @@ def add_generation_mixin_to_remote_model(model_class):
 
     # 3. Prior to v4.45, we could detect whether a model was `generate`-compatible if it had its own `generate` and/or
     # `prepare_inputs_for_generation` method.
+<<<<<<< HEAD
     has_custom_generate_in_class = hasattr(model_class, "generate") and "GenerationMixin" not in str(
         getattr(model_class, "generate")
     )
@@ -766,6 +767,11 @@ def add_generation_mixin_to_remote_model(model_class):
         getattr(model_class, "prepare_inputs_for_generation")
     )
     if has_custom_generate_in_class or has_custom_prepare_inputs:
+=======
+    has_custom_generate = "GenerationMixin" not in str(getattr(model_class, "generate"))
+    has_custom_prepare_inputs = "GenerationMixin" not in str(getattr(model_class, "prepare_inputs_for_generation"))
+    if has_custom_generate or has_custom_prepare_inputs:
+>>>>>>> fe1c406619 (added `segmentation_maps` support to fast image processor)
         model_class_with_generation_mixin = type(
             model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
         )
@@ -873,6 +879,3 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
         self._extra_content[key] = value
-
-
-__all__ = ["get_values"]
