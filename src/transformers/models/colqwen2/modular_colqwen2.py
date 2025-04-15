@@ -72,7 +72,6 @@ class ColQwen2Processor(ColPaliProcessor):
         visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
 <|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
         query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
-        max_num_visual_tokens (`int`, *optional*, defaults to 768): : The maximum number of visual tokens that can be processed by the model.
     """
 
     valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
@@ -86,7 +85,6 @@ class ColQwen2Processor(ColPaliProcessor):
         chat_template=None,
         visual_prompt_prefix: str = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>",
         query_prefix: str = "Query: ",
-        max_num_visual_tokens: int = 768,
         **kwargs,
     ):
         ColPaliProcessor().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -97,15 +95,6 @@ class ColQwen2Processor(ColPaliProcessor):
         self.query_prefix = query_prefix
 
         self.tokenizer.padding_side = "left"
-
-        self.max_num_visual_tokens = max_num_visual_tokens
-        self.factor = 28
-        self.min_pixels = 4 * 28 * 28
-        self.max_pixels = self.max_num_visual_tokens * 28 * 28
-
-        # TODO: change in the preprocessor config + change logic when https://github.com/huggingface/transformers/pull/36207 is merged.
-        self.image_processor.min_pixels = self.min_pixels
-        self.image_processor.max_pixels = self.max_pixels
 
     def __call__(
         self,
