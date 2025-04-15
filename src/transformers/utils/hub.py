@@ -551,7 +551,7 @@ def cached_files(
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
-        else:
+        elif not isinstance(e, EntryNotFoundError):
             raise e
 
     resolved_files = [
