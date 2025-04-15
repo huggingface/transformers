@@ -727,6 +727,7 @@ class AltRobertaPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -799,7 +800,6 @@ class AltCLIPAttention(nn.Module):
                 attention_mask = causal_attention_mask
         else:
             self.is_causal = causal_attention_mask is not None
-
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

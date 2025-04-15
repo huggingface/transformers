@@ -264,6 +264,7 @@ class CLIPSegTextEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
