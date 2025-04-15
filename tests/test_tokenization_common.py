@@ -3829,7 +3829,7 @@ class TokenizerTesterMixin:
                     input_pair = tokenizer_p.encode(sample_pair, add_special_tokens=False)
 
                     # Generate output
-                    output_r = tokenizer_r.encode_plus(sample_input)['input_ids']
+                    output_r = tokenizer_r.encode_plus(sample_input)["input_ids"]
                     output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
                     self.assertEqual(output_p, output_r)
 
