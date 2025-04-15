@@ -467,9 +467,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         images = make_flat_list_of_images(images)
 
-        if not is_batched(images):
-            images = [images]
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "

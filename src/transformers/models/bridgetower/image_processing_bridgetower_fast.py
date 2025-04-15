@@ -28,6 +28,7 @@ from ...image_processing_utils_fast import (
     Unpack,
     group_images_by_shape,
     reorder_images,
+    get_max_height_width,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
@@ -41,13 +42,6 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
-
-
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
-    """
-    Return the maximum value across all indices of an iterable of values.
-    """
-    return [max(values_i) for values_i in zip(*values)]
 
 
 def make_pixel_mask(
@@ -68,14 +62,6 @@ def make_pixel_mask(
     mask = torch.zeros((batch_size, *output_size), dtype=torch.long)
     mask[:input_height, :input_width] = 1
     return mask
-
-
-def get_max_height_width(images: List["torch.Tensor"]) -> List[int]:
-    """
-    Get the maximum height and width across all images in a batch.
-    """
-    _, max_height, max_width = max_across_indices([img.shape for img in images])
-    return (max_height, max_width)
 
 
 def get_resize_output_image_size(
@@ -136,10 +122,8 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    # do_convert_rgb = None
-
-    size_divisor = 32
     do_pad = True
+    size_divisor = 32
     valid_kwargs = BridgeTowerFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
@@ -251,8 +235,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-    ) -> BatchFeature:
+    ) -> tuple:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
@@ -290,16 +273,12 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
                 processed_masks_grouped[shape] = stacked_masks
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        data = {"pixel_values": processed_images}
-
+        processed_masks = None
         if return_pixel_mask:
             processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
-            processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
-            data["pixel_mask"] = processed_masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return processed_images, processed_masks
 
     def _preprocess(
         self,
@@ -345,13 +324,16 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
+        data = {}
         if do_pad:
-            encoded_outputs = self.pad(processed_images, return_pixel_mask=True, return_tensors=return_tensors)
-        else:
-            processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-            encoded_outputs = BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+            processed_images, processed_masks = self.pad(processed_images, return_pixel_mask=True)
+            processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
+            data["pixel_mask"] = processed_masks
 
-        return encoded_outputs
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        data["pixel_values"] = processed_images
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def to_dict(self):
         encoder_dict = super().to_dict()
