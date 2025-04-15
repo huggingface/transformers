@@ -191,8 +191,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         patches = patches.reshape([batch_size, rows * columns, depth])
 
         # [rows * columns, 1]
-        row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
-        col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
+        row_ids = torch.arange(rows, device=patches.device).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
+        col_ids = torch.arange(columns, device=patches.device).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
 
         # Offset by 1 so the ids do not contain zeros, which represent padding.
         row_ids += 1
