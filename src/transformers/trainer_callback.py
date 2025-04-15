@@ -18,6 +18,7 @@ Callbacks to use with the Trainer class and customize the training loop.
 import dataclasses
 import json
 import math
+import time
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -576,7 +577,13 @@ class DefaultFlowCallback(TrainerCallback):
     A [`TrainerCallback`] that handles the default flow of the training loop for logs, evaluation and checkpoints.
     """
 
+    def __init__(self):
+        self.last_eval_time = None
+        self.last_save_time = None
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        current_time = time.time()
+        
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
@@ -584,26 +591,30 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_log = True
 
         # Evaluate
-        if (
-            args.eval_strategy == IntervalStrategy.STEPS
-            and state.global_step % state.eval_steps == 0
-            and args.eval_delay <= state.global_step
-        ):
+        if args.eval_strategy == IntervalStrategy.TIME:
+            if self.last_eval_time is None:
+                self.last_eval_time = current_time
+            elif current_time - self.last_eval_time >= args.eval_minutes * 60:
+                control.should_evaluate = True
+                self.last_eval_time = current_time
+        elif args.eval_strategy == IntervalStrategy.STEPS and state.global_step % state.eval_steps == 0 and args.eval_delay <= state.global_step:
             control.should_evaluate = True
 
         # Save
-        if (
-            args.save_strategy == SaveStrategy.STEPS
-            and state.save_steps > 0
-            and state.global_step % state.save_steps == 0
-        ):
+        if args.save_strategy == SaveStrategy.TIME:
+            if self.last_save_time is None:
+                self.last_save_time = current_time
+            elif current_time - self.last_save_time >= args.save_minutes * 60:
+                control.should_save = True
+                self.last_save_time = current_time
+        elif args.save_strategy == SaveStrategy.STEPS and state.save_steps > 0 and state.global_step % state.save_steps == 0:
             control.should_save = True
 
         # End training
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy == SaveStrategy.STEPS:
+            if args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.TIME]:
                 control.should_save = True
 
         return control
