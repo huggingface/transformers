@@ -50,7 +50,6 @@ from .utils import (
 )
 from .utils.import_utils import define_import_structure
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
@@ -291,7 +290,6 @@ else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
@@ -333,6 +331,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.superpoint"].append("SuperPointImageProcessorFast")
 
 # PyTorch-backed objects
 try:
@@ -510,7 +509,6 @@ else:
         "create_optimizer",
     ]
     _import_structure["tf_utils"] = []
-
 
 # FLAX-backed objects
 try:
@@ -1020,7 +1018,6 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
-
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
     logger.warning_advice(
