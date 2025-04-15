@@ -306,7 +306,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=None,
+            output_attentions=output_attentions,
             output_hidden_states=True,
             return_dict=True,
             pixel_values=pixel_values,

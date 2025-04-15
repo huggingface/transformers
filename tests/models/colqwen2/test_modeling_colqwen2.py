@@ -75,10 +75,9 @@ class ColQwen2ForRetrievalModelTester:
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rms_norm_eps": 1e-06,
-            "rope_scaling": {"mrope_section": [1, 1, 1], "rope_type": "default", "type": "default"},
+            "rope_scaling": {"mrope_section": [4, 6, 6], "rope_type": "default", "type": "default"},
             "sliding_window": 32768,
             "tie_word_embeddings": True,
-            "torch_dtype": "bfloat16",
             "vision_config": {
                 "depth": 2,
                 "embed_dim": 32,
@@ -126,7 +125,7 @@ class ColQwen2ForRetrievalModelTester:
         self.batch_size = 3
         self.num_channels = vlm_config["vision_config"]["in_chans"]
 
-        self.encoder_seq_length = seq_length
+        self.encoder_seq_length = self.seq_length
         self.use_cache = use_cache
 
         self.embedding_dim = embedding_dim
@@ -208,8 +207,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColQwen2Config, has_text_modality=False)
-
-        # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
