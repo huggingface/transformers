@@ -337,9 +337,13 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Evolla has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+        "Evolla has a separate test runner for generation tests with complex inheritance, causing this check to fail."
     )
     def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
+    def test_flex_attention_with_grads(self):
         pass
 
 

@@ -137,6 +137,17 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, EvollaRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, CrossAttention):
+            module.gate_attention.zero_()
+            module.gate_ffw.zero_()
+            module.attention_norm.weight.data.fill_(1.0)
+        elif isinstance(module, SequenceCompressorResampler):
+            module.latents.data.normal_(mean=0.0, std=std)
 
 
 class EvollaProteinEncoder(nn.Module):
@@ -291,7 +302,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
 """
 
 
-class EvollaLLM(LlamaModel):
+class EvollaModel(LlamaModel):
+    r""" """
+
     def __init__(
         self,
         config: EvollaConfig,
@@ -301,6 +314,11 @@ class EvollaLLM(LlamaModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+
+        self.protein_encoder = EvollaProteinEncoder(
+            config=self.config,
+            add_pooling_layer=False,
+        )
 
         self.layers = nn.ModuleList(
             [
@@ -327,14 +345,8 @@ class EvollaLLM(LlamaModel):
 
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = EvollaRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        # self.use_cache = config.use_cache
-        # self.use_return_dict = config.use_return_dict
+        self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
         self.config = config
-
-        # Initialize weights and apply final processing
-        # self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -355,10 +367,10 @@ class EvollaLLM(LlamaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        protein_feats: Optional[torch.FloatTensor] = None,
+        protein_input_ids: Optional[torch.LongTensor] = None,
+        protein_attention_mask: Optional[torch.Tensor] = None,
         structure_feats: Optional[torch.FloatTensor] = None,
         msa_feats: Optional[torch.FloatTensor] = None,
-        protein_batch_mask: Optional[torch.Tensor] = None,
         structure_batch_mask: Optional[torch.Tensor] = None,
         msa_batch_mask: Optional[torch.Tensor] = None,
         **kwargs,
@@ -369,6 +381,18 @@ class EvollaLLM(LlamaModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # If not provided `protein_feats`, use the `protein_encoder` to get the protein features
+        if protein_input_ids is not None and protein_attention_mask is not None:
+            protein_outputs = self.protein_encoder(
+                input_ids=protein_input_ids,
+                attention_mask=protein_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=True,
+            )
+            protein_feats = protein_outputs.sequence_compressor_output
+            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -478,110 +502,110 @@ class EvollaLLM(LlamaModel):
         return output if return_dict else output.to_tuple()
 
 
-class EvollaModel(EvollaPreTrainedModel):
-    r""" """
+# class EvollaModel(EvollaPreTrainedModel):
+#     r""" """
 
-    def __init__(self, config: EvollaConfig, **kwargs):
-        super().__init__(config)
-        self.config = config
-        self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
+#     def __init__(self, config: EvollaConfig, **kwargs):
+#         super().__init__(config)
+#         self.config = config
+#         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
 
-        self.protein_encoder = EvollaProteinEncoder(
-            config=self.config,
-            add_pooling_layer=False,
-        )
+#         self.protein_encoder = EvollaProteinEncoder(
+#             config=self.config,
+#             add_pooling_layer=False,
+#         )
 
-        self.llm = EvollaLLM(
-            config=self.config,
-        )
+#         self.llm = EvollaLLM(
+#             config=self.config,
+#         )
 
-        self.post_init()
+#         self.post_init()
 
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,  # text input ids
-        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
-        inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
-        protein_input_ids: torch.LongTensor = None,
-        protein_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+#     def forward(
+#         self,
+#         input_ids: torch.LongTensor = None,  # text input ids
+#         attention_mask: Optional[torch.Tensor] = None,  # text attention mask
+#         inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
+#         protein_input_ids: torch.LongTensor = None,
+#         protein_attention_mask: Optional[torch.Tensor] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         use_cache: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#         **kwargs,
+#     ):
+#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+#         output_hidden_states = (
+#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+#         )
+#         use_cache = use_cache if use_cache is not None else self.config.use_cache
+#         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+#         if (input_ids is None) ^ (inputs_embeds is not None):
+#             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if protein_input_ids is None:
-            raise ValueError("protein_input_ids is required")
+#         if protein_input_ids is None:
+#             raise ValueError("protein_input_ids is required")
 
-        text_input_ids = input_ids
-        text_attention_mask = attention_mask
-        text_inputs_embeds = inputs_embeds
+#         text_input_ids = input_ids
+#         text_attention_mask = attention_mask
+#         text_inputs_embeds = inputs_embeds
 
-        # create batch mask for seqs
-        protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0])
+#         # create batch mask for seqs
+#         protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0])
 
-        protein_outputs = self.protein_encoder(
-            input_ids=protein_input_ids,
-            attention_mask=protein_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
+#         protein_outputs = self.protein_encoder(
+#             input_ids=protein_input_ids,
+#             attention_mask=protein_attention_mask,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=True,
+#         )
 
-        text_outputs = self.llm(
-            input_ids=text_input_ids,
-            attention_mask=text_attention_mask,
-            inputs_embeds=text_inputs_embeds,
-            protein_feats=protein_outputs.sequence_compressor_output,
-            protein_batch_mask=protein_batch_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
+#         text_outputs = self.llm(
+#             input_ids=text_input_ids,
+#             attention_mask=text_attention_mask,
+#             inputs_embeds=text_inputs_embeds,
+#             protein_feats=protein_outputs.sequence_compressor_output,
+#             protein_batch_mask=protein_batch_mask,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=True,
+#         )
 
-        if output_hidden_states:
-            decoder_hidden_states = text_outputs.hidden_states
-        else:
-            decoder_hidden_states = None
+#         if output_hidden_states:
+#             decoder_hidden_states = text_outputs.hidden_states
+#         else:
+#             decoder_hidden_states = None
 
-        last_hidden_state = text_outputs.last_hidden_state
+#         last_hidden_state = text_outputs.last_hidden_state
 
-        if output_attentions:
-            decoder_attentions = text_outputs.attentions
-        else:
-            decoder_attentions = None
+#         if output_attentions:
+#             decoder_attentions = text_outputs.attentions
+#         else:
+#             decoder_attentions = None
 
-        # change the output to BaseModelOutputWithPast
-        output = BaseModelOutputWithPast(
-            last_hidden_state=last_hidden_state,
-            hidden_states=decoder_hidden_states,
-            attentions=decoder_attentions,
-        )
-        return output if return_dict else output.to_tuple()
+#         # change the output to BaseModelOutputWithPast
+#         output = BaseModelOutputWithPast(
+#             last_hidden_state=last_hidden_state,
+#             hidden_states=decoder_hidden_states,
+#             attentions=decoder_attentions,
+#         )
+#         return output if return_dict else output.to_tuple()
 
-    def embed_tokens(self, input_ids, **kwargs):
-        return self.llm.embed_tokens(input_ids, **kwargs)
+#     def embed_tokens(self, input_ids, **kwargs):
+#         return self.llm.embed_tokens(input_ids, **kwargs)
 
-    def get_input_embeddings(self):
-        return self.llm.get_input_embeddings()
+#     def get_input_embeddings(self):
+#         return self.llm.get_input_embeddings()
 
-    def set_input_embeddings(self, value):
-        self.llm.set_input_embeddings(value)
+#     def set_input_embeddings(self, value):
+#         self.llm.set_input_embeddings(value)
 
 
 # this was adapted from modeling_idefics.IdeficsForVisionText2Text
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    # _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = []
 
     def __init__(self, config):
