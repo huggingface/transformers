@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoModelForImageTextToText
 from ...utils import (
@@ -81,7 +80,7 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class ColQwen2ForRetrievalOutput(BaseModelOutputWithPast):
+class ColQwen2ForRetrievalOutput(ModelOutput):
     """
     Base class for ColQwen2 embeddings output.
 
