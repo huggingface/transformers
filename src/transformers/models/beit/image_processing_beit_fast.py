@@ -38,6 +38,8 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
     validate_kwargs,
     make_list_of_images,
+    to_numpy_array,
+    infer_channel_dimension_format,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -142,18 +144,51 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
+    # def _preprocess_segmentation_maps(
+    #     self,
+    #     segmentation_maps,
+    #     **kwargs,
+    # ):
+    #     """Preprocesses a single segmentation map."""
+    #     # Add an axis to the segmentation maps for transformations.
+    #     kwargs["do_normalize"] = False
+    #     kwargs["do_rescale"] = False
+    #     kwargs["input_data_format"] = ChannelDimension.FIRST
+    #     segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
+    #     return segmentation_maps
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
         **kwargs,
     ):
         """Preprocesses a single segmentation map."""
-        # Add an axis to the segmentation maps for transformations.
+        processed_segmentation_maps = list()
+        added_dimension = False # we will assume that the batch of maps will all either have added dims or not
+        for segmentation_map in segmentation_maps:        
+            segmentation_map = to_numpy_array(segmentation_map)
+            # Add an axis to the segmentation maps for transformations.
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
+                added_dimension = True
+                input_data_format = ChannelDimension.FIRST
+            else:
+                added_dimension = False
+                if input_data_format is None:
+                    input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+            
+            processed_segmentation_maps.append(torch.tensor(segmentation_map))
+        
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
-        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
-        return segmentation_maps
+        processed_segmentation_maps = self._preprocess(
+            images=processed_segmentation_maps,
+            **kwargs
+        )
+        if added_dimension:
+            processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
+        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+        return processed_segmentation_maps
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
