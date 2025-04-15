@@ -279,7 +279,6 @@ class DPTImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        # TODO rename - left/right + top/bottom are wrong way around
         pad_size_left, pad_size_right = _get_pad(height, size_divisor)
         pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
 
