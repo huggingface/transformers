@@ -4986,6 +4986,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         device_mesh,
                     )
 
+            // convert missing buffers of LLama model to tp_device  
+            if  model.model.embed_tokens.weight.device != tp_device:
+                model.model.embed_tokens.weight.data = model.model.embed_tokens.weight.data.to(tp_device)
+            if  model.model.norm.weight.device != tp_device:
+                model.model.norm.weight.data = model.model.norm.weight.data.to(tp_device)
+            if  model.lm_head.weight.device != tp_device:
+                model.lm_head.weight.data = model.lm_head.weight.data.to(tp_device)
+
+            for layer in model.model.layers:
+                if  layer.input_layernorm.weight.device != tp_device:
+                    layer.input_layernorm.weight.data =\
+                    layer.input_layernorm.weight.data.to(tp_device)
+                if  layer.post_attention_layernorm.weight.device != tp_device:
+                    layer.post_attention_layernorm.weight.data =\
+                    layer.post_attention_layernorm.weight.data.to(tp_device)
+
         # All potential warnings/infos
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
