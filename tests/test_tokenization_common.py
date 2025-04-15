@@ -3815,19 +3815,6 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                # # Input string
-                # input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
-                # input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
-
-                # # Generate output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                # self.assertEqual(output_p, output_r)
-
-                # # Generate pair output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                # self.assertEqual(output_p, output_r)
 
                 input_pairs = [
                     ("", ""),
@@ -3842,12 +3829,13 @@ class TokenizerTesterMixin:
                     input_pair = tokenizer_p.encode(sample_pair, add_special_tokens=False)
 
                     # Generate output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                    output_r = tokenizer_r.encode_plus(sample_input)['input_ids']
                     output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
                     self.assertEqual(output_p, output_r)
 
                     # Generate pair output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                    output_r = tokenizer_r.batch_encode_plus([sample_input, sample_pair])["input_ids"]
+                    output_r = [item for sublist in output_r for item in sublist]
                     output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
                     self.assertEqual(output_p, output_r)
 
