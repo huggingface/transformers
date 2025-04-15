@@ -1327,8 +1327,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim, eps=config.vision_config.layer_norm_eps)
         self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.projection_dim))
-
-        mit_config = copy(vision_config)
+        mit_config = copy.copy(vision_config)
         mit_config.hidden_size = vision_config.mit_hidden_size
         mit_config.intermediate_size = vision_config.mit_intermediate_size
         mit_config.num_hidden_layers = vision_config.mit_num_hidden_layers
