@@ -216,12 +216,12 @@ class SamHQProcessor(ProcessorMixin):
 
         return coords
 
-    def _preprocess_input(self, inp, error_message, expected_nesting=1, dtype=None):
+    def _preprocess_input(self, inputs, error_message, expected_nesting=1, dtype=None):
         """
         Preprocess input by converting torch tensors to numpy arrays and validating structure.
 
         Args:
-            inp: The input to process
+            inputs: The input to process
             error_message: Error message if validation fails
             expected_nesting: Expected nesting level (1 for points/labels, 2 for boxes)
             dtype: Optional data type for numpy array conversion
@@ -229,16 +229,16 @@ class SamHQProcessor(ProcessorMixin):
         Returns:
             Processed input as list of numpy arrays or None
         """
-        if inp is None:
+        if inputs is None:
             return None
 
         # Convert torch tensor to list if applicable
-        if hasattr(inp, "numpy"):
-            inp = inp.numpy().tolist()
+        if hasattr(inputs, "numpy"):
+            inputs = inputs.numpy().tolist()
 
         # Validate structure based on expected nesting
-        valid = isinstance(inp, list)
-        current = inp
+        valid = isinstance(inputs, list)
+        current = inputs
 
         for _ in range(expected_nesting):
             if not valid or not current:
@@ -250,7 +250,7 @@ class SamHQProcessor(ProcessorMixin):
             raise ValueError(error_message)
 
         # Convert to numpy arrays
-        return [np.array(item, dtype=dtype) for item in inp]
+        return [np.array(item, dtype=dtype) for item in inputs]
 
     def _check_and_preprocess_points(
         self,

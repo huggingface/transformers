@@ -197,6 +197,8 @@ class MaskGenerationPipeline(ChunkPipeline):
                         model_inputs["intermediate_embeddings"] = intermediate_embeddings
                     else:
                         image_embeddings = embeddings
+                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                    #       Consider using a more robust method for distinguishing model types here.
 
                     model_inputs["image_embeddings"] = image_embeddings
 
