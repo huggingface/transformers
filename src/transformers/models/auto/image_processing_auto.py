@@ -36,7 +36,6 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.import_utils import requires
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -59,7 +58,7 @@ else:
             ("align", ("EfficientNetImageProcessor",)),
             ("aria", ("AriaImageProcessor",)),
             ("beit", ("BeitImageProcessor",)),
-            ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
+            ("bit", ("BitImageProcessor",)),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("bridgetower", ("BridgeTowerImageProcessor",)),
@@ -79,13 +78,13 @@ else:
             ("deta", ("DetaImageProcessor",)),
             ("detr", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("dinov2", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
+            ("dinov2", ("BitImageProcessor",)),
+            ("donut-swin", ("DonutImageProcessor",)),
             ("dpt", ("DPTImageProcessor",)),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
             ("efficientnet", ("EfficientNetImageProcessor",)),
-            ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
-            ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
+            ("flava", ("FlavaImageProcessor",)),
+            ("focalnet", ("BitImageProcessor",)),
             ("fuyu", ("FuyuImageProcessor",)),
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -93,7 +92,7 @@ else:
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor",)),
             ("groupvit", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("hiera", ("BitImageProcessor", "BitImageProcessorFast")),
+            ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("idefics3", ("Idefics3ImageProcessor",)),
@@ -102,9 +101,9 @@ else:
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
-            ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
-            ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
+            ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
+            ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
+            ("levit", ("LevitImageProcessor",)),
             ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
@@ -114,19 +113,18 @@ else:
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
-            ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
+            ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("nougat", ("NougatImageProcessor",)),
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
-            ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
+            ("owlvit", ("OwlViTImageProcessor",)),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
-            ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
+            ("perceiver", ("PerceiverImageProcessor",)),
             ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
@@ -155,7 +153,7 @@ else:
             ("timm_wrapper", ("TimmWrapperImageProcessor",)),
             ("tvlt", ("TvltImageProcessor",)),
             ("tvp", ("TvpImageProcessor",)),
-            ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
+            ("udop", ("LayoutLMv3ImageProcessor",)),
             ("upernet", ("SegformerImageProcessor",)),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor",)),
@@ -326,7 +324,6 @@ def _warning_fast_image_processor_available(fast_class):
     )
 
 
-@requires(backends=("vision", "torchvision"))
 class AutoImageProcessor:
     r"""
     This is a generic image processor class that will be instantiated as one of the image processor classes of the
@@ -643,6 +640,3 @@ class AutoImageProcessor:
         IMAGE_PROCESSOR_MAPPING.register(
             config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
         )
-
-
-__all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]
