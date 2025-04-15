@@ -100,8 +100,10 @@ The primary trade-off in quantization is **efficiency vs. accuracy**. Reducing p
 The 🤗 Transformers library integrates with several quantization backends like:
 
 - `bitsandbytes`
-- `auto-gptq`
+-`torchao`
+-`compressed-tensors`
 - `awq`
+- `gptqmodel`
 - And more...
 
 These are unified under the `HfQuantizer` API and associated `QuantizationConfig` classes. You can integrate your own custom quantization backends by implementing a custom `HfQuantizer` and `QuantizationConfig`, allowing seamless use within the 🤗 Transformers ecosystem. For more details,  you can check out this [example](https://github.com/huggingface/transformers/blob/main/examples/quantization/custom_quantization_int8_example.py) and the [contribution guide](./contribute).
