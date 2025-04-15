@@ -31,7 +31,6 @@ You can find all the original ColPali checkpoints under the [ColPali](https://hu
 <hfoption id="image retrieval">
 
 ```py
-from io import BytesIO
 import requests
 import torch
 from PIL import Image
@@ -49,17 +48,10 @@ processor = ColPaliProcessor.from_pretrained(model_name)
 url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
 url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
 
-
-def load_image_from_url(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; PierreBot/1.0; +http://example.com/bot)"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()  # Ensure the download was successful
-    return Image.open(BytesIO(response.content)).convert("RGB")
-
-
-images = [load_image_from_url(url1), load_image_from_url(url2)]
+images = [
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
+]
 
 queries = [
     "Who printed the edition of Romeo and Juliet?",
@@ -88,7 +80,6 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to int4.
 
 ```py
-from io import BytesIO
 import requests
 import torch
 from PIL import Image
@@ -117,17 +108,10 @@ processor = ColPaliProcessor.from_pretrained(model_name)
 url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
 url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
 
-
-def load_image_from_url(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; PierreBot/1.0; +http://example.com/bot)"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()  # Ensure the download was successful
-    return Image.open(BytesIO(response.content)).convert("RGB")
-
-
-images = [load_image_from_url(url1), load_image_from_url(url2)]
+images = [
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
+]
 
 queries = [
     "Who printed the edition of Romeo and Juliet?",
