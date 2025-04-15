@@ -59,7 +59,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("blenderbot-small", "BlenderbotSmallConfig"),
         ("blip", "BlipConfig"),
         ("blip-2", "Blip2Config"),
-        ("blip_2_qformer", "Blip2QFormerConfig"),
         ("bloom", "BloomConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bros", "BrosConfig"),
@@ -139,7 +138,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gemma3_text", "Gemma3TextConfig"),
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
-        ("glm4", "Glm4Config"),
         ("glpn", "GLPNConfig"),
         ("got_ocr2", "GotOcr2Config"),
         ("gpt-sw3", "GPT2Config"),
@@ -151,7 +149,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
-        ("granite_speech", "GraniteSpeechConfig"),
         ("granitemoe", "GraniteMoeConfig"),
         ("granitemoehybrid", "GraniteMoeHybridConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
@@ -216,7 +213,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
         ("mixtral", "MixtralConfig"),
-        ("mlcd", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
@@ -271,7 +267,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pvt_v2", "PvtV2Config"),
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
-        ("qwen2_5_omni", "Qwen2_5OmniConfig"),
         ("qwen2_5_vl", "Qwen2_5_VLConfig"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
@@ -419,7 +414,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("blenderbot-small", "BlenderbotSmall"),
         ("blip", "BLIP"),
         ("blip-2", "BLIP-2"),
-        ("blip_2_qformer", "BLIP-2 QFormer"),
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
@@ -509,7 +503,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gemma3_text", "Gemma3ForCausalLM"),
         ("git", "GIT"),
         ("glm", "GLM"),
-        ("glm4", "glm4"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -521,7 +514,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
-        ("granite_speech", "GraniteSpeech"),
         ("granitemoe", "GraniteMoeMoe"),
         ("granitemoehybrid", "GraniteMoeHybrid"),
         ("granitemoeshared", "GraniteMoeSharedMoe"),
@@ -594,7 +586,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
         ("mixtral", "Mixtral"),
-        ("mlcd", "MLCD"),
         ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
@@ -654,7 +645,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
-        ("qwen2_5_omni", "Qwen2_5Omni"),
         ("qwen2_5_vl", "Qwen2_5_VL"),
         ("qwen2_5_vl_text", "Qwen2_5_VL"),
         ("qwen2_audio", "Qwen2Audio"),
@@ -835,7 +825,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam_vision_model", "sam"),
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
-        ("blip_2_qformer", "blip_2"),
     ]
 )
 
@@ -1229,6 +1218,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
-
-
-__all__ = ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"]
