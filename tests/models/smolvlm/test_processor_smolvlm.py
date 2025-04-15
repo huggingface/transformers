@@ -435,7 +435,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modality="image")
@@ -445,14 +446,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            padding="longest",
+            padding="max_length",
             max_length=76,
             truncation=True,
-            max_image_size={"longest_edge": 30},
+            max_image_size={"longest_edge": 300},
         )
 
         self.assertEqual(inputs["pixel_values"].shape[2], 3)
-        self.assertEqual(inputs["pixel_values"].shape[3], 30)
+        self.assertEqual(inputs["pixel_values"].shape[3], 300)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
