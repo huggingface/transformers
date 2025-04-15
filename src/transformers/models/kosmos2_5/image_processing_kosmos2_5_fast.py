@@ -15,15 +15,14 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
-import os
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     group_images_by_shape,
     reorder_images,
 )
