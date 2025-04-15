@@ -353,12 +353,16 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Kosmos-2.5 doesn't support assisted generation due to the need to extend `image_embeds_position_mask` length.")
+    @unittest.skip(
+        "Kosmos-2.5 doesn't support assisted generation due to the need to extend `image_embeds_position_mask` length."
+    )
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Kosmos-2.5 doesn't support assisted generation due to the need to extend `image_embeds_position_mask` length.")
+    @unittest.skip(
+        "Kosmos-2.5 doesn't support assisted generation due to the need to extend `image_embeds_position_mask` length."
+    )
     def test_assisted_decoding_sample(self):
         pass
 

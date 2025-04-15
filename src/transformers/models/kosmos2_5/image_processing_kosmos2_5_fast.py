@@ -19,7 +19,14 @@ import os
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import Unpack
 from ...utils import TensorType, add_start_docstrings, is_torch_available
@@ -46,7 +53,12 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     image_tensor = image_tensor
     patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
     patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
-    patches = patches.permute(0, 4, 2, 3, 1).reshape(image_tensor.size(0), image_tensor.size(2) // patch_height, image_tensor.size(3) // patch_width, image_tensor.size(1) * patch_height * patch_width)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        image_tensor.size(0),
+        image_tensor.size(2) // patch_height,
+        image_tensor.size(3) // patch_width,
+        image_tensor.size(1) * patch_height * patch_width,
+    )
     return patches
 
 
@@ -191,8 +203,18 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         patches = patches.reshape([batch_size, rows * columns, depth])
 
         # [rows * columns, 1]
-        row_ids = torch.arange(rows, device=patches.device).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
-        col_ids = torch.arange(columns, device=patches.device).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
+        row_ids = (
+            torch.arange(rows, device=patches.device)
+            .reshape([rows, 1])
+            .repeat(1, columns)
+            .reshape([rows * columns, 1])
+        )
+        col_ids = (
+            torch.arange(columns, device=patches.device)
+            .reshape([1, columns])
+            .repeat(rows, 1)
+            .reshape([rows * columns, 1])
+        )
 
         # Offset by 1 so the ids do not contain zeros, which represent padding.
         row_ids += 1
@@ -256,7 +278,9 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
                 obj_idx_to_new_index_map[id(x)] = current_index
 
         processed_images = reorder_images(processed_image_patches_grouped, grouped_images_index)
-        orig_idx_to_new_idx_map = {orig_idx: obj_idx_to_new_index_map[id(image)] for orig_idx, image in enumerate(processed_images)}
+        orig_idx_to_new_idx_map = {
+            orig_idx: obj_idx_to_new_index_map[id(image)] for orig_idx, image in enumerate(processed_images)
+        }
 
         flattened_patches = processed_images
         width = [width[orig_idx_to_new_idx_map[orig_idx]] for orig_idx in orig_idx_to_new_idx_map]
