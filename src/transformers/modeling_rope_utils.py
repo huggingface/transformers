@@ -425,6 +425,46 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _compute_custom_wavelengths_rope_parameters(
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
+) -> tuple["torch.Tensor", float]:
+    """
+    Sets the inverse frequencies to the provided wavelengths.
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    if config is not None and len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
+            f"`_compute_default_rope_parameters`, got `rope_kwargs`={rope_kwargs} and `config`={config}"
+        )
+
+    if len(rope_kwargs) > 0:
+        wavelengths = rope_kwargs["wavelengths"]
+    elif config is not None:
+        wavelengths = config.rope_scaling["wavelengths"]
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    wavelengths = torch.tensor([float(w) for w in wavelengths], device=device)
+    inv_freq = 2 * torch.pi / wavelengths
+    return inv_freq, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -435,6 +475,7 @@ ROPE_INIT_FUNCTIONS = {
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
+    "custom_wavelengths": _compute_custom_wavelengths_rope_parameters,
 }
 
 
@@ -625,6 +666,31 @@ def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[
         )
 
 
+def _validate_custom_wavelengths_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
+    required_keys = {"rope_type", "wavelengths"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+    def _is_convertible_to_float(value):
+        try:
+            float(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    wavelengths = rope_scaling["wavelengths"]
+    if not isinstance(wavelengths, list) or not all(_is_convertible_to_float(w) for w in wavelengths):
+        logger.warning(
+            f"`rope_scaling`'s wavelengths field must be a list of numbers (or strings convertible to float), got {wavelengths}"
+        )
+
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    if len(wavelengths) != head_dim // 2:
+        logger.warning(f"`rope_scaling`'s wavelengths field must have length {head_dim}, got {len(wavelengths)}")
+
+
 # Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
 ROPE_VALIDATION_FUNCTIONS = {
     "default": _validate_default_rope_parameters,
@@ -633,6 +699,7 @@ ROPE_VALIDATION_FUNCTIONS = {
     "yarn": _validate_yarn_parameters,
     "longrope": _validate_longrope_parameters,
     "llama3": _validate_llama3_parameters,
+    "custom_wavelengths": _validate_custom_wavelengths_rope_parameters,
 }
 
 
