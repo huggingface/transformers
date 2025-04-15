@@ -33,8 +33,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi4_multimodal.modeling_phi4_multimodal import simple_eager_attention_forward
-from ..t5.modeling_t5 import T5LayerNorm
 from .configuration_timesfm import TimesFmConfig
 
 
@@ -119,7 +119,7 @@ class TimesFmResidualBlock(nn.Module):
         return output + residual
 
 
-class TimesFmRMSNorm(T5LayerNorm):
+class TimesFmRMSNorm(LlamaRMSNorm):
     pass
 
 
