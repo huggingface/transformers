@@ -287,10 +287,14 @@ class XCLIPAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         # CLIP text model uses both `causal_attention_mask` and `attention_mask`
-        if attention_mask is not None and causal_attention_mask is not None:
-            attention_mask = attention_mask + causal_attention_mask
-        elif causal_attention_mask is not None:
-            attention_mask = causal_attention_mask
+        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
+        if self.config._attn_implementation != "flash_attention_2":
+            if attention_mask is not None and causal_attention_mask is not None:
+                attention_mask = attention_mask + causal_attention_mask
+            elif causal_attention_mask is not None:
+                attention_mask = causal_attention_mask
+        else:
+            self.is_causal = causal_attention_mask is not None
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

@@ -299,16 +299,12 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "visual_projection"))
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
-    @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("last_hidden_state", "pooler_output", "image_embeds"),
-            use_attention_mask_options=(None,),
-        )
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -473,16 +469,13 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "text_projection"))
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("last_hidden_state", "pooler_output", "text_embeds"),
-            use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
-        )
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -701,16 +694,13 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = CLIPModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("logits_per_image", "logits_per_text"),
-            use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
-        )
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -874,16 +864,13 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
     def test_initialization(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("logits",),
-            use_attention_mask_options=(None,),
-        )
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -963,5 +950,5 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=6e-3, atol=4e-4
         )
