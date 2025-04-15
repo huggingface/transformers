@@ -18,8 +18,9 @@ import unittest
 
 import numpy as np
 import requests
+from packaging import version
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision, slow, require_torch_gpu, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -149,6 +150,27 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.flattened_patches - encoding_fast.flattened_patches)).item(), 1e-3
         )
+
+    # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
+    # TODO: enhance the common test to avoid overwriting
+    @slow
+    @require_torch_gpu
+    @require_vision
+    def test_can_compile_fast_image_processor(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        torch.testing.assert_close(output_eager.pixel_values, output_compiled.pixel_values, rtol=1e-4, atol=1e-4)
 
     @unittest.skip(reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU.")
     def test_fast_is_faster_than_slow(self):
