@@ -70,7 +70,7 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 ## Installation
 
-Transformers works with Python 3.9+ [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
+Transformers works with Python 3.9-3.12 [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -78,10 +78,23 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 # venv
 python -m venv .my-env
 source .my-env/bin/activate
-
+pip install "jax>=0.4.1,<=0.4.13"
+pip install "optax>=0.0.8,<=0.1.4"
+pip install "orbax-checkpoint==0.2.3"
+pip install "torch>=2.1"
+pip install "tensorflow>2.9,<2.16"
+pip install "flax>=0.4.1,<=0.7.0"
+pip install "accelerate>=0.26.0"
 # uv
 uv venv .my-env
 source .my-env/bin/activate
+uv pip install "jax>=0.4.1,<=0.4.13"
+uv pip install "optax>=0.0.8,<=0.1.4"
+uv pip install "orbax-checkpoint==0.2.3"
+uv pip install "torch>=2.1"
+uv pip install "tensorflow>2.9,<2.16"
+uv pip install "flax>=0.4.1,<=0.7.0"
+uv pip install "accelerate>=0.26.0"
 ```
 
 Install Transformers in your virtual environment.
