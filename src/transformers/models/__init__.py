@@ -179,6 +179,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
+    from .mlcd import *
     from .mllama import *
     from .mluke import *
     from .mobilebert import *
