@@ -38,7 +38,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = AlbertTokenizerFast(SAMPLE_VOCAB)
+        tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):

@@ -547,9 +547,6 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
-        # store extractor to convert tokens to ids from sp directly
-        self.extractor = self.SpmExtractor(self.original_tokenizer.vocab_file)
-
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 

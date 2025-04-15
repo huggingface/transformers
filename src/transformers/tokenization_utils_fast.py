@@ -104,7 +104,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:            raise ValueError(
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+            raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
             )
