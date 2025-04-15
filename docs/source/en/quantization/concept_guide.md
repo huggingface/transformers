@@ -122,7 +122,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### FP8 Quantization (A8W8)
+### FP8 quantization (A8W8)
 
 <img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
 
