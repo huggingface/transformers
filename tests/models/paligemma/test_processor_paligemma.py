@@ -60,7 +60,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
-        self.assertEqual(len(inputs["input_ids"][0]), 112 + 14)
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     def test_text_with_image_tokens(self):
         image_processor = self.get_component("image_processor")
