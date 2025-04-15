@@ -39,6 +39,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -336,6 +337,7 @@ def get_size_with_aspect_ratio(
             Whether to return segmentation masks.
     """,
 )
+@requires(backends=("torchvision", "torch"))
 class YolosImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
