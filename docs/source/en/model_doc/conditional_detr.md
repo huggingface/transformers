@@ -48,6 +48,11 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrImageProcessor
     - preprocess
+
+## ConditionalDetrImageProcessorFast
+
+[[autodoc]] ConditionalDetrImageProcessorFast
+    - preprocess
     - post_process_object_detection
     - post_process_instance_segmentation
     - post_process_semantic_segmentation

@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_conditional_detr import *
-    from .feature_extraction_conditional_detr import *
-    from .image_processing_conditional_detr import *
-    from .image_processing_conditional_detr_fast import *
-    from .modeling_conditional_detr import *
+    from .configuration_mlcd import *
+    from .modeling_mlcd import *
 else:
     import sys
 
