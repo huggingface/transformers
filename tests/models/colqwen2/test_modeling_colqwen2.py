@@ -54,7 +54,7 @@ class ColQwen2ForRetrievalModelTester:
         ignore_index=-100,
         pad_token_id=2,
         projector_hidden_act="gelu",
-        seq_length=20,
+        seq_length=11,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         projection_dim=32,
@@ -83,13 +83,13 @@ class ColQwen2ForRetrievalModelTester:
                 "depth": 2,
                 "embed_dim": 32,
                 "hidden_act": "quick_gelu",
-                "hidden_size": 32,
+                "hidden_size": 1536,
                 "mlp_ratio": 4,
                 "num_heads": 4,
                 "patch_size": 14,
                 "in_chans": 3,
                 "spatial_merge_size": 1,
-                "temporal_patch_size": 1,
+                "temporal_patch_size": 2,
             },
             "vision_end_token_id": 151653,
             "vision_token_id": 151654,
@@ -111,8 +111,8 @@ class ColQwen2ForRetrievalModelTester:
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
 
-        self.image_size = 14
-        self.num_image_tokens = 32
+        self.image_size = 56
+        self.num_image_tokens = 4
 
         self.seq_length = seq_length + self.num_image_tokens
         self.projection_dim = projection_dim
@@ -139,42 +139,49 @@ class ColQwen2ForRetrievalModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        # pixel_values = floats_tensor(
-        #     [
-        #         self.batch_size,
-        #         self.num_channels,
-        #         self.image_size,
-        #         self.image_size,
-        #     ]
-        # )
         config = self.get_config()
         patch_size = config.vlm_config.vision_config.patch_size
         temporal_patch_size = config.vlm_config.vision_config.temporal_patch_size
+
+        # NOTE: Assume all inputs are square images of the same size.
+        num_patches = (self.image_size // patch_size) ** 2
         pixel_values = floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
+                self.batch_size * num_patches,
                 self.num_channels * (patch_size**2) * temporal_patch_size,
             ]
         )
 
-        return config, pixel_values
+        # Hardcoded image grid size: do not change unless you modified image size or patch size!
+        image_grid_thw = torch.tensor([1, 4, 4]).repeat(self.batch_size, 1)
+
+        # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
+        # Line is copied from `src/transformers/models/colqwen2/processing_colqwen2.py`
+        offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)
+        pixel_values = list(
+            torch.split(pixel_values, offsets.tolist())
+        )  # [(num_patches_image_0, pixel_values), ..., (num_patches_image_n, pixel_values)]
+        pixel_values = torch.nn.utils.rnn.pad_sequence(
+            pixel_values, batch_first=True
+        )  # (batch_size, max_num_patches, pixel_values)
+
+        return config, pixel_values, image_grid_thw
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
+        config, pixel_values, image_grid_thw = config_and_inputs
         input_ids = (
-            ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=config.vlm_config.vocab_size - 1) + 1
+            ids_tensor(
+                shape=[self.batch_size, self.seq_length],
+                vocab_size=config.vlm_config.vocab_size - 1,
+            )
+            + 1
         )
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
-        # Do not change this unless you modified image size or patch size.
         input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
 
-        # Hardcoded image grid size: do not change unless you modified image size or patch size!
-        image_grid_thw = torch.tensor([1, 1, 1]).repeat(self.batch_size, 1)
         inputs_dict = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
