@@ -78,7 +78,7 @@ We will do text-to-image retrieval. To do so, we need to index images offline, a
 ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to("cuda"), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
 ```
 
-For the online inference part, we need a function to search image embeddings in batches and retrieve k-most-relevant images. Below function takes in the indexed dataset and text embedding, number of top results and batch size to get the best results and returns the indices in the dataset and their scores.
+For online inference, create a function to search the image embeddings in batches and retrieve the k-most relevant images. The function below returns the indices in the dataset and their scores for a given indexed dataset, text embeddings, number of top results, and the batch size.
 
 ```python
 def find_top_k_indices_batched(dataset, text_embedding, processor, k=10, batch_size=4):
