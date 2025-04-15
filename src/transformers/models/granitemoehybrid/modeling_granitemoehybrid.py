@@ -984,7 +984,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
         if config.layers_block_type[layer_idx] == "multihead_latent_attention":
             self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx)
-        elif config.layers_block_type[layer_idx] == "mamba2":
+        elif config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             raise ValueError("unsupported layer type")
@@ -1030,7 +1030,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type == "mamba2":
+        if self.layer_type == "mamba":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_position=cache_position,
