@@ -132,12 +132,11 @@ We recommend consulting each methods documentation and associated papers careful
 
 ## Benchmark Comparison
 
-To provide a quantitative comparison of different quantization methods, we benchmarked several popular techniques on the Llama 3.1 8B and 70B models. The following tables show results for accuracy (higher is better), inference throughput (tokens/second, higher is better), peak VRAM usage (GB, lower is better), and quantization time.
+To provide a quantitative comparison of different quantization methods, we benchmarked several popular techniques on the Llama 3.1 8B and 70B models. The following tables show results for accuracy (higher is better), inference throughput measured in tokens/second (higher is better), peak VRAM usage measured in GB (lower is better), and quantization time.
 
-*Performance metrics were measured on 2 NVIDIA A100 80GB GPU for Llama 3.1 70B - bfloat16, 1 NVIDIA h100 80GB GPU for FP8 methods, and 1 NVIDIA A100 80GB GPU for all other methods. Throughput was measured with a batch size of 1 and generating 64 tokens.*
-*Results for `torch.compile` and `Marlin` kernels are included where applicable and supported.*
+Performance metrics were measured on 2 NVIDIA A100 80GB GPU for Llama 3.1 70B (bfloat16), 1 NVIDIA H100 80GB GPU for FP8 methods, and 1 NVIDIA A100 80GB GPU for all other methods. Throughput was measured with a batch size of 1 and generating 64 tokens.
+Results for `torch.compile` and Marlin kernels are included where applicable and supported.
 
-The full dataset with detailed results can be found on the Hugging Face Hub: 
 <iframe
   src="https://huggingface.co/datasets/derekl35/quantization-benchmarks/embed/viewer/default/train"
   frameborder="0"
@@ -146,7 +145,7 @@ The full dataset with detailed results can be found on the Hugging Face Hub:
   title="benchmarking results dataset"
 ></iframe>
 
-### Key Observations
+The key takeaways are:
 
 *   **8-bit Quantization (bnb-int8, HQQ, Quanto, torchao, fp8):** Provide memory savings (~2x vs bf16) and maintain accuracy very close to the baseline bf16 model.
 *   **4-bit Quantization (AWQ, GPTQ, HQQ, bnb-nf4):** Provide significant memory savings (~4x vs bf16) and maintaining relatively high accuracy. AWQ and GPTQ often lead in accuracy but require calibration. HQQ and bnb-nf4 provide easy on-the-fly quantization.
