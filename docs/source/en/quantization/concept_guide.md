@@ -78,7 +78,25 @@ A key aspect of int4 quantization is **weight packing**. Since most hardware can
 
 int4 is still beneficial even without native int4 compute because the primary benefit comes from reduced memory bandwidth. Loading packed int4 weights (stored as int8) from memory (RAM or VRAM) to the compute units is twice as fast as loading int8 weights. For large models, memory access is often a significant bottleneck. The speed up from faster data transfer can outweigh the computational overhead of unpacking and dequantizing on the fly, leading to overall faster inference, especially in memory-bound scenarios.
 
-However, int4 quantization typically results in a larger accuracy drop compared to int8. Advanced quantization techniques like [GPTQ](./gptq] or [AWQ](./awq) are often necessary for good performance with int4.
+However, int4 quantization typically results in a larger accuracy drop compared to int8. Advanced quantization techniques like [GPTQ](./gptq) or [AWQ](./awq) are often necessary for good performance with int4.
+
+### FP8 Quantization (A8W8)
+
+<div class="flex justify-center">
+    <img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
+</div>
+A newer datatype, 8-bit floating-point (FP8), offers another way to reduce precision while retaining more accuracy than int8 in certain scenarios. FP8 keeps the floating-point structure (sign, exponent, mantissa) but uses fewer bits.
+
+There are two common FP8 variants.
+
+- E4M3: 1 sign bit, 4 exponent bits, 3 mantissa bits. Offers higher precision (more mantissa bits) but a smaller dynamic range (fewer exponent bits).
+- E5M2: 1 sign bit, 5 exponent bits, 2 mantissa bits. Offers a wider dynamic range but lower precision.
+
+FP8 is used in the *A8W8* quantization scheme, which quantizes both activations (A) and weights (W) to 8-bit precision.
+
+While int8 has broad support, efficient FP8 computation requires specific hardware capabilities found in newer GPUs like NVIDIA H100/H200/B100 and AMD Instinct MI300 series. Without native hardware acceleration, the benefits of FP8 might not be fully realized.
+
+Transformers supports FP8 through specific backends like [FBGEMM](./fbgemm_fp8), [FineGrainedFP8](./finegrained_fp8), and [compressed-tensors](./compressed_tensors). These backends handle the underlying FP8 conversion and computation when the appropriate hardware and configurations are used.
 
 ## Granularity
 
@@ -131,23 +149,6 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### FP8 quantization (A8W8)
-
-<div class="flex justify-center">
-    <img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
-</div>
-A newer data byte, 8-bit floating-point (FP8), offers another way to reduce precision while retaining more accuracy than int8 in certain scenarios. FP8 keeps the floating-point structure (sign, exponent, mantissa) but uses fewer bits.
-
-There are two common FP8 variants.
-
-- E4M3: 1 sign bit, 4 exponent bits, 3 mantissa bits. Offers higher precision (more mantissa bits) but a smaller dynamic range (fewer exponent bits).
-- E5M2: 1 sign bit, 5 exponent bits, 2 mantissa bits. Offers a wider dynamic range but lower precision.
-
-FP8 is used in the *A8W8* quantization scheme, which quantizes both activations (A) and weights (W) to 8-bit precision.
-
-While int8 has broad support, efficient FP8 computation requires specific hardware capabilities found in newer GPUs like NVIDIA H100/H200/B100 and AMD Instinct MI300 series. Without native hardware acceleration, the benefits of FP8 might not be fully realized.
-
-Transformers supports FP8 through specific backends like [FBGEMM](./fbgemm_fp8), [FineGrainedFP8](./finegrained_fp8), and [compressed-tensors](./compressed_tensors). These backends handle the underlying FP8 conversion and computation when the appropriate hardware and configurations are used.
 
 ## Resources
 
