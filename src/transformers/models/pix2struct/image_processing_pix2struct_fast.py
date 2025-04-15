@@ -187,13 +187,17 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
             
 
             header_images = []
+            header_new_size = []
+            img_new_size = []
             for i, text in enumerate(header_text):
                 image = images[i]
                 header_image = self._process_image(render_text(text, font_bytes=font_bytes, font_path=font_path))
                 new_width = max(header_image.width, image.width)
-
                 new_height = int(image.height * (new_width / image.width))
                 new_header_height = int(header_image.height * (new_width / header_image.width))
+                header_images.append(header_image)
+                header_new_size.append(SizeDict(height=new_header_height, width=new_width))
+                img_new_size.append(SizeDict(height=new_height, width=new_width))
 
 
         # Group images by size for batched resizing
