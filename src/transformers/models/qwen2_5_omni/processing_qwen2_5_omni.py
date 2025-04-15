@@ -244,11 +244,13 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         curr_video_grid_thw = next(video_grid_thw)
                         height = curr_video_grid_thw[1] // self.image_processor.merge_size
                         width = curr_video_grid_thw[2] // self.image_processor.merge_size
-                        video_token_indices = np.arange(curr_video_grid_thw[0]).view(-1, 1, 1)
-                        video_token_indices = video_token_indices.expand(-1, height, width).flatten()
+                        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
+                        video_token_indices = np.broadcast_to(
+                            video_token_indices, (video_token_indices.shape[0], height, width)
+                        ).reshape(-1)
                         video_token_indices = (
                             video_token_indices * next(video_second_per_grid) * position_id_per_seconds
-                        ).long()
+                        )
 
                         tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
                         video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
