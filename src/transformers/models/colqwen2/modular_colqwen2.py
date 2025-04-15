@@ -56,22 +56,22 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class ColQwen2Processor(ColPaliProcessor):
     r"""
-    Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
+        Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
+        well as to compute the late-interaction retrieval score.
 
-    [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
-    for more information.
+        [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
+        for more information.
 
-    Args:
-        image_processor ([`Qwen2VLImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
-<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
+        Args:
+            image_processor ([`Qwen2VLImageProcessor`], *optional*):
+                The image processor is a required input.
+            tokenizer ([`Qwen2TokenizerFast`], *optional*):
+                The tokenizer is a required input.
+            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+                in a chat into a tokenizable string.
+            visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
+    <|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
+            query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
     """
 
     valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
