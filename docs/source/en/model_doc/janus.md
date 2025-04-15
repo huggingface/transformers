@@ -50,7 +50,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor  
 
-model_id = "yaswanthgali/Janus-Pro-1B-HF"
+model_id = "deepseek-community/Janus-Pro-1B"
 # Prepare Input for generation.
 messages = [
     {
@@ -93,7 +93,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
 
-model_id = "yaswanthgali/Janus-Pro-1B-HF"
+model_id = "deepseek-community/Janus-Pro-1B"
 
 image_urls = [
     "http://images.cocodataset.org/val2017/000000039769.jpg",
@@ -156,7 +156,7 @@ from transformers import JanusForConditionalGeneration, JanusProcessor
 
 # Set generation mode to `image` to prepare inputs for image generation..
 
-model_id = "yaswanthgali/Janus-Pro-1B-HF"
+model_id = "deepseek-community/Janus-Pro-1B"
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
         torch_dtype=torch.bfloat16,

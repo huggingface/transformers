@@ -42,7 +42,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
         processor = self.processor_class.from_pretrained(
-            "yaswanthgali/Janus-Pro-1B-HF",
+            "deepseek-community/Janus-Pro-1B",
             extra_special_tokens=special_image_tokens,
         )
         processor.save_pretrained(self.tmpdirname)

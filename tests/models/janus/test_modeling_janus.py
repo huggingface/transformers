@@ -439,7 +439,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
+        self.model_id = "deepseek-community/Janus-Pro-1B"
 
     @slow
     def test_model_text_generation(self):

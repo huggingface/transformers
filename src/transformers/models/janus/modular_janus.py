@@ -204,7 +204,7 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
-    [yaswanthgali/Janus-Pro-1B-HF](https://huggingface.co/yaswanthgali/Janus-Pro-1B-HF).
+    [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B).
 
     Args:
         embed_dim (`int`, *optional*, defaults to 8):
@@ -293,8 +293,8 @@ class JanusConfig(PretrainedConfig):
     Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Janus-1B or Janus-7B models.
 
-    e.g. [yaswanthgali/Janus-Pro-1B-HF](https://huggingface.co/yaswanthgali/Janus-Pro-1B-HF) or
-    [hugosilva664/Janus-Pro-7B-HF](https://huggingface.co/hugosilva664/Janus-Pro-7B-HF)
+    e.g. [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B) or
+    [deepseek-community/Janus-Pro-7B](https://huggingface.co/deepseek-community/Janus-Pro-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
