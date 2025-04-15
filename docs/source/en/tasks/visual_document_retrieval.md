@@ -72,7 +72,9 @@ with torch.no_grad():
   text_embeds = model(**inputs, return_tensors="pt").embeddings
 ```
 
-We will do text-to-image retrieval. To do so, we need to index images offline, and during inference time, we get the text embeddings and simply get the closest image embedding to the query text embedding. Thus, we need to store image embeddings along with their images. A nice hack to index embeddings and write them on dataset is to use `dataset.map()` like below. We add an embeddings column that contains indexed embeddings. Since ColPali embeddings hold a lot of space, we need to remove them from GPU, so we detach them and write them as numpy vectors to store in CPU.
+Index the images offline, and during inference, return the query text embeddings to get its closest image embeddings.
+
+Store the image and image embeddings by writing them to the dataset with [`~datasets.Dataset.map`] as shown below. Add an `embeddings` column that contains the indexed embeddings. ColPali embeddings take up a lot of storage, so remove them from the GPU and store them in the CPU as NumPy vectors.
 
 ```python
 ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to("cuda"), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
