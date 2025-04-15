@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
