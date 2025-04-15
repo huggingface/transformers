@@ -332,6 +332,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["models.superpoint"].append("SuperPointImageProcessorFast")
+    # _import_structure["models.superpoint"].append("SuperPointImageProcessorFast")
 
 # PyTorch-backed objects
 try:
@@ -805,6 +806,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.superpoint import SuperPointImageProcessorFast
 
     try:
         if not (is_torchvision_available() and is_timm_available()):

@@ -16,7 +16,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -31,6 +31,9 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import SuperPointImageProcessor
+
+    if is_torchvision_available():
+        from transformers import SuperPointImageProcessorFast
 
 
 class SuperPointImageProcessingTester:
@@ -100,6 +103,7 @@ class SuperPointImageProcessingTester:
 @require_vision
 class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SuperPointImageProcessor if is_vision_available() else None
+    fast_image_processing_class = SuperPointImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self) -> None:
         super().setUp()
