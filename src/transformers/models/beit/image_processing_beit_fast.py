@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 from torchvision.transforms import functional as F
 
-from ...image_processing_utils import BatchFeature, INIT_SERVICE_KWARGS
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
@@ -34,19 +34,15 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    is_torch_tensor,
-    pil_torch_interpolation_mapping,
-    validate_kwargs,
-    make_list_of_images,
-    to_numpy_array,
     infer_channel_dimension_format,
+    is_torch_tensor,
+    make_list_of_images,
+    pil_torch_interpolation_mapping,
+    to_numpy_array,
+    validate_kwargs,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    filter_out_non_signature_kwargs
-)
+from ...utils import TensorType, add_start_docstrings
 from ...utils.deprecation import deprecate_kwarg
 
 
@@ -144,18 +140,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
-    # def _preprocess_segmentation_maps(
-    #     self,
-    #     segmentation_maps,
-    #     **kwargs,
-    # ):
-    #     """Preprocesses a single segmentation map."""
-    #     # Add an axis to the segmentation maps for transformations.
-    #     kwargs["do_normalize"] = False
-    #     kwargs["do_rescale"] = False
-    #     kwargs["input_data_format"] = ChannelDimension.FIRST
-    #     segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
-    #     return segmentation_maps
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
@@ -164,7 +148,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         """Preprocesses a single segmentation map."""
         processed_segmentation_maps = list()
         added_dimension = False # we will assume that the batch of maps will all either have added dims or not
-        for segmentation_map in segmentation_maps:        
+        for segmentation_map in segmentation_maps:
             segmentation_map = to_numpy_array(segmentation_map)
             # Add an axis to the segmentation maps for transformations.
             if segmentation_map.ndim == 2:
@@ -175,9 +159,9 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
                 added_dimension = False
                 if input_data_format is None:
                     input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
-            
+
             processed_segmentation_maps.append(torch.tensor(segmentation_map))
-        
+
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
