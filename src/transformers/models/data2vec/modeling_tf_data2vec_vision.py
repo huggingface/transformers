@@ -90,8 +90,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    pooler_output: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    pooler_output: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 

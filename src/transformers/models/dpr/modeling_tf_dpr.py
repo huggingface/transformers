@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -68,7 +68,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor = None
+    pooler_output: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -96,7 +96,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor = None
+    pooler_output: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -127,9 +127,9 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor = None
-    end_logits: tf.Tensor = None
-    relevance_logits: tf.Tensor = None
+    start_logits: Optional[tf.Tensor] = None
+    end_logits: Optional[tf.Tensor] = None
+    relevance_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -155,13 +155,13 @@ class TFDPREncoderLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         outputs = self.bert_model(
@@ -226,7 +226,7 @@ class TFDPRSpanPredictorLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
@@ -296,7 +296,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -329,7 +329,7 @@ class TFDPREncoder(TFPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
