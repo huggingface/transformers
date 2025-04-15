@@ -292,13 +292,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
 
 class EvollaLLM(LlamaModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
-
-    Args:
-        config: LlamaConfig
-    """
-
     def __init__(
         self,
         config: EvollaConfig,

@@ -35,7 +35,13 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    _config_zero_init,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -324,7 +330,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(self):
