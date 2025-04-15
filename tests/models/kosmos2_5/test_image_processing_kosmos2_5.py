@@ -150,6 +150,10 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.mean(torch.abs(encoding_slow.flattened_patches - encoding_fast.flattened_patches)).item(), 1e-3
         )
 
+    @unittest.skip(reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU.")
+    def test_fast_is_faster_than_slow(self):
+        super().test_fast_is_faster_than_slow()
+
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -365,6 +369,10 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.flattened_patches - encoding_fast.flattened_patches)).item(), 1e-3
         )
+
+    @unittest.skip(reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU.")
+    def test_fast_is_faster_than_slow(self):
+        super().test_fast_is_faster_than_slow()
 
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
