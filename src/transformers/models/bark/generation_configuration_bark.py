@@ -240,7 +240,6 @@ class BarkFineGenerationConfig(GenerationConfig):
 
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
-    is_composition = True
 
     # TODO (joao): nested from_dict
 

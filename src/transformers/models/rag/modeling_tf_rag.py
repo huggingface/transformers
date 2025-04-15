@@ -115,7 +115,7 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
@@ -198,7 +198,7 @@ class TFRetrievAugLMOutput(ModelOutput):
             average in the self-attention heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
@@ -232,8 +232,8 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: str = None,
-        generator_pretrained_model_name_or_path: str = None,
+        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        generator_pretrained_model_name_or_path: Optional[str] = None,
         retriever: RagRetriever = None,
         *model_args,
         **kwargs,

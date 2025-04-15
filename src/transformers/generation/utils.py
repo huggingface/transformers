@@ -33,7 +33,9 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
+    HybridChunkedCache,
     OffloadedCache,
+    OffloadedHybridCache,
     QuantizedCacheConfig,
     StaticCache,
 )
@@ -48,6 +50,7 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
+    is_torchdynamo_exporting,
     logging,
 )
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -374,6 +377,102 @@ class GenerationMixin:
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    def _cache_dependant_input_preparation(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: Optional[torch.FloatTensor],
+        cache_position: Optional[torch.LongTensor],
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+        """
+        Generic cache-dependent input preparation
+        The code is put in a separate function to allow granular unit testing
+        as it needs a different implementation to be exportable.
+
+        If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        - Exception 1: when passing input_embeds, input_ids may be missing entries
+        - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        - Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+          generate the first token for each sequence. Later use the generated Input ids for continuation.
+
+        The current implementation does not rely on ``self`` and could be
+        a class method. It is left as a standard method to be easily rewritten.
+        """
+        if is_torchdynamo_exporting():
+            return self._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+            inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+        elif (
+            inputs_embeds is not None  # Exception 1
+            or (cache_position[-1] >= input_ids.shape[1])  # Exception 3
+        ):
+            input_ids = input_ids[:, -cache_position.shape[0] :]
+        elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+            input_ids = input_ids[:, cache_position]
+        return inputs_embeds, input_ids
+
+    def _cache_dependant_input_preparation_exporting(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: Optional[torch.FloatTensor],
+        cache_position: Optional[torch.LongTensor],
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+        """
+        This method implements method ``_cache_dependant_input_preparation``
+        with :func:`torch.cond` to make it exportable with :func:`torch.export.export`.
+        The code is put in a separate function to allow granular unit testing.
+        """
+        if inputs_embeds is None:
+            input_ids = input_ids[:, cache_position]
+        else:
+            # This is the code we need to implemented with torch.cond.
+            # if input_ids.shape[1] == 0:
+            #     inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            # else:
+            #     if cache_position[-1] >= input_ids.shape[1]:
+            #         input_ids = input_ids[:, -cache_position.shape[0] :]
+            #     else:
+            #         if input_ids.shape[1] != cache_position.shape[0]:
+            #             input_ids = input_ids[:, cache_position]
+            def branch_1(inputs_embeds, cache_position):
+                return inputs_embeds[:, -cache_position.shape[0] :]
+
+            def branch_2(input_ids, cache_position):
+                return input_ids[:, -cache_position.shape[0] :]
+
+            def branch_3(input_ids, cache_position):
+                return input_ids[:, cache_position]
+
+            inputs_embeds, input_ids = torch.cond(
+                input_ids.shape[1] == 0,
+                (
+                    lambda input_ids, inputs_embeds, cache_position: (
+                        branch_1(inputs_embeds, cache_position),
+                        input_ids,
+                    )
+                ),
+                (
+                    lambda input_ids, inputs_embeds, cache_position: (
+                        inputs_embeds,
+                        torch.cond(
+                            cache_position[-1] >= input_ids.shape[1],
+                            branch_2,
+                            lambda input_ids, cache_position: (
+                                torch.cond(
+                                    input_ids.shape[1] != cache_position.shape[0],
+                                    branch_3,
+                                    (lambda input_ids, cache_position: input_ids),
+                                    [input_ids, cache_position],
+                                )
+                            ),
+                            [input_ids, cache_position],
+                        ),
+                    )
+                ),
+                [input_ids, inputs_embeds, cache_position],
+            )
+        return inputs_embeds, input_ids
+
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
@@ -404,23 +503,11 @@ class GenerationMixin:
             cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
         # 2. Generic cache-dependent input preparation
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
-        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-            elif (
-                inputs_embeds is not None  # Exception 1
-                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
+            inputs_embeds, input_ids = self._cache_dependant_input_preparation(
+                input_ids, inputs_embeds, cache_position
+            )
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
@@ -877,8 +964,14 @@ class GenerationMixin:
         elif different_tokenizers:
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
-                    target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device
+                    target_tokenizer,
+                    assistant_tokenizer,
+                    self.config.vocab_size,
+                    assistant_model=assistant_model,
+                    assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
+                # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
+                assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,
@@ -1232,7 +1325,7 @@ class GenerationMixin:
     ) -> torch.Tensor:
         """
         Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
-        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
+        used). This is a convenient method to quickly obtain the scores of the selected tokens at generation time.
 
         Parameters:
             sequences (`torch.LongTensor`):
@@ -1344,27 +1437,6 @@ class GenerationMixin:
         transition_scores[beam_indices_mask] = 0
 
         return transition_scores
-
-    def _validate_model_class(self):
-        """
-        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
-        right class to use.
-        """
-        # TODO(joao): remove this function in v4.50, i.e. when we remove the inheritance of `GenerationMixin` from
-        # `PreTrainedModel`. With that inheritance removed, all model classes inheriting from `GenerationMixin` can
-        # safely call `GenerationMixin.generate`
-        if not self.can_generate():
-            terminations_with_generation_support = [
-                "ForCausalLM",
-                "ForConditionalGeneration",
-                "ForSpeechSeq2Seq",
-                "ForVision2Seq",
-            ]
-            raise TypeError(
-                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
-                "it doesn't have a language model head. Classes that support generation often end in one of these "
-                f"names: {terminations_with_generation_support}."
-            )
 
     def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
         if assistant_model is None:
@@ -1590,6 +1662,8 @@ class GenerationMixin:
             generation_config = self.generation_config
             using_model_generation_config = True
 
+        # `torch.export.export` usually raises an exception if it is called
+        # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
         if not using_model_generation_config:
@@ -1656,11 +1730,10 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_layer_device_map_for_cache_init(self):
+    def _get_layer_device_map_for_cache_init(self) -> Optional[Dict[int, Union[str, int]]]:
         """
-        Taken from `dispatch_model` from accelerate.
-        This is needed here if we don't want to make changes in accelerate in order to save execution_device
-        For offloaded case, we need to get the execution device, not just the device where it is offloaded
+        Returns the device map for each decoder layer, to allocate the cache on the right device.
+        Inspired from `dispatch_model` in accelerate.
         """
         execution_device_map = None
 
@@ -1674,17 +1747,62 @@ class GenerationMixin:
                 for name, device in self.hf_device_map.items()
             }
 
-        num_hidden_layers = self.config.get_text_config().num_hidden_layers
+        # No `execution_device_map` -> rely on `self.device` to allocate the cache
         if execution_device_map is None:
             return None
-        elif len(execution_device_map) == 1 and "" in execution_device_map:
+
+        # Single device for all layers
+        num_hidden_layers = self.config.get_text_config().num_hidden_layers
+        if len(execution_device_map) == 1 and "" in execution_device_map:
             return dict.fromkeys(range(num_hidden_layers), execution_device_map[""])
+
+        # Multiple devices in `execution_device_map` -> we need to map decoder layers to the correct device.
         layer_device_map = {}
-        for layer in execution_device_map:
-            for idx in range(num_hidden_layers):
-                if f".{idx}." in f"{layer}.":
-                    layer_device_map[idx] = execution_device_map[layer]
+        # Case 1: The model has a `get_decoder` method, we can use it to find the decoder name.
+        if hasattr(self, "get_decoder"):
+            decoder_name = None
+            for name, module in self.named_modules():
+                if module is self.get_decoder():
+                    decoder_name = name
                     break
+            if decoder_name is None:
+                raise RuntimeError(
+                    "`model.get_decoder()` is not returning a named module of the model. This is unexpected, please "
+                    "open an issue on GitHub."
+                )
+
+            decoder_mapped_modules = [
+                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+            ]
+            # The decoder name may be present in `execution_device_map` in two forms:
+            # a) each layer has a device mapping
+            if len(decoder_mapped_modules) >= num_hidden_layers:
+                for idx in range(num_hidden_layers):
+                    for module_name in decoder_mapped_modules:
+                        if f".{idx}." in f"{module_name}.":
+                            layer_device_map[idx] = execution_device_map[module_name]
+                            break
+
+            # b) the whole module is mapped to a single device. If the decoder name is NOT present in the device map,
+            # then the mapping is done in a parent module
+            else:
+                while True:
+                    if decoder_name in execution_device_map:
+                        layer_device_map = dict.fromkeys(range(num_hidden_layers), execution_device_map[decoder_name])
+                        break
+                    elif "." in decoder_name:
+                        decoder_name = decoder_name.rsplit(".", 1)[0]  # gets the name of the parent module
+                    else:
+                        raise RuntimeError(f"Decoder name {decoder_name} not found in execution device map")
+
+        # Case 2: Legacy code path: assume the decoder layers are named as `(...).X` (X being the layer index)
+        else:
+            for layer in execution_device_map:
+                for idx in range(num_hidden_layers):
+                    if f".{idx}." in f"{layer}.":
+                        layer_device_map[idx] = execution_device_map[layer]
+                        break
+
         for idx in range(num_hidden_layers):
             if idx not in layer_device_map:
                 raise RuntimeError(f"layer {idx} has not been mapped to a device.")
@@ -1699,6 +1817,9 @@ class GenerationMixin:
 
         Returns the resulting cache object.
         """
+        if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
+            cache_implementation = "hybrid_chunked"
+
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
@@ -1714,6 +1835,9 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != batch_size
+            or isinstance(
+                cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
+            )  # due to internal slicing, we always re-init
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1827,6 +1951,9 @@ class GenerationMixin:
             )
             generation_config.cache_implementation = None
 
+        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
+            self.config.get_text_config(), "cache_implementation", None
+        )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._supports_static_cache:
@@ -2076,7 +2203,6 @@ class GenerationMixin:
         """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
 
@@ -2468,7 +2594,7 @@ class GenerationMixin:
         if synced_gpus:
             # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
             # The following logic allows an early break if all peers finished generating their sequence
-            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
             dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
             # did all peers finish? the reduced sum will be 0.0 then
@@ -3274,7 +3400,12 @@ class GenerationMixin:
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 
-        is_prefill = True
+        if generation_config.prefill_chunk_size is not None:
+            model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
+            is_prefill = False
+        else:
+            is_prefill = True
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -3724,7 +3855,7 @@ class GenerationMixin:
             device=input_ids.device,
         )
         running_sequences[:, :, :cur_len] = self._unflatten_beam_dim(input_ids, batch_size, num_beams)
-        sequences = running_sequences.clone().detach()
+        sequences = running_sequences.detach().clone()
 
         # per batch, beam-item score, logprobs
         # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
@@ -3745,7 +3876,7 @@ class GenerationMixin:
         running_beam_indices = torch.full(
             (batch_size, num_beams, max_length - cur_len), fill_value=-1, dtype=torch.int32, device=input_ids.device
         )
-        beam_indices = running_beam_indices.clone().detach()
+        beam_indices = running_beam_indices.detach().clone()
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3887,9 +4018,14 @@ class GenerationMixin:
         beam_scores = self._flatten_beam_dim(beam_scores[:, :num_return_sequences])
         beam_indices = self._flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
 
-        # Crop the static-shaped tensors to the actual size
-        sequences = sequences[:, :cur_len]
-        beam_indices = beam_indices[:, : cur_len - decoder_prompt_len]
+        # Crop the static-shaped tensors to the actual size.
+        # `beam_indices` is initialized with -1s, and is updated with the beam index of the generated token at each
+        # step. We can use it to detect the generated length, which may be != `cur_len`  (e.g. selected beam is from a
+        # previous decoding iteration)
+        max_generated_length = ((beam_indices + 1).bool()).sum(dim=1).max()
+        output_length = decoder_prompt_len + max_generated_length
+        sequences = sequences[:, :output_length]
+        beam_indices = beam_indices[:, :max_generated_length]
 
         if return_dict_in_generate:
             if not output_scores:
@@ -4719,6 +4855,45 @@ class GenerationMixin:
         else:
             return input_ids
 
+    def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
+        # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
+        # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
+        torch._dynamo.config.cache_size_limit = 64
+
+        chunk_size = generation_config.prefill_chunk_size
+        # Only chunk up the token just before last, so that decoding is completely performed outside this function
+        # (here we simply prefill the cache)
+        input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
+
+        if "past_key_values" not in model_kwargs:
+            raise ValueError("Cannot use prefill chunkink without a cache")
+
+        model_forward = self.get_compiled_call(generation_config.compile_config)
+        attention_mask = model_kwargs.pop("attention_mask", None)
+
+        past_length = 0
+        for input_chunk in input_chunks:
+            current_length = past_length + input_chunk.shape[-1]
+            # Prepare inputs
+            if attention_mask is not None:
+                model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+            model_kwargs["cache_position"] = torch.arange(
+                past_length, current_length, dtype=torch.long, device=input_chunk.device
+            )
+            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
+            model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+
+            outputs = model_forward(**model_inputs, return_dict=True)
+
+            model_kwargs["past_key_values"] = outputs.past_key_values
+            past_length = current_length
+
+        model_kwargs["attention_mask"] = attention_mask
+        model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+        _ = model_kwargs.pop("position_ids", None)
+
+        return model_kwargs
+
 
 def _speculative_sampling(
     candidate_input_ids,
@@ -5051,7 +5226,7 @@ def _dola_select_contrast(
 
     # 6. Reduce the batchmean
     js_divs = js_divs.mean(-1)  # shape: (num_premature_layers,)
-    premature_layer = candidate_premature_layers[int(js_divs.argmax().cpu().item())]
+    premature_layer = candidate_premature_layers[int(js_divs.argmax().item())]
 
     base_logits = candidate_premature_logits[premature_layer]
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)

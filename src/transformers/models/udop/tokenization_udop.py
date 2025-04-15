@@ -33,6 +33,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -147,6 +148,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@requires(backends=("sentencepiece",))
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
@@ -697,7 +699,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             List[TextInputPair],
             List[PreTokenizedInput],
         ],
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -890,7 +892,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             List[TextInputPair],
             List[PreTokenizedInput],
         ],
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -944,7 +946,7 @@ class UdopTokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model_boxes(
         self,
         batch_text_or_text_pairs,
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[int]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
