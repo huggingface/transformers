@@ -1029,7 +1029,7 @@ def require_torch_large_gpu(test_case, memory: float = 20):
 def require_torch_large_accelerator(test_case, memory: float = 20):
     """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
     if torch_device != "cuda" and torch_device != "xpu":
-        return unittest.skip(reason=f"test requires a CUDA GPU or XPU with more than {memory} GiB of memory")(test_case)
+        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
 
     torch_accelerator_module = getattr(torch, torch_device)
 
