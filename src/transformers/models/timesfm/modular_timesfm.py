@@ -356,8 +356,6 @@ TIMESFM_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -416,7 +414,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
     ) -> TimesFmOutput:
         """
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -485,14 +482,13 @@ class TimesFmModel(TimesFmPreTrainedModel):
         else:
             all_hidden_states = None
 
-        output = TimesFmOutput(
+        return TimesFmOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions if output_attentions else None,
             loc=stats[0],
             scale=stats[1],
         )
-        return output if return_dict else output.to_tuple()
 
     @staticmethod
     def _prepare_4d_attention_mask(
@@ -735,7 +731,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         truncate_negative: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> TimesFmOutputForPrediction:
         r"""
         window_size (`int`, *optional*):
@@ -761,9 +756,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                     (# past_values,  # forecast horizon, 1 + # quantiles).
                 - loss: the mean squared error loss + quantile loss if `future_values` is provided.
         """
-        if return_dict is None:
-            return_dict = self.config.use_return_dict
-
         if forecast_context_len is None:
             fcontext_len = self.context_len
         else:
@@ -869,7 +861,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_values)
             loss = mse_loss + quantile_loss
 
-        output = TimesFmOutputForPrediction(
+        return TimesFmOutputForPrediction(
             last_hidden_state=decoder_output.last_hidden_state,
             attentions=decoder_output.attentions if output_attentions else None,
             hidden_states=decoder_output.hidden_states if output_hidden_states else None,
@@ -877,7 +869,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             full_predictions=full_outputs,
             loss=loss,
         )
-        return output if return_dict else output.to_tuple()
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
