@@ -130,7 +130,11 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Further Learning
 
-To explore quantization more deeply, check out these short courses created in partnership with DeepLearning.AI:
+To explore quantization and related performance optimization concepts more deeply, check out these resources:
 
 - [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
 - [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth)
+- [Introduction to Quantization cooked in 🤗 with 💗🧑‍🍳](https://huggingface.co/blog/merve/quantization)
+- [EfficientML.ai Lecture 5 - Quantization Part I](https://www.youtube.com/watch?v=RP23-dRVDWM)
+- [Making Deep Learning Go Brrrr From First Principles](https://horace.io/brrr_intro.html)
+- [Accelerating Generative AI with PyTorch Part 2: LLM Optimizations](https://pytorch.org/blog/accelerating-generative-ai-2/)
