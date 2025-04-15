@@ -108,13 +108,14 @@ These are unified under the `HfQuantizer` API and associated `QuantizationConfig
 
 ### Typical Workflow
 
-1. Choose a quantization method suitable for your hardware and use-case (see the [Overview table](./overview)).
+1. Choose a quantization method suitable for your hardware and use-case (see the [Overview table](./overview) or [selecting a quantization method doc](./selecting)).
 2. Load a pre-quantized model from the Hugging Face Hub, or loading a `float32`/`float16`/`bfloat16` model and applying quantization using a specific `QuantizationConfig`.
 
 ```python
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-model_id = "facebook/opt-350m"
+model_id = "meta-llama/Llama-3.1-8B-Instruct"
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -124,6 +125,7 @@ quantization_config = BitsAndBytesConfig(
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=quantization_config,
+    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 ```
