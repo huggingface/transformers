@@ -323,11 +323,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
-        # TODO reject if channels_last (torchvision only support channels_first )
-
         height, width = get_image_size(image, input_data_format)
 
         pad_top, pad_bottom = _get_pad(height, size_divisor)
