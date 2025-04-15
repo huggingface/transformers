@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Visual Document Retrieval
+# Visual document retrieval
 
 Documents can contain multimodal data if they include charts, tables, and visuals in addition to text. Retrieving information from these documents is challenging because text retrieval models alone can't handle visual data and image retrieval models lack the granularity and document processing capabilities.
 
