@@ -27,7 +27,7 @@ On a larger scale, you might want to index and retrieve your documents using a v
 
 </Tip>
 
-We will begin by installing transformers and datasets.
+Make sure Transformers and Datasets is installed.
 
 ```bash
 pip install -q datasets transformers
