@@ -33,6 +33,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     can_return_tuple,
     logging,
+    replace_return_docstrings,
     torch_int,
 )
 from .configuration_mlcd import MLCDVisionConfig
@@ -631,6 +632,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MLCDVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

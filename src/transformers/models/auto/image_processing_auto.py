@@ -64,10 +64,10 @@ else:
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("bridgetower", ("BridgeTowerImageProcessor",)),
             ("chameleon", ("ChameleonImageProcessor",)),
-            ("chinese_clip", ("ChineseCLIPImageProcessor",)),
+            ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("conditional_detr", ("ConditionalDetrImageProcessor",)),
+            ("conditional_detr", ("ConditionalDetrImageProcessor", "ConditionalDetrImageProcessorFast")),
             ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
@@ -167,7 +167,7 @@ else:
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("yolos", ("YolosImageProcessor",)),
+            ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )
