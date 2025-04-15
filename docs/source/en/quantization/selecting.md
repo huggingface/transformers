@@ -147,9 +147,11 @@ Results for `torch.compile` and Marlin kernels are included where applicable and
 
 The key takeaways are:
 
-*   **8-bit Quantization (bnb-int8, HQQ, Quanto, torchao, fp8):** Provide memory savings (~2x vs bf16) and maintain accuracy very close to the baseline bf16 model.
-*   **4-bit Quantization (AWQ, GPTQ, HQQ, bnb-nf4):** Provide significant memory savings (~4x vs bf16) and maintaining relatively high accuracy. AWQ and GPTQ often lead in accuracy but require calibration. HQQ and bnb-nf4 provide easy on-the-fly quantization.
-*   **Sub-4-bit Quantization (VPTQ, AQLM, 2-bit GPTQ):** Offer extreme memory compression but usually come with a noticeable accuracy drop, especially at 2-bits. Quantization times can be very long (AQLM, VPTQ). Performance varies significantly.
+| Quantization & Methods                      | Memory Savings (vs bf16) | Accuracy             | Other Notes                                                        |
+|-------------------------------------------- |------------------------- |--------------------- |------------------------------------------------------------------- |
+| **8-bit** (bnb-int8, HQQ, Quanto, torchao, fp8) | ~2x             | Very close to baseline bf16 model   |                                                                    |
+| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4 are easy on-the-fly. |
+| **Sub-4-bit** (VPTQ, AQLM, 2-bit GPTQ) | Extreme (>4x)            | Noticeable drop, especially at 2-bit | Quantization times can be very long (AQLM, VPTQ). Performance varies. |
 
 > [!TIP]
 > Always benchmark the performance (accuracy and speed) of the quantized model on your specific task and hardware to ensure it meets your requirements. Refer to the individual documentation pages linked above for detailed usage instructions.
