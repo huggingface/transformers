@@ -30,6 +30,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -406,6 +407,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         )
         return outputs, (mu, sigma)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -415,7 +417,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
+    ) -> TimesFmOutput:
         """
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
@@ -714,6 +716,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             losses.append(loss.mean())
         return torch.stack(losses).mean()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TimesFmOutputForPrediction, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
@@ -733,7 +736,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[TimesFmOutputForPrediction, tuple[torch.Tensor, ...]]:
+    ) -> TimesFmOutputForPrediction:
         r"""
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
