@@ -219,12 +219,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # verify inputs
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath, map_location="cpu")
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
-        original_input_ids = torch.load(filepath, map_location="cpu")
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         original_input_ids[original_input_ids == -200] = image_token_index
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
@@ -233,7 +233,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         filepath = hf_hub_download(
             repo_id="nielsr/test-image", filename="llava_1_6_34b_input_ids.pt", repo_type="dataset"
         )
-        original_input_ids = torch.load(filepath, map_location="cpu")
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index
         original_input_ids[original_input_ids == -200] = image_token_index
 

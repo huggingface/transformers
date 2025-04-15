@@ -27,6 +27,7 @@ from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridChunkedCache
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -59,7 +60,7 @@ _CONFIG_FOR_DOC = "Llama4Config"
 
 
 class Llama4TextExperts(nn.Module):
-    def __init__(self, config: Llama4Config):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
@@ -144,6 +145,7 @@ class Llama4TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -474,6 +476,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
 
     def _init_weights(self, module):
         std = (
@@ -489,6 +492,17 @@ class Llama4PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Llama4TextRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Llama4TextExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, Llama4VisionModel):
+            module.class_embedding.data.normal_(std=module.scale)
+            module.positional_embedding_vlm.data.normal_(std=module.scale)
 
 
 LLAMA4_INPUTS_DOCSTRING = r"""

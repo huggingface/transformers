@@ -591,26 +591,22 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        # important: this ported version of GotOcr2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/GotOcr2/tree/main/got_ocr2 should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, GotOcr2LayerNorm)):  # noqa: F821
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, GotOcr2VisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, GotOcr2VisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
 
 
 GOT_OCR2_INPUTS_DOCSTRING = r"""

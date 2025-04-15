@@ -142,6 +142,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
+        ("granite_speech", "GraniteSpeechConfig"),
         ("granitemoe", "GraniteMoeConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
         ("granitevision", "LlavaNextConfig"),
@@ -199,6 +200,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
         ("mixtral", "MixtralConfig"),
+        ("mlcd", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
@@ -253,6 +255,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Config"),
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
+        ("qwen2_5_omni", "Qwen2_5OmniConfig"),
         ("qwen2_5_vl", "Qwen2_5_VLConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
@@ -491,6 +494,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
+        ("granite_speech", "GraniteSpeech"),
         ("granitemoe", "GraniteMoeMoe"),
         ("granitemoeshared", "GraniteMoeSharedMoe"),
         ("granitevision", "LLaVA-NeXT"),
@@ -556,6 +560,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
         ("mixtral", "Mixtral"),
+        ("mlcd", "MLCD"),
         ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
@@ -615,6 +620,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
+        ("qwen2_5_omni", "Qwen2_5Omni"),
         ("qwen2_5_vl", "Qwen2_5_VL"),
         ("qwen2_audio", "Qwen2Audio"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
@@ -1173,3 +1179,6 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+
+
+__all__ = ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"]
