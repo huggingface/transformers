@@ -146,7 +146,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ):
         """Preprocesses a single segmentation map."""
-        processed_segmentation_maps = list()
+        processed_segmentation_maps = []
         added_dimension = False # we will assume that the batch of maps will all either have added dims or not
         for segmentation_map in segmentation_maps:
             segmentation_map = to_numpy_array(segmentation_map)
