@@ -25,13 +25,12 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from torchvision import transforms
 from timm import create_model
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
+from torchvision import transforms
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
-from transformers.image_utils import PILImageResampling
 from transformers.models.convnext.image_processing_convnext import get_resize_output_image_size
 from transformers.utils import logging
 
@@ -140,6 +139,7 @@ def prepare_img():
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
+
 def get_logits_from_timm(checkpoint_url):
     timm_model_name = None
     if "convnext_tiny_1k_224_ema.pth" in checkpoint_url:
@@ -170,7 +170,6 @@ def get_logits_from_timm(checkpoint_url):
         timm_model_name = "convnext_xlarge.fb_in22k_ft_in1k_384"
     else:
         raise ValueError(f"TIMM model name unknown for URL: {checkpoint_url}")
-    
 
     config, expected_shape = get_convnext_config(timm_model_name)
 
@@ -188,7 +187,7 @@ def get_logits_from_timm(checkpoint_url):
     # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if not key in ["classifier.weight","classifier.bias"]:
+        if key not in ["classifier.weight", "classifier.bias"]:
             key = "convnext." + key
         state_dict[key] = val
 
@@ -196,15 +195,11 @@ def get_logits_from_timm(checkpoint_url):
     transform = create_transform(**resolve_data_config({}, model=timm_model))
     timm_transforms = transform.transforms
 
-    pillow_resamplings = {
-        "bilinear": PILImageResampling.BILINEAR,
-        "bicubic": PILImageResampling.BICUBIC,
-        "nearest": PILImageResampling.NEAREST,
-    }
     image = prepare_img()
     timm_pixel_values = transform(image).unsqueeze(0)
     timm_logits = timm_model(timm_pixel_values)
     return timm_logits
+
 
 @torch.no_grad()
 def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
