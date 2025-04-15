@@ -67,7 +67,7 @@ model = ColPaliForRetrieval.from_pretrained(
 ).eval()
 ```
 
-We can simply infer with the model with text query like below. We can get the indexed embeddings with `embeddings` in our output. For image-to-text search, you can swap text with `images` argument and pass in images instead. 
+Pass the text query to the processor and return the indexed text embeddings from the model. For image-to-text search, replace the `text` parameter in [`ColPaliProcessor`] with the `images` parameter to pass images.
 
 ```python
 inputs = processor(text="a document about Mars expedition").to("cuda")
