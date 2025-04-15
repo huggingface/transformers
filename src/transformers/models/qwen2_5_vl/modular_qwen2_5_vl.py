@@ -313,8 +313,16 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 grid_w // self.spatial_merge_size,
             )
             index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
-            pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size if llm_grid_h % vit_merger_window_size != 0 else 0
-            pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size if llm_grid_w % vit_merger_window_size != 0 else 0
+            pad_h = (
+                vit_merger_window_size - llm_grid_h % vit_merger_window_size
+                if llm_grid_h % vit_merger_window_size != 0
+                else 0
+            )
+            pad_w = (
+                vit_merger_window_size - llm_grid_w % vit_merger_window_size
+                if llm_grid_w % vit_merger_window_size != 0
+                else 0
+            )
             num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
             num_windows_w = (llm_grid_w + pad_w) // vit_merger_window_size
             index_padded = F.pad(index, (0, pad_w, 0, pad_h), "constant", -100)
