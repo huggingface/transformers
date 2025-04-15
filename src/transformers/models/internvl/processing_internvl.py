@@ -75,6 +75,18 @@ class InternVLProcessor(ProcessorMixin):
             image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        fake_image_token (`str`, *optional*, defaults to `"<image>"`):
+            The token to use for the image placeholder in the text. This token will be replaced by the
+            appropriate image tokens when processing the text with images.
+        fake_video_token (`str`, *optional*, defaults to `"<video>"`):
+            The token to use for the video placeholder in the text. This token will be replaced by the
+            appropriate image tokens when processing the text with videos.
+        start_image_token (`str`, *optional*, defaults to `"<img>"`):
+            The token to use at the start of the image sequence in the text.
+        end_image_token (`str`, *optional*, defaults to `"</img>"`):
+            The token to use at the end of the image sequence in the text.
+        context_image_token (`str`, *optional*, defaults to `"<IMG_CONTEXT>"`):
+            The token to use for the context of the image in the text.
     """
 
     attributes = ["image_processor", "tokenizer"]
