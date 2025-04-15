@@ -78,14 +78,37 @@ class InternVLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "image_seq_length"]
+    valid_kwargs = [
+        "chat_template",
+        "image_seq_length",
+        "fake_image_token",
+        "fake_video_token",
+        "start_image_token",
+        "end_image_token",
+        "context_image_token",
+    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
-        self, image_processor=None, tokenizer=None, image_seq_length: int = 256, chat_template=None, **kwargs
+        self,
+        image_processor=None,
+        tokenizer=None,
+        image_seq_length: int = 256,
+        chat_template=None,
+        fake_image_token="<image>",
+        fake_video_token="<video>",
+        start_image_token="<img>",
+        end_image_token="</img>",
+        context_image_token="<IMG_CONTEXT>",
+        **kwargs,
     ):
         self.image_seq_length = image_seq_length
+        self.fake_image_token = fake_image_token
+        self.fake_video_token = fake_video_token
+        self.start_image_token = start_image_token
+        self.end_image_token = end_image_token
+        self.context_image_token = context_image_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -112,9 +135,10 @@ class InternVLProcessor(ProcessorMixin):
         # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
         for prompt in text:
             new_prompt = prompt
-            while "<image>" in new_prompt or "<video>" in new_prompt:
-                if "<image>" in new_prompt and (
-                    "<video>" not in new_prompt or new_prompt.index("<image>") < new_prompt.index("<video>")
+            while self.fake_image_token in new_prompt or self.fake_video_token in new_prompt:
+                if self.fake_image_token in new_prompt and (
+                    self.fake_video_token not in new_prompt
+                    or new_prompt.index(self.fake_image_token) < new_prompt.index(self.fake_video_token)
                 ):
                     # Get the slice of patches corresponding to the current image
                     start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
@@ -122,8 +146,8 @@ class InternVLProcessor(ProcessorMixin):
                     image_video_patches.append(image_pixel_values[start_index:end_index])
                     # Replace the corresponding image placeholder with the correct number of image tokens
                     new_prompt = new_prompt.replace(
-                        "<image>",
-                        f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * image_num_patches[image_index]}</img>",
+                        self.fake_image_token,
+                        f"{self.start_image_token}{self.context_image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}",
                         1,
                     )
                     image_index += 1
@@ -139,10 +163,10 @@ class InternVLProcessor(ProcessorMixin):
                     # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
                     num_patches = list(video_num_patches[current_patch_index:end_patch_index])
                     video_prompt = "\n".join(
-                        f"Frame{i+1}: <img>{'<IMG_CONTEXT>' * self.image_seq_length * num_patches[i]}</img>"
+                        f"Frame{i + 1}: {self.start_image_token}{self.context_image_token * self.image_seq_length * num_patches[i]}{self.end_image_token}"
                         for i in range(len(num_patches))
                     )
-                    new_prompt = new_prompt.replace("<video>", video_prompt, 1)
+                    new_prompt = new_prompt.replace(self.fake_video_token, video_prompt, 1)
                     video_index += 1
             processed_text.append(new_prompt)
 
