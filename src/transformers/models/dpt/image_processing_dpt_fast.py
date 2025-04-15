@@ -65,8 +65,7 @@ if is_torchvision_available():
 
 
 def get_output_image_size_for_ensure_multiple(
-    # TODO type should be torch.Tensor
-    input_image: np.ndarray,
+    input_image: "torch.Tensor",
     output_size: Union[int, Iterable[int]],
     keep_aspect_ratio: bool,
     multiple: int,
@@ -129,16 +128,6 @@ DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = """
     DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING,
 )
 class DPTImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -150,14 +139,12 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
-    size_divisor = None
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
+    # Overrides BaseImageProcessor `__call__` so that segmentation maps can be passed
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
     def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     def _preprocess(
