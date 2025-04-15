@@ -32,6 +32,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -548,6 +549,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
 )
 class MLCDVisionModel(CLIPVisionModel):
     @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MLCDVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
