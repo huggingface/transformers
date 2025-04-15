@@ -517,8 +517,6 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
-        else:
-            raise e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
@@ -553,6 +551,8 @@ def cached_files(
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+        else:
+            raise e
 
     resolved_files = [
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
