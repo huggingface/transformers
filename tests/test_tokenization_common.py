@@ -33,8 +33,8 @@ from typing import TYPE_CHECKING, Any, Union
 from parameterized import parameterized
 
 from transformers import (
-   #AlbertTokenizer,
-    #AlbertTokenizerFast,
+    AlbertTokenizer,
+    AlbertTokenizerFast,
     BertTokenizer,
     BertTokenizerFast,
     PreTrainedTokenizer,

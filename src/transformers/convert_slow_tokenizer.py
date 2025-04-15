@@ -1366,14 +1366,8 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        return processors.TemplateProcessing(
-            single="<bos> $A </eos>",
-            pair="<bos> $A </eos> </eos> $B </eos>",
-            special_tokens=[
-                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
-                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
-            ],
-        )
+        # the processor is defined in the LlamaTokenizerFast class.
+        return None
 
 
 class MarkupLMConverter(Converter):
@@ -1686,7 +1680,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "NllbTokenizer": NllbConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
-    "PreTrainedTokenizerFast": SpmConverter,
     "Qwen2Tokenizer": Qwen2Converter,
     "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
@@ -1695,7 +1688,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
-    "SPMTokenizer": LlamaConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
