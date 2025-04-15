@@ -331,7 +331,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         scores = self.processor.score_retrieval(
             query_embeddings=query_embeddings,
             passage_embeddings=image_embeddings,
-        )  # (len(qs), len(ps))
+        )  # (num_queries, num_passages)
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
         assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
