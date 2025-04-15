@@ -345,6 +345,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
