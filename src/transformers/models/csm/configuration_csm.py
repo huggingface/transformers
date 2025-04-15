@@ -497,10 +497,6 @@ class CsmConfig(PretrainedConfig):
         "depth_decoder_config": CsmDepthDecoderConfig,
     }
 
-    # does not really make sense to have a text config for csm
-    # def get_text_config(self, decoder=False):
-    #     return self.backbone_config
-
     def __init__(
         self,
         backbone_config=None,
@@ -530,6 +526,7 @@ class CsmConfig(PretrainedConfig):
         self.initializer_range = self.backbone_config.initializer_range
         self.max_position_embeddings = self.backbone_config.max_position_embeddings
         self.num_attention_heads = self.backbone_config.num_attention_heads
+        self.num_key_value_heads = self.backbone_config.num_key_value_heads
         self.num_hidden_layers = self.backbone_config.num_hidden_layers
 
         self.tie_codebooks_embeddings = tie_codebooks_embeddings
@@ -539,7 +536,12 @@ class CsmConfig(PretrainedConfig):
 
         # TODO: ensure parameters that need to shared are the same across sub-configs
 
-        super().__init__(**{**kwargs, "tie_word_embeddings": False})
+        super().__init__( 
+            pad_token_id=kwargs.pop("pad_token_id", self.backbone_config.codebook_pad_token_id),
+            eos_token_id=kwargs.pop("eos_token_id", self.backbone_config.codebook_eos_token_id),
+            tie_word_embeddings=False,
+            **kwargs
+        )
 
 
 __all__ = [
