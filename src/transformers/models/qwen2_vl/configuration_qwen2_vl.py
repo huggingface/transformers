@@ -38,6 +38,7 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         patch_size=14,
         spatial_merge_size=2,
         temporal_patch_size=2,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -52,6 +53,7 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
+        self.initializer_range = initializer_range
 
 
 class Qwen2VLConfig(PretrainedConfig):
