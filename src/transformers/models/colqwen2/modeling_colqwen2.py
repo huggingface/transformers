@@ -106,7 +106,8 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
             heads.
     """
 
-    embeddings: torch.Tensor = None
+    loss: Optional[torch.FloatTensor] = None
+    embeddings: Optional[torch.Tensor] = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -255,7 +256,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     @replace_return_docstrings(output_type=ColQwen2ForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -351,4 +352,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         return model_embeds
 
 
-__all__ = ["ColQwen2ForRetrieval", "ColQwen2PreTrainedModel"]
+__all__ = [
+    "ColQwen2ForRetrieval",
+    "ColQwen2PreTrainedModel",
+]
