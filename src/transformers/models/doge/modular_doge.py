@@ -493,7 +493,7 @@ class DogeCDMoE(nn.Module):
         routing_weights = self.router_gate(hidden_states).view(2, bsz * seq_len, -1)
 
         # get experts with the highest routing weights
-        (scores_x, scores_y), (indices_x, indices_y) = [w.topk(self.num_keys, dim=-1) for w in routing_weights]
+        (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.num_keys, dim=-1)
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
         all_indices = indices_x.unsqueeze(-1) * self.num_keys + indices_y.unsqueeze(-2)
         all_scores = all_scores.view(*all_scores.shape[:-2], -1)
