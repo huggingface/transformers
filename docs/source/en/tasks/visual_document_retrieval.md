@@ -15,7 +15,9 @@ rendered properly in your Markdown viewer.
 -->
 # Visual Document Retrieval
 
-Documents are essentially multimodal data, rich in charts, tables, visuals as well as text. Retrieving information from such documents is challenging as text retrieval models miss out on infographics, and image retrieval models lack granularity and document processing capabilities. Visual document retrieval is a new paradigm to solve information retrieval from documents. This comes in handy in all document retrieval use cases, a major one is multimodal retrieval augmented generation (RAG). These models essentially take in documents (as images) and texts and calculate similarity between each.
+Documents can contain multimodal data if they include charts, tables, and visuals in addition to text. Retrieving information from these documents is challenging because text retrieval models alone can't handle visual data and image retrieval models lack the granularity and document processing capabilities.
+
+Visual document retrieval can help retrieve information from all types of documents, including multimodal retrieval augmented generation (RAG). These models accept documents (as images) and texts and calculates the similarity scores between them.
 
 This task guide aims to demonstrate how to index and retrieve documents using [ColPali](https://huggingface.co/vidore/colpali-v1.2-hf) with transformers.  
 
