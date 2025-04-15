@@ -106,7 +106,7 @@ def find_top_k_indices_batched(dataset, text_embedding, processor, k=10, batch_s
     return indices, scores
 ```
 
-Let's infer. We should first get text embeddings and call our helper function above.
+Generate the text embeddings and pass them to the function above to return the dataset indices and scores.
 
 ```python
 with torch.no_grad():
