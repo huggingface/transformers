@@ -48,22 +48,21 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class ColQwen2Processor(ProcessorMixin):
     r"""
-        Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
-        well as to compute the late-interaction retrieval score.
+    Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
+    well as to compute the late-interaction retrieval score.
 
-        [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
-        for more information.
+    [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
+    for more information.
 
-        Args:
-            image_processor ([`Qwen2VLImageProcessor`], *optional*):
-                The image processor is a required input.
-            tokenizer ([`Qwen2TokenizerFast`], *optional*):
-                The tokenizer is a required input.
-            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-                in a chat into a tokenizable string.
-            visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
-    <|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
-            query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
+    Args:
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -77,16 +76,19 @@ class ColQwen2Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        visual_prompt_prefix: str = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>",
-        query_prefix: str = "Query: ",
+        visual_prompt_prefix: Optional[str] = None,
+        query_prefix: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
-        self.visual_prompt_prefix = visual_prompt_prefix
-        self.query_prefix = query_prefix
+        self.visual_prompt_prefix = (
+            visual_prompt_prefix
+            or "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
+        )
+        self.query_prefix = query_prefix or "Query: "
 
         self.tokenizer.padding_side = "left"
 
