@@ -130,6 +130,22 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### FP8 Quantization (A8W8)
+
+<img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
+
+A newer databyte, 8-bit floating-point (FP8), offers another way to reduce precision while retaining more accuracy than INT8 in certain scenarios. FP8 keeps the floating-point structure (sign, exponent, mantissa) but use fewer bits.
+
+**FP8 Formats:** The two common FP8 variants are:
+- **E4M3:** 1 sign bit, 4 exponent bits, 3 mantissa bits. Offers higher precision (more mantissa bits) but a smaller dynamic range (fewer exponent bits).
+- **E5M2:** 1 sign bit, 5 exponent bits, 2 mantissa bits. Offers a wider dynamic range but lower precision.
+
+**A8W8 Scheme:** This refers to quantizing both activations (A) and weights (W) to 8-bit precision.
+
+**Hardware Requirement:** While INT8 has broad support, efficient FP8 computation requires specific hardware capabilities found in newer GPUs like NVIDIA H100/H200/B100 and AMD Instinct MI300 series. Without native hardware acceleration, the benefits of FP8 might not be fully realized.
+
+**Integration in 🤗 Transformers:** FP8 support is integrated via specific backends like `FBGEMM`, `FineGrainedFP8`, and `compressed-tensors`. These handle the underlying FP8 conversion and computation when the appropriate hardware and configurations are used.
+
 ## Further Learning
 
 To explore quantization and related performance optimization concepts more deeply, check out these resources:
