@@ -170,7 +170,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
 
-        torch.testing.assert_close(output_eager.pixel_values, output_compiled.pixel_values, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_eager.flattened_patches, output_compiled.flattened_patches, rtol=1e-4, atol=1e-4)
 
     @unittest.skip(reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU.")
     def test_fast_is_faster_than_slow(self):
