@@ -74,6 +74,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     patch_size = {"height": 16, "width": 16}
     max_patches = 4096
+    rescale_factor = None
     valid_kwargs = Kosmos2_5FastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]):
