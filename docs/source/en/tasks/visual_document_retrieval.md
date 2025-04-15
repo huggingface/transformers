@@ -21,11 +21,8 @@ Visual document retrieval can help retrieve information from all types of docume
 
 This guide demonstrates how to index and retrieve documents with [ColPali](../model_doc/colpali).  
 
-<Tip>
-
-On a larger scale, you might want to index and retrieve your documents using a vector database. 
-
-</Tip>
+> [!TIP]
+> For large scale use cases, you may want to index and retrieve documents with a vector database.
 
 Make sure Transformers and Datasets is installed.
 
