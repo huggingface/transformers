@@ -9,12 +9,19 @@ Reducing a model's precision offers several significant benefits:
 -  Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
 -  Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
 
+The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
+
+The sections below cover quantization schemes, granularity, and techniques.
+
 ## Quantization schemes
 
 The core idea is to map the range of values found in the original float32 weights and activations to the much smaller range represented by int8 (typically $[-128, 127]$).
 
 This section covers how some quantization techniques work.
-<img width="606" alt="quant_visual" src="https://gist.github.com/user-attachments/assets/b45773d8-762a-4223-b1b4-bc15456ca64e" />
+
+<div class="flex justify-center">
+    <img width="606" alt="quant_visual" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/quant_visual.png" />
+</div>
 
 ### Affine quantization
 
@@ -26,17 +33,17 @@ There are two main ways to perform this mapping, *symmetric* and *asymmetric*. T
 - Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range $[val_{min}, val_{max}]$ from float32 to the full int8 range, like $[-128, 127]$. This requires two parameters, a **scale ($S$)** and a **zero-point ($Z$)**. 
 
 
-scale ($S$): A positive float32 number representing the ratio between the float32 and the int8 range.
+    scale ($S$): A positive float32 number representing the ratio between the float32 and the int8 range.
 
-$$
-S = \frac{val_{max} - val_{min}}{q_{max} - q_{min}}
-$$
+    $$
+    S = \frac{val_{max} - val_{min}}{q_{max} - q_{min}}
+    $$
 
-zero-Point ($Z$): An int8 value that corresponds to the float32 value $0.0$.
+    zero-Point ($Z$): An int8 value that corresponds to the float32 value $0.0$.
 
-$$
-Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
-$$
+    $$
+    Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
+    $$
 
 > [!TIP]
 > In symmetric quantization, Z would typically be fixed at 0.
@@ -53,13 +60,17 @@ $$
 x \approx S \cdot (q - Z)
 $$
 
-<img width="974" alt="dequant" src="https://gist.github.com/user-attachments/assets/05c10fc0-ace3-40ff-962c-c4ea0eb49d60" />
+<div class="flex justify-center">
+    <img width="606" alt="dequant" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/dequant.png" />
+</div>
 
 During inference, computations like matrix multiplication are performed using the int8 values ($q$), and the result is dequantized back to float32 (often using a higher-precision accumulation type like int32 internally) before it is passed to the next layer.
 
 ### int4 and weight packing
 
-<img width="606" alt="weight packing" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/weight_packing.png" />
+<div class="flex justify-center">
+    <img width="606" alt="weight packing" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/weight_packing.png" />
+</div>
 
 int4 quantization further reduces the model size and memory usage (halving it compared to int8). The same affine or symmetric quantization principles apply, mapping the float32 range to the 16 possible values representable by int4 ($[-8, 7]$ for signed int4).
 
@@ -76,7 +87,9 @@ Quantization parameters ($S$ and $Z$) can be calculated in one of two ways.
 - Per-Tensor: One set of $S$ and $Z$ for the entire tensor. Simpler, but less accurate if data values vary greatly within the tensor.
 - Per-Channel (or Per-Group/Block): Separate $S$ and $Z$ for each channel or group. More accurate and better performance at the cost of slightly more complexity and memory.
 
-<img width="625" alt="Granularities" src="https://gist.github.com/user-attachments/assets/a974fddc-dc31-4ca7-997e-93c648bfda23" />
+<div class="flex justify-center">
+    <img width="625" alt="Granularities" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Granularities.png" />
+</div>
 
 ## Quantization techniques
 
@@ -84,10 +97,6 @@ There are two main types of quantization techniques.
 
 - Post-Training Quantization (PTQ): Quantization is applied  *after* the model is fully trained.
 - Quantization-Aware Training (QAT): Quantization effects are simulated *during* training by inserting "fake quantization" ops that simulate the rounding errors of quantization. This lets the model adapt to quantization, and usually results in better accuracy, especially at lower bit-widths.
-
-The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
-
-The sections below cover quantization schemes, granularity, and techniques.
 
 ## Quantization in Transformers
 
@@ -124,8 +133,9 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ### FP8 quantization (A8W8)
 
-<img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
-
+<div class="flex justify-center">
+    <img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
+</div>
 A newer data byte, 8-bit floating-point (FP8), offers another way to reduce precision while retaining more accuracy than int8 in certain scenarios. FP8 keeps the floating-point structure (sign, exponent, mantissa) but uses fewer bits.
 
 There are two common FP8 variants.
