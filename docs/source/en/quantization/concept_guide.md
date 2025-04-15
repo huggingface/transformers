@@ -85,20 +85,14 @@ There are two main types of quantization techniques.
 - Post-Training Quantization (PTQ): Quantization is applied  *after* the model is fully trained.
 - Quantization-Aware Training (QAT): Quantization effects are simulated *during* training by inserting "fake quantization" ops that simulate the rounding errors of quantization. This lets the model adapt to quantization, and usually results in better accuracy, especially at lower bit-widths.
 
-## Trade-offs
+The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
 
-The primary trade-off in quantization is **efficiency vs. accuracy**. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
+The sections below cover quantization schemes, granularity, and techniques.
 
 ## Quantization in Transformers
 
 Transformers integrates several quantization backends such as bitsandbytes, torchao, compressed-tensors, and more (refer to the quantization [overview](./overview) for more backends). 
 
-- `bitsandbytes`
--`torchao`
--`compressed-tensors`
-- `awq`
-- `gptqmodel`
-- And more...
 
 All backends are unified under the [`HfQuantizer`] API and associated [`QuantizationConfig`] classes. You can integrate your own custom quantization backends by implementing a custom [`HfQuantizer`] and [`QuantizationConfig`], as shown in the [Contribution](./contribution) guide.
 
