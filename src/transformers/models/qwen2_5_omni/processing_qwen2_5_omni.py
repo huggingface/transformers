@@ -329,13 +329,14 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             conversations = [conversations]
         for conversation in conversations:
             sys_content = ""
-            if isinstance(conversation[0]["content"],str):
+            if isinstance(conversation[0]["content"], str):
                 sys_content = conversation[0]["content"]
-            elif isinstance(conversation[0]["content"],list) and len(conversation[0]["content"])>0:
-                sys_content = conversation[0]["content"][0].get("text","")
+            elif isinstance(conversation[0]["content"], list) and len(conversation[0]["content"]) > 0:
+                sys_content = conversation[0]["content"][0].get("text", "")
             if (
                 conversation[0]["role"] != "system"
-                or sys_content != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
+                or sys_content
+                != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
             ):
                 logging.warning(
                     "System prompt modified, audio output may not work as expected. "
