@@ -276,7 +276,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
-            # TODO: use batched tensor method, eg pad_images, or a version of pad_image that can detect if images are batched
             if do_pad:
                 stacked_images = torch.stack([self.pad_image(image, size_divisor) for image in stacked_images])
             # Fused rescale and normalize
