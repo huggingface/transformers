@@ -551,6 +551,10 @@ def cached_files(
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+        # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
+        # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
+        elif not isinstance(e, EntryNotFoundError):
+            raise e
 
     resolved_files = [
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
