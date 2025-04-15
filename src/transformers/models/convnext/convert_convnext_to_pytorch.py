@@ -20,15 +20,19 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torchvision import transforms
 from timm import create_model
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
+from transformers.image_utils import PILImageResampling
+from transformers.models.convnext.image_processing_convnext import get_resize_output_image_size
 from transformers.utils import logging
 
 
@@ -82,6 +86,22 @@ def get_convnext_config(checkpoint_url):
 
 
 def rename_key(name):
+    if "downsample_layers.0.0" in name:
+        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
+    if "downsample_layers.0.1" in name:
+        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
+    if "downsample_layers.1.0" in name:
+        name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
+    if "downsample_layers.1.1" in name:
+        name = name.replace("downsample_layers.1.1", "stages.1.downsampling_layer.1")
+    if "downsample_layers.2.0" in name:
+        name = name.replace("downsample_layers.2.0", "stages.2.downsampling_layer.0")
+    if "downsample_layers.2.1" in name:
+        name = name.replace("downsample_layers.2.1", "stages.2.downsampling_layer.1")
+    if "downsample_layers.3.0" in name:
+        name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
+    if "downsample_layers.3.1" in name:
+        name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
     if "stages" in name and "downsampling_layer" not in name:
         # stages.0.0. for instance should be renamed to stages.0.layers.0.
         name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
@@ -120,14 +140,38 @@ def prepare_img():
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
+def get_logits_from_timm(checkpoint_url):
+    timm_model_name = None
+    if "convnext_tiny_1k_224_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_tiny.fb_in1k"
+    elif "convnext_small_1k_224_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_small.fb_in1k"
+    elif "convnext_base_1k_224_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_base.fb_in1k"
+    elif "convnext_large_1k_224_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_large.fb_in1k"
+    elif "convnext_base_22k_224.pth" in checkpoint_url:
+        timm_model_name = "convnext_base.fb_in22k"
+    elif "convnext_large_22k_224.pth" in checkpoint_url:
+        timm_model_name = "convnext_large.fb_in22k"
+    elif "convnext_xlarge_22k_224.pth" in checkpoint_url:
+        timm_model_name = "convnext_xlarge.fb_in22k"
+    elif "convnext_base_22k_1k_224.pth" in checkpoint_url:
+        timm_model_name = "convnext_base.fb_in22k_ft_in1k"
+    elif "convnext_base_22k_1k_384.pth" in checkpoint_url:
+        timm_model_name = "convnext_base.fb_in22k_ft_in1k_384"
+    elif "convnext_large_22k_1k_224.pth" in checkpoint_url:
+        timm_model_name = "convnext_large.fb_in22k_ft_in1k"
+    elif "convnext_large_22k_1k_384.pth" in checkpoint_url:
+        timm_model_name = "convnext_large.fb_in22k_ft_in1k_384"
+    elif "convnext_xlarge_22k_1k_224_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_xlarge.fb_in22k_ft_in1k"
+    elif "convnext_xlarge_22k_1k_384_ema.pth" in checkpoint_url:
+        timm_model_name = "convnext_xlarge.fb_in22k_ft_in1k_384"
+    else:
+        raise ValueError(f"TIMM model name unknown for URL: {checkpoint_url}")
+    
 
-@torch.no_grad()
-def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_to_hub=False):
-    """
-    Copy/paste/tweak model's weights to our ConvNext structure.
-    """
-
-    # define default Convnext configuration
     config, expected_shape = get_convnext_config(timm_model_name)
 
     # load original model from timm
@@ -140,46 +184,99 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
+
+    # add prefix to all keys expect classifier head
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        if not key in ["classifier.weight","classifier.bias"]:
+            key = "convnext." + key
+        state_dict[key] = val
+
+    # create image processor
+    transform = create_transform(**resolve_data_config({}, model=timm_model))
+    timm_transforms = transform.transforms
+
+    pillow_resamplings = {
+        "bilinear": PILImageResampling.BILINEAR,
+        "bicubic": PILImageResampling.BICUBIC,
+        "nearest": PILImageResampling.NEAREST,
+    }
+    image = prepare_img()
+    timm_pixel_values = transform(image).unsqueeze(0)
+    timm_logits = timm_model(timm_pixel_values)
+    return timm_logits
+
+@torch.no_grad()
+def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
+    """
+    Copy/paste/tweak model's weights to our ConvNext structure.
+    """
+
+    # define default Convnext configuration
+    config, expected_shape = get_convnext_config(checkpoint_url)
+
+    # load original state_dict from URL
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+
+    # rename keys
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if key not in ["classifier.weight", "classifier.bias"]:
+        if not key.startswith("classifier"):
             key = "convnext." + key
         state_dict[key] = val
 
     # load HuggingFace model
     model = ConvNextForImageClassification(config)
-    model.eval()
     model.load_state_dict(state_dict)
-
-    # create timm transform
-    transform = create_transform(**resolve_data_config({}, model=timm_model))
+    model.eval()
 
     # Check outputs on an image, prepared by ConvNextImageProcessor
-    size = 384 if "384" in timm_model_name else 224
-    image_processor = ConvNextImageProcessor(
-        size={"shortest_edge": size},
-    )
-    image = prepare_img()
-    timm_pixel_values = transform(image).unsqueeze(0)
+    size = 224 if "224" in checkpoint_url else 384
+    image_processor = ConvNextImageProcessor(size={"shortest_edge": size})
 
+    image = prepare_img()
     pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
-    assert torch.allclose(timm_pixel_values, pixel_values)
+    if size == 224:
+        # resize image with crop_pct=224/256
+        resize_size = get_resize_output_image_size(np.array(image), 256, default_to_square=False)
+        transformations = transforms.Compose(
+            [
+                transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(size),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=image_processor.image_mean,  # these are RGB mean+std values
+                    std=image_processor.image_std,  # across a large photo dataset.
+                ),
+            ]
+        )
+    else:
+        transformations = transforms.Compose(
+            [
+                transforms.Resize((size, size), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=image_processor.image_mean,  # these are RGB mean+std values
+                    std=image_processor.image_std,  # across a large photo dataset.
+                ),
+            ]
+        )
+    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     logits = model(pixel_values).logits
-
-    # verify logits
-    with torch.no_grad():
-        outputs = model(pixel_values)
-        logits = outputs.logits
+    timm_logits = get_logits_from_timm(checkpoint_url)
 
     print("Logits:", logits[0, :3])
     print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
-    timm_logits = timm_model(timm_pixel_values)
-    assert timm_logits.shape == outputs.logits.shape
-    assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+    assert timm_logits.shape == logits.shape
+    assert torch.allclose(timm_logits, logits, atol=1e-3)
     print("Looks ok!")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -190,23 +287,23 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
 
     print("Pushing model to the hub...")
     model_name = "convnext"
-    if "tiny" in timm_model_name:
+    if "tiny" in checkpoint_url:
         model_name += "-tiny"
-    elif "small" in timm_model_name:
+    elif "small" in checkpoint_url:
         model_name += "-small"
-    elif "base" in timm_model_name:
+    elif "base" in checkpoint_url:
         model_name += "-base"
-    elif "xlarge" in timm_model_name:
+    elif "xlarge" in checkpoint_url:
         model_name += "-xlarge"
-    elif "large" in timm_model_name:
+    elif "large" in checkpoint_url:
         model_name += "-large"
-    if "384" in timm_model_name:
-        model_name += "-384"
-    else:
+    if "224" in checkpoint_url:
         model_name += "-224"
-    if "22k" in timm_model_name and "1k" not in timm_model_name:
+    elif "384" in checkpoint_url:
+        model_name += "-384"
+    if "22k" in checkpoint_url and "1k" not in checkpoint_url:
         model_name += "-22k"
-    if "22k" in timm_model_name and "1k" in timm_model_name:
+    if "22k" in checkpoint_url and "1k" in checkpoint_url:
         model_name += "-22k-1k"
 
     model.push_to_hub(
@@ -219,19 +316,19 @@ def convert_convnext_checkpoint(timm_model_name, pytorch_dump_folder_path, push_
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--timm_model_name",
-        default="convnext_tiny.fb_in1k",
+        "--checkpoint_url",
+        default="http://dl.fbaipublicfiles.com/convnext/convnext_xlarge_22k_1k_384_ema.pth",
         type=str,
-        help="Name of the ConvNext timm model you'd like to convert.",
+        help="URL of the original ConvNeXT checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
-    )
-    parser.add_argument(
-        "--push_to_hub",
-        action="store_true",
-        help="Whether to push the model to the hub.",
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=False,
+        help="Path to the output PyTorch model directory.",
+
     )
 
     args = parser.parse_args()
-    convert_convnext_checkpoint(args.timm_model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_convnext_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
