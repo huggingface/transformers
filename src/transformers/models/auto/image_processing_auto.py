@@ -67,7 +67,7 @@ else:
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("conditional_detr", ("ConditionalDetrImageProcessor",)),
+            ("conditional_detr", ("ConditionalDetrImageProcessor", "ConditionalDetrImageProcessorFast")),
             ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
