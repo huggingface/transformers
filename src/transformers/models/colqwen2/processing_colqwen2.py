@@ -48,22 +48,23 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class ColQwen2Processor(ProcessorMixin):
     r"""
-    Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
+        Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
+        well as to compute the late-interaction retrieval score.
 
-    [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
-    for more information.
+        [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
+        for more information.
 
-    Args:
-        image_processor ([`Qwen2VLImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*): A prefix to be used for the query.
-        max_num_visual_tokens (`int`, *optional*): : The maximum number of visual tokens that can be processed by the model.
+        Args:
+            image_processor ([`Qwen2VLImageProcessor`], *optional*):
+                The image processor is a required input.
+            tokenizer ([`Qwen2TokenizerFast`], *optional*):
+                The tokenizer is a required input.
+            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+                in a chat into a tokenizable string.
+            visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
+    <|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
+            query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
+            max_num_visual_tokens (`int`, *optional*, defaults to 768): : The maximum number of visual tokens that can be processed by the model.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -97,7 +98,8 @@ class ColQwen2Processor(ProcessorMixin):
         self.max_pixels = self.max_num_visual_tokens * 28 * 28
 
         # TODO: change in the preprocessor config + change logic when https://github.com/huggingface/transformers/pull/36207 is merged.
-        image_processor.max_pixels = self.max_num_visual_tokens * 28 * 28
+        self.image_processor.min_pixels = self.min_pixels
+        self.image_processor.max_pixels = self.max_pixels
 
     def __call__(
         self,

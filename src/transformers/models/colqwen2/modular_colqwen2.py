@@ -69,9 +69,10 @@ class ColQwen2Processor(ColPaliProcessor):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*): A prefix to be used for the query.
-        max_num_visual_tokens (`int`, *optional*): : The maximum number of visual tokens that can be processed by the model.
+        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user
+<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`): A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Query: "`): A prefix to be used for the query.
+        max_num_visual_tokens (`int`, *optional*, defaults to 768): : The maximum number of visual tokens that can be processed by the model.
     """
 
     valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
