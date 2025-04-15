@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Advanced Micro Devices, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +43,7 @@ class QuarkConfigTest(unittest.TestCase):
 @require_quark
 @require_torch_gpu
 class QuarkTest(unittest.TestCase):
-    reference_model_name = "meta-llama/Llama-3.1-8B-Instruct"
+    reference_model_name = "unsloth/Meta-Llama-3.1-8B-Instruct"
     quantized_model_name = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
 
     input_text = "Today I am in Paris and"
@@ -53,6 +52,7 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris, France\nToday I am in Paris, Illinois")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -83,7 +83,7 @@ class QuarkTest(unittest.TestCase):
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
-        Checks also if other models are casted correctly.
+        Checks also if other models are casted correctly .
         """
         # This should work
         if self.device_map is None:
