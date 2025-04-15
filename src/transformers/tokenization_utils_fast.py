@@ -55,6 +55,7 @@ TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 TIKTOKEN_VOCAB_FILE = "tokenizer.model"
+SPIECE_VOCAB_FILE = "spiece.model"
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -75,7 +76,7 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "tiktoken_vocab_file": TIKTOKEN_VOCAB_FILE, "spiece_vocab_file": SPIECE_VOCAB_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -102,9 +103,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        spiece_vocab_file = kwargs.pop("spiece_vocab_file", None)
+        tiktoken_vocab_file = kwargs.pop("tiktoken_vocab_file", None)
+        self.vocab_file = args[0] if args and len(args) > 0 else None
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+        # not sure why we have "args" just for one arg (being the model path). I would deprecate this into kwargs
+
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and spiece_vocab_file is None and tiktoken_vocab_file is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
@@ -132,6 +138,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif self.vocab_file is not None:
+            fast_tokenizer = convert_slow_tokenizer(self)
+        elif spiece_vocab_file:
+            self.vocab_file = spiece_vocab_file
+            fast_tokenizer = convert_slow_tokenizer(self)
+        elif tiktoken_vocab_file:
+            self.vocab_file = tiktoken_vocab_file
+            fast_tokenizer = convert_slow_tokenizer(self, from_tiktoken=True)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
             self.vocab_file = kwargs.get("vocab_file", None)
@@ -611,7 +625,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
-        batched_input = [(text, text_pair)] if text_pair else [text]
+        batched_input = [(text, text_pair)] if text_pair is not None else [text]
         batched_output = self._batch_encode_plus(
             batched_input,
             is_split_into_words=is_split_into_words,

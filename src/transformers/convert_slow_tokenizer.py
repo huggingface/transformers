@@ -547,6 +547,9 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
+        # store extractor to convert tokens to ids from sp directly
+        self.extractor = self.SpmExtractor(self.original_tokenizer.vocab_file)
+
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
@@ -1363,8 +1366,14 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        # the processor is defined in the LlamaTokenizerFast class.
-        return None
+        return processors.TemplateProcessing(
+            single="<bos> $A </eos>",
+            pair="<bos> $A </eos> </eos> $B </eos>",
+            special_tokens=[
+                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
+                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
+            ],
+        )
 
 
 class MarkupLMConverter(Converter):
@@ -1677,6 +1686,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "NllbTokenizer": NllbConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "PreTrainedTokenizerFast": SpmConverter,
     "Qwen2Tokenizer": Qwen2Converter,
     "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
@@ -1685,6 +1695,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
+    "SPMTokenizer": LlamaConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,

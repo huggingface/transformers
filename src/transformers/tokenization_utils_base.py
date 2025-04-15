@@ -149,6 +149,8 @@ AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+CHAT_TEMPLATE_FILE = "chat_template.jinja"
+SPIECE_VOCAB_FILE = "spiece.model"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -2027,24 +2029,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if "fast_tokenizer_files" in tokenizer_config:
                                 fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
                     vocab_files["tokenizer_file"] = fast_tokenizer_file
-
-                    # This block looks for any extra chat template files
-                    if is_local:
-                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                        if template_dir.is_dir():
-                            for template_file in template_dir.glob("*.jinja"):
-                                template_name = template_file.name.removesuffix(".jinja")
-                                vocab_files[f"chat_template_{template_name}"] = (
-                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                                )
-                    else:
-                        for template in list_repo_templates(
-                            pretrained_model_name_or_path,
-                            local_files_only=local_files_only,
-                            revision=revision,
-                            cache_dir=cache_dir,
-                        ):
-                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}

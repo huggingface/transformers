@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import AlbertTokenizer, AlbertTokenizerFast
+from transformers import PreTrainedTokenizerFast #, AlbertTokenizer, AlbertTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -27,8 +27,8 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_tokenizers
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "albert/albert-base-v1"
-    tokenizer_class = AlbertTokenizer
-    rust_tokenizer_class = AlbertTokenizerFast
+    tokenizer_class = PreTrainedTokenizerFast
+    rust_tokenizer_class = PreTrainedTokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
@@ -38,7 +38,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
+        tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB)
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
@@ -51,8 +51,8 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "<pad>"
         token_id = 0
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id_with_added_voc(token), token_id)
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
@@ -88,7 +88,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(ids, rust_ids)
 
     def test_full_tokenizer(self):
-        tokenizer = AlbertTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁this", "▁is", "▁a", "▁test"])
@@ -109,7 +109,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_sequence_builders(self):
-        tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
+        tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB)
 
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
