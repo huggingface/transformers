@@ -21,22 +21,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...utils import is_timm_available
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_timm_available, requires_backends
 from ...utils.backbone_utils import load_backbone
 
 
 if is_timm_available():
     from timm import create_model
 
-
-from transformers import (
-    FastConfig,
-    PreTrainedModel,
-    add_start_docstrings,
-    is_timm_available,
-    requires_backends,
-)
-from transformers.utils import add_start_docstrings_to_model_forward
+from ...modeling_utils import PreTrainedModel
+from .configuration_fast import FastConfig
 
 
 _CONFIG_FOR_DOC = "FastConfig"
