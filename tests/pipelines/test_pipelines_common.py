@@ -430,8 +430,7 @@ class PipelineUtilsTest(unittest.TestCase):
         from transformers.pipelines.pt_utils import PipelineIterator
 
         def dummy_dataset():
-            for i in range(4):
-                yield i
+            yield from range(4)
 
         def add(number, extra=0):
             return number + extra
@@ -480,8 +479,7 @@ class PipelineUtilsTest(unittest.TestCase):
         from transformers.pipelines.pt_utils import PipelineChunkIterator
 
         def preprocess_chunk(n: int):
-            for i in range(n):
-                yield i
+            yield from range(n)
 
         dataset = [2, 3]
 
