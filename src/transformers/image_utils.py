@@ -19,7 +19,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Callable, Optional, Union
-from urllib import urlparse
+from urllib.parse import urlparse
 
 import numpy as np
 import requests
