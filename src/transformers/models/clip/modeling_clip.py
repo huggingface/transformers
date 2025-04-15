@@ -368,6 +368,11 @@ class CLIPAttention(nn.Module):
                     target_dtype = self.config._pre_quantization_dtype
                 else:
                     target_dtype = self.q_proj.weight.dtype
+                logger.warning_once(
+                    f"The input hidden states seems to be silently casted in float32, this might be related to"
+                    f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                    f" {target_dtype}."
+                )
                 queries = queries.to(target_dtype)
                 keys = keys.to(target_dtype)
                 values = values.to(target_dtype)
