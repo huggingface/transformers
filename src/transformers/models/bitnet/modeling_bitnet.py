@@ -26,19 +26,17 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
-from ...generation import GenerationMixin
-from ...integrations.bitnet import unpack_weights
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...integrations.bitnet import unpack_weights
 from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from ...utils import (
@@ -89,7 +87,7 @@ class WeightQuant(torch.autograd.Function):
         s = 1.0 / x.abs().mean().clamp_(min=1e-5)
         x = (x * s).round().clamp(-1, 1) / s
         return x.to(dtype)
-    
+
     @staticmethod
     def backward(ctx, grad_output):
         grad_input = grad_output.clone()
@@ -493,7 +491,7 @@ class BitNetFlashAttention2(BitNetAttention):
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.attn_sub_norm(attn_output)
-        
+
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -1017,16 +1015,16 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, BitNetForCausalLM
 
-        >>> model = BitNetForCausalLM.from_pretrained("meta-bitnet/BitNet-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-bitnet/BitNet-2-7b-hf")
+        >>> model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = f'<|begin_of_text|>User: Hey, are you conscious? Can you talk to me?<|eot_id|>Assistant: '
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=100)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        "User: Hey, are you conscious? Can you talk to me?Assistant: No, I'm not conscious. I'm an artificial intelligence designed to assist with information and tasks. How can I help you today?"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
