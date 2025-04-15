@@ -114,6 +114,7 @@ else:
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
+            ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
@@ -166,7 +167,7 @@ else:
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("yolos", ("YolosImageProcessor",)),
+            ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )

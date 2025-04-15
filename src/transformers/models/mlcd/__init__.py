@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_yolos import *
-    from .feature_extraction_yolos import *
-    from .image_processing_yolos import *
-    from .image_processing_yolos_fast import *
-    from .modeling_yolos import *
+    from .configuration_mlcd import *
+    from .modeling_mlcd import *
 else:
     import sys
 
