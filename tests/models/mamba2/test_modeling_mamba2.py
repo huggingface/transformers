@@ -238,6 +238,11 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
+    def test_mamba2_slow_vs_fast_forward_grouped(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].n_groups //= 2
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
