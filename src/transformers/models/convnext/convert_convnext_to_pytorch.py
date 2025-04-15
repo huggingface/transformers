@@ -193,7 +193,6 @@ def get_logits_from_timm(checkpoint_url):
 
     # create image processor
     transform = create_transform(**resolve_data_config({}, model=timm_model))
-    timm_transforms = transform.transforms
 
     image = prepare_img()
     timm_pixel_values = transform(image).unsqueeze(0)
@@ -312,7 +311,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_url",
-        default="http://dl.fbaipublicfiles.com/convnext/convnext_xlarge_22k_1k_384_ema.pth",
+        default="http://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
         type=str,
         help="URL of the original ConvNeXT checkpoint you'd like to convert.",
     )
@@ -320,9 +319,8 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=False,
+        required=True,
         help="Path to the output PyTorch model directory.",
-
     )
 
     args = parser.parse_args()
