@@ -59,8 +59,8 @@ images = [
 ]
 
 queries = [
-    "Who printed the edition of Romeo and Juliet?",
     "When was the United States Declaration of Independence proclaimed?",
+    "Who printed the edition of Romeo and Juliet?",
 ]
 
 # Process the inputs
@@ -121,8 +121,8 @@ images = [
 ]
 
 queries = [
-    "Who printed the edition of Romeo and Juliet?",
     "When was the United States Declaration of Independence proclaimed?",
+    "Who printed the edition of Romeo and Juliet?",
 ]
 
 # Process the inputs
