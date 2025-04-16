@@ -131,16 +131,15 @@ def remove_copied_from_statements(model):
             continue
         file_path = model_path / file
         with open(file_path, "r") as f:
-            file_lines = f.read()
+            file_content = f.read()
 
-        new_file_lines = []
-        for line in file_lines.split("\n"):
-            if "# Copied from" in line:
-                continue
-            new_file_lines.append(line)
+        cleaned_content = "\n".join(
+            line for line in file_content.split("\n") 
+            if "# Copied from" not in line
+        )
 
         with open(file_path, "w") as f:
-            f.write("\n".join(new_file_lines))
+            f.write(cleaned_content)
 
 
 def move_model_files_to_deprecated(model):
