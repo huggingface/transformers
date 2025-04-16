@@ -489,5 +489,4 @@ Refer to [Other Available Quantization Techniques](https://github.com/pytorch/ao
 
 ## Issues
 
-If you encounter any issues with the transformers integration, please open an issue on the [transformers](https://github.com/huggingface/transformers/issues) repository.  
-If you encounter any issues with torchao, please open an issue on the [torchao](https://github.com/pytorch/ao/issues) repository.
+If you encounter any issues with the Transformers integration, please open an issue on the [Transformers](https://github.com/huggingface/transformers/issues) repository. For issues directly related to torchao, please open an issue on the [torchao](https://github.com/pytorch/ao/issues) repository.
