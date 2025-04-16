@@ -941,16 +941,14 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         if not isinstance(text, list):
             text = [text]
 
+        text = text.copy()  # below lines change text in-place
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length),
-                        1,
-                    )
+                    num_image_tokens = image_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
@@ -959,17 +957,16 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.video_token,
-                        "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length),
-                        1,
-                    )
+                    num_video_tokens = video_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 
 __all__ = [
