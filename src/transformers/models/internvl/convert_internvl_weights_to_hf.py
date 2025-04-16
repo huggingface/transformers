@@ -62,6 +62,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"patch_embedding":                             r"patch_embeddings.projection",
     r"ls(\d+)":                                     r"lambda_\1",
     r"attn.proj":                                   r"attention.output",
+    r"attn.q_norm":                                 r"attention.q_norm",
+    r"attn.k_norm":                                 r"attention.k_norm",
     r"mlp.fc1":                                     r"mlp.up_proj",
     r"mlp.fc2":                                     r"mlp.down_proj",
     r"norm1":                                       r"layernorm_before",
