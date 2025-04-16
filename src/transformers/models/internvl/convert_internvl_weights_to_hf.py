@@ -261,6 +261,13 @@ def write_model(
     if push_to_hub:
         model.push_to_hub(hub_dir, use_temp_dir=True)
 
+    image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+    processor.save_pretrained(model_path)
+    if push_to_hub:
+        processor.push_to_hub(hub_dir, use_temp_dir=True)
+
     # generation config
     if LM_TYPE_CORRESPONDENCE[input_base_path] == "llama":
         print("Saving generation config...")
@@ -279,13 +286,6 @@ def write_model(
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.bfloat16)
-    image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
-    processor.save_pretrained(model_path)
-    if push_to_hub:
-        processor.push_to_hub(hub_dir, use_temp_dir=True)
-
     print("Model reloaded successfully.")
     del model
 
