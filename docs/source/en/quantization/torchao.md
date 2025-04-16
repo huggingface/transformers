@@ -22,7 +22,11 @@ See the table below for additional torchao features.
 
 torchao supports the [quantization techniques](https://github.com/pytorch/ao/blob/main/torchao/quantization/README.md) below.
 
-- **Int8 Weight Only**
+- A16W8 Int8 WeightOnly Quantization
+- A16W4 WeightOnly Quantization
+- A8W8 Int8 Dynamic Quantization
+- A16W8 Float8 WeightOnly Quantization
+- Autoquantization
 - **Int4 Weight Only**
 - **Int8 Dynamic Quantization**
 - **Float8 (E4M3 / E5M2)**
