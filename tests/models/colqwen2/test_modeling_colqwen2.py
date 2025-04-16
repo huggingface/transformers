@@ -321,7 +321,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "vidore/colqwen2-v1.0-hf-internal"  # TODO: remove "-internal" before merge
+    model_name: ClassVar[str] = "vidore/colqwen2-v1.0-hf"
 
     def setUp(self):
         self.processor = ColQwen2Processor.from_pretrained(self.model_name)
@@ -365,12 +365,11 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
-        # Further validation: fine-grained check, with a hardcoded score from the original implementation
-        # NOTE: Expected scores were obtained using "colpali-engine==0.3.8" on a L4 GPU.
+        # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expected_scores = torch.tensor(
             [
-                [16.2500, 7.9062, 14.6250],
-                [9.5000, 17.3750, 10.5625],
+                [16.1250, 8.0000, 14.6250],
+                [9.6250, 17.3750, 10.3125],
                 [15.0625, 10.8750, 20.1250],
             ],
             dtype=scores.dtype,
