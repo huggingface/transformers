@@ -87,8 +87,10 @@ class ColPaliProcessor(ProcessorMixin):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*, defaults to `"Question: "`): A prefix to be used for the query.
+        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Question: "`):
+            A prefix to be used for the query.
     """
 
     attributes = ["image_processor", "tokenizer"]

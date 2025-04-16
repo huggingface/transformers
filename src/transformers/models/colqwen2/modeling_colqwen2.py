@@ -85,6 +85,8 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     Base class for ColQwen2 embeddings output.
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
         embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             The embeddings of the model.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
