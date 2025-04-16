@@ -374,7 +374,7 @@ quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False
 
 ## Loading quantized models
 
-For int8 and float8, all combinations of device are possible, you can quantize on cpu and load on cuda or cpu or vice versa.
+Loading a quantized model depends on the quantization scheme. For quantization schemes, like int8 and float8, you can quantize the model on any device and also load it on any device. The example below demonstrates quantizing a model on the CPU and then loading it on CUDA.
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
