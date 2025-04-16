@@ -45,7 +45,7 @@ model = TimesFmModelForPrediction.from_pretrained(
     "google/timesfm-2.0-500m-pytorch",
     torch_dtype=torch.bfloat16,
     attn_implementation="sdpa",
-    device_map="cuda" if torch.cuda.is_available() else None)
+    device_map="cuda" if torch.cuda.is_available() else None
 )
 
 
