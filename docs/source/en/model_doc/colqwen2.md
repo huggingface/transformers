@@ -91,5 +91,5 @@ scores = processor.score_retrieval(query_embeddings, image_embeddings)
 
 ## ColQwen2ForRetrieval
 
-[[autodoc]] ColQwen2Model
+[[autodoc]] ColQwen2ForRetrieval
     - forward
