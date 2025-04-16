@@ -4566,15 +4566,7 @@ class ModelTesterMixin:
             model = model_class(copy.deepcopy(config))
 
             # set a global gpu device
-            if hasattr(torch._GLOBAL_DEVICE_CONTEXT, "device_context"):
-                device_context = torch._GLOBAL_DEVICE_CONTEXT.device_context
-                if device_context is not None:
-                    device_context.__exit__(None, None, None)
-
-            if orig_device_from_torch_global_device_context is not None:
-                torch.set_default_device(orig_device_from_torch_global_device_context)
-            else:
-               delattr(torch._GLOBAL_DEVICE_CONTEXT, "device_context")
+            torch.set_default_device(device)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4585,7 +4577,14 @@ class ModelTesterMixin:
                 }
 
             # set back the correct device
-            torch.set_default_device(default_device)
+            if orig_device_from_torch_global_device_context is not None:
+                torch.set_default_device(orig_device_from_torch_global_device_context)
+            else:
+                if hasattr(torch._GLOBAL_DEVICE_CONTEXT, "device_context"):
+                    device_context = torch._GLOBAL_DEVICE_CONTEXT.device_context
+                    if device_context is not None:
+                        device_context.__exit__(None, None, None)
+                delattr(torch._GLOBAL_DEVICE_CONTEXT, "device_context")
 
             self.assertEqual(
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
