@@ -17,7 +17,14 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -424,7 +431,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
@@ -439,7 +446,7 @@ class MptIntegrationTests(unittest.TestCase):
         input_text = "Hello"
         expected_output = "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
 
-        inputs = tokenizer(input_text, return_tensors="pt")
+        inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -455,9 +462,22 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n"
+        expected_outputs = Expectations(
+            {
+                (
+                    "xpu",
+                    3,
+                ): "Hello and welcome to the first ever episode of the new and improved, and hopefully improved, podcast.\n",
+                ("cuda", 7): "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n",
+                (
+                    "cuda",
+                    8,
+                ): "Hello and welcome to the first day of the new release countdown for the month of May!\nToday",
+            }
+        )
+        expected_output = expected_outputs.get_expectation()
 
-        inputs = tokenizer(input_text, return_tensors="pt")
+        inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
