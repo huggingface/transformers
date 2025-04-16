@@ -468,7 +468,6 @@ print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_toke
 > [!TIP]
 > For best performance, you can use recommended settings by calling `torchao.quantization.utils.recommended_inductor_config_setter()`
 
-## Other Features proposed by torchao
 
 | Feature | Description |
 |--------|-------------|
