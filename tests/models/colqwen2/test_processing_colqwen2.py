@@ -20,17 +20,16 @@ if is_vision_available():
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
+@require_torch
 @require_vision
 class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        # image_processor = Qwen2VLImageProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-        # image_processor.image_seq_length = 0
-        # tokenizer = Qwen2Tokenizer(SAMPLE_VOCAB, keep_accents=True)
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -38,11 +37,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
-    @require_torch
-    @require_vision
     def test_process_images(self):
         # Processor configuration
         image_input = self.prepare_image_inputs()
@@ -63,8 +61,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("pixel_values", batch_feature)
         self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 56, 1176]))
 
-    @require_torch
-    @require_vision
+
     def test_process_queries(self):
         # Inputs
         queries = [
@@ -91,7 +88,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
-        # The following tests are overwritten as ColQwen2Processor can only take one of images or text as input at a time
+    # The following tests override the parent tests because ColQwen2Processor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:

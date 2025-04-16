@@ -89,7 +89,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
-        # The following tests are overwritten as ColPaliProcessor can only take one of images or text as input at a time
+    # The following tests override the parent tests because ColPaliProcessor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
