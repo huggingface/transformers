@@ -84,6 +84,8 @@ class BitNetModelConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        online_quant (`bool`, *optional*, defaults to `False`):
+            Whether to use online quantization. If set to `True`, the model will use online quantization.
 
     ```python
     >>> from transformers import BitNetModel, BitNetModelConfig
