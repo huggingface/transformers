@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_grounding_dino import *
-    from .image_processing_grounding_dino import *
-    from .image_processing_grounding_dino_fast import *
-    from .modeling_grounding_dino import *
-    from .processing_grounding_dino import *
+    from .configuration_timesfm import *
+    from .modeling_timesfm import *
 else:
     import sys
 
