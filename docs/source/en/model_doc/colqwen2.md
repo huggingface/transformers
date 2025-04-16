@@ -46,7 +46,7 @@ model_name = "vidore/colqwen2-v1.0-hf"
 # Load model
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+    torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,
 ).eval()
