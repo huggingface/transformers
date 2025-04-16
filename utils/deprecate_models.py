@@ -134,7 +134,7 @@ def remove_copied_from_statements(model):
             file_content = f.read()
 
         cleaned_content = "\n".join(
-            line for line in file_content.split("\n") 
+            line for line in file_content.split("\n")
             if "# Copied from" not in line
         )
 
