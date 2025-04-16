@@ -31,6 +31,7 @@ from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
+from .feature_extraction_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
     ImageInput,
@@ -1614,6 +1615,23 @@ class ProcessorMixin(PushToHubMixin):
             `List[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
+        """
+        Checks that number of special tokens in text and processed text is same. The count can be different
+        if tokenized text was truncated, leading to issues in model code.
+        """
+        for modality in modalities:
+            token_str = getattr(self, f"{modality}_token")
+            token_id = getattr(self, f"{modality}_token_id")
+            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+            text_count = [sample.count(token_str) for sample in text]
+
+            if ids_count != text_count:
+                raise ValueError(
+                    f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                )
 
 
 def _validate_images_text_input_order(images, text):
