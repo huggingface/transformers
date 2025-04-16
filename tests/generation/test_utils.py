@@ -228,6 +228,10 @@ class GenerationTesterMixin:
                 "video_token_index",
                 "video_token_id",
                 "vision_start_token_id",
+                "audio_token_index",
+                "audio_start_token_id",
+                "audio_end_token_id",
+                "vision_end_token_id",
             ]:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
@@ -1943,7 +1947,7 @@ class GenerationTesterMixin:
                     )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
         """Tests we can generate by indicating `cache_implementation` for each possible cache class"""

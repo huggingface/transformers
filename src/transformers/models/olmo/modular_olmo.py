@@ -15,6 +15,7 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -114,8 +115,21 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
 
-class OlmoPreTrainedModel(LlamaPreTrainedModel):
+class OlmoRotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
+
+class OlmoPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class OlmoModel(LlamaModel):
