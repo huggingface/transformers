@@ -331,7 +331,6 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,
-        do_center_crop=True,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
         do_convert_rgb=True,
