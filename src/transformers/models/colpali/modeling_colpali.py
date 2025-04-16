@@ -234,8 +234,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         if not return_dict:
             output = (embeddings,) + outputs[2:]
-            output[2] = output[2] if output_hidden_states is not None else None
-            output[-1] = (outputs.image_hidden_states if pixel_values is not None else None,)
+            output[2] = output[2] if output_hidden_states else None
+            output[-1] = outputs.image_hidden_states if pixel_values is not None else None
             return output
 
         return ColPaliForRetrievalOutput(
