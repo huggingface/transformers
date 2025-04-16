@@ -14,72 +14,141 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # ColQwen2
 
-## Overview
+[ColQwen2](https://doi.org/10.48550/arXiv.2407.01449) is a variant of the ColPali model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColQwen2 treats each page as an image. It uses the Qwen2-VL backbone to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. A key advantage of ColQwen2 is its ability to handle arbitrary image resolutions and aspect ratios, making it particularly suitable for document processing as images are not resized into fixed-size squares.
 
-*ColQwen2* is a variant of the *ColPali* model, first introduced in [ColPali: Efficient Document Retrieval with Vision Language Models](https://doi.org/10.48550/arXiv.2407.01449) by **Manuel Faysse***, **Hugues Sibille***, **Tony Wu***, Bilel Omrani, Gautier Viaud, Céline Hudelot, Pierre Colombo (* denotes equal contribution). Work led by ILLUIN Technology.
+You can find all the original ColPali checkpoints under Vidore's [Hf-native ColVision Models](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
-*ColQwen2* leverages a Vision Language Model (VLM) to construct efficient multi-vector embeddings directly from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity between these document embeddings and the corresponding query embeddings, using the late interaction method introduced in ColBERT.
+> [!TIP]
+> Click on the ColQwen2 models in the right sidebar for more examples of how to use ColQwen2 for image retrieval.
 
-Using *ColQwen2* removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
-
-Unlike ColPali, ColQwen2—powered by the Qwen2-VL backbone—supports arbitrary image resolutions and aspect ratios. This makes it particularly interesting for document processing: images are not resized into fixed-size squares, preserving more of the original input signal. Larger input images generate longer multi-vector embeddings, allowing users to adjust image resolution to balance performance and memory usage.
-
-## Resources
-
-- The *ColPali* arXiv paper can be found [here](https://doi.org/10.48550/arXiv.2407.01449). 📄
-- The official blog post detailing ColPali can be found [here](https://huggingface.co/blog/manu/colpali). 📝
-- The ColPali Hf model card can be found [here](https://github.com/huggingface/transformers/tree/main/docs/source/en/model_doc/colpali.md). 🤗
-- The original model implementation code for the ColQwen2 model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
-- Cookbooks for learning to use the transformers-native version of *ColPali*, fine-tuning, and similarity maps generation can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
-
-This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) and [@yonigozlan](https://huggingface.co/yonigozlan).
-
-## Usage
-
-This example demonstrates how to use *ColQwen2* to embed both queries and images, calculate their similarity scores, and identify the most relevant matches. For a specific query, you can retrieve the top-k most similar images by selecting the ones with the highest similarity scores.
+<hfoptions id="usage">
+<hfoption id="image retrieval">
 
 ```python
+import requests
 import torch
 from PIL import Image
 
 from transformers import ColQwen2ForRetrieval, ColQwen2Processor
 from transformers.utils.import_utils import is_flash_attn_2_available
 
+
 model_name = "vidore/colqwen2-v1.0-hf"
 
+# Load model
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="cuda:0",  # or "mps" if on Apple Silicon
+    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+    device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,
 ).eval()
 
 processor = ColQwen2Processor.from_pretrained(model_name)
 
-# Your inputs (replace dummy images with screenshots of your documents)
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
 images = [
-    Image.new("RGB", (32, 32), color="white"),
-    Image.new("RGB", (16, 16), color="black"),
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
 ]
+
 queries = [
-    "What is the organizational structure for our R&D department?",
-    "Can you provide a breakdown of last year’s financial performance?",
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
 ]
 
 # Process the inputs
-batch_images = processor(images=images).to(model.device)
-batch_queries = processor(text=queries).to(model.device)
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
 
 # Forward pass
 with torch.no_grad():
-    image_embeddings = model(**batch_images).embeddings
-    query_embeddings = model(**batch_queries).embeddings
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
 
 # Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
 ```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to int4.
+
+```python
+import requests
+import torch
+from PIL import Image
+
+from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
+
+
+model_name = "vidore/colqwen2-v1.0-hf"
+
+# 4-bit quantization configuration
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+)
+
+model = ColQwen2ForRetrieval.from_pretrained(
+    model_name,
+    quantization_config=bnb_config,
+    device_map="cuda",
+).eval()
+
+processor = ColQwen2Processor.from_pretrained(model_name)
+
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
+images = [
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
+]
+
+queries = [
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
+]
+
+# Process the inputs
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
+
+# Forward pass
+with torch.no_grad():
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
+
+# Score the queries against the images
+scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
+```
+
+## Notes
+
+- [`~ColQwen2Processor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.
+- Unlike ColPali, ColQwen2 supports arbitrary image resolutions and aspect ratios, which means images are not resized into fixed-size squares. This preserves more of the original input signal.
+- Larger input images generate longer multi-vector embeddings, allowing users to adjust image resolution to balance performance and memory usage.
 
 ## ColQwen2Config
 

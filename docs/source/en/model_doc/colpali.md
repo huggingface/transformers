@@ -22,7 +22,9 @@ rendered properly in your Markdown viewer.
 
 [ColPali](https://huggingface.co/papers/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image. It uses [Paligemma-3B](./paligemma) to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.
 
-You can find all the original ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
+This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) and [@yonigozlan](https://huggingface.co/yonigozlan).
+
+You can find all the original ColPali checkpoints under Vidore's [Hf-native ColVision Models](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
 > [!TIP]
 > Click on the ColPali models in the right sidebar for more examples of how to use ColPali for image retrieval.
@@ -30,15 +32,18 @@ You can find all the original ColPali checkpoints under the [ColPali](https://hu
 <hfoptions id="usage">
 <hfoption id="image retrieval">
 
-```py
+```python
 import requests
 import torch
 from PIL import Image
+
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
-# Load model (bfloat16 support is limited; fallback to float32 if needed)
+
+model_name = "vidore/colpali-v1.2-hf"
+
 model = ColPaliForRetrieval.from_pretrained(
-    "vidore/colpali-v1.2-hf",
+    model_name,
     torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
 ).eval()
@@ -67,6 +72,7 @@ with torch.no_grad():
     image_embeddings = model(**inputs_images).embeddings
     query_embeddings = model(**inputs_text).embeddings
 
+# Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
 
 print("Retrieval scores (query x image):")
@@ -80,12 +86,15 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to int4.
 
-```py
+```python
 import requests
 import torch
 from PIL import Image
-from transformers import ColPaliForRetrieval, ColPaliProcessor
-from transformers import BitsAndBytesConfig
+
+from transformers import BitsAndBytesConfig, ColPaliForRetrieval, ColPaliProcessor
+
+
+model_name = "vidore/colpali-v1.2-hf"
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
@@ -95,13 +104,10 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model_name = "vidore/colpali-v1.2-hf"
-
-# Load model
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda"
+    device_map="cuda",
 ).eval()
 
 processor = ColPaliProcessor.from_pretrained(model_name)
@@ -128,6 +134,7 @@ with torch.no_grad():
     image_embeddings = model(**inputs_images).embeddings
     query_embeddings = model(**inputs_text).embeddings
 
+# Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
 
 print("Retrieval scores (query x image):")
