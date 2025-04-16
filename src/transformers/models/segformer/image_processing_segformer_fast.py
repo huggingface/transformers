@@ -34,10 +34,12 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    infer_channel_dimension_format,
     is_torch_tensor,
     pil_torch_interpolation_mapping,
     validate_kwargs,
     make_list_of_images,
+    to_numpy_array,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -73,7 +75,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = SegformerFastImageProcessorKwargs
 
-    def __init__(self, do_reduce_labels=None, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):
         # Allow explicit setting of do_reduce_labels or use default
         super().__init__(**kwargs)
 
@@ -152,12 +154,50 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ):
         """Preprocesses a single segmentation map."""
+        processed_segmentation_maps = []
+        added_dimension_list = []
+        for segmentation_map in segmentation_maps:
+            segmentation_map = to_numpy_array(segmentation_map)
+            # Add an axis to the segmentation maps for transformations.
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
+                added_dimension = True
+                input_data_format = ChannelDimension.FIRST
+            else:
+                added_dimension = False
+                if input_data_format is None:
+                    input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+
+            processed_segmentation_maps.append(torch.tensor(segmentation_map))
+            added_dimension_list.append(added_dimension)
+
         # Add an axis to the segmentation maps for transformations.
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
-        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
-        return segmentation_maps
+
+        processed_segmentation_maps = self._preprocess(
+            images=processed_segmentation_maps,
+            **kwargs
+        )
+        final_segmentation_maps = []
+        is_batched = isinstance(processed_segmentation_maps, torch.Tensor)
+        for idx, seg_map in enumerate(processed_segmentation_maps):
+            current_map = seg_map if is_batched else processed_segmentation_maps[idx]
+            if added_dimension_list[idx]:
+                # Squeeze dim 1 if batched (B, C, H, W), dim 0 if not batched (C, H, W)
+                squeeze_dim = 1 if is_batched and current_map.ndim > 2 else 0
+                if current_map.ndim > squeeze_dim and current_map.shape[squeeze_dim] == 1:
+                    current_map = current_map.squeeze(squeeze_dim)
+
+            current_map = current_map.to(torch.int64)
+            final_segmentation_maps.append(current_map)
+
+        # Return stacked tensor or list, matching the output format of _preprocess
+        if is_batched:
+            return torch.stack(final_segmentation_maps, dim=0)
+        else:
+            return final_segmentation_maps
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
@@ -213,12 +253,11 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         if segmentation_maps is not None:
             # Segmentation maps should not be converted to RGB
             prepared_segmentation_maps = make_list_of_images(
-                images = prepared_images,
-                expected_ndims = 1
+                images = segmentation_maps,
+                expected_ndims = 2
             )
             if len(prepared_images) != len(prepared_segmentation_maps):
                  raise ValueError("Number of images and segmentation maps must match.")
-
 
         # Update kwargs that need further processing before being validated (e.g., size)
         kwargs = self._further_process_kwargs(**kwargs)
