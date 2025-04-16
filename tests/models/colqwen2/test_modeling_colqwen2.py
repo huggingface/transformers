@@ -267,47 +267,8 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertIsInstance(outputs, ColQwen2ForRetrievalOutput)
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
-
-    @unittest.skip(
-        reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."
-    )
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of Qwen2-VL. Skip for now.")
     def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
-    def test_initialization(self):
-        pass
-
-    # TODO extend valid outputs to include this test @Molbap
-    @unittest.skip(reason="PaliGemma has currently one output format.")
-    def test_model_outputs_equivalence(self):
         pass
 
     @unittest.skip(reason="Pass because ColQwen2 requires `attention_mask is not None`")
