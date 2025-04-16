@@ -32,7 +32,7 @@ class BitNetModelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BitNetModel`]. It is used to instantiate an BitNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BitNet-7B.
+    defaults will yield a similar configuration to that of the BitNet b1.58 2B4T.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -86,12 +86,12 @@ class BitNetModelConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import BitNetModel, BitNetConfig
+    >>> from transformers import BitNetModel, BitNetModelConfig
 
-    >>> # Initializing a BitNet BitNet-7b style configuration
-    >>> configuration = BitNetConfig()
+    >>> # Initializing a BitNet style configuration
+    >>> configuration = BitNetModelConfig()
 
-    >>> # Initializing a model from the BitNet-7b style configuration
+    >>> # Initializing a model from the BitNet style configuration
     >>> model = BitNetModel(configuration)
 
     >>> # Accessing the model configuration
