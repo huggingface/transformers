@@ -154,7 +154,7 @@ class AutoRoundTest(unittest.TestCase):
         Simple test that checks if auto-round work properly wth mixed bits
         """
         model_name = "facebook/opt-125m"
-        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         layer_config = {
             "model.decoder.layers.0.self_attn.k_proj": {"bits": 8},
