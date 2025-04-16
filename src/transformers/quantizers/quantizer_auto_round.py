@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Optional
-
-from packaging import version
 
 from .base import HfQuantizer
 
@@ -49,19 +46,11 @@ class AutoRoundQuantizer(HfQuantizer):
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
             )
-        ## AutoRound offer on-demand reminders to install necessary packages, such as IPEX.
-        autoround_version = version.parse(importlib.metadata.version("auto_round"))
-        if autoround_version < version.parse("0.5.0"):
-            raise ImportError(
-                "You need a version of auto_round >= 0.5.0 to use AutoRound: `pip install --upgrade auto-round`"
-            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            torch_dtype = torch.float16
-            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
-        elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AutoRound")
+            torch_dtype = torch.bfloat16
+            logger.info("Loading the model in `torch.bfloat16`. To overwrite it, set `torch_dtype` manually.")
         return torch_dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):

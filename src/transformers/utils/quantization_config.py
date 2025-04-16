@@ -229,8 +229,8 @@ class AutoRoundConfig(QuantizationConfigMixin):
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
-        self.target_backend = "auto"
         self.backend = backend
+        self.packing_format = "auto_round:auto_gptq"
         if kwargs is not None:
             for key in kwargs.keys():
                 setattr(self, key, kwargs[key])
@@ -269,7 +269,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
             )
 
         if "auto-round" not in quant_method:
-            config_dict["backend"] = f"auto_round:{quant_method}"
+            config_dict["packing_format"] = f"auto_round:{quant_method}"
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
 

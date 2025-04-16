@@ -131,7 +131,7 @@ class AutoRoundTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_force_from_gptq(self):
+    def test_convert_from_gptq(self):
         """
         Simple test that checks if auto-round work properly wth gptq format
         """

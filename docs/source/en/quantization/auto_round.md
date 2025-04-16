@@ -18,6 +18,9 @@ It also supports tuning and inference across multiple hardware platforms, includ
 AutoRound also offers a variety of useful features, including mixed-bit tuning and inference, lm-head quantization, support for exporting to formats like GPTQ/AWQ/GGUF, and flexible tuning recipes. 
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
 
+
+AutoRound is part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor). For more model compression technicals optimized for Intel devices, please check it out
+
 ## Installation
 
 ```bash
@@ -26,13 +29,13 @@ pip install auto-round
 
 ## Supported Quantization Configurations
 
-AutoRound supports several quantization techniques:
+AutoRound supports several quantization configurations:
 
 - **Int8 Weight Only**
 - **Int4 Weight Only**
 - **Int3 Weight Only**
 - **Int2 Weight Only**
-- **Mixed bits/group_size Weight only**
+- **Mixed bits Weight only**
 
 ## Hardware Compatibility
 
@@ -112,8 +115,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2,4,8 bits, we recommend to use IPEX(intel-extension-for-pytorch) for 4 bits and ITREX(
-intel-extension-for-transformers) for 2/8 bits.
+Supports 2,4,8 bits, we recommend to use intel-extension-for-pytorch for 4 bits 
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -168,9 +170,8 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 <hfoption id="specific backend">
 
-The automatically selected backend may not always be the most suitable for certain devices. You can specify your
-preferred backend, such as "ipex"(cpu/xpu), "itrex"(cpu), "marlin"(cuda), "exllamav2"(cuda), "triton"(cuda) and others, according to your needs or
-hardware compatibility. Please note that some corresponding libraries  may need to be installed.
+The automatically selected backend may not always be the most suitable for certain devices. 
+You can specify your preferred backend, such as "ipex"(cpu/xpu), "itrex"(cpu), "marlin"(cuda), "exllamav2"(cuda), "triton"(cuda) and others, according to your needs or hardware compatibility. Please note that some corresponding libraries  may need to be installed.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
@@ -216,3 +217,7 @@ If you encounter any issues with the transformers integration, please open an is
 the [transformers](https://github.com/huggingface/transformers/issues) repository.  
 If you encounter any issues with auto-round, please open an issue on
 the [auto-round](https://github.com/intel/auto-round/issues) repository.
+
+
+## Acknowledgement
+Special thanks to AutoGPTQ, AutoAWQ, GPTQModel, Triton, Marlin, and ExLLaMAV2 for providing low-precision CUDA kernels, which were leveraged in AutoRound.
