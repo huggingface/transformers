@@ -62,7 +62,7 @@ else:
             ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("bridgetower", ("BridgeTowerImageProcessor",)),
+            ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
             ("chameleon", ("ChameleonImageProcessor",)),
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
