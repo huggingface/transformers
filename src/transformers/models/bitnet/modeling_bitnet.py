@@ -32,7 +32,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations.bitnet import unpack_weights
+from ...integrations.bitnet import unpack_weights, pack_weights
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -133,6 +133,7 @@ class BitLinear(nn.Linear):
                 ),
             )
             self._register_load_state_dict_pre_hook(self.load_hook)
+            self._register_state_dict_hook(self.save_hook)
 
     def load_hook(
         self,
@@ -144,6 +145,16 @@ class BitLinear(nn.Linear):
         if (prefix + "weight") in state_dict:
             state_dict[prefix + "weight"] = unpack_weights(state_dict[prefix + "weight"], dtype=self.weight.dtype)
         return state_dict
+
+    def save_hook(
+        self,
+        state_dict,
+        *args,
+        **kwargs,
+    ):
+        for k, v in state_dict.items():
+            if k.endswith("weight"):
+                state_dict[k] = pack_weights(state_dict[k] / self.weight_scale)
 
     def forward(self, input):
         if self.online_quant:
@@ -1109,7 +1120,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, **kwargs
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -1148,11 +1159,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
+        model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
             {
