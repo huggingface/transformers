@@ -31,6 +31,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -56,6 +57,27 @@ _CHECKPOINT_FOR_DOC = "yonigozlan/InternVL2_5-1B-MPO-hf"
 
 
 _CONFIG_FOR_DOC = "InternVLConfig"
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class InternVLVisionRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        InternVLVisionRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 def eager_attention_forward(
@@ -100,12 +122,17 @@ class InternVLVisionAttention(nn.Module):
         self.scaling = 1 / math.sqrt(self.attention_head_size)
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
 
         self.output = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.qk_normalization = config.qk_normalization
+        if self.qk_normalization:
+            self.q_norm = InternVLVisionRMSNorm(self.all_head_size, eps=config.layer_norm_eps)
+            self.k_norm = InternVLVisionRMSNorm(self.all_head_size, eps=config.layer_norm_eps)
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -122,9 +149,16 @@ class InternVLVisionAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, self.num_attention_heads, self.attention_head_size)
 
-        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+        if self.qk_normalization:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -139,9 +173,9 @@ class InternVLVisionAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
+            query_states,
+            key_states,
+            value_states,
             None,
             output_attentions=output_attentions,
             dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
@@ -383,6 +417,9 @@ class InternVLVisionMLP(nn.Module):
         return hidden_states
 
 
+NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternVLVisionRMSNorm}
+
+
 class InternVLVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -392,8 +429,9 @@ class InternVLVisionLayer(nn.Module):
         self.seq_len_dim = 1
         self.attention = InternVLVisionAttention(config)
         self.mlp = InternVLVisionMLP(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # InternVL uses different layernorm implementations for different models
+        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
         self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)

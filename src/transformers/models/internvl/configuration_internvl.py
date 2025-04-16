@@ -34,6 +34,10 @@ class InternVLVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the queries, keys and values.
+        qk_normalization (`bool`, *optional*, defaults to `False`):
+            Whether to apply normalization to the queries and keys before the attention operation.
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -45,6 +49,8 @@ class InternVLVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+            The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to `[448, 448]`):
@@ -86,11 +92,14 @@ class InternVLVisionConfig(PretrainedConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
+        qkv_bias=False,
+        qk_normalization=False,
         intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
+        norm_type="layer_norm",
         layer_norm_eps=1e-06,
         image_size=[448, 448],
         patch_size=[14, 14],
@@ -106,11 +115,14 @@ class InternVLVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.qkv_bias = qkv_bias
+        self.qk_normalization = qk_normalization
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
+        self.norm_type = norm_type
         self.layer_norm_eps = layer_norm_eps
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)

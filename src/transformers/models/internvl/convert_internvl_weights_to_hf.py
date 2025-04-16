@@ -50,7 +50,7 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3-78B": "qwen2",
 }
 
-UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "qk_normalization", "qkv_bias", "bias", "norm_type", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
+UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
@@ -178,6 +178,9 @@ def get_internvl_config(input_base_path):
     llm_config["use_cache"] = True
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
+    if "qkv_bias" in vision_config:
+        qkv_bias = vision_config.pop("qkv_bias")
+        vision_config["attention_bias"] = qkv_bias
 
     return InternVLConfig(
         text_config=language_config_class(**llm_config),
