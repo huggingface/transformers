@@ -238,6 +238,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
+    # This test adjusts n_groups to half the original setting and effectively
+    # creates a grouped SSD configuration in the mamba2 layers
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2
