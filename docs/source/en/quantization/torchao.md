@@ -70,20 +70,11 @@ pip install torchao --extra-index-url https://download.pytorch.org/whl/cu124 # o
 
 If your torcha version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
 
-## Available Quantization Schemes
+## Quantization examples
 
-TorchAO provides a variety of quantization configurations:
-
-- `Int4WeightOnlyConfig`
-- `Int8WeightOnlyConfig`
-- `Int8DynamicActivationInt8WeightConfig`
-- `Float8WeightOnlyConfig`
-
-
-Each configuration can be further customized with parameters such as `group_size`, `scheme`, and `layout` to optimize for specific hardware and model architectures.
+TorchAO provides a variety of quantization configurations. Each configuration can be further customized with parameters such as `group_size`, `scheme`, and `layout` to optimize for specific hardware and model architectures.
 
 For a complete list of available configurations, see the [quantization API documentation](https://github.com/pytorch/ao/blob/main/torchao/quantization/quant_api.py).
-
 
 You can manually choose the quantization types and settings or automatically select the quantization types.
 
@@ -315,6 +306,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 
 </hfoptions>
+
+### Autoquant
 
 If you want to automatically choose a quantization type for quantizable layers (`nn.Linear`) you can use the [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API.
 
