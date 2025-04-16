@@ -155,7 +155,7 @@ class AutoRoundTest(unittest.TestCase):
         """
         model_name = "facebook/opt-125m"
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", trust_remote_code=True)
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         layer_config = {
             "model.decoder.layers.0.self_attn.k_proj": {"bits": 8},
             "model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32},
