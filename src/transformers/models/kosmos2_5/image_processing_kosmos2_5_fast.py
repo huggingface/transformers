@@ -62,7 +62,6 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
 
 
 class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    # Q: should we use `SizeDict`?
     patch_size: Optional[Dict[str, int]]
     max_patches: Optional[int]
 
@@ -121,7 +120,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             image (`torch.Tensor`):
                 Image to normalize.
         """
-        # Q: should we keep this
+        # Q: should we keep this?
         if image.dtype == torch.uint8:
             image = image.to(dtype=torch.float32)
 
