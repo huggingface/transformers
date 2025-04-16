@@ -11,7 +11,12 @@ rendered properly in your Markdown viewer.
 
 # torchao
 
-[torchao](https://github.com/pytorch/ao) is a PyTorch architecture optimization library with support for custom high performance data types, quantization, and sparsity. It is composable with native PyTorch features such as [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training. You can checkout torchao [README](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for an overall introduction to the library and recent highlights and updates.
+[torchao](https://github.com/pytorch/ao) is a PyTorch architecture optimization library with support for custom high performance data types, quantization, and sparsity. It is composable with native PyTorch features such as [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training.
+
+See the table below for additional torchao features.
+
+> [!TIP]
+> Refer to the torchao [README.md](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for more details about the library.
 
 
 ## Supported Quantization techniques
