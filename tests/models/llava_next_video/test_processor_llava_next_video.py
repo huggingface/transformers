@@ -41,6 +41,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = LlavaNextImageProcessor()
         video_processor = LlavaNextVideoImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
         processor_kwargs = cls.prepare_processor_dict()
 
         processor = LlavaNextVideoProcessor(
