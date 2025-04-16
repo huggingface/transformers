@@ -87,4 +87,5 @@ class AutoRoundQuantizer(HfQuantizer):
         return True
 
     def is_serializable(self, safe_serialization=None):
+        ## for gptq/awq models, the quantization config will be changed
         return True

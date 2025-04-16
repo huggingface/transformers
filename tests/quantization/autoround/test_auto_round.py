@@ -136,7 +136,6 @@ class AutoRoundTest(unittest.TestCase):
         Simple test that checks if auto-round work properly wth gptq format
         """
         model_name = "ybelkada/opt-125m-gptq-4bit"
-        from transformers import AutoRoundConfig
 
         quantization_config = AutoRoundConfig()
 
