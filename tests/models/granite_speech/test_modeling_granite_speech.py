@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_datasets_available,
+    is_peft_available,
     is_torch_available,
 )
 
@@ -309,8 +310,7 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
 class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # TODO - use the actual model path on HF hub after release.
-        self.model_path = "ibm-granite/granite-speech"
+        self.model_path = "ibm-granite/granite-speech-3.3-8b"
         self.processor = AutoProcessor.from_pretrained(self.model_path)
         self.prompt = self._get_prompt(self.processor.tokenizer)
 
@@ -338,9 +338,11 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    @pytest.mark.skip("Public models not yet available")
+    @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_single(self):
-        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(
+            self.model_path, torch_dtype="auto", device_map="auto"
+        )
         input_speech = self._load_datasamples(1)
 
         # Verify feature sizes; note that the feature mask refers to the size of
@@ -364,9 +366,11 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @pytest.mark.skip("Public models not yet available")
+    @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_batch(self):
-        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path)
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(
+            self.model_path, torch_dtype="auto", device_map="auto"
+        )
         input_speech = self._load_datasamples(2)
         prompts = [self.prompt, self.prompt]
 
