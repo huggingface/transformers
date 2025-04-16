@@ -176,6 +176,9 @@ class GotOcr2Config(PretrainedConfig):
     ```"""
 
     model_type = "got_ocr2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
     def __init__(
