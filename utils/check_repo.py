@@ -157,6 +157,7 @@ IGNORE_NON_TESTED = (
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "TimesFmModel",  # Building part of bigger (tested) model
     ]
 )
 
