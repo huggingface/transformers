@@ -29,26 +29,26 @@ The most common method is *affine quantization*. For a given float32 tensor (lik
 
 There are two main ways to perform this mapping, *symmetric* and *asymmetric*. The choice between symmetric and asymmetric quantization determines how the float32 range is mapped to the int8 range.
 
-- Symmetric: This method assumes the original float32 range is symmetric around zero (\\([ -a, a ]\\)). This range is mapped symmetrically to the int8 range, for example, \\([-127, 127]\\). A key characteristic is that the float32 value \\(0.0\\) maps directly to the int8 value \\(0\\). This only requires one parameter, the **scale (\\(S\\))**, to define the mapping. It can simplify computations, but it might be less accurate if the original data distribution isn't naturally centered around zero.
-- Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range \\([val_{min}, val_{max}]\\) from float32 to the full int8 range, like \\([-128, 127]\\). This requires two parameters, a **scale (\\(S\\))** and a **zero-point (\\(Z\\))**. 
+- Symmetric: This method assumes the original float32 range is symmetric around zero ( \\([ -a, a ]\\) ). This range is mapped symmetrically to the int8 range, for example, \\([-127, 127]\\). A key characteristic is that the float32 value \\(0.0\\) maps directly to the int8 value \\(0\\). This only requires one parameter, the **scale ( \\(S\\) )**, to define the mapping. It can simplify computations, but it might be less accurate if the original data distribution isn't naturally centered around zero.
+- Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range \\([val_{min}, val_{max}]\\) from float32 to the full int8 range, like \\([-128, 127]\\). This requires two parameters, a **scale ( \\(S\\) )** and a **zero-point ( \\(Z\\) )**. 
 
 
-    scale (\\(S\\)): A positive float32 number representing the ratio between the float32 and the int8 range.
+    scale ( \\(S\\) ): A positive float32 number representing the ratio between the float32 and the int8 range.
 
-    $$
-    S = \frac{val_{max} - val_{min}}{q_{max} - q_{min}}
-    $$
+$$
+S = \frac{val_{max} - val_{min}}{q_{max} - q_{min}}
+$$
 
-    zero-Point (\\(Z\\)): An int8 value that corresponds to the float32 value \\(0.0\\).
+zero-Point ( \\(Z\\) ): An int8 value that corresponds to the float32 value \\(0.0\\).
 
-    $$
-    Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
-    $$
+$$
+Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
+$$
 
 > [!TIP]
 > In symmetric quantization, Z would typically be fixed at 0.
 
-With these parameters, a float32 value, \\(x\\). can be quantized to int8 (\\(q\\)) with the formula below.
+With these parameters, a float32 value, \\(x\\). can be quantized to int8 ( \\(q\\) ) with the formula below.
 
 $$
 q = round\left(\frac{x}{S} + Z\right)
@@ -64,7 +64,7 @@ $$
     <img width="606" alt="dequant" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/dequant.png" />
 </div>
 
-During inference, computations like matrix multiplication are performed using the int8 values (\\(q\\)), and the result is dequantized back to float32 (often using a higher-precision accumulation type like int32 internally) before it is passed to the next layer.
+During inference, computations like matrix multiplication are performed using the int8 values ( \\(q\\) ), and the result is dequantized back to float32 (often using a higher-precision accumulation type like int32 internally) before it is passed to the next layer.
 
 ### int4 and weight packing
 
@@ -72,7 +72,7 @@ During inference, computations like matrix multiplication are performed using th
     <img width="606" alt="weight packing" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/weight_packing.png" />
 </div>
 
-int4 quantization further reduces the model size and memory usage (halving it compared to int8). The same affine or symmetric quantization principles apply, mapping the float32 range to the 16 possible values representable by int4 (\\([-8, 7]\\) for signed int4).
+int4 quantization further reduces the model size and memory usage (halving it compared to int8). The same affine or symmetric quantization principles apply, mapping the float32 range to the 16 possible values representable by int4 ( \\([-8, 7]\\) for signed int4).
 
 A key aspect of int4 quantization is **weight packing**. Since most hardware can't natively handle 4-bit data types in memory, two int4 values are typically packed together into a single int8 byte for storage and transfer. For example, the first value might occupy the lower 4 bits and the second value the upper 4 bits of the byte (`packed_byte = (val1 & 0x0F) | (val2 << 4)`).
 
@@ -100,7 +100,7 @@ Transformers supports FP8 through specific backends like [FBGEMM](./fbgemm_fp8),
 
 ## Granularity
 
-Quantization parameters (\\(S\\) and \\(Z\\)) can be calculated in one of two ways.
+Quantization parameters ( \\(S\\) and \\(Z\\)) can be calculated in one of two ways.
 
 - Per-Tensor: One set of \\(S\\) and \\(Z\\) for the entire tensor. Simpler, but less accurate if data values vary greatly within the tensor.
 - Per-Channel (or Per-Group/Block): Separate \\(S\\) and \\(Z\\) for each channel or group. More accurate and better performance at the cost of slightly more complexity and memory.
