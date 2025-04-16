@@ -318,31 +318,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
             # Initialize scaling parameter
             nn.init.ones_(module.scaling)
 
-    def generate(self, *args, **kwargs):
-        """
-        This method is disabled for TimesFM models. TimesFM models are designed for time series forecasting and should be used
-        with the forward() method instead. For forecasting, use:
-
-        ```python
-        # For basic forecasting:
-        outputs = model(past_values=your_time_series, freq=your_frequency)
-
-        # For prediction with extra features:
-        outputs = model.forward(
-            past_values=your_time_series_list,
-            freq=your_frequencies,
-            window_size=optional_window_size,
-            future_values=optional_future_values,
-            forecast_context_len=optional_max_context_length
-        )
-
-        See the model's documentation for more details on the forward method parameters.
-        """
-        raise NotImplementedError(
-            "The generate() method is not implemented for TimesFM models as they are designed for time series "
-            "forecasting. Please use the forward() method instead. See the docstring of this method for usage examples."
-        )
-
 
 TIMESFM_INPUTS_DOCSTRING = r"""
     Args:
