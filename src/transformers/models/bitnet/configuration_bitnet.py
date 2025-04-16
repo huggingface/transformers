@@ -76,7 +76,7 @@ class BitNetModelConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 128001):
             End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
@@ -119,7 +119,7 @@ class BitNetModelConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=128000,
         eos_token_id=128001,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
         rope_theta=500000.0,
         attention_bias=False,
         attention_dropout=0.0,
