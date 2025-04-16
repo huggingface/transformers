@@ -3520,6 +3520,22 @@ class TokenizerTesterMixin:
                 if tokenizer_r.num_special_tokens_to_add(pair=True):
                     self.assertIn(None, pair_batch_sequence_ids)
 
+    def test_call_empty_strings(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            self.skipTest(reason="test_slow_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+
+                # Ensure basic input match
+                input_p = tokenizer_p("", "")
+                input_r = tokenizer_r("", "")
+
+                self.assertEqual(input_p["input_ids"], input_r["input_ids"])
+
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
