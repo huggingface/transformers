@@ -4600,7 +4600,9 @@ class ModelTesterMixin:
                 }
 
             self.assertEqual(
-                unique_devices, {torch.device("meta")}, f"All parameters should be on meta device, but found {unique_devices}."
+                unique_devices,
+                {torch.device("meta")},
+                f"All parameters should be on meta device, but found {unique_devices}.",
             )
 
 
