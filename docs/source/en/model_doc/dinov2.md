@@ -109,7 +109,11 @@ predicted_class_idx = logits.argmax(-1).item()
 print("Predicted class:", model.config.id2label[predicted_class_idx])
 ```
 
-The example below shows how to split the output tensor into one embedding for the whole image, i.e. the CLS token, and patch embeddings.
+The example below shows how to split the output tensor into:
+- one embedding for the whole image, commonly referred to as a `CLS` token,
+  useful for classification and retrieval
+- a set of local embeddings, one for each `14x14` patch of the input image,
+  useful for dense tasks, such as semantic segmentation
 
 ```py
 from transformers import AutoImageProcessor, AutoModel
