@@ -23,7 +23,7 @@ from transformers import (
     AutoModel,
     AutoTokenizer,
     GenerationConfig,
-    GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorFast,
     InternVLConfig,
     InternVLForConditionalGeneration,
     InternVLProcessor,
@@ -276,7 +276,7 @@ def write_model(
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.bfloat16)
-    image_processor = GotOcr2ImageProcessor.from_pretrained(model_path)
+    image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
     processor.save_pretrained(model_path)
@@ -325,7 +325,7 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, 
 
 
 def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str = None):
-    image_processor = GotOcr2ImageProcessor(
+    image_processor = GotOcr2ImageProcessorFast(
         do_resize=True,
         size={"height": 448, "width": 448},
         do_rescale=True,
