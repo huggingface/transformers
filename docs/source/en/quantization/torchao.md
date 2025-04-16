@@ -41,7 +41,7 @@ Check the table below to see if your hardware is compatible.
 
 
 
-Install torchao with the following command.
+Install torchao from PyPi or the PyTorch index with the following commands.
 
 ```bash
 # Updating 🤗 Transformers to the latest version, as the example script below uses the new auto compilation
