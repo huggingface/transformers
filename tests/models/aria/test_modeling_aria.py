@@ -460,26 +460,25 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
         images = [[image1, image2], [image2]]
-        inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device)
-        inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
+        inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device).to(model.dtype)
 
-        EXPECTED_OUTPUT = (
-            [
+        EXPECTED_OUTPUT = {
+            "cpu": [
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
             ],  # cpu output
-            [
+            "cuda": [
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
             ],  # cuda output
-            [
+            "xpu": [
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute, light-colored puppy sitting on a paved surface with",
                 "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
             ],  # xpu output
-        )
+        }
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertTrue(outputs in EXPECTED_OUTPUT)
+        self.assertEqual(outputs, EXPECTED_OUTPUT[model.device.type])
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
