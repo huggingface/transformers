@@ -1693,7 +1693,7 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     Returns:
         (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
-    device = num_segments.device
+    device = num_segments.device if torch.is_tensor(num_segments) else "cpu"
     batch_shape = torch.as_tensor(
         batch_shape, dtype=torch.long, device=device
     )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
