@@ -274,24 +274,18 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         hence to use that we need to add and remove a dimension which corresponds to the missing batch dimension.
         """
         isBatched = False
-        added_dimension = False
         if isinstance(segmentation_maps, list):
             isBatched = True
             if not is_pil_image(segmentation_maps[0]) and segmentation_maps[0].ndim == 2:
                 segmentation_maps = [map.unsqueeze(0) for map in segmentation_maps]
-                added_dimension = True
-            elif is_pil_image(segmentation_maps[0]):
-                added_dimension = True
-        elif is_pil_image(segmentation_maps):
-            added_dimension = True
         elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
             segmentation_maps = segmentation_maps.unsqueeze(0)
-            added_dimension = True
 
         segmentation_maps = self._prepare_input_images(segmentation_maps)
-        if added_dimension and isBatched:
+
+        if isBatched:
             segmentation_maps = [map.squeeze(0) for map in segmentation_maps]
-        elif added_dimension:
+        else:
             segmentation_maps = segmentation_maps[0]
         return segmentation_maps
 
