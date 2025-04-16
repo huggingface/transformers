@@ -20,7 +20,7 @@ See the table below for additional torchao features.
 
 
 
-TorchAO supports several quantization techniques:
+torchao supports the [quantization techniques](https://github.com/pytorch/ao/blob/main/torchao/quantization/README.md) below.
 
 - **Int8 Weight Only**
 - **Int4 Weight Only**
