@@ -36,8 +36,8 @@ Check the table below to see if your hardware is compatible.
 
 | Component | Compatibility |
 |----------|----------------|
-| **CUDA Versions** | ✅ cu118, cu124, cu126, cu128 |
-| **CPU** | ✅ Quantization on cpu is supported (different layouts for Int4, see below) |
+| CUDA Versions | ✅ cu118, cu124, cu126, cu128 |
+| CPU | ✅ change `device_map="cpu"` (see examples below) |
 
 
 ## Installation
