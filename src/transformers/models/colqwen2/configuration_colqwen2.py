@@ -30,6 +30,9 @@ class ColQwen2Config(PretrainedConfig):
     of `ColQwen2ForRetrieval` according to the specified arguments, defining the model architecture following the methodology
     from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
+    Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
+    ColQwen2-v1.0 model, e.g. [vidore/colqwen2-v1.0-hf](https://huggingface.co/vidore/colqwen2-v1.0-hf).
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
