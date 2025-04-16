@@ -192,23 +192,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         data = {"pixel_values": processed_images}
 
         if segmentation_maps is not None:
-            isList = False
-            added_dimension = False
-            if isinstance(segmentation_maps, list):
-                isList = True
-                # Batched input as a list of PIL images, no added dimension is needed.
-                if not is_pil_image(segmentation_maps[0]) and segmentation_maps[0].ndim == 2:
-                    segmentation_maps = [map.unsqueeze(0) for map in segmentation_maps]
-                    added_dimension = True
-                elif is_pil_image(segmentation_maps[0]):
-                    added_dimension = True
-            elif is_pil_image(segmentation_maps):
-                added_dimension = True
-            elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
-                segmentation_maps = segmentation_maps.unsqueeze(0)
-                added_dimension = True
-
-            segmentation_maps = self._prepare_input_images(segmentation_maps)
+            segmentation_maps = self._prepare_segmentation_maps(segmentation_maps)
             processed_maps = self._preprocess_images(
                 images=segmentation_maps,
                 do_resize=do_resize,
@@ -227,11 +211,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 ensure_multiple_of=ensure_multiple_of,
                 keep_aspect_ratio=keep_aspect_ratio,
             )
-            if added_dimension and isList:
-                processed_maps = processed_maps.squeeze(1).long()
-            elif added_dimension:
-                processed_maps = processed_maps.squeeze(0).long()
-            data["labels"] = processed_maps
+            data["labels"] = processed_maps.long()
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -287,6 +267,33 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
+    
+    def _prepare_segmentation_maps(self, segmentation_maps: ImageInput) -> "torch.Tensor":
+        """
+        Prepares segmentation maps for processing. Leverages _prepare_input_images,
+        hence to use that we need to add and remove a dimension which corresponds to the missing batch dimension.
+        """
+        isBatched = False
+        added_dimension = False
+        if isinstance(segmentation_maps, list):
+            isBatched = True
+            if not is_pil_image(segmentation_maps[0]) and segmentation_maps[0].ndim == 2:
+                segmentation_maps = [map.unsqueeze(0) for map in segmentation_maps]
+                added_dimension = True
+            elif is_pil_image(segmentation_maps[0]):
+                added_dimension = True
+        elif is_pil_image(segmentation_maps):
+            added_dimension = True
+        elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
+            segmentation_maps = segmentation_maps.unsqueeze(0)
+            added_dimension = True
+
+        segmentation_maps = self._prepare_input_images(segmentation_maps)
+        if added_dimension and isBatched:
+            segmentation_maps = [map.squeeze(0) for map in segmentation_maps]
+        elif added_dimension:
+            segmentation_maps = segmentation_maps[0]
+        return segmentation_maps
 
     def pad_image(
         self,
