@@ -121,7 +121,7 @@ There are two main types of quantization techniques.
 Transformers integrates several quantization backends such as bitsandbytes, torchao, compressed-tensors, and more (refer to the quantization [overview](./overview) for more backends). 
 
 
-All backends are unified under the [`HfQuantizer`] API and associated [`QuantizationConfig`] classes. You can integrate your own custom quantization backends by implementing a custom [`HfQuantizer`] and [`QuantizationConfig`], as shown in the [Contribution](./contribution) guide.
+All backends are unified under the [`HfQuantizer`] API and associated [`QuantizationConfig`] classes. You can integrate your own custom quantization backends by implementing a custom [`HfQuantizer`] and [`QuantizationConfig`], as shown in the [Contribution](./contribute) guide.
 
 The typical workflow for quantization in Transformers is to:
 
