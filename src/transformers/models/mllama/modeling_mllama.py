@@ -163,6 +163,7 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
 
         return hidden_state
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->MllamaVision
 class MllamaVisionMLP(nn.Module):
     def __init__(self, config):

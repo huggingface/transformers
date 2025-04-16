@@ -828,6 +828,7 @@ class AltCLIPAttention(nn.Module):
             attn_weights = None
         return attn_output, attn_weights
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->AltCLIP
 class AltCLIPMLP(nn.Module):
     def __init__(self, config):

@@ -265,6 +265,7 @@ class IdeficsVisionAttention(nn.Module):
             attn_weights = None
         return attn_output, attn_weights
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->IdeficsVision
 class IdeficsVisionMLP(nn.Module):
     def __init__(self, config):

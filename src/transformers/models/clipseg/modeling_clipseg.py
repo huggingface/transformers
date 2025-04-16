@@ -366,6 +366,7 @@ class CLIPSegAttention(nn.Module):
 
         return attn_output, attn_weights
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CLIPSeg
 class CLIPSegMLP(nn.Module):
     def __init__(self, config):

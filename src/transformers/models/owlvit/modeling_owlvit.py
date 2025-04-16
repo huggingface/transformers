@@ -476,6 +476,7 @@ class OwlViTAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
 class OwlViTMLP(nn.Module):
     def __init__(self, config):

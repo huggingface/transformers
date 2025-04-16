@@ -35,7 +35,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_torch_available,
-    is_torch_sdpa_available,
     is_vision_available,
 )
 
