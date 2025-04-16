@@ -243,6 +243,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+</hfoption>
 <hfoption id="int8-dynamic-quantization cpu">
 
 ```py
