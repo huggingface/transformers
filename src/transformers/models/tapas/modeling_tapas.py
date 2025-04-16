@@ -1563,7 +1563,7 @@ class IndexMap:
                 batch dimensions. Segments in different batch elements are always distinct even if they have the same
                 index.
         """
-        self.indices = torch.as_tensor(indices)
+        self.indices = torch.as_tensor(indices, device=indices.device)
         self.num_segments = torch.as_tensor(num_segments, device=indices.device)
         self.batch_dims = batch_dims
 
