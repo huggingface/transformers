@@ -4533,7 +4533,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             # If it does not raise here, the test passes
             with torch.device("meta"):
-                model = model_class(config)
+                _ = model_class(config)
 
     @require_torch_accelerator
     def test_can_load_with_device_context_manager(self):
