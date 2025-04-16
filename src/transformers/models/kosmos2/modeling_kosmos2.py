@@ -568,6 +568,7 @@ class Kosmos2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
 class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
