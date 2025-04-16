@@ -1693,11 +1693,12 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     Returns:
         (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
+    device = num_segments.deivce
     batch_shape = torch.as_tensor(
-        batch_shape, dtype=torch.long
+        batch_shape, dtype=torch.long, device=device
     )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
     assert len(batch_shape.size()) == 1
-    num_segments = torch.as_tensor(num_segments)  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
+    num_segments = torch.as_tensor(num_segments, device=device)  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
     assert len(num_segments.size()) == 0
 
     indices = torch.arange(
@@ -1711,7 +1712,7 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     new_shape = [int(x) for x in new_tensor.tolist()]
     indices = indices.view(new_shape)
 
-    multiples = torch.cat([batch_shape, torch.as_tensor([1])], dim=0)
+    multiples = torch.cat([batch_shape, torch.as_tensor([1], device=device)], dim=0)
     indices = indices.repeat(multiples.tolist())
     # equivalent (in Numpy:)
     # indices = torch.as_tensor(np.tile(indices.numpy(), multiples.tolist()))
