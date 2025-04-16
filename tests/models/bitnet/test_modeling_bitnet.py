@@ -82,7 +82,6 @@ class BitNetModelTester:
         self.bos_token_id = bos_token_id
         self.scope = scope
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -109,7 +108,6 @@ class BitNetModelTester:
             bos_token_id=self.bos_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen3
     def create_and_check_model(self, config, input_ids, input_mask):
         model = BitNetModel(config=config)
         model.to(torch_device)
@@ -118,7 +116,6 @@ class BitNetModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
