@@ -32,7 +32,7 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - **Float8 (E4M3 / E5M2)**
 - **AutoQuant**
 
-## Hardware Compatibility
+Check the table below to see if your hardware is compatible.
 
 | Component | Compatibility |
 |----------|----------------|
