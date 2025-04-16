@@ -1752,12 +1752,13 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
         dim=0, index=flat_index.indices.long(), src=flat_values.float(), reduce=segment_reduce_fn, include_self=False
     )
 
+    device = index.num_segments.device
     # Unflatten the values.
     new_shape = torch.cat(
         [
-            torch.as_tensor(index.batch_shape(), dtype=torch.long),
-            torch.as_tensor([index.num_segments], dtype=torch.long),
-            torch.as_tensor(vector_shape, dtype=torch.long),
+            torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
+            torch.as_tensor([index.num_segments], dtype=torch.long, device=device),
+            torch.as_tensor(vector_shape, dtype=torch.long, device=device),
         ],
         dim=0,
     )
