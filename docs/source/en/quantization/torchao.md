@@ -408,7 +408,7 @@ output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
-For int4, you can only load on the same device you quantized on because the layout is specific to the device. For cpu for example, it will look like this:
+For int4, the model can only be loaded on the same device it was quantized on because the layout is specific to the device. The example below demonstrates quantizing and loading a model on the CPU.
 
 ```py
 import torch
