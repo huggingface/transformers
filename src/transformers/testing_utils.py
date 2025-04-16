@@ -138,12 +138,11 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -201,9 +200,11 @@ if is_torch_available():
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
+    IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
+    IS_XPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -940,6 +941,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mlu" and not is_torch_mlu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MLU is unavailable. Please double-check your testing environment."
+            )
         if torch_device == "hpu" and not is_torch_hpu_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
@@ -956,6 +961,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_mlu_available():
+        torch_device = "mlu"
     elif _run_third_party_device_tests and is_torch_hpu_available():
         torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
@@ -1019,6 +1026,19 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
+def require_torch_large_accelerator(test_case, memory: float = 20):
+    """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
+    if torch_device != "cuda" and torch_device != "xpu":
+        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
+
+    torch_accelerator_module = getattr(torch, torch_device)
+
+    return unittest.skipUnless(
+        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU or XPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1064,21 +1084,20 @@ def require_torch_bf16_gpu(test_case):
     )(test_case)
 
 
-def require_torch_bf16_cpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using CPU."""
-    return unittest.skipUnless(
-        is_torch_bf16_cpu_available(),
-        "test requires torch>=1.10, using CPU",
-    )(test_case)
-
-
 def require_deterministic_for_xpu(test_case):
-    if is_torch_xpu_available():
-        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
-            test_case
-        )
-    else:
-        return test_case
+    @wraps(test_case)
+    def wrapper(*args, **kwargs):
+        if is_torch_xpu_available():
+            original_state = torch.are_deterministic_algorithms_enabled()
+            try:
+                torch.use_deterministic_algorithms(True)
+                return test_case(*args, **kwargs)
+            finally:
+                torch.use_deterministic_algorithms(original_state)
+        else:
+            return test_case(*args, **kwargs)
+
+    return wrapper
 
 
 def require_torch_tf32(test_case):
@@ -2367,8 +2386,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
-            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
+            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
         ],
         timeout=timeout,
     )
@@ -2531,9 +2550,11 @@ class RequestCounter:
 
     def __exit__(self, *args, **kwargs) -> None:
         assert len(self.mock.call_args_list) == len(self._extra_info)
-
         for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
             if thread_id != self._thread_id:
+                continue
+            # code 307: the URL being requested by the user has moved to a temporary location
+            if call.args[-2] == 307:
                 continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
@@ -2927,9 +2948,21 @@ def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], 
 if is_torch_available():
     # Mappings from device names to callable functions to support device agnostic
     # testing.
-    BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
-    BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
-    BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+    BACKEND_MANUAL_SEED = {
+        "cuda": torch.cuda.manual_seed,
+        "cpu": torch.manual_seed,
+        "default": torch.manual_seed,
+    }
+    BACKEND_EMPTY_CACHE = {
+        "cuda": torch.cuda.empty_cache,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_DEVICE_COUNT = {
+        "cuda": torch.cuda.device_count,
+        "cpu": lambda: 0,
+        "default": lambda: 1,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
@@ -2938,6 +2971,11 @@ else:
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_mlu_available():
+    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
+    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
+    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
@@ -2979,6 +3017,8 @@ if is_torch_available():
 
         # Try to strip extension for later import – also verifies we are importing a
         # python file.
+        device_spec_dir, _ = os.path.split(os.path.realpath(device_spec_path))
+        sys.path.append(device_spec_dir)
         try:
             import_name = device_spec_path[: device_spec_path.index(".py")]
         except ValueError as e:
@@ -3049,6 +3089,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+    torch._dynamo.reset()
 
 
 # Type definition of key used in `Expectations` class.
@@ -3056,7 +3097,7 @@ DeviceProperties = tuple[Union[str, None], Union[int, None]]
 
 
 @cache
-def get_device_properties(self) -> DeviceProperties:
+def get_device_properties() -> DeviceProperties:
     """
     Get environment device properties.
     """
@@ -3068,6 +3109,14 @@ def get_device_properties(self) -> DeviceProperties:
             return ("rocm", major)
         else:
             return ("cuda", major)
+    elif IS_XPU_SYSTEM:
+        import torch
+
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        arch = torch.xpu.get_device_capability()["architecture"]
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen)
     else:
         return (torch_device, None)
 

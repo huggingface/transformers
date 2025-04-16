@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -735,7 +734,7 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 

@@ -34,6 +34,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -43,6 +44,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class DeiTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DeiT image processor.
@@ -163,14 +165,14 @@ class DeiTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample=None,
-        do_center_crop: bool = None,
+        do_center_crop: Optional[bool] = None,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

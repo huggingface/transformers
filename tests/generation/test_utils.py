@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_optimum_quanto,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -47,7 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available
+from transformers.utils import is_ipex_available, is_torchdynamo_exporting
 
 
 if is_torch_available():
@@ -56,6 +56,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
@@ -86,6 +87,7 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        GenerationMixin,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
         LogitsProcessorList,
@@ -126,6 +128,8 @@ VLM_CLASS_NAMES = [
     "ayavision",
     "gemma3",
     "mistral3",
+    "chameleon",
+    "qwen2_5_omni",
 ]
 
 
@@ -224,6 +228,10 @@ class GenerationTesterMixin:
                 "video_token_index",
                 "video_token_id",
                 "vision_start_token_id",
+                "audio_token_index",
+                "audio_start_token_id",
+                "audio_end_token_id",
+                "vision_end_token_id",
             ]:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
@@ -278,6 +286,7 @@ class GenerationTesterMixin:
             do_sample=False,
             num_beams=1,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
@@ -308,6 +317,7 @@ class GenerationTesterMixin:
             do_sample=True,
             num_beams=1,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             num_return_sequences=num_return_sequences,
             output_scores=output_scores,
             output_logits=output_logits,
@@ -337,6 +347,7 @@ class GenerationTesterMixin:
         output_generate = model.generate(
             do_sample=False,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_scores=output_scores,
             output_logits=output_logits,
             output_attentions=output_attentions,
@@ -367,6 +378,7 @@ class GenerationTesterMixin:
         output_generate = model.generate(
             do_sample=True,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_scores=output_scores,
             output_logits=output_logits,
             output_attentions=output_attentions,
@@ -396,6 +408,7 @@ class GenerationTesterMixin:
         output_generate = model.generate(
             do_sample=False,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_scores=output_scores,
             output_logits=output_logits,
             output_attentions=output_attentions,
@@ -426,6 +439,7 @@ class GenerationTesterMixin:
         output_generate = model.generate(
             do_sample=False,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_scores=output_scores,
             output_logits=output_logits,
             output_attentions=output_attentions,
@@ -461,6 +475,7 @@ class GenerationTesterMixin:
             do_sample=False,
             num_beams=1,
             max_new_tokens=self.max_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
@@ -879,8 +894,7 @@ class GenerationTesterMixin:
                 num_beams=beam_kwargs["num_beams"],
             )
 
-    # TODO: @gante check why it is flaky
-    @is_flaky()
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -937,6 +951,7 @@ class GenerationTesterMixin:
             for generation_output in output_generate:
                 self._check_sequence_inside_sequence(force_tokens, generation_output)
 
+    @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
     def test_constrained_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
@@ -1650,6 +1665,12 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values", None)
                 inputs_dict.pop("pixel_values_videos", None)
                 inputs_dict.pop("pixel_values_images", None)
+            # HACK - in the case of granite speech, input_features and inputs_embeds are mutually exclusive;
+            # this is similar to VLMs and should likely be standardized for similar audio models in the future,
+            # then made generic here.
+            if "granitespeech" in model_class.__name__.lower():
+                inputs_dict.pop("input_features", None)
+
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
@@ -1746,9 +1767,7 @@ class GenerationTesterMixin:
 
             text_config = model.config.get_text_config()
             head_dim = (
-                text_config.head_dim
-                if hasattr(text_config, "head_dim")
-                else text_config.hidden_size // text_config.num_attention_heads
+                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )
             num_key_value_heads = (
                 text_config.num_attention_heads
@@ -1928,7 +1947,7 @@ class GenerationTesterMixin:
                     )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
         """Tests we can generate by indicating `cache_implementation` for each possible cache class"""
@@ -1999,9 +2018,8 @@ class GenerationTesterMixin:
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
                 text_config = config.text_config if hasattr(config, "text_config") else config
                 head_dim = (
-                    text_config.head_dim
-                    if hasattr(text_config, "head_dim")
-                    else text_config.hidden_size // text_config.num_attention_heads
+                    getattr(text_config, "head_dim", None)
+                    or text_config.hidden_size // text_config.num_attention_heads
                 )
                 num_key_value_heads = (
                     text_config.num_attention_heads
@@ -2275,6 +2293,14 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
+            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
+            # resulting in a mask with holes (not supported properly by FA2).
+            if attn_implementation == "flash_attention_2":
+                for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
+                    if input_name in inputs_dict:
+                        inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
+
             # make sure that all models have enough positions for generation
             if hasattr(config, "max_position_embeddings"):
                 config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
@@ -2329,8 +2355,6 @@ class GenerationTesterMixin:
     @slow
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
-        # TODO (@joao @raushan) -- this test is failing the output checks on most models, investigate. After fixing,
-        # check whether we still need the overwrites
         self._test_attention_implementation("flash_attention_2")
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
@@ -2593,9 +2617,9 @@ class GenerationTesterMixin:
         # set to same device. we don't care what device.
 
         if not isinstance(tensor_1, list):
-            tensor_1 = tensor_1.cpu().tolist()
+            tensor_1 = tensor_1.tolist()
         if not isinstance(tensor_2, list):
-            tensor_2 = tensor_2.cpu().tolist()
+            tensor_2 = tensor_2.tolist()
 
         in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
@@ -2700,6 +2724,54 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_cache_dependant_input_preparation_exporting(self):
+        self.assertFalse(
+            is_torchdynamo_exporting()
+        )  # otherwise this test does not compare two different implementation
+        # Case 1
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
+        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 2
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
+        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 3
+        input_ids = torch.randint(0, 16, (2, 12), dtype=torch.int64)
+        inputs_embeds = None
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
+
+        # Case 4
+        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
+        inputs_embeds = None
+        cache_position = torch.arange(0, 8, dtype=torch.int64)
+        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
+        torch.testing.assert_close(eager1, export1)
+        torch.testing.assert_close(eager2, export2)
 
 
 global_rng = random.Random()
@@ -3746,11 +3818,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_assisted_decoding_in_different_gpu(self):
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:0")
+        device_0 = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
+        device_1 = f"{torch_device}:1" if torch_device != "cpu" else "cpu"
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(device_0)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
-            "cuda:1"
+            device_1
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model.config.pad_token_id = tokenizer.eos_token_id
@@ -3914,7 +3988,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # TODO: We need to raise a warning in case the cache is not set correctly
         # with self.assertRaisesRegex(ValueError, "If you are manually initializing the cache"):
         #     past_key_values = StaticCache(
-        #         config=model.config, batch_size=1, max_cache_len=30, device=torch_device, dtype=model.dtype
+        #         config=model.config, max_batch_size=1, max_cache_len=30, device=torch_device, dtype=model.dtype
         #     )
         #     results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
@@ -3922,7 +3996,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         layer_device_map = {0: 0, 1: 1}
         past_key_values = StaticCache(
             config=model.config,
-            batch_size=1,
+            max_batch_size=1,
             max_cache_len=30,
             device=torch_device,
             dtype=model.dtype,
@@ -4123,7 +4197,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         batch_size = 2
         query_length = input_ids.shape[-1] - init_input_ids.shape[-1]
         static_cache = StaticCache(
-            config=config, batch_size=batch_size, max_cache_len=max_cache_len, device=torch_device, dtype=torch.float32
+            config=config,
+            max_batch_size=batch_size,
+            max_cache_len=max_cache_len,
+            device=torch_device,
+            dtype=torch.float32,
         )
         static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
         model_inputs = model.prepare_inputs_for_generation(
@@ -4211,6 +4289,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
+    @require_read_token
+    @slow
     def test_assisted_generation_early_exit(self):
         """
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
@@ -4718,6 +4798,61 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
+
+    @require_read_token
+    @slow
+    @require_torch_gpu
+    def test_cache_device_map_with_vision_layer_device_map(self):
+        """
+        Test that the cache device map is correctly set when the vision layer has a device map. Regression test for
+        #36942
+        """
+        # gemma 3 uses hybrid cache, which can be compiled -> needs a device map at allocation time
+        model_id = "google/gemma-3-4b-it"
+
+        # important part of this device map: the `.layers.` pattern is NOT present in the decoder
+        device_map = {
+            "vision_tower.vision_model.embeddings": 0,
+            "vision_tower.vision_model.encoder.layers.0": 0,
+            "vision_tower.vision_model.encoder.layers.1": 0,
+            "vision_tower.vision_model.encoder.layers.2": 0,
+            "vision_tower.vision_model.encoder.layers.3": 0,
+            "vision_tower.vision_model.encoder.layers.4": 0,
+            "vision_tower.vision_model.encoder.layers.5": 0,
+            "vision_tower.vision_model.encoder.layers.6": 0,
+            "vision_tower.vision_model.encoder.layers.7": 0,
+            "vision_tower.vision_model.encoder.layers.8": 0,
+            "vision_tower.vision_model.encoder.layers.9": 0,
+            "vision_tower.vision_model.encoder.layers.10": 0,
+            "vision_tower.vision_model.encoder.layers.11": 0,
+            "vision_tower.vision_model.encoder.layers.12": 0,
+            "vision_tower.vision_model.encoder.layers.13": 0,
+            "vision_tower.vision_model.encoder.layers.14": "cpu",
+            "vision_tower.vision_model.encoder.layers.15": "cpu",
+            "vision_tower.vision_model.encoder.layers.16": "cpu",
+            "vision_tower.vision_model.encoder.layers.17": "cpu",
+            "vision_tower.vision_model.encoder.layers.18": "cpu",
+            "vision_tower.vision_model.encoder.layers.19": "cpu",
+            "vision_tower.vision_model.encoder.layers.20": "cpu",
+            "vision_tower.vision_model.encoder.layers.21": "cpu",
+            "vision_tower.vision_model.encoder.layers.22": "cpu",
+            "vision_tower.vision_model.encoder.layers.23": "cpu",
+            "vision_tower.vision_model.encoder.layers.24": "cpu",
+            "vision_tower.vision_model.encoder.layers.25": "cpu",
+            "vision_tower.vision_model.encoder.layers.26": "cpu",
+            "vision_tower.vision_model.post_layernorm": "cpu",
+            "multi_modal_projector": "cpu",
+            "language_model": "cpu",
+        }
+
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id, device_map=device_map, torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
+
+        # If the generate doesn't infer the DECODER device map correctly, this will fail
+        _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
 
 @require_torch

@@ -249,7 +249,7 @@ class T5LayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -1205,7 +1205,7 @@ class T5Stack(T5PreTrainedModel):
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1218,8 +1218,7 @@ class T5Stack(T5PreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1262,7 +1261,7 @@ class T5Stack(T5PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -2135,7 +2134,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
