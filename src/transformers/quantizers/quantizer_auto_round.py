@@ -84,7 +84,7 @@ class AutoRoundQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return True
+        return False
 
     def is_serializable(self, safe_serialization=None):
         ## for gptq/awq models, the quantization config will be changed
