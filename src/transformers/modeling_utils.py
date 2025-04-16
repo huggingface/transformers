@@ -21,7 +21,6 @@ import importlib.metadata
 import inspect
 import itertools
 import json
-import math
 import os
 import re
 import shutil
@@ -5872,7 +5871,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = math.prod(param.shape) * param.element_size()
+        param_byte_count = param.numel() * param.element_size()
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
