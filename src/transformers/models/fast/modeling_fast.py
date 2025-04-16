@@ -21,12 +21,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_timm_available, requires_backends
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_timm_available, requires_backends, can_return_tuple
 from ...utils.backbone_utils import load_backbone
-
-
-if is_timm_available():
-    from timm import create_model
 
 from ...modeling_utils import PreTrainedModel
 from .configuration_fast import FastConfig
@@ -250,22 +246,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(1, 2, 3, 4),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config.backbone_config)
-        self.backbone = backbone
+        self.backbone = load_backbone(config.backbone_config)
         self.neck = FastNeck(config=config)
         self.text_detection_head = FastHead(config=config)
 
@@ -277,12 +258,12 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         )
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_hidden_states: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
         labels: Optional[Dict] = None,
     ):
         r"""
@@ -297,25 +278,26 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         >>> from transformers import FastImageProcessor, FastForSceneTextRecognition
         >>> from PIL import Image
         >>> import requests
-
+        >>> import torch
         >>> url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         >>> processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
         >>> model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
         >>> inputs = processor(image, return_tensors="pt")
-        >>> # forward pass
-        >>> outputs = model(pixel_values=inputs["pixel_values"])
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
         >>> target_sizes = [(image.height, image.width)]
-        >>> threshold = 0.88
-        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bounding_box_type="rect")
+        >>> text_locations = processor.post_process_text_detection(
+        ...     outputs,
+        ...     target_sizes=target_sizes,
+        ...     threshold=0.88,
+        ...     output_type="boxes"  # or "polygons"
+        ... )
         >>> print(text_locations[0]["boxes"][0])
         [151, 151, 160, 56, 355, 74, 346, 169]
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        features = (
-            self.backbone(pixel_values) if self.config.use_timm_backbone else self.backbone(pixel_values).feature_maps
-        )
+        features = self.backbone(pixel_values).feature_maps
 
         hidden_states = self.neck(features)
 
@@ -335,10 +317,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         text_detection_output = F.interpolate(
             text_detection_output, size=(pixel_values.size(2) // 4, pixel_values.size(3) // 4), mode="bilinear"
         )
-
-        if not return_dict:
-            output = (loss, text_detection_output) if loss is not None else (text_detection_output,)
-            return output + (all_hidden_states,) if output_hidden_states else output
 
         return SemanticSegmenterOutput(
             loss=loss,

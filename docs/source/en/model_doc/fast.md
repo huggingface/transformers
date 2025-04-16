@@ -49,12 +49,16 @@ This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari
 
 >>> inputs = image_processor(image, return_tensor="pt")
 
->>> output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
-    target_sizes = [(image.height, image.width)]
-    threshold = 0.88
-    final_out = image_processor.post_process_text_detection(
-        output, target_sizes, threshold, bounding_box_type="rect"
-    )
+>>> with torch.no_grad():
+...     output = model(**inputs)
+
+>>> target_sizes = [(image.height, image.width)]
+>>> output = image_processor.post_process_text_detection(
+...     output,
+...     target_sizes=target_sizes,
+...     threshold=0.88,
+...     output_type="boxes",  # or "polygons"
+... )
 ```
 
 ## FastConfig

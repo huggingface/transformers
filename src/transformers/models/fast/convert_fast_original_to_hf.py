@@ -216,11 +216,18 @@ def convert_fast_checkpoint(
     test_config = content_model.get("test_cfg", None)
     data_config = content_model["data"]
     min_area = 250
-    bounding_box_type = "rect"
+    bounding_box_type = "boxes"
     if test_config is not None:
         min_area = test_config.get("min_area", min_area)
-        bounding_box_type = test_config.get("bounding_box_type", bounding_box_type)
+        bbox_type = test_config.get("bounding_box_type", bounding_box_type)
         loss_bg = test_config.get("loss_emb", None) == "EmbLoss_v2"
+
+    if bbox_type == "rect":
+        bounding_box_type = "boxes"
+    elif bbox_type == "poly":
+        bounding_box_type = "polygons"
+    else:
+        bounding_box_type = bbox_type
 
     # determine model type from content
     model_type = None
@@ -282,7 +289,7 @@ def convert_fast_checkpoint(
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         text_locations = fast_image_processor.post_process_text_detection(
-            output, target_sizes, threshold, bounding_box_type="rect"
+            output, target_sizes, threshold, bounding_box_type="boxes"
         )
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")

@@ -15,6 +15,7 @@
 """Image processor class for FAST."""
 
 import math
+from typing import Tuple
 
 import numpy as np
 
@@ -161,7 +162,7 @@ class FastImageProcessor(TextNetImageProcessor):
         super().__init__(self, **super_kwargs)
         self.min_area = min_area
         self.pooling_size = pooling_size
-
+    
     def _max_pooling(self, input_tensor, scale=1):
         kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
         padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
@@ -171,7 +172,7 @@ class FastImageProcessor(TextNetImageProcessor):
         pooled_output = pooling(input_tensor)
         return pooled_output
 
-    def post_process_text_detection(self, output, target_sizes=None, threshold=0.5, bounding_box_type="rect"):
+    def post_process_text_detection(self, output, target_sizes=None, threshold=0.5, output_type="boxes"):
         """
         Post-processes the raw model output to generate bounding boxes and scores for text detection.
 
@@ -180,13 +181,15 @@ class FastImageProcessor(TextNetImageProcessor):
             target_sizes (List[Tuple[int, int]], optional): Original image sizes (height, width) for each item in the batch.
                                                             Used to scale detection results back to original image dimensions.
             threshold (float): Confidence threshold for filtering low-score text regions.
-            bounding_box_type (str): "rect" (rotated rectangles) or "poly" (polygon).
+            output_type (str): "boxes" (rotated rectangles) or "polygons" (polygon).
 
         Returns:
             List[Dict]: Each dict contains:
-                - "boxes": np.ndarray of shape (N, 5) or (N, 8)
+                - "boxes": np.ndarray of shape (N, 5) if output_type="boxes", or (N, 8) if output_type="polygons"
                 - "scores": np.ndarray of shape (N,)
         """
+        if output_type not in ["boxes", "polygons"]:
+            raise ValueError(f"Invalid output_type: {output_type}. Must be 'boxes' or 'polygons'.")
         scale = 2
         out = output["logits"]
         batch_size, _, H, W = out.shape
@@ -216,48 +219,38 @@ class FastImageProcessor(TextNetImageProcessor):
                 scale_x = scale_y = 1.0
 
             keys = torch.unique(labels_[i], sorted=True)
-            bboxes, scores = self.generate_bounding_box(
-                keys,
-                labels[i],
-                score_maps[i],
-                (scale_x, scale_y),
-                threshold=threshold,
-                bounding_box_type=bounding_box_type,
-            )
+            if output_type == "boxes":
+                bboxes, scores = self._get_rotated_boxes(
+                    keys, labels[i], score_maps[i], (scale_x, scale_y), threshold
+                )
+            elif output_type == "polygons":
+                bboxes, scores = self._get_polygons(
+                    keys, labels[i], score_maps[i], (scale_x, scale_y), threshold
+                )
+            else:
+                raise ValueError(f"Unsupported output_type: {output_type}")
+
             results.append({"boxes": bboxes, "scores": scores})
 
         return results
 
-    def generate_bounding_box(self, keys, label, score, scales, threshold, bounding_box_type):
-        """
-        Generates bounding boxes and corresponding confidence scores from instance labels and score maps.
-
-        Args:
-            keys (Tensor): Unique instance labels (1D Tensor) for connected components in the image.
-            label (Tensor): Instance segmentation map (H x W), where each connected region has a unique label.
-            score (Tensor): Confidence map (H x W) with values in [0, 1], representing text region probabilities.
-            scales (Tuple[float, float]): Scaling factors (width_scale, height_scale) used to map results
-                                        back to original image dimensions.
-            threshold (float): Minimum average score required for a region to be considered a valid detection.
-            bounding_box_type (str): Type of bounding box to generate for each instance. Options:
-                            - "rect": Minimum area rotated rectangle (via `compute_min_area_rect`).
-                            - "poly": Polygonal contour (via `cv2.findContours`, requires OpenCV).
-
-        Returns:
-            Tuple[List[List[int]], List[float]]:
-                - List of bounding boxes (`bounding_boxes`), each a flattened list of coordinates.
-                - List of corresponding confidence scores (`scores`).
-        """
-        if bounding_box_type == "rect":
-            return self.generate_rotated_rect_bounding_boxes(keys, label, score, scales, threshold)
-        elif bounding_box_type == "poly":
-            return self.generate_polygon_bounding_boxes(keys, label, score, scales, threshold)
-        else:
-            raise ValueError(f"Unsupported bounding_box_type: {bounding_box_type}")
-
-    def generate_rotated_rect_bounding_boxes(self, keys, label, score, scales, threshold):
+    def _get_rotated_boxes(
+        self,
+        keys: torch.Tensor,
+        label: torch.Tensor,
+        score: torch.Tensor,
+        scales: Tuple[float, float],
+        threshold: float
+    ) -> Tuple[List[List[Tuple[int, int]]], List[float]]:
         """
         Generates rotated rectangular bounding boxes for connected components.
+
+        Args:
+            keys (Tensor): Unique instance labels.
+            label (Tensor): Label map (H x W).
+            score (Tensor): Confidence map (H x W).
+            scales (Tuple[float, float]): Scaling factors (x, y) to match original image dimensions.
+            threshold (float): Minimum average score for a region to be considered valid.
 
         Returns:
             Tuple[List[List[int]], List[float]]:
@@ -289,12 +282,26 @@ class FastImageProcessor(TextNetImageProcessor):
             scores.append(score_i)
         return bounding_boxes, scores
 
-    def generate_polygon_bounding_boxes(self, keys, label, score, scales, threshold):
+    def _get_polygons(
+        self,
+        keys: torch.Tensor,
+        label: torch.Tensor,
+        score: torch.Tensor,
+        scales: Tuple[float, float],
+        threshold: float
+    ) -> Tuple[List[List[int]], List[float]]:
         """
         Generates polygonal bounding boxes using OpenCV contours for connected components.
 
         Note:
             Requires OpenCV backend (`cv2`) to be available.
+
+        Args:
+            keys (Tensor): Unique labels.
+            label (Tensor): Label map (H x W).
+            score (Tensor): Score map (H x W).
+            scales (Tuple[float, float]): Scaling factors (x, y).
+            threshold (float): Minimum average score for a valid region.
 
         Returns:
             Tuple[List[List[int]], List[float]]:

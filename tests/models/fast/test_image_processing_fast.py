@@ -56,7 +56,7 @@ class FastImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         min_area: int = 200,
         min_score: float = 0.88,
-        bounding_box_type: str = "rect",
+        bounding_box_type: str = "boxes",
         pooling_size: int = 9,
     ):
         size = size if size is not None else {"height": 20, "width": 20}
@@ -161,15 +161,16 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         final_out = image_processor.post_process_text_detection(
-            output, target_sizes, threshold, bounding_box_type="rect"
+            output, target_sizes, threshold, output_type="boxes"
         )
-        assert final_out[0]["boxes"][0] == [
-            (148, 151),
-            (157, 53),
-            (357, 72),
-            (347, 170),
-        ]  # (151, 151), (160, 56), (355, 74), (346, 169)
-        assert round(float(final_out[0]["scores"][0]), 5) == 0.92573  # 0.91862
+        self.assertListEqual(
+            final_out[0]["boxes"][0],
+            [(148, 151), (157, 53), (357, 72), (347, 170)]
+        )
+
+        self.assertAlmostEqual(
+            float(final_out[0]["scores"][0]), 0.92573, places=5
+        )
 
     @require_cv2
     def test_get_box_points_against_cv2(self):

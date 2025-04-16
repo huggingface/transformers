@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 
 
-def FastForSceneTextRecognitionLoss(hidden: torch.Tensor, labels: torch.Tensor, texts):
+def FastForSceneTextRecognitionLoss(logits: torch.Tensor, labels: torch.Tensor, texts):
     """
     Computes the overall loss for fast.
     """
@@ -28,8 +28,8 @@ def FastForSceneTextRecognitionLoss(hidden: torch.Tensor, labels: torch.Tensor, 
     training_masks = labels["training_masks"]
     gt_instances = labels["gt_instances"]
 
-    kernels = hidden[:, 0, :, :]  # 4*640*640
-    embs = hidden[:, 1:, :, :]  # 4*4*640*640
+    kernels = logits[:, 0, :, :]  # 4*640*640
+    embs = logits[:, 1:, :, :]  # 4*4*640*640
 
     selected_masks = ohem_batch(texts, gt_texts, training_masks)
     loss_text = dice_loss_with_masks(texts, gt_texts, selected_masks, reduce=False)
@@ -120,7 +120,6 @@ def emb_loss(
     instance: torch.Tensor,
     kernel: torch.Tensor,
     training_mask: torch.Tensor,
-    feature_dim: int = 4,
     delta_v: float = 0.5,
     delta_d: float = 1.5,
     weights: Tuple[float, float] = (1.0, 1.0),
