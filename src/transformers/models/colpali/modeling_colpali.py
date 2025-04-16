@@ -219,7 +219,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=True,
             output_attentions=output_attentions,
             **kwargs,
         )
