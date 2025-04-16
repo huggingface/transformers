@@ -40,6 +40,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
@@ -48,6 +49,12 @@ from .configuration_kosmos2_5 import (
     Kosmos2_5TextConfig,
     Kosmos2_5VisionConfig,
 )
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
