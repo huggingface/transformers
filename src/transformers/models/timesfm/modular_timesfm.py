@@ -735,6 +735,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         >>>     outputs = model(past_values=forecast_input, freq=frequency_input, return_dict=True)
         >>>     point_forecast_conv = outputs.mean_predictions
         >>>     quantile_forecast_conv = outputs.full_predictions
+        ```
         """
         if forecast_context_len is None:
             fcontext_len = self.context_len
