@@ -33,14 +33,9 @@ class FastConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         neck_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
             Denotes the in channels of FastRepConvLayer in neck module.
         neck_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
@@ -76,15 +71,6 @@ class FastConfig(PretrainedConfig):
             Denotes the in channels of final conv layer in head layer.
         head_final_out_channels (`int`, *optional*, defaults to 5):
             Denotes the out channels of final conv layer in head layer.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
-            backbone from the timm package. For a list of all available models, see [this
-            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation for normal distribution weight initialization, with a mean of 0.0.
 
@@ -106,9 +92,7 @@ class FastConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
-        num_channels=3,
         neck_in_channels=None,
         neck_out_channels=None,
         neck_kernel_size=None,
@@ -124,9 +108,6 @@ class FastConfig(PretrainedConfig):
         head_final_bias=False,
         head_final_in_channels=128,
         head_final_out_channels=5,
-        backbone="resnet50",
-        use_pretrained_backbone=True,
-        dilation=False,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -141,26 +122,16 @@ class FastConfig(PretrainedConfig):
         if neck_stride is None:
             neck_stride = [1, 1, 1, 1]
 
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone.")
+            backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
 
-        if not use_timm_backbone:
-            if backbone_config is None:
-                logger.info(
-                    "`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone."
-                )
-                backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-            # set timm attributes to None
-            dilation, backbone, use_pretrained_backbone = None, None, None
-
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
 
         self.neck_in_channels = neck_in_channels
         self.neck_out_channels = neck_out_channels
@@ -180,10 +151,6 @@ class FastConfig(PretrainedConfig):
         self.head_final_bias = head_final_bias
         self.head_final_in_channels = head_final_in_channels
         self.head_final_out_channels = head_final_out_channels
-
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.dilation = dilation
 
         self.initializer_range = initializer_range
 

@@ -21,10 +21,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_timm_available, requires_backends, can_return_tuple
-from ...utils.backbone_utils import load_backbone
-
 from ...modeling_utils import PreTrainedModel
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+)
+from ...utils.backbone_utils import load_backbone
 from .configuration_fast import FastConfig
 
 
@@ -41,16 +44,18 @@ FAST_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
+FAST_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`FastImageProcessor.__call__`] for details.
+            Pixel values. Use [`FastImageProcessor`] to preprocess input images. See [`FastImageProcessor.__call__`] for details.
+
         output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return the hidden states of all layers.
+        labels (`Dict[str, torch.Tensor]`, *optional*):
+            Dictionary of ground truth tensors used for computing loss. Should contain:
+            - `"gt_texts"`: ground truth text regions
+            - `"gt_kernels"`: kernel regions for training
+            - `"gt_instances"`: instance segmentation labels
 """
 
 
@@ -259,7 +264,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FAST_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values: torch.FloatTensor,

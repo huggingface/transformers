@@ -15,7 +15,7 @@
 """Image processor class for FAST."""
 
 import math
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 
@@ -31,7 +31,6 @@ if is_scipy_available():
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
     import torch.nn.functional as F
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 
@@ -162,15 +161,6 @@ class FastImageProcessor(TextNetImageProcessor):
         super().__init__(self, **super_kwargs)
         self.min_area = min_area
         self.pooling_size = pooling_size
-    
-    def _max_pooling(self, input_tensor, scale=1):
-        kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
-        padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
-
-        pooling = nn.MaxPool2d(kernel_size=kernel_size, stride=1, padding=padding)
-
-        pooled_output = pooling(input_tensor)
-        return pooled_output
 
     def post_process_text_detection(self, output, target_sizes=None, threshold=0.5, output_type="boxes"):
         """
@@ -190,13 +180,14 @@ class FastImageProcessor(TextNetImageProcessor):
         """
         if output_type not in ["boxes", "polygons"]:
             raise ValueError(f"Invalid output_type: {output_type}. Must be 'boxes' or 'polygons'.")
-        scale = 2
         out = output["logits"]
         batch_size, _, H, W = out.shape
 
         # generate score maps
         texts = F.interpolate(out[:, 0:1, :, :], size=(H, W), mode="nearest")
-        texts = self._max_pooling(texts, scale=scale)
+        texts = F.max_pool2d(
+            texts, kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
+        )
         score_maps = torch.sigmoid(texts)
         score_maps = score_maps.squeeze(1)
 
@@ -207,7 +198,13 @@ class FastImageProcessor(TextNetImageProcessor):
             _, label_ = connected_components(kernel)
             labels_.append(label_)
         labels_ = torch.from_numpy(np.array(labels_)).unsqueeze(1).float()
-        labels = self._max_pooling(labels_, scale=scale).squeeze(1).to(torch.int32)
+        labels = (
+            F.max_pool2d(
+                labels_, kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
+            )
+            .squeeze(1)
+            .to(torch.int32)
+        )
 
         results = []
         for i in range(batch_size):
@@ -220,13 +217,9 @@ class FastImageProcessor(TextNetImageProcessor):
 
             keys = torch.unique(labels_[i], sorted=True)
             if output_type == "boxes":
-                bboxes, scores = self._get_rotated_boxes(
-                    keys, labels[i], score_maps[i], (scale_x, scale_y), threshold
-                )
+                bboxes, scores = self._get_rotated_boxes(keys, labels[i], score_maps[i], (scale_x, scale_y), threshold)
             elif output_type == "polygons":
-                bboxes, scores = self._get_polygons(
-                    keys, labels[i], score_maps[i], (scale_x, scale_y), threshold
-                )
+                bboxes, scores = self._get_polygons(keys, labels[i], score_maps[i], (scale_x, scale_y), threshold)
             else:
                 raise ValueError(f"Unsupported output_type: {output_type}")
 
@@ -240,7 +233,7 @@ class FastImageProcessor(TextNetImageProcessor):
         label: torch.Tensor,
         score: torch.Tensor,
         scales: Tuple[float, float],
-        threshold: float
+        threshold: float,
     ) -> Tuple[List[List[Tuple[int, int]]], List[float]]:
         """
         Generates rotated rectangular bounding boxes for connected components.
@@ -288,7 +281,7 @@ class FastImageProcessor(TextNetImageProcessor):
         label: torch.Tensor,
         score: torch.Tensor,
         scales: Tuple[float, float],
-        threshold: float
+        threshold: float,
     ) -> Tuple[List[List[int]], List[float]]:
         """
         Generates polygonal bounding boxes using OpenCV contours for connected components.

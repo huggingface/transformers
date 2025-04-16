@@ -53,7 +53,6 @@ if is_scipy_available():
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
     import torch.nn.functional as F
 
 if is_vision_available():
@@ -489,15 +488,6 @@ class FastImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def _max_pooling(self, input_tensor, scale=1):
-        kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
-        padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
-
-        pooling = nn.MaxPool2d(kernel_size=kernel_size, stride=1, padding=padding)
-
-        pooled_output = pooling(input_tensor)
-        return pooled_output
-
     def post_process_text_detection(self, output, target_sizes=None, threshold=0.5, output_type="boxes"):
         """
         Post-processes the raw model output to generate bounding boxes and scores for text detection.
@@ -516,13 +506,14 @@ class FastImageProcessor(BaseImageProcessor):
         """
         if output_type not in ["boxes", "polygons"]:
             raise ValueError(f"Invalid output_type: {output_type}. Must be 'boxes' or 'polygons'.")
-        scale = 2
         out = output["logits"]
         batch_size, _, H, W = out.shape
 
         # generate score maps
         texts = F.interpolate(out[:, 0:1, :, :], size=(H, W), mode="nearest")
-        texts = self._max_pooling(texts, scale=scale)
+        texts = F.max_pool2d(
+            texts, kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
+        )
         score_maps = torch.sigmoid(texts)
         score_maps = score_maps.squeeze(1)
 
@@ -533,7 +524,13 @@ class FastImageProcessor(BaseImageProcessor):
             _, label_ = connected_components(kernel)
             labels_.append(label_)
         labels_ = torch.from_numpy(np.array(labels_)).unsqueeze(1).float()
-        labels = self._max_pooling(labels_, scale=scale).squeeze(1).to(torch.int32)
+        labels = (
+            F.max_pool2d(
+                labels_, kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
+            )
+            .squeeze(1)
+            .to(torch.int32)
+        )
 
         results = []
         for i in range(batch_size):
