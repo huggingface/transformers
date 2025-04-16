@@ -476,7 +476,7 @@ print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_toke
 | **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference (see [Accelerating Neural Network Training with Semi-Structured (2:4) Sparsity](https://pytorch.org/blog/accelerating-neural-network-training/) blog post) |
 | **Optimizer Quantization** | Reduce optimizer state memory with 4/8-bit variants of Adam. |
 | **KV Cache Quantization** | Enables long context inference with lower memory, some details [here](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md) |
-| **Custom Kernels Support** | use your own ops compatible with `torch.compile`. |
+| **Custom Kernels Support** | use your own `torch.compile` compatible ops |
 | **FSDP2** | Composable with FSDP2 for training|
 
 
