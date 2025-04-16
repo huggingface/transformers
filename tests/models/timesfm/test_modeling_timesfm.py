@@ -19,7 +19,6 @@ from typing import List
 
 import numpy as np
 import torch
-from huggingface_hub import hf_hub_download
 
 from transformers import TimesFmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -172,25 +171,27 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class TimesFmModelIntegrationTests(unittest.TestCase):
-    @classmethod
-    def load_batch(cls, filename="train-batch.pt"):
-        file = hf_hub_download(
-            repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset"
-        )
-        batch = torch.load(file, map_location=torch_device)
-        return batch
-
     def test_inference_no_head(self):
-        model = TimesFmModelForPrediction.from_pretrained("huggingface/timesfm-tourism-monthly").to(torch_device)
-        batch = self.load_batch()
+        model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch", revision="refs/pr/7").to(
+            torch_device
+        )
+        forecast_input = [
+            np.sin(np.linspace(0, 20, 100)),
+            np.sin(np.linspace(0, 20, 200)),
+            np.sin(np.linspace(0, 20, 400)),
+        ]
+        forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
+        frequency_input = [0, 1, 2]
+
         with torch.no_grad():
-            inputs = batch["past_values"]
-            output = model(past_values=inputs).last_hidden_state
+            output = model(past_values=forecast_input_tensor, freq=frequency_input).last_hidden_state
+
         self.assertEqual(
             output.shape,
-            torch.Size([64, model.config.context_length // model.config.patch_length, model.config.hidden_size]),
+            torch.Size([3, model.config.context_length // model.config.patch_length, model.config.hidden_size]),
         )
         expected_slice = torch.tensor(
-            [[0.0215, -0.0747, -0.1287], [0.0521, -0.0061, -0.1488], [-0.0233, -0.0611, -0.2323]], device=torch_device
+            [[-0.4267, -0.7273, -0.3932], [-0.4267, -0.7273, -0.3932], [-0.4267, -0.7273, -0.3932]],
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
