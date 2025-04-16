@@ -12,8 +12,6 @@ from .base import ChunkPipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    import inspect
-
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
@@ -238,13 +236,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         original_sizes = model_inputs.pop("original_sizes").tolist()
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes").tolist()
 
-        intermediate_embeddings = model_inputs.pop("intermediate_embeddings", None)
-        forward_params = inspect.signature(self.model.forward).parameters
-
-        if "intermediate_embeddings" in forward_params and intermediate_embeddings is not None:
-            model_outputs = self.model(**model_inputs, intermediate_embeddings=intermediate_embeddings)
-        else:
-            model_outputs = self.model(**model_inputs)
+        model_outputs = self.model(**model_inputs)
 
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]

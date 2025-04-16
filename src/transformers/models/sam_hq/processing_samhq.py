@@ -17,13 +17,13 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...image_utils import ImageInput, VideoInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
 
@@ -90,7 +90,10 @@ class SamHQProcessor(ProcessorMixin):
         # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
         *args,  # to be deprecated
-        **kwargs,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio: Optional[AudioInput] = None,
+        video: Optional[VideoInput] = None,
+        **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchEncoding:
         """
         This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
