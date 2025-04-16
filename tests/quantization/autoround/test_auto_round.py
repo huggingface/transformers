@@ -166,7 +166,7 @@ class AutoRoundTest(unittest.TestCase):
         autoround = AutoRound(model, tokenizer, bits=bits, group_size=group_size, sym=sym, layer_config=layer_config)
         with tempfile.TemporaryDirectory() as tmpdirname:
             autoround.quantize_and_save(output_dir=tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float16, device_map="auto")
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float16, device_map="cuda")
             text = "There is a girl who likes adventure,"
             inputs = tokenizer(text, return_tensors="pt").to(model.device)
             tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
