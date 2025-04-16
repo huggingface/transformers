@@ -65,11 +65,6 @@ if is_torch_available():
         CLIPVisionModelWithProjection,
     )
 
-
-if is_torch_sdpa_available():
-    pass
-
-
 if is_vision_available():
     from PIL import Image
 

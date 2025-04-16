@@ -359,23 +359,6 @@ class CLIPAttention(nn.Module):
         # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
         if self.config._attn_implementation == "flash_attention_2":
             self.is_causal = causal_attention_mask is not None
-            input_dtype = queries.dtype
-            if input_dtype == torch.float32:
-                if torch.is_autocast_enabled():
-                    target_dtype = torch.get_autocast_gpu_dtype()
-                # Handle the case where the model is quantized
-                elif hasattr(self.config, "_pre_quantization_dtype"):
-                    target_dtype = self.config._pre_quantization_dtype
-                else:
-                    target_dtype = self.q_proj.weight.dtype
-                logger.warning_once(
-                    f"The input hidden states seems to be silently casted in float32, this might be related to"
-                    f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                    f" {target_dtype}."
-                )
-                queries = queries.to(target_dtype)
-                keys = keys.to(target_dtype)
-                values = values.to(target_dtype)
         else:
             if attention_mask is not None and causal_attention_mask is not None:
                 attention_mask = attention_mask + causal_attention_mask
