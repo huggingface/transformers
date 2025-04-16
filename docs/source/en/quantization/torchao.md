@@ -19,7 +19,6 @@ See the table below for additional torchao features.
 > Refer to the torchao [README.md](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for more details about the library.
 
 
-## Supported Quantization techniques
 
 TorchAO supports several quantization techniques:
 
