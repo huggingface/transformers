@@ -159,7 +159,7 @@ _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
-_auto_round_available,_auto_round_version = _is_package_available("auto_round", return_version=True)
+_auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
