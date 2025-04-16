@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BitNet model configuration"""
+"""BitNet model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -152,5 +152,6 @@ class BitNetModelConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
 
 __all__ = ["BitNetModelConfig"]

@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BitNet model."""
+"""PyTorch BitNet model."""
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -77,8 +78,8 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
-class WeightQuant(torch.autograd.Function):
 
+class WeightQuant(torch.autograd.Function):
     @staticmethod
     @torch.compile
     def forward(ctx, x):
@@ -93,8 +94,8 @@ class WeightQuant(torch.autograd.Function):
         grad_input = grad_output.clone()
         return grad_input
 
-class ActQuant(torch.autograd.Function):
 
+class ActQuant(torch.autograd.Function):
     @staticmethod
     @torch.compile
     def forward(ctx, x):
@@ -109,8 +110,17 @@ class ActQuant(torch.autograd.Function):
         grad_input = grad_output.clone()
         return grad_input
 
+
 class BitLinear(nn.Linear):
-    def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None, online_quant: bool = False):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+        online_quant: bool = False,
+    ):
         super(BitLinear, self).__init__(in_features, out_features, bias)
         self.online_quant = online_quant
         if not online_quant:
@@ -202,6 +212,7 @@ class BitNetRotaryEmbedding(nn.Module):
             self.sin_cached[:seq_len].to(dtype=x.dtype),
         )
 
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -243,9 +254,15 @@ class BitNetMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = BitLinear(self.hidden_size, self.intermediate_size, bias=False, online_quant=config.online_quant)
-        self.up_proj = BitLinear(self.hidden_size, self.intermediate_size, bias=False, online_quant=config.online_quant)
-        self.down_proj = BitLinear(self.intermediate_size, self.hidden_size, bias=False, online_quant=config.online_quant)
+        self.gate_proj = BitLinear(
+            self.hidden_size, self.intermediate_size, bias=False, online_quant=config.online_quant
+        )
+        self.up_proj = BitLinear(
+            self.hidden_size, self.intermediate_size, bias=False, online_quant=config.online_quant
+        )
+        self.down_proj = BitLinear(
+            self.intermediate_size, self.hidden_size, bias=False, online_quant=config.online_quant
+        )
         self.act_fn = ACT2FN[config.hidden_act]
         self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
 
@@ -297,10 +314,30 @@ class BitNetAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = BitLinear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias, online_quant=config.online_quant)
-        self.k_proj = BitLinear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias, online_quant=config.online_quant)
-        self.v_proj = BitLinear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias, online_quant=config.online_quant)
-        self.o_proj = BitLinear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias, online_quant=config.online_quant)
+        self.q_proj = BitLinear(
+            self.hidden_size,
+            self.num_heads * self.head_dim,
+            bias=config.attention_bias,
+            online_quant=config.online_quant,
+        )
+        self.k_proj = BitLinear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+            online_quant=config.online_quant,
+        )
+        self.v_proj = BitLinear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+            online_quant=config.online_quant,
+        )
+        self.o_proj = BitLinear(
+            self.num_heads * self.head_dim,
+            self.hidden_size,
+            bias=config.attention_bias,
+            online_quant=config.online_quant,
+        )
         self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.rotary_emb = BitNetRotaryEmbedding(
@@ -597,10 +634,7 @@ class BitNetFlashAttention2(BitNetAttention):
         )
 
 
-BitNet_ATTENTION_CLASSES = {
-    "eager": BitNetAttention,
-    "flash_attention_2": BitNetFlashAttention2
-}
+BitNet_ATTENTION_CLASSES = {"eager": BitNetAttention, "flash_attention_2": BitNetFlashAttention2}
 
 
 class BitNetDecoderLayer(nn.Module):
@@ -1138,6 +1172,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
 
 __all__ = [
     "BitNetForCausalLM",

@@ -110,9 +110,7 @@ class BitNetModelTester:
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen3
-    def create_and_check_model(
-        self, config, input_ids, input_mask
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask):
         model = BitNetModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -209,7 +207,24 @@ class BitNetIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.8665, -1.7681, -1.7043, 3.7446, 2.7730, 4.7133, 0.9768, -3.5018, -12.2812, -8.1477, -10.2571, -8.7610]])
+        EXPECTED_MEAN = torch.tensor(
+            [
+                [
+                    -1.8665,
+                    -1.7681,
+                    -1.7043,
+                    3.7446,
+                    2.7730,
+                    4.7133,
+                    0.9768,
+                    -3.5018,
+                    -12.2812,
+                    -8.1477,
+                    -10.2571,
+                    -8.7610,
+                ]
+            ]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([5.5815, 4.9154, 1.0478, 4.3869, 3.0112, 0.8235, 3.8412, 2.9233, 8.1140, 1.9406, 1.7973, 10.5025, 4.7796, 8.5926, 4.5196, 3.1549, 3.2656, 3.2588, 2.7356, 2.6032, 2.1454, 1.5683, 1.3465, 1.5329, 1.1886, 7.7902, 5.9326, 1.4737, 3.3319, 1.6291])  # fmt: skip
@@ -224,9 +239,7 @@ class BitNetIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = """User: What is your favourite food?Assistant: As an AI, I don't have personal preferences or the ability to eat food. However, I"""
         tokenizer = AutoTokenizer.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
         prompt = tokenizer.apply_chat_template(
-           [{"role": "user", "content": "What is your favourite food?"}],
-           add_generation_prompt=True,
-           tokenize=False
+            [{"role": "user", "content": "What is your favourite food?"}], add_generation_prompt=True, tokenize=False
         )
         model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
