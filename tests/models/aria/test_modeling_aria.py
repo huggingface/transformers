@@ -460,7 +460,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
         images = [[image1, image2], [image2]]
-        inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device).to(model.dtype)
+        inputs = (
+            processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device).to(model.dtype)
+        )
 
         EXPECTED_OUTPUT = {
             "cpu": [
