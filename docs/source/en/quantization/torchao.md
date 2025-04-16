@@ -40,7 +40,6 @@ Check the table below to see if your hardware is compatible.
 | CPU | ✅ change `device_map="cpu"` (see examples below) |
 
 
-## Installation
 
 Install torchao with the following command.
 
