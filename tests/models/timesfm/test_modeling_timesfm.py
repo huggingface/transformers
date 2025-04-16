@@ -172,9 +172,7 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimesFmModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch", revision="refs/pr/7").to(
-            torch_device
-        )
+        model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch").to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),
@@ -191,7 +189,7 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
             torch.Size([3, model.config.context_length // model.config.patch_length, model.config.hidden_size]),
         )
         expected_slice = torch.tensor(
-            [[-0.4267, -0.7273, -0.3932], [-0.4267, -0.7273, -0.3932], [-0.4267, -0.7273, -0.3932]],
+            [[-0.7407, -0.5401, 0.7085], [-0.7407, -0.5401, 0.7085], [-0.7407, -0.5401, 0.7085]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
