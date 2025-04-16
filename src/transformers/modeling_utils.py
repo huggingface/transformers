@@ -4170,14 +4170,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if device_map is None and not is_deepspeed_zero3_enabled():
             device_in_context = get_torch_context_manager_or_global_device()
             if device_in_context == torch.device("meta"):
-                # TODO Cyril: raise this error instead of the warning in v4.53
-                # raise ValueError(
-                #     (
-                #         "`from_pretrained` is not compatible with a meta device context manager or `torch.set_default_device('meta')` "
-                #         "as its purpose is to load weights. If you want to initialize a model on the meta device, use the context manager "
-                #         "or global device with `from_config`, or `ModelClass(config)`"
-                #     )
-                # )
+                # TODO Cyril: raise an error instead of the warning in v4.53
                 logger.warning(
                     "We detected that you are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`\n"
                     "This is an anti-pattern and will raise an Error in version v4.53\nIf you want to initialize a model on the meta device, use "
