@@ -32,7 +32,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations.bitnet import unpack_weights, pack_weights
+from ...integrations.bitnet import unpack_weights
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -133,7 +133,6 @@ class BitLinear(nn.Linear):
                 ),
             )
             self._register_load_state_dict_pre_hook(self.load_hook)
-            self._register_state_dict_hook(self.save_hook)
 
     def load_hook(
         self,
@@ -142,19 +141,9 @@ class BitLinear(nn.Linear):
         *args,
         **kwargs,
     ):
-        if (prefix + "weight") in state_dict:
+        if (prefix + "weight") in state_dict and state_dict[prefix + "weight"].dtype != self.weight.dtype:
             state_dict[prefix + "weight"] = unpack_weights(state_dict[prefix + "weight"], dtype=self.weight.dtype)
         return state_dict
-
-    def save_hook(
-        self,
-        state_dict,
-        *args,
-        **kwargs,
-    ):
-        for k, v in state_dict.items():
-            if k.endswith("weight"):
-                state_dict[k] = pack_weights(state_dict[k] / self.weight_scale)
 
     def forward(self, input):
         if self.online_quant:
