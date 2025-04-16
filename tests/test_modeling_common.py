@@ -4528,6 +4528,13 @@ class ModelTesterMixin:
                 ),
             )
 
+    def test_can_be_initialized_on_meta(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # If it does not raise here, the test passes
+            with torch.device("meta"):
+                _ = model_class(config)
+
     @require_torch_accelerator
     def test_can_load_with_device_context_manager(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
