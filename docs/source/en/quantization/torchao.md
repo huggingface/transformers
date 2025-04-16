@@ -96,7 +96,6 @@ For a complete list of available configurations, see our [quantization API docum
 >
 > All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
 
-## Quantization Examples 
 
 You can manually choose the quantization types and settings or automatically select the quantization types.
 
