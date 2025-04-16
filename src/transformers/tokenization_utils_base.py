@@ -902,7 +902,9 @@ class SpecialTokensMixin:
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
     def add_special_tokens(
-        self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
+        self,
+        special_tokens_dict: Dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
+        replace_additional_special_tokens=True,
     ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
@@ -926,7 +928,7 @@ class SpecialTokensMixin:
         `'</s>'`).
 
         Args:
-            special_tokens_dict (dictionary *str* to *str* or `tokenizers.AddedToken`):
+            special_tokens_dict (dictionary *str* to *str*, `tokenizers.AddedToken`, or `Sequence[Union[str, AddedToken]]`):
                 Keys should be in the list of predefined special attributes: [`bos_token`, `eos_token`, `unk_token`,
                 `sep_token`, `pad_token`, `cls_token`, `mask_token`, `additional_special_tokens`].
 
@@ -1004,7 +1006,7 @@ class SpecialTokensMixin:
         return added_tokens
 
     def add_tokens(
-        self, new_tokens: Union[str, AddedToken, List[Union[str, AddedToken]]], special_tokens: bool = False
+        self, new_tokens: Union[str, AddedToken, Sequence[Union[str, AddedToken]]], special_tokens: bool = False
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
@@ -1018,7 +1020,7 @@ class SpecialTokensMixin:
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
         Args:
-            new_tokens (`str`, `tokenizers.AddedToken` or a list of *str* or `tokenizers.AddedToken`):
+            new_tokens (`str`, `tokenizers.AddedToken` or a sequence of *str* or `tokenizers.AddedToken`):
                 Tokens are only added if they are not already in the vocabulary. `tokenizers.AddedToken` wraps a string
                 token to let you personalize its behavior: whether this token should only match against a single word,
                 whether this token should strip all potential whitespaces on the left side, whether this token should
