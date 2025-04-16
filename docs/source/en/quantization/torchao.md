@@ -15,9 +15,18 @@ rendered properly in your Markdown viewer.
 
 See the table below for additional torchao features.
 
+| Feature | Description |
+|--------|-------------|
+| **Quantization Aware Training (QAT)** | Train quantized models with minimal accuracy loss (see [QAT README](https://github.com/pytorch/ao/blob/main/torchao/quantization/qat/README.md)) |
+| **Float8 Training** | High-throughput training with float8 formats (see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/docs/float8.md) and [Accelerate](https://huggingface.co/docs/accelerate/usage_guides/low_precision_training#configuring-torchao) docs) |
+| **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference (see [Accelerating Neural Network Training with Semi-Structured (2:4) Sparsity](https://pytorch.org/blog/accelerating-neural-network-training/) blog post) |
+| **Optimizer Quantization** | Reduce optimizer state memory with 4 and 8-bit variants of Adam |
+| **KV Cache Quantization** | Enables long context inference with lower memory (see [KV Cache Quantization](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md)) |
+| **Custom Kernels Support** | use your own `torch.compile` compatible ops |
+| **FSDP2** | Composable with FSDP2 for training|
+
 > [!TIP]
 > Refer to the torchao [README.md](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for more details about the library.
-
 
 
 torchao supports the [quantization techniques](https://github.com/pytorch/ao/blob/main/torchao/quantization/README.md) below.
@@ -27,10 +36,7 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - A8W8 Int8 Dynamic Quantization
 - A16W8 Float8 WeightOnly Quantization
 - Autoquantization
-- **Int4 Weight Only**
-- **Int8 Dynamic Quantization**
-- **Float8 (E4M3 / E5M2)**
-- **AutoQuant**
+
 
 Check the table below to see if your hardware is compatible.
 
@@ -43,15 +49,24 @@ Check the table below to see if your hardware is compatible.
 
 Install torchao from PyPi or the PyTorch index with the following commands.
 
+<hfoptions id="install torchao">
+<hfoption id="PyPi">
+
 ```bash
 # Updating 🤗 Transformers to the latest version, as the example script below uses the new auto compilation
 # Stable release from Pypi which will default to CUDA 12.4
 pip install --upgrade torchao transformers
 ```
+</hfoption> 
+<hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
 ```bash
 pip install torchao --extra-index-url https://download.pytorch.org/whl/cu124 # options are cpu/cu118/cu124/cu126
 ```
+</hfoption>
+</hfoptions>
+
+If your torcha version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
 
 ## Available Quantization Schemes
 
@@ -62,39 +77,10 @@ TorchAO provides a variety of quantization configurations:
 - `Int8DynamicActivationInt8WeightConfig`
 - `Float8WeightOnlyConfig`
 
+
 Each configuration can be further customized with parameters such as `group_size`, `scheme`, and `layout` to optimize for specific hardware and model architectures.
 
 For a complete list of available configurations, see the [quantization API documentation](https://github.com/pytorch/ao/blob/main/torchao/quantization/quant_api.py).
-
-> **⚠️ DEPRECATION WARNING**
->
-> Starting with version 0.10.0, the string-based API for quantization configuration (e.g., `TorchAoConfig("int4_weight_only", group_size=128)`) is **deprecated** and will be removed in a future release.
->
-> Please use the new `AOBaseConfig`-based approach instead:
->
-> ```python
-> # Old way (deprecated)
-> quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
->
-> # New way (recommended)
-> from torchao.quantization import Int4WeightOnlyConfig
-> quant_config = Int4WeightOnlyConfig(group_size=128)
-> quantization_config = TorchAoConfig(quant_type=quant_config)
-> ```
->
-> The new API offers greater flexibility, better type safety, and access to the full range of features available in torchao.
->
-> ## Migration Guide
->
-> Here's how to migrate from common string identifiers to their `AOBaseConfig` equivalents:
->
-> | Old String API | New `AOBaseConfig` API |
-> |----------------|------------------------|
-> | `"int4_weight_only"` | `Int4WeightOnlyConfig()` |
-> | `"int8_weight_only"` | `Int8WeightOnlyConfig()` |
-> | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
->
-> All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
 
 
 You can manually choose the quantization types and settings or automatically select the quantization types.
@@ -326,9 +312,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
 
-<hfoption id="autoquant">
+</hfoptions>
 
-The [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API automatically chooses a quantization type for quantizable layers (`nn.Linear`) by micro-benchmarking on input type and shape and compiling a single linear layer.
+If you want to automatically choose a quantization type for quantizable layers (`nn.Linear`) you can use the [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API.
+
+The `autoquant` API automatically chooses a quantization type by micro-benchmarking on input type and shape and compiling a single linear layer.
 
 Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
 
@@ -355,9 +343,6 @@ output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implemen
 quantized_model.finalize_autoquant()
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
-</hfoption>
-
-</hfoptions>
 
 
 ## Serialization
@@ -445,7 +430,41 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
 
-## Benchmark
+## ⚠️ Deprecation Notice
+
+> Starting with version 0.10.0, the string-based API for quantization configuration (e.g., `TorchAoConfig("int4_weight_only", group_size=128)`) is **deprecated** and will be removed in a future release.
+>
+> Please use the new `AOBaseConfig`-based approach instead:
+>
+> ```python
+> # Old way (deprecated)
+> quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+>
+> # New way (recommended)
+> from torchao.quantization import Int4WeightOnlyConfig
+> quant_config = Int4WeightOnlyConfig(group_size=128)
+> quantization_config = TorchAoConfig(quant_type=quant_config)
+> ```
+>
+> The new API offers greater flexibility, better type safety, and access to the full range of features available in torchao.
+>
+> [Migration Guide](#migration-guide)
+>
+> Here's how to migrate from common string identifiers to their `AOBaseConfig` equivalents:
+>
+> | Old String API | New `AOBaseConfig` API |
+> |----------------|------------------------|
+> | `"int4_weight_only"` | `Int4WeightOnlyConfig()` |
+> | `"int8_weight_only"` | `Int8WeightOnlyConfig()` |
+> | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
+>
+> All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
+
+
+
+## Resources
+
+For a better sense of expected performance, view the [benchmarks](https://github.com/pytorch/ao/tree/main/torchao/quantization#benchmarks) for various models with CUDA and XPU backends. You can also run the code below to benchmark a model yourself.
 
 ```py
 from torch._inductor.utils import do_bench_using_profiling
@@ -467,22 +486,6 @@ print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_toke
 
 > [!TIP]
 > For best performance, you can use recommended settings by calling `torchao.quantization.utils.recommended_inductor_config_setter()`
-
-
-| Feature | Description |
-|--------|-------------|
-| **Quantization Aware Training (QAT)** | Train quantized models with minimal accuracy loss (see [QAT README](https://github.com/pytorch/ao/blob/main/torchao/quantization/qat/README.md)) |
-| **Float8 Training** | High-throughput training with float8 formats (see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/docs/float8.md) and [Accelerate](https://huggingface.co/docs/accelerate/usage_guides/low_precision_training#configuring-torchao) docs) |
-| **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference (see [Accelerating Neural Network Training with Semi-Structured (2:4) Sparsity](https://pytorch.org/blog/accelerating-neural-network-training/) blog post) |
-| **Optimizer Quantization** | Reduce optimizer state memory with 4 and 8-bit variants of Adam |
-| **KV Cache Quantization** | Enables long context inference with lower memory (see [KV Cache Quantization](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md)) |
-| **Custom Kernels Support** | use your own `torch.compile` compatible ops |
-| **FSDP2** | Composable with FSDP2 for training|
-
-
-## Resources
-
-For a better sense of expected performance, view the [benchmarks](https://github.com/pytorch/ao/tree/main/torchao/quantization#benchmarks) for various models with CUDA and XPU backends. You can also run the code below to benchmark a model yourself.
 
 Refer to [Other Available Quantization Techniques](https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques) for more examples and documentation.
 
