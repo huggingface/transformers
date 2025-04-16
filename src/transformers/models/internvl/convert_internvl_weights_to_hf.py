@@ -174,6 +174,9 @@ def get_internvl_config(input_base_path):
         language_config_class = LlamaConfig
 
     llm_config = {k: v for k, v in llm_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
+    # Force use_cache to True
+    llm_config["use_cache"] = True
+
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
 
     return InternVLConfig(
