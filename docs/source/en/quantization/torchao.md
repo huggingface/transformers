@@ -373,7 +373,7 @@ output_dir = "llama3-8b-int4wo-128"
 quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
 ```
 
-## Loading Quantized Models Examples
+## Loading quantized models
 
 For int8 and float8, all combinations of device are possible, you can quantize on cpu and load on cuda or cpu or vice versa.
 ```py
