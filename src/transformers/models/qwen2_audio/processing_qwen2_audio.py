@@ -105,12 +105,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
 
-        # Handle BC when user passes deprecared keyword argument
+        # Handle BC when user passes deprecated keyword argument
         if audios is not None and audio is None:
             audio = audios
-            warnings.wanr(
+            warnings.warn(
                 "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
-                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the onle acceptable keyword argument.",
+                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the only acceptable keyword argument.",
                 FutureWarning,
             )
 
