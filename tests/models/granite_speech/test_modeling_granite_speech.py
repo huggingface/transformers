@@ -347,9 +347,7 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_single(self):
-        model = GraniteSpeechForConditionalGeneration.from_pretrained(
-            self.model_path, torch_dtype="auto", device_map="auto"
-        )
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
         input_speech = self._load_datasamples(1)
 
         # Verify feature sizes; note that the feature mask refers to the size of
@@ -375,9 +373,7 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_batch(self):
-        model = GraniteSpeechForConditionalGeneration.from_pretrained(
-            self.model_path, torch_dtype="auto", device_map="auto"
-        )
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
         input_speech = self._load_datasamples(2)
         prompts = [self.prompt, self.prompt]
 
