@@ -74,7 +74,7 @@ model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 bits, group_size, sym = 4, 128, True
-# ## mixed bits config
+# mixed bits config
 # layer_config = {"model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
 
 autoround = AutoRound(model, tokenizer, bits=bits, group_size=group_size, sym=sym,
