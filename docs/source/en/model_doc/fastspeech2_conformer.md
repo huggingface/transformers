@@ -27,7 +27,7 @@ You can find the FastSpeech2Conformer checkpoints under the [ESPnet](https://hug
 > [!TIP]
 > Click on the FastSpeech2Conformer models in the right sidebar for more examples of how to apply FastSpeech2Conformer to different text-to-speech tasks.
 
-The example below demonstrates how to generate speech from text with [`Pipeline`] and [`AutoModel`].
+The example below demonstrates how to generate audio from text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
