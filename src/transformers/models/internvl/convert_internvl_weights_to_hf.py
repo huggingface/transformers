@@ -177,6 +177,9 @@ def get_internvl_config(input_base_path):
     llm_config = {k: v for k, v in llm_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
     # Force use_cache to True
     llm_config["use_cache"] = True
+    # Force correct eos_token_id for InternVL3
+    if "InternVL3" in input_base_path and LM_TYPE_CORRESPONDENCE[input_base_path] == "qwen2":
+        llm_config["eos_token_id"] = 151645
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
 
