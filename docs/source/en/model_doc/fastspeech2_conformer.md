@@ -22,7 +22,7 @@ specific language governing permissions and limitations under the License.
 
 FastSpeech2Conformer can synthesize speech significantly faster than autoregressive models while maintaining high quality. Unlike the original FastSpeech, it trains directly on ground-truth data and incorporates speech variation information like pitch, energy, and duration for more natural-sounding output. The Conformer architecture combines the strengths of convolution and attention mechanisms to better capture both local and global dependencies in speech.
 
-You can find the FastSpeech2Conformer checkpoints under the [ESPnet](https://huggingface.co/espnet) organization.
+You can find all the original FastSpeech2Conformer checkpoints under the [ESPnet](https://huggingface.co/espnet?search_models=fastspeech2) organization.
 
 > [!TIP]
 > Click on the FastSpeech2Conformer models in the right sidebar for more examples of how to apply FastSpeech2Conformer to different text-to-speech tasks.
