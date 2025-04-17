@@ -345,32 +345,6 @@ output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implemen
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
-<hfoption id="float8-weight-only cpu">
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Float8WeightOnlyConfig
-
-quant_config = Float8WeightOnlyConfig()
-quantization_config = TorchAoConfig(quant_type=quant_config)
-
-# Load and quantize the model
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
-    device_map="cpu",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-</hfoption>
 </hfoptions>
 
 ### Autoquant
