@@ -257,7 +257,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             if do_pad:
-                stacked_images = torch.stack([self.pad_image(image, size_divisor) for image in stacked_images])
+                stacked_images = self.pad_image(stacked_images, size_divisor)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -293,42 +293,39 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size_divisor: int,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> "torch.Tensor":
         """
-        Center pad an image to be a multiple of `size_divisor`.
+        Center pad a batch of images to be a multiple of `size_divisor`.
 
         Args:
             image (`torch.Tensor`):
-                Image to pad.
+                Image to pad.  Can be a batch of images of dimensions (N, C, H, W) or a single image of dimensions (C, H, W).
             size_divisor (`int`):
                 The width and height of the image will be padded to a multiple of this number.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
 
+        """
+        if(image.ndim >= 4):
+            # If images is a batch of images, get the first image's size
+            height, width = get_image_size(image[0], input_data_format)
+        else:
+            height, width = get_image_size(image, input_data_format)
+ 
         def _get_pad(size, size_divisor):
             new_size = math.ceil(size / size_divisor) * size_divisor
             pad_size = new_size - size
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
-
-        height, width = get_image_size(image, input_data_format)
-
+ 
         pad_top, pad_bottom = _get_pad(height, size_divisor)
         pad_left, pad_right = _get_pad(width, size_divisor)
-
         padding = (pad_left, pad_top, pad_right, pad_bottom)
         return F.pad(image, padding)
 
