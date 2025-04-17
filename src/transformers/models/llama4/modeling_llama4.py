@@ -158,12 +158,12 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states).transpose(0, 1)
+        router_logits = self.router(hidden_states)
 
-        router_top_value, router_indices = torch.topk(router_logits.transpose(0, 1), self.top_k, dim=1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
 
         router_scores = (
-            torch.full_like(router_logits.transpose(0, 1), float("-inf"))
+            torch.full_like(router_logits, float("-inf"))
             .scatter_(1, router_indices, router_top_value)
             .transpose(0, 1)
         )
