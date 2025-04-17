@@ -53,6 +53,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.import_utils import requires
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -133,6 +134,7 @@ ALL_CACHE_NAMES = [
 
 
 @dataclass
+@requires(backends=("torch",))
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
     Outputs of decoder-only generation models, when using non-beam methods.
@@ -169,6 +171,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("torch",))
 class GenerateEncoderDecoderOutput(ModelOutput):
     """
     Outputs of encoder-decoder generation models, when using non-beam methods.
@@ -217,6 +220,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("torch",))
 class GenerateBeamDecoderOnlyOutput(ModelOutput):
     """
     Outputs of decoder-only generation models, when using beam methods.
@@ -261,6 +265,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("torch",))
 class GenerateBeamEncoderDecoderOutput(ModelOutput):
     """
     Outputs of encoder-decoder generation models, when using beam methods.
@@ -345,6 +350,7 @@ GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDec
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 
+@requires(backends=("torch",))
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
@@ -5232,3 +5238,22 @@ def _dola_select_contrast(
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
     logits = final_logits - base_logits
     return logits
+
+
+__all__ = [
+    "GenerationMixin",
+    "GreedySearchEncoderDecoderOutput",
+    "GreedySearchDecoderOnlyOutput",
+    "SampleEncoderDecoderOutput",
+    "SampleDecoderOnlyOutput",
+    "BeamSearchEncoderDecoderOutput",
+    "BeamSearchDecoderOnlyOutput",
+    "BeamSampleEncoderDecoderOutput",
+    "BeamSampleDecoderOnlyOutput",
+    "ContrastiveSearchEncoderDecoderOutput",
+    "ContrastiveSearchDecoderOnlyOutput",
+    "GenerateBeamDecoderOnlyOutput",
+    "GenerateBeamEncoderDecoderOutput",
+    "GenerateDecoderOnlyOutput",
+    "GenerateEncoderDecoderOutput",
+]

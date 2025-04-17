@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
 
 import jax
@@ -21,6 +20,7 @@ import jax.numpy as jnp
 from jax.experimental import sparse
 
 from ..utils import add_start_docstrings
+from ..utils.import_utils import requires
 from ..utils.logging import get_logger
 
 
@@ -48,6 +48,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("flax",))
 class FlaxLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
@@ -59,6 +60,7 @@ class FlaxLogitsProcessor:
         )
 
 
+@requires(backends=("flax",))
 class FlaxLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
@@ -70,6 +72,7 @@ class FlaxLogitsWarper:
         )
 
 
+@requires(backends=("flax",))
 class FlaxLogitsProcessorList(list):
     """
     This class can be used to create a list of [`FlaxLogitsProcessor`] or [`FlaxLogitsWarper`] to subsequently process
@@ -93,6 +96,7 @@ class FlaxLogitsProcessorList(list):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     r"""
     [`FlaxLogitsWarper`] for temperature (exponential scaling output probability distribution).
@@ -113,6 +117,7 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
     [`FlaxLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
@@ -157,6 +162,7 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
         return next_scores
 
 
+@requires(backends=("flax",))
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     r"""
     [`FlaxLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
@@ -192,6 +198,7 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         return next_scores
 
 
+@requires(backends=("flax",))
 class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that enforces the specified token as the first generated token.
@@ -214,6 +221,7 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
@@ -239,6 +247,7 @@ class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
@@ -269,6 +278,7 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
@@ -294,6 +304,7 @@ class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] suppressing a list of tokens at each decoding step. The processor will set their log probs
@@ -313,6 +324,7 @@ class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that takes a list of pairs of integers which indicates a mapping from generation indices to
@@ -361,6 +373,7 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
     r"""
     Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
@@ -458,6 +471,7 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+@requires(backends=("flax",))
 class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that enforces no repetition of n-grams. See
@@ -542,3 +556,21 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
 
         output = jax.lax.cond((cur_len >= self.ngram_size - 1), true_fn, lambda: scores)
         return output
+
+
+__all__ = [
+    "FlaxForcedBOSTokenLogitsProcessor",
+    "FlaxForcedEOSTokenLogitsProcessor",
+    "FlaxForceTokensLogitsProcessor",
+    "FlaxLogitsProcessor",
+    "FlaxLogitsProcessorList",
+    "FlaxLogitsWarper",
+    "FlaxMinLengthLogitsProcessor",
+    "FlaxSuppressTokensAtBeginLogitsProcessor",
+    "FlaxSuppressTokensLogitsProcessor",
+    "FlaxTemperatureLogitsWarper",
+    "FlaxTopKLogitsWarper",
+    "FlaxTopPLogitsWarper",
+    "FlaxWhisperTimeStampLogitsProcessor",
+    "FlaxNoRepeatNGramLogitsProcessor",
+]

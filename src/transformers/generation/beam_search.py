@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import Dict, List, Optional, Tuple, Union
@@ -21,6 +20,7 @@ import numpy as np
 import torch
 
 from ..utils import add_start_docstrings
+from ..utils.import_utils import requires
 from .beam_constraints import Constraint, ConstraintListState
 
 
@@ -88,6 +88,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("torch",))
 class BeamScorer(ABC):
     """
     Abstract base class for all beam scorers that are used for [`~PreTrainedModel.beam_search`] and
@@ -120,6 +121,7 @@ class BeamScorer(ABC):
         raise NotImplementedError("This is an abstract method.")
 
 
+@requires(backends=("torch",))
 class BeamSearchScorer(BeamScorer):
     r"""
     [`BeamScorer`] implementing standard beam search decoding.
@@ -416,6 +418,7 @@ class BeamSearchScorer(BeamScorer):
         )
 
 
+@requires(backends=("torch",))
 class ConstrainedBeamSearchScorer(BeamScorer):
     r"""
     [`BeamScorer`] implementing constrained beam search decoding.
@@ -927,6 +930,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         )
 
 
+@requires(backends=("torch",))
 class BeamHypotheses:
     def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool, max_length: Optional[int] = None):
         """
@@ -1011,3 +1015,6 @@ class BeamHypotheses:
                 highest_attainable_score = best_sum_logprobs / (cur_len - decoder_prompt_len) ** self.length_penalty
             ret = self.worst_score >= highest_attainable_score
             return ret
+
+
+__all__ = ["BeamHypotheses", "BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]

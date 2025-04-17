@@ -13,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import copy
 import inspect
 import warnings
@@ -33,6 +31,7 @@ from ..models.auto import (
     FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from ..utils import ModelOutput, logging
+from ..utils.import_utils import requires
 from .configuration_utils import GenerationConfig
 from .flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
@@ -53,6 +52,7 @@ logger = logging.get_logger(__name__)
 
 
 @flax.struct.dataclass
+@requires(backends=("flax",))
 class FlaxGreedySearchOutput(ModelOutput):
     """
     Flax Base class for outputs of decoder-only generation models using greedy search.
@@ -67,6 +67,7 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
 @flax.struct.dataclass
+@requires(backends=("flax",))
 class FlaxSampleOutput(ModelOutput):
     """
     Flax Base class for outputs of decoder-only generation models using sampling.
@@ -81,6 +82,7 @@ class FlaxSampleOutput(ModelOutput):
 
 
 @flax.struct.dataclass
+@requires(backends=("flax",))
 class FlaxBeamSearchOutput(ModelOutput):
     """
     Flax Base class for outputs of decoder-only generation models using greedy search.
@@ -127,6 +129,7 @@ class BeamSearchState:
     model_kwargs: Dict[str, jnp.ndarray]
 
 
+@requires(backends=("flax",))
 class FlaxGenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in
@@ -1027,3 +1030,6 @@ class FlaxGenerationMixin:
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
+
+
+__all__ = ["FlaxGenerationMixin", "FlaxGreedySearchOutput", "FlaxSampleOutput", "FlaxBeamSearchOutput"]

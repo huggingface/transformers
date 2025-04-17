@@ -12,18 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from __future__ import annotations
 
 import asyncio
 from queue import Queue
 from typing import TYPE_CHECKING, Optional
 
+from ..utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
 
 
+@requires()
 class BaseStreamer:
     """
     Base class from which `.generate()` streamers should inherit.
@@ -38,6 +40,7 @@ class BaseStreamer:
         raise NotImplementedError()
 
 
+@requires()
 class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
@@ -159,6 +162,7 @@ class TextStreamer(BaseStreamer):
         return False
 
 
+@requires()
 class TextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
@@ -230,6 +234,7 @@ class TextIteratorStreamer(TextStreamer):
             return value
 
 
+@requires()
 class AsyncTextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an async iterator.
@@ -316,3 +321,6 @@ class AsyncTextIteratorStreamer(TextStreamer):
                 raise StopAsyncIteration()
             else:
                 return value
+
+
+__all__ = ["AsyncTextIteratorStreamer", "BaseStreamer", "TextIteratorStreamer", "TextStreamer"]

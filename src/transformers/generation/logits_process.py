@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
 import math
 from typing import Callable, Iterable, List, Optional, Tuple, Union
@@ -22,6 +21,7 @@ import torch
 
 from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
+from ..utils.import_utils import requires
 from ..utils.logging import get_logger
 
 
@@ -42,6 +42,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("torch",))
 class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
@@ -52,6 +53,7 @@ class LogitsProcessor:
         )
 
 
+@requires(backends=("torch",))
 class LogitsProcessorList(list):
     """
     This class can be used to create a list of [`LogitsProcessor`] to subsequently process a `scores` input tensor.
@@ -90,6 +92,7 @@ class LogitsProcessorList(list):
         return scores
 
 
+@requires(backends=("torch",))
 class MinLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length by setting EOS probability to 0. Note that, for decoder-only models
@@ -151,6 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
@@ -223,6 +227,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class TemperatureLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for temperature (exponential scaling output probability distribution), which effectively means
@@ -289,6 +294,7 @@ class TemperatureLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
@@ -343,6 +349,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that works similarly to [`RepetitionPenaltyLogitsProcessor`], but with an *inverse* penalty
@@ -398,6 +405,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class TopPLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
@@ -465,6 +473,7 @@ class TopPLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class TopKLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that performs top-k, i.e. restricting to the k highest probability elements. Often used
@@ -518,6 +527,7 @@ class TopKLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class MinPLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that performs min-p, i.e. keeps all tokens that are above a minimum probability, scaled by the
@@ -595,6 +605,7 @@ class MinPLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class TypicalLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that performs typical decoding. Inspired on how humans use language, it prioritizes tokens
@@ -683,6 +694,7 @@ class TypicalLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class EpsilonLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
@@ -752,6 +764,7 @@ class EpsilonLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class EtaLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
@@ -903,6 +916,7 @@ def _calc_banned_ngram_tokens(
     return banned_tokens
 
 
+@requires(backends=("torch",))
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
     N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given the
@@ -962,6 +976,7 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that works similarly to [`NoRepeatNGramLogitsProcessor`], but applied exclusively to prevent
@@ -1031,6 +1046,7 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
     [`LogitsProcessor`] that applies an additive bias on sequences. The bias is applied to the last token of a sequence
@@ -1208,6 +1224,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
             self.sequence_bias = {tuple(sublist[0]): sublist[1] for sublist in temp_sequence}
 
 
+@requires(backends=("torch",))
 class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     """
     [`LogitsProcessor`] that enforces that specified sequences will never be selected.
@@ -1299,6 +1316,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             )
 
 
+@requires(backends=("torch",))
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces constrained generation and is useful for prefix-conditioned constrained
@@ -1371,6 +1389,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
@@ -1507,6 +1526,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces the specified token as the first generated token. Used with encoder-decoder
@@ -1552,6 +1572,7 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
@@ -1608,6 +1629,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class InfNanRemoveLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation method to fail. Note that using
@@ -1629,6 +1651,7 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class ExponentialDecayLengthPenalty(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that exponentially increases the score of the `eos_token_id` after `start_index` has been
@@ -1730,6 +1753,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class LogitNormalization(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
@@ -1767,6 +1791,7 @@ class LogitNormalization(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     r"""
     [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
@@ -1820,6 +1845,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class SuppressTokensLogitsProcessor(LogitsProcessor):
     r"""
     This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so
@@ -1860,6 +1886,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
         return scores
 
 
+@requires(backends=("torch",))
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
 
@@ -2053,6 +2080,7 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         return scores
 
 
+@requires(backends=("torch",))
 class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for classifier free guidance (CFG). The scores are split over the batch dimension,
@@ -2117,6 +2145,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing alternated generation between the two codebooks of Bark.
@@ -2162,6 +2191,7 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""
     Logits processor for Classifier-Free Guidance (CFG). The processors computes a weighted average across scores
@@ -2327,6 +2357,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+@requires(backends=("torch",))
 class WatermarkLogitsProcessor(LogitsProcessor):
     r"""
     Logits processor for watermarking generated text. The processor modifies model output scores by adding a small bias to
@@ -2500,6 +2531,7 @@ class SynthIDTextWatermarkState:
         self.num_calls = 0
 
 
+@requires(backends=("torch",))
 class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     r"""
     Logits processor that implements watermarking techniques for text generation models.
@@ -2940,3 +2972,39 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+__all__ = [
+    "AlternatingCodebooksLogitsProcessor",
+    "ClassifierFreeGuidanceLogitsProcessor",
+    "EncoderNoRepeatNGramLogitsProcessor",
+    "EncoderRepetitionPenaltyLogitsProcessor",
+    "EpsilonLogitsWarper",
+    "EtaLogitsWarper",
+    "ExponentialDecayLengthPenalty",
+    "ForcedBOSTokenLogitsProcessor",
+    "ForcedEOSTokenLogitsProcessor",
+    "HammingDiversityLogitsProcessor",
+    "InfNanRemoveLogitsProcessor",
+    "LogitNormalization",
+    "LogitsProcessor",
+    "LogitsProcessorList",
+    "MinLengthLogitsProcessor",
+    "MinNewTokensLengthLogitsProcessor",
+    "MinPLogitsWarper",
+    "NoBadWordsLogitsProcessor",
+    "NoRepeatNGramLogitsProcessor",
+    "PrefixConstrainedLogitsProcessor",
+    "RepetitionPenaltyLogitsProcessor",
+    "SequenceBiasLogitsProcessor",
+    "SuppressTokensLogitsProcessor",
+    "SuppressTokensAtBeginLogitsProcessor",
+    "SynthIDTextWatermarkLogitsProcessor",
+    "TemperatureLogitsWarper",
+    "TopKLogitsWarper",
+    "TopPLogitsWarper",
+    "TypicalLogitsWarper",
+    "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+    "WhisperTimeStampLogitsProcessor",
+    "WatermarkLogitsProcessor",
+]

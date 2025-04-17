@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+from ..utils.import_utils import requires
 
+
+@requires(backends=("torch",))
 class Constraint(ABC):
     r"""Abstract base class for all constraints that can be applied during generation.
     It must define how the constraint can be satisfied.
@@ -129,6 +132,7 @@ class Constraint(ABC):
         )
 
 
+@requires(backends=("torch",))
 class PhrasalConstraint(Constraint):
     r"""
     [`Constraint`] enforcing that an ordered sequence of tokens is included in the output.
@@ -261,6 +265,7 @@ class DisjunctiveTrie:
         return len(nested_token_ids) != leaf_count
 
 
+@requires(backends=("torch",))
 class DisjunctiveConstraint(Constraint):
     r"""
     A special [`Constraint`] that is fulfilled by fulfilling just one of several constraints.
@@ -351,6 +356,7 @@ class DisjunctiveConstraint(Constraint):
         return new_constraint
 
 
+@requires(backends=("torch",))
 class ConstraintListState:
     r"""
     A class for beam scorers to track its progress through a list of constraints.
@@ -522,3 +528,6 @@ class ConstraintListState:
             new_state.pending_constraints = [constraint.copy() for constraint in self.pending_constraints]
 
         return new_state
+
+
+__all__ = ["Constraint", "ConstraintListState", "DisjunctiveConstraint", "PhrasalConstraint"]

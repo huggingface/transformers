@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import inspect
 import warnings
@@ -33,6 +32,7 @@ from ..models.auto import (
 )
 from ..tf_utils import shape_list, stable_softmax
 from ..utils import ModelOutput, logging
+from ..utils.import_utils import requires
 from .configuration_utils import GenerationConfig
 from .tf_logits_process import (
     TFForcedBOSTokenLogitsProcessor,
@@ -55,6 +55,7 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFGreedySearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using greedy search.
@@ -83,6 +84,7 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFGreedySearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using greedy search. Hidden states and attention
@@ -125,6 +127,7 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFSampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using sampling.
@@ -153,6 +156,7 @@ class TFSampleDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFSampleEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using sampling. Hidden states and attention weights of
@@ -195,6 +199,7 @@ class TFSampleEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFBeamSearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using beam search.
@@ -230,6 +235,7 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFBeamSearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam search. Hidden states and attention weights
@@ -280,6 +286,7 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFBeamSampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using beam sample.
@@ -315,6 +322,7 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFBeamSampleEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam sampling. Hidden states and attention
@@ -364,6 +372,7 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using contrastive search.
@@ -391,6 +400,7 @@ class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
 
 
 @dataclass
+@requires(backends=("tf",))
 class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using contrastive search. Hidden states and attention
@@ -441,6 +451,7 @@ TFGenerateOutput = Union[
 ]
 
 
+@requires(backends=("tf",))
 class TFGenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
@@ -3130,3 +3141,18 @@ def _ranking_fast(
     contrastive_score = tf.reshape(contrastive_score, shape=[-1, beam_width])
     selected_idx = tf.argmax(contrastive_score, axis=1)
     return selected_idx
+
+
+__all__ = [
+    "TFGenerationMixin",
+    "TFGreedySearchDecoderOnlyOutput",
+    "TFGreedySearchEncoderDecoderOutput",
+    "TFSampleEncoderDecoderOutput",
+    "TFSampleDecoderOnlyOutput",
+    "TFBeamSearchEncoderDecoderOutput",
+    "TFBeamSearchDecoderOnlyOutput",
+    "TFBeamSampleEncoderDecoderOutput",
+    "TFBeamSampleDecoderOnlyOutput",
+    "TFContrastiveSearchEncoderDecoderOutput",
+    "TFContrastiveSearchDecoderOnlyOutput",
+]
