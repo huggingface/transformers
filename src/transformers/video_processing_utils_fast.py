@@ -142,7 +142,7 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
-class BaseVideoProcessorFast(BaseImageProcessorFast):
+class BaseVideoProcessor(BaseImageProcessorFast):
     _auto_class = None
 
     resample = None
@@ -793,8 +793,8 @@ class BaseVideoProcessorFast(BaseImageProcessorFast):
             raise TypeError(f"only a single or a list of entries is supported but got type={type(video_url_or_urls)}")
 
 
-BaseVideoProcessorFast.push_to_hub = copy_func(BaseVideoProcessorFast.push_to_hub)
-if BaseVideoProcessorFast.push_to_hub.__doc__ is not None:
-    BaseVideoProcessorFast.push_to_hub.__doc__ = BaseVideoProcessorFast.push_to_hub.__doc__.format(
+BaseVideoProcessor.push_to_hub = copy_func(BaseVideoProcessor.push_to_hub)
+if BaseVideoProcessor.push_to_hub.__doc__ is not None:
+    BaseVideoProcessor.push_to_hub.__doc__ = BaseVideoProcessor.push_to_hub.__doc__.format(
         object="video processor", object_class="AutoVideoProcessor", object_files="video processor file"
     )

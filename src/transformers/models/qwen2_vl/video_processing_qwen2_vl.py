@@ -40,9 +40,10 @@ from ...utils import (
     is_torchvision_v2_available,
     is_vision_available,
 )
+from ...utils.import_utils import requires
 from ...video_processing_utils_fast import (
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
-    BaseVideoProcessorFast,
+    BaseVideoProcessor,
 )
 from ...video_utils import group_videos_by_shape, reorder_videos
 
@@ -86,7 +87,8 @@ class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
             The merge size of the vision encoder to llm encoder.
     """,
 )
-class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
+@requires(backend=("torchvision",))
+class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
     image_mean = OPENAI_CLIP_MEAN
@@ -198,4 +200,4 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
         )
 
 
-__all__ = ["Qwen2VLVideoProcessorFast"]
+__all__ = ["Qwen2VLVideoProcessor"]

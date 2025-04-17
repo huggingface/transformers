@@ -28,7 +28,7 @@ if is_vision_available():
     from transformers import LlavaNextImageProcessor
 
     if is_torchvision_available():
-        from transformers import LlavaNextVideoVideoProcessorFast
+        from transformers import LlavaNextVideoVideoProcessor
 
 if is_torch_available:
     pass
@@ -42,7 +42,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaNextImageProcessor()
-        video_processor = LlavaNextVideoVideoProcessorFast()
+        video_processor = LlavaNextVideoVideoProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
         processor_kwargs = cls.prepare_processor_dict()
 

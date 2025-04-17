@@ -31,7 +31,7 @@ if is_vision_available():
     )
 
     if is_torchvision_available():
-        from transformers import LlavaOnevisionVideoProcessorFast
+        from transformers import LlavaOnevisionVideoProcessor
 
 if is_torch_available:
     pass
@@ -46,7 +46,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaOnevisionImageProcessor()
-        video_processor = LlavaOnevisionVideoProcessorFast()
+        video_processor = LlavaOnevisionVideoProcessor()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
         processor_kwargs = cls.prepare_processor_dict()
 

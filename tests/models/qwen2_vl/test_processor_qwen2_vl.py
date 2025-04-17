@@ -32,7 +32,7 @@ if is_vision_available():
     from transformers import Qwen2VLImageProcessor, Qwen2VLProcessor
 
     if is_torchvision_available():
-        from transformers import Qwen2VLVideoProcessorFast
+        from transformers import Qwen2VLVideoProcessor
 
 if is_torch_available():
     import torch
@@ -84,7 +84,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
-        self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessorFast)
+        self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

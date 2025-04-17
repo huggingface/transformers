@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers.models.qwen2_vl.video_processing_qwen2_vl_fast import smart_resize
 
     if is_torchvision_available():
-        from transformers import Qwen2VLVideoProcessorFast
+        from transformers import Qwen2VLVideoProcessor
 
 
 class Qwen2VLVideoProcessingTester(unittest.TestCase):
@@ -134,7 +134,7 @@ class Qwen2VLVideoProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Qwen2VLVideoProcessorFast if is_torchvision_available() else None
+    fast_video_processing_class = Qwen2VLVideoProcessor if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()

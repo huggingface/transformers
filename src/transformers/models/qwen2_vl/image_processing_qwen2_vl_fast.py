@@ -421,7 +421,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             logger.warning(
                 "`Qwen2VLImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
                 "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Qwen2VLVideoProcessorFast`. "
+                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
             )
             videos = make_batched_videos(videos)
             pixel_values_videos, vision_grid_thws_videos = [], []

@@ -36,7 +36,7 @@ from ...utils import (
     cached_file,
     logging,
 )
-from ...video_processing_utils_fast import BaseVideoProcessorFast
+from ...video_processing_utils_fast import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -305,7 +305,7 @@ class AutoProcessor:
                     pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
                 if preprocessor_config_file is not None:
-                    config_dict, _ = BaseVideoProcessorFast.get_video_processor_dict(
+                    config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
                         pretrained_model_name_or_path, **kwargs
                     )
                     processor_class = config_dict.get("processor_class", None)

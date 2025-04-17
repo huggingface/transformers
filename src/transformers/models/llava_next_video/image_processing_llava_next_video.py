@@ -359,7 +359,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         images = make_batched_videos(images)
         logger.warning(
             "`LlavaNextVideoImageProcessor` is deprecated and will be removed in v5.0. "
-            "We recommend to load an instance of `LlavaNextVideoVideoProcessorFast` to process videos for the model. "
+            "We recommend to load an instance of `LlavaNextVideoVideoProcessor` to process videos for the model. "
         )
 
         validate_preprocess_arguments(

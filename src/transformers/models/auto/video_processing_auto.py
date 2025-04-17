@@ -32,7 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import requires
-from ...video_processing_utils_fast import BaseVideoProcessorFast
+from ...video_processing_utils_fast import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -52,12 +52,12 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("instructblipvideo", "InstructBlipVideoVideoProcessorFast"),
-            ("llava_next_video", "LlavaNextVideoVideoProcessorFast"),
-            ("llava_onevision", "LlavaOnevisionVideoProcessorFast"),
-            ("qwen2_5_vl", "Qwen2_5_VLVideoProcessorFast"),
-            ("qwen2_vl", "Qwen2VLVideoProcessorFast"),
-            ("video_llava", "VideoLlavaVideoProcessorFast"),
+            ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
+            ("llava_next_video", "LlavaNextVideoVideoProcessor"),
+            ("llava_onevision", "LlavaOnevisionVideoProcessor"),
+            ("qwen2_5_vl", "Qwen2_5_VLVideoProcessor"),
+            ("qwen2_vl", "Qwen2VLVideoProcessor"),
+            ("video_llava", "VideoLlavaVideoProcessor"),
         ]
     )
 
@@ -231,7 +231,7 @@ class AutoVideoProcessor:
                 - a string, the *model id* of a pretrained video_processor hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a video processor file saved using the
-                  [`~video_processing_utils.BaseVideoProcessorFast.save_pretrained`] method, e.g.,
+                  [`~video_processing_utils.BaseVideoProcessor.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
@@ -301,7 +301,7 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = BaseVideoProcessorFast.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
@@ -375,7 +375,7 @@ class AutoVideoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            video_processor_class ([`BaseVideoProcessorFast`]):
+            video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.
         """
         VIDEO_PROCESSOR_MAPPING.register(config_class, video_processor_class, exist_ok=exist_ok)

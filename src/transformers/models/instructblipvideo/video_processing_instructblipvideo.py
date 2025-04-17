@@ -33,7 +33,8 @@ from ...utils import (
     is_torchvision_v2_available,
     is_vision_available,
 )
-from ...video_processing_utils_fast import BaseVideoProcessorFast
+from ...utils.import_utils import requires
+from ...video_processing_utils_fast import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
 
@@ -54,7 +55,8 @@ if is_torch_available():
 class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
+@requires(backend=("torchvision",))
+class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -120,4 +122,4 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
         return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
 
 
-__all__ = ["InstructBlipVideoVideoProcessorFast"]
+__all__ = ["InstructBlipVideoVideoProcessor"]

@@ -33,7 +33,7 @@ if is_vision_available():
     )
 
     if is_torchvision_available():
-        from transformers import InstructBlipVideoVideoProcessorFast
+        from transformers import InstructBlipVideoVideoProcessor
 
 
 @require_vision
@@ -45,7 +45,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        video_processor = InstructBlipVideoVideoProcessorFast()
+        video_processor = InstructBlipVideoVideoProcessor()
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
         qformer_tokenizer = BertTokenizerFast.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -86,7 +86,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.video_processor.to_json_string(), video_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.video_processor, InstructBlipVideoVideoProcessorFast)
+        self.assertIsInstance(processor.video_processor, InstructBlipVideoVideoProcessor)
         self.assertIsInstance(processor.qformer_tokenizer, BertTokenizerFast)
 
     def test_video_processor(self):

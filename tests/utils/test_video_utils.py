@@ -39,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import BaseVideoProcessorFast
+    from transformers import BaseVideoProcessor
     from transformers.video_utils import VideoMetadata, load_video
 
 
@@ -145,7 +145,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertTrue(np.array_equal(videos_list[0], video))
 
     def test_resize(self):
-        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
         video = get_random_video(16, 32, return_torch=True)
 
         # Size can be an int or a tuple of ints.
@@ -155,7 +155,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertEqual(resized_video.shape, (8, 3, 8, 8))
 
     def test_normalize(self):
-        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
         array = torch.randn(4, 3, 16, 32)
         mean = [0.1, 0.5, 0.9]
         std = [0.2, 0.4, 0.6]
@@ -166,7 +166,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         torch.testing.assert_close(normalized_array, expected)
 
     def test_center_crop(self):
-        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
         video = get_random_video(16, 32, return_torch=True)
 
         # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
@@ -180,7 +180,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
             self.assertEqual(cropped_video.shape, (8, 3, *expected_size))
 
     def test_convert_to_rgb(self):
-        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
         video = get_random_video(20, 20, return_torch=True)
 
         rgb_video = video_processor.convert_to_rgb(video[:, :1])
