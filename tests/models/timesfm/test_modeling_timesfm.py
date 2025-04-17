@@ -171,7 +171,7 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class TimesFmModelIntegrationTests(unittest.TestCase):
-    def test_inference_no_head(self):
+    def test_inference(self):
         model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch").to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
@@ -182,14 +182,9 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
         frequency_input = [0, 1, 2]
 
         with torch.no_grad():
-            output = model(past_values=forecast_input_tensor, freq=frequency_input).last_hidden_state
+            output = model(past_values=forecast_input_tensor, freq=frequency_input)
 
-        self.assertEqual(
-            output.shape,
-            torch.Size([3, model.config.context_length // model.config.patch_length, model.config.hidden_size]),
-        )
-        expected_slice = torch.tensor(
-            [[-0.7407, -0.5401, 0.7085], [-0.7407, -0.5401, 0.7085], [-0.7407, -0.5401, 0.7085]],
-            device=torch_device,
-        )
-        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
+        mean_predictions = output.mean_predictions
+        self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
+        expected_slice = torch.tensor([0.9813, 1.0086, 0.9985], device=torch_device)
+        self.assertTrue(torch.allclose(mean_predictions[0, :3], expected_slice, atol=TOLERANCE))
