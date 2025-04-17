@@ -124,15 +124,15 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
         data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
             The channel dimension format for the output video. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: videoin (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: videoin (height, width, num_channels) format.
+            - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
             - Unset: Use the channel dimension format of the input video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video. If unset, the channel dimension format is inferred
             from the input video. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: videoin (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: videoin (height, width, num_channels) format.
-            - `"none"` or `ChannelDimension.NONE`: videoin (height, width) format.
+            - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
         device (`torch.device`, *optional*):
             The device to process the videos on. If unset, the device is inferred from the input videos."""
 

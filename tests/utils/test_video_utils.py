@@ -163,7 +163,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         # mean and std can be passed as lists or NumPy arrays.
         expected = (array - torch.tensor(mean)[:, None, None]) / torch.tensor(std)[:, None, None]
         normalized_array = video_processor.normalize(array, mean, std)
-        torch.testing.assert_allclose(normalized_array, expected)
+        torch.testing.assert_close(normalized_array, expected)
 
     def test_center_crop(self):
         video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)

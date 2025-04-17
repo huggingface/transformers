@@ -40,7 +40,7 @@ Fast video processors are available for all models and are loaded by default whe
 ```python
 import torch
 from transformers.video_utils import load_video
-from transformers import DetrImageProcessorFast
+from transformers import AutoVideoProcessor
 
 video = load_video("video.mp4")
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device="cuda")

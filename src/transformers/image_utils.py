@@ -304,6 +304,8 @@ def infer_channel_dimension_format(
         first_dim, last_dim = 0, 2
     elif image.ndim == 4:
         first_dim, last_dim = 1, 3
+    elif image.ndim == 5:
+        first_dim, last_dim = 2, 4
     else:
         raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 

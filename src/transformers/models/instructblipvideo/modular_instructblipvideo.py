@@ -175,11 +175,11 @@ class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
     pass
 
 
-class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
+class InstructBlipVideoVisionModel(InstructBlipVisionModel):
     pass
 
 
-class InstructBlipVideoVisionModel(InstructBlipVisionModel):
+class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
     pass
 
 

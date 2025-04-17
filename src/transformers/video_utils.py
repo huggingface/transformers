@@ -18,12 +18,13 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 
 import numpy as np
 import requests
 
 from .image_transforms import PaddingMode
-from .image_utils import ChannelDimension, is_valid_image
+from .image_utils import ChannelDimension, infer_channel_dimension_format, is_valid_image, to_channel_dimension_format
 from .utils import (
     is_av_available,
     is_cv2_available,
@@ -45,18 +46,6 @@ if is_vision_available():
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
-
-if is_decord_available():
-    pass
-
-if is_av_available():
-    pass
-
-if is_cv2_available():
-    pass
-
-if is_yt_dlp_available():
-    pass
 
 if is_torch_available():
     import torch
@@ -175,106 +164,6 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
     elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
         return [video for sublist in videos for video in sublist]
     return convert_pil_frames_to_video(videos)
-
-
-def infer_channel_dimension_format(
-    video: np.ndarray, num_channels: Optional[Union[int, Tuple[int, ...]]] = None
-) -> ChannelDimension:
-    """
-    Infers the channel dimension format of `video`.
-
-    Args:
-        video (`np.ndarray`):
-            The video to infer the channel dimension of.
-        num_channels (`int` or `Tuple[int, ...]`, *optional*, defaults to `(1, 3)`):
-            The number of channels of the video.
-
-    Returns:
-        The channel dimension of the video.
-    """
-    num_channels = num_channels if num_channels is not None else (1, 3)
-    num_channels = (num_channels,) if isinstance(num_channels, int) else num_channels
-
-    if video.ndim == 4:
-        first_dim, last_dim = 1, 3
-    elif video.ndim == 5:
-        first_dim, last_dim = 2, 4
-    else:
-        raise ValueError(f"Unsupported number of video dimensions: {video.ndim}")
-
-    if video.shape[first_dim] in num_channels and video.shape[last_dim] in num_channels:
-        logger.warning(
-            f"The channel dimension is ambiguous. Got video shape {video.shape}. Assuming channels are the first dimension."
-        )
-        return ChannelDimension.FIRST
-    elif video.shape[first_dim] in num_channels:
-        return ChannelDimension.FIRST
-    elif video.shape[last_dim] in num_channels:
-        return ChannelDimension.LAST
-    raise ValueError("Unable to infer channel dimension format")
-
-
-def get_channel_dimension_axis(
-    video: np.ndarray, input_data_format: Optional[Union[ChannelDimension, str]] = None
-) -> int:
-    """
-    Returns the channel dimension axis of the video.
-
-    Args:
-        video (`np.ndarray`):
-            The video to get the channel dimension axis of.
-        input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format of the video. If `None`, will infer the channel dimension from the video.
-
-    Returns:
-        The channel dimension axis of the video.
-    """
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(video)
-    if input_data_format == ChannelDimension.FIRST:
-        return video.ndim - 3
-    elif input_data_format == ChannelDimension.LAST:
-        return video.ndim - 1
-    raise ValueError(f"Unsupported data format: {input_data_format}")
-
-
-def to_channel_dimension_format(
-    video: np.ndarray,
-    channel_dim: Union[ChannelDimension, str],
-    input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
-) -> np.ndarray:
-    """
-    Converts `video` to the channel dimension format specified by `channel_dim`.
-
-    Args:
-        video (`numpy.ndarray`):
-            The video to have its channel dimension set.
-        channel_dim (`ChannelDimension`):
-            The channel dimension format to use.
-        input_channel_dim (`ChannelDimension`, *optional*):
-            The channel dimension format of the input video. If not provided, it will be inferred from the input video.
-
-    Returns:
-        `np.ndarray`: The video with the channel dimension set to `channel_dim`.
-    """
-    if not isinstance(video, np.ndarray):
-        raise TypeError(f"Input video must be of type np.ndarray, got {type(video)}")
-
-    if input_channel_dim is None:
-        input_channel_dim = infer_channel_dimension_format(video)
-
-    target_channel_dim = ChannelDimension(channel_dim)
-    if input_channel_dim == target_channel_dim:
-        return video
-
-    if target_channel_dim == ChannelDimension.FIRST:
-        video = video.transpose((0, 3, 1, 2))
-    elif target_channel_dim == ChannelDimension.LAST:
-        video = video.transpose((0, 2, 3, 1))
-    else:
-        raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
-
-    return video
 
 
 def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
@@ -616,7 +505,7 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
-    if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
+    if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
