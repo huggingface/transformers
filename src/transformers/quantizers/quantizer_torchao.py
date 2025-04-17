@@ -230,12 +230,16 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         if self.pre_quantized:
-            module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
+            module._parameters[tensor_name] = torch.nn.Parameter(
+                param_value.to(device=target_device), requires_grad=param_value.requires_grad
+            )
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
             assert isinstance(self.quantization_config, TorchAoConfig)
-            module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
+            module._parameters[tensor_name] = torch.nn.Parameter(
+                param_value, requires_grad=param_value.requires_grad
+            ).to(device=target_device)
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def _process_model_after_weight_loading(self, model, **kwargs):

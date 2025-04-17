@@ -23,6 +23,7 @@ import sentencepiece
 
 from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +45,7 @@ FAIRSEQ_LANGUAGE_CODES = {
 # fmt: on
 
 
+@requires(backends=("sentencepiece",))
 class M2M100Tokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).

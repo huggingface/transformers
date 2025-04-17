@@ -244,6 +244,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "output_router_logits",
         "router_aux_loss_coef",
         "router_jitter_noise",
+        "cache_implementation",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
@@ -344,6 +345,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
@@ -354,6 +356,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",

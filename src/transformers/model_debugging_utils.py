@@ -21,6 +21,8 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
+from transformers.utils.import_utils import requires
+
 from .utils import is_torch_available
 
 
