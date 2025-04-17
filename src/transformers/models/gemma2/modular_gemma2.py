@@ -362,7 +362,7 @@ class Gemma2DecoderLayer(nn.Module):
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                offset = cache_position[-1] - effective_seq_len
+                offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
                 offset = max(0, offset)
                 # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
