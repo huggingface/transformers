@@ -307,6 +307,13 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    @pytest.mark.generate
+    @require_torch_sdpa
+    @slow
+    @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
 
 class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
