@@ -22,7 +22,9 @@ rendered properly in your Markdown viewer.
 
 # ColQwen2
 
-[ColQwen2](https://doi.org/10.48550/arXiv.2407.01449) is a variant of the ColPali model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColQwen2 treats each page as an image. It uses the Qwen2-VL backbone to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. A key advantage of ColQwen2 is its ability to handle arbitrary image resolutions and aspect ratios, making it particularly suitable for document processing as images are not resized into fixed-size squares.
+[ColQwen2](https://doi.org/10.48550/arXiv.2407.01449) is a variant of the ColPali model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColQwen2 treats each page as an image. It uses the [Qwen2-VL](./qwen2_vl) backbone to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. A key advantage of ColQwen2 is its ability to handle arbitrary image resolutions and aspect ratios, making it particularly suitable for document processing as images are not resized into fixed-size squares.
+
+This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) and [@yonigozlan](https://huggingface.co/yonigozlan).
 
 You can find all the original ColPali checkpoints under Vidore's [Hf-native ColVision Models](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
