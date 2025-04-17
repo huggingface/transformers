@@ -1010,7 +1010,7 @@ class KosmosTextAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             **kwargs,
         )

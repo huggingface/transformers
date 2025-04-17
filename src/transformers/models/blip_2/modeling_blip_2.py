@@ -1555,10 +1555,10 @@ class Blip2Model(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
-        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.qformer = Blip2QFormerModel._from_config(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
@@ -2016,10 +2016,10 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
-        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.qformer = Blip2QFormerModel._from_config(config.qformer_config)
 
         # vision projection layer
         self.vision_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
@@ -2137,10 +2137,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
-        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.qformer = Blip2QFormerModel._from_config(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
@@ -2501,12 +2501,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
 
         self.embeddings = Blip2TextEmbeddings(config.qformer_config)
-        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.qformer = Blip2QFormerModel._from_config(config.qformer_config)
 
         # vision projection layer
         self.vision_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)

@@ -3495,8 +3495,16 @@ class ModelTesterMixin:
 
                 vision_model_sdpa = getattr(model, vision_model_name)
                 language_model_sdpa = getattr(model, language_model_name)
-                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
-                vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
+                text_attn = (
+                    "sdpa"
+                    if (language_model_sdpa._supports_sdpa or language_model_sdpa._supports_attention_backend)
+                    else "eager"
+                )
+                vision_attn = (
+                    "sdpa"
+                    if (vision_model_sdpa._supports_sdpa or vision_model_sdpa._supports_attention_backend)
+                    else "eager"
+                )
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
@@ -4002,14 +4010,14 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
                 sub_models_supporting_fa2 = [
-                    module._supports_flash_attn_2
+                    (module._supports_flash_attn_2 or module._supports_attention_backend)
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
                 ]
                 supports_fa2_all_modules = (
                     all(sub_models_supporting_fa2)
                     if len(sub_models_supporting_fa2) > 0
-                    else model._supports_flash_attn_2
+                    else (model._supports_flash_attn_2 or model._supports_attention_backend)
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):

@@ -856,6 +856,8 @@ class PretrainedConfig(PushToHubMixin):
 
         if "_attn_implementation_internal" in serializable_config_dict:
             del serializable_config_dict["_attn_implementation_internal"]
+        if "_attn_implementation_autoset" in serializable_config_dict:
+            del serializable_config_dict["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in serializable_config_dict:
             del serializable_config_dict["base_model_tp_plan"]

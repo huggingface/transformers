@@ -1324,10 +1324,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVisionModel(config.vision_config)
+        self.vision_model = InstructBlipVisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
-        self.qformer = InstructBlipQFormerModel(config.qformer_config)
+        self.qformer = InstructBlipQFormerModel._from_config(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
 
