@@ -42,7 +42,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from .configuration_bitnet import BitNetModelConfig
+from .configuration_bitnet import BitNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +55,7 @@ class BitNetRMSNorm(LlamaRMSNorm):
 
 
 class BitNetMLP(GemmaMLP):
-    def __init__(self, config: BitNetModelConfig):
+    def __init__(self, config: BitNetConfig):
         super().__init__(config)
         self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
 
@@ -65,7 +65,7 @@ class BitNetMLP(GemmaMLP):
 
 
 class BitNetAttention(LlamaAttention):
-    def __init__(self, config: BitNetModelConfig, layer_idx: int):
+    def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -122,7 +122,7 @@ class BitNetAttention(LlamaAttention):
 
 
 class BitNetDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: BitNetModelConfig, layer_idx: int):
+    def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__()
         self.self_attn = BitNetAttention(config=config, layer_idx=layer_idx)
         self.mlp = BitNetMLP(config)

@@ -1691,7 +1691,7 @@ class TorchAoConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class BitNetConfig(QuantizationConfigMixin):
+class BitNetQuantConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,

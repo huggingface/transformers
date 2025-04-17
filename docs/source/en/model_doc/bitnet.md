@@ -109,9 +109,9 @@ print("\nAssistant Response:", response)
 ```
 
 
-## BitNetModelConfig
+## BitNetConfig
 
-[[autodoc]] BitNetModelConfig
+[[autodoc]] BitNetConfig
 
 ## BitNetModel
 

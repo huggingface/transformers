@@ -20,7 +20,7 @@ from ..utils import logging
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
-    BitNetConfig,
+    BitNetQuantConfig,
     BitsAndBytesConfig,
     CompressedTensorsConfig,
     EetqConfig,
@@ -91,7 +91,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "fbgemm_fp8": FbgemmFp8Config,
     "higgs": HiggsConfig,
     "torchao": TorchAoConfig,
-    "bitnet": BitNetConfig,
+    "bitnet": BitNetQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,

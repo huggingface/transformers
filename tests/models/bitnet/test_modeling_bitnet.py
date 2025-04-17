@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, BitNetModelConfig, is_torch_available
+from transformers import AutoTokenizer, BitNetConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -94,7 +94,7 @@ class BitNetModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return BitNetModelConfig(
+        return BitNetConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -164,7 +164,7 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = BitNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BitNetModelConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BitNetConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

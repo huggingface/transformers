@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 BitNet_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class BitNetModelConfig(PretrainedConfig):
+class BitNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BitNetModel`]. It is used to instantiate an BitNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -88,10 +88,10 @@ class BitNetModelConfig(PretrainedConfig):
             Whether to use online quantization. If set to `True`, the model will use online quantization.
 
     ```python
-    >>> from transformers import BitNetModel, BitNetModelConfig
+    >>> from transformers import BitNetModel, BitNetConfig
 
     >>> # Initializing a BitNet style configuration
-    >>> configuration = BitNetModelConfig()
+    >>> configuration = BitNetConfig()
 
     >>> # Initializing a model from the BitNet style configuration
     >>> model = BitNetModel(configuration)
@@ -156,4 +156,4 @@ class BitNetModelConfig(PretrainedConfig):
         )
 
 
-__all__ = ["BitNetModelConfig"]
+__all__ = ["BitNetConfig"]
