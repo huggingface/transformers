@@ -140,6 +140,13 @@ class Mamba2Config(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
+        if (hidden_size * expand) != (num_heads * head_dim):
+            raise AttributeError(
+                "Inconsistent configuration: hidden_size * expand "
+                f"({hidden_size * expand}) must equal num_heads * head_dim "
+                f"({num_heads * head_dim})."
+            )
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.state_size = state_size
@@ -170,6 +177,7 @@ class Mamba2Config(PretrainedConfig):
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
         self.tie_word_embeddings = tie_word_embeddings
+
 
         super().__init__(
             bos_token_id=bos_token_id,
