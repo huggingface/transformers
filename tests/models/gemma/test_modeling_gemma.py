@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
-import tempfile
 import unittest
 
 import pytest
@@ -23,7 +22,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_to
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -35,11 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
-from ...causal_lm_tester import CausalLMModelTester, CausalLMModelTest
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -61,10 +55,19 @@ class GemmaModelTester(CausalLMModelTester):
         causal_lm_class = GemmaForCausalLM
         sequence_classification_class = GemmaForSequenceClassification
         token_classification_class = GemmaForTokenClassification
+        pipeline_model_mapping = (
+                {
+                    "feature-extraction": GemmaModel,
+                    "text-classification": GemmaForSequenceClassification,
+                    "token-classification": GemmaForTokenClassification,
+                    "text-generation": GemmaForCausalLM,
+                    "zero-shot": GemmaForSequenceClassification,
+                }
+        )
 
 
 @require_torch
-class GemmaModelTest(CausalLMModelTest):
+class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GemmaModelTester
     pipeline_model_mapping = (
         {

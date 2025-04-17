@@ -1,12 +1,32 @@
-from .test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor, torch_device, is_torch_available, require_torch
-from .test_configuration_common import ConfigTester
-from .test_pipeline_mixin import PipelineTesterMixin
-from transformers.testing_utils import is_flaky, require_torch_sdpa, require_torch_accelerator, slow, require_flash_attn, require_torch_gpu
-import pytest
-import unittest
 import tempfile
+import unittest
+
+import pytest
+
+from transformers.testing_utils import (
+    is_flaky,
+    require_flash_attn,
+    require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_sdpa,
+    slow,
+)
+
+from .test_configuration_common import ConfigTester
+from .test_modeling_common import (
+    GenerationTesterMixin,
+    ModelTesterMixin,
+    ids_tensor,
+    is_torch_available,
+    require_torch,
+    torch_device,
+)
+from .test_pipeline_mixin import PipelineTesterMixin
+
+
 if is_torch_available():
     import torch
+
 
 # TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
@@ -21,43 +41,55 @@ class CausalLMModelTester:
     def _verify_model_attributes(self):
         for required_attribute in self._required_attributes:
             if getattr(self, required_attribute) is None:
-                raise ValueError(f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute.")
+                raise ValueError(
+                    f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute."
+                )
         if not isinstance(self.pipeline_model_mapping, dict):
-            raise ValueError("You have inherited from CausalLMModelTester but did not set the pipeline_model_mapping attribute. "
-                             "This should be a dictionary mapping pipeline tasks to model classes, like "
-                             "{'feature-extraction': MyModel, 'text-classification': MyModelForSequenceClassification}")
+            raise ValueError(
+                "You have inherited from CausalLMModelTester but did not set the pipeline_model_mapping attribute. "
+                "This should be a dictionary mapping pipeline tasks to model classes, like "
+                "{'feature-extraction': MyModel, 'text-classification': MyModelForSequenceClassification}"
+            )
 
     @property
     def all_model_classes(self):
-        return [model_class for model_class in (self.base_model_class, self.causal_lm_class, self.sequence_classification_class, self.token_classification_class) if model_class is not None]
-
+        return [
+            model_class
+            for model_class in (
+                self.base_model_class,
+                self.causal_lm_class,
+                self.sequence_classification_class,
+                self.token_classification_class,
+            )
+            if model_class is not None
+        ]
 
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=False,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            pad_token_id=0,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=False,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        pad_token_id=0,
+        scope=None,
     ):
         self._verify_model_attributes()
         self.parent = parent
@@ -131,7 +163,7 @@ class CausalLMModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = self.model_class(config=config)
+        model = self.base_model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -152,8 +184,9 @@ class CausalLMModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     test_headmasking = False
     test_pruning = False
     model_tester_class = None
@@ -161,7 +194,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def setUp(self):
         if self.model_tester_class is None:
-            raise ValueError("You have inherited from CausalLMModelTest but did not set the model_tester_class attribute.")
+            raise ValueError(
+                "You have inherited from CausalLMModelTest but did not set the model_tester_class attribute."
+            )
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
         if self.all_model_classes is None:
@@ -175,21 +210,21 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_sequence_classification_model(self):
-        if "ForSequenceClassification" not in self.model_tester.model_classes:
+        if self.model_tester.sequence_classification_class is None:
             self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = self.model_tester.for_sequence_class(config)
+        model = self.model_tester.sequence_classification_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     def test_sequence_classification_model_for_single_label(self):
-        if "ForSequenceClassification" not in self.model_tester.model_classes:
+        if self.model_tester.sequence_classification_class is None:
             self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -197,14 +232,14 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = self.model_tester.for_sequence_class(config)
+        model = self.model_tester.sequence_classification_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     def test_sequence_classification_model_for_multi_label(self):
-        if "ForSequenceClassification" not in self.model_tester.model_classes:
+        if self.model_tester.sequence_classification_class is None:
             self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -214,21 +249,21 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = self.model_tester.for_sequence_class(config)
+        model = self.model_tester.sequence_classification_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     def test_token_classification_model(self):
-        if "ForTokenClassification" not in self.model_tester.model_classes:
+        if self.model_tester.token_classification_class is None:
             self.skipTest("Model does not support token classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = self.model_tester.for_token_class(config=config)
+        model = self.model_tester.token_classification_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
@@ -255,8 +290,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 )
                 model_sdpa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16,
-                                                    attn_implementation="eager")
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
+                )
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]
@@ -289,8 +325,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16,
-                                                    attn_implementation="eager")
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
+                )
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]
