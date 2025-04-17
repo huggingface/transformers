@@ -106,6 +106,7 @@ class ColQwen2ForRetrievalModelTester:
         self.image_token_id = vlm_config["image_token_id"]
         self.video_token_id = vlm_config["video_token_id"]
         self.pad_token_id = vlm_config["eos_token_id"]
+        self.vision_start_token_id = vlm_config["vision_start_token_id"]
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -180,6 +181,9 @@ class ColQwen2ForRetrievalModelTester:
 
         input_ids[:, -1] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
 
         inputs_dict = {
             "input_ids": input_ids,
