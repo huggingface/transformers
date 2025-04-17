@@ -186,5 +186,17 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
 
         mean_predictions = output.mean_predictions
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
-        expected_slice = torch.tensor([0.9813, 1.0086, 0.9985], device=torch_device)
-        self.assertTrue(torch.allclose(mean_predictions[0, :3], expected_slice, atol=TOLERANCE))
+        # fmt: off
+        expected_slice = torch.tensor(
+            [ 0.9813,  1.0086,  0.9985,  0.9432,  0.8505,  0.7203,  0.5596,  0.3788,
+              0.1796, -0.0264, -0.2307, -0.4255, -0.5978, -0.7642, -0.8772, -0.9670,
+             -1.0110, -1.0162, -0.9848, -0.9151, -0.8016, -0.6511, -0.4707, -0.2842,
+             -0.0787,  0.1260,  0.3293,  0.5104,  0.6818,  0.8155,  0.9172,  0.9843,
+              1.0101,  1.0025,  0.9529,  0.8588,  0.7384,  0.5885,  0.4022,  0.2099,
+             -0.0035, -0.2104, -0.4146, -0.6033, -0.7661, -0.8818, -0.9725, -1.0191,
+             -1.0190, -0.9874, -0.9137, -0.8069, -0.6683, -0.4939, -0.3086, -0.1106,
+              0.0846,  0.2927,  0.4832,  0.6612,  0.8031,  0.9051,  0.9772,  1.0064
+            ],
+            device=torch_device)
+        # fmt: on
+        self.assertTrue(torch.allclose(mean_predictions[0, :64], expected_slice, atol=TOLERANCE))
