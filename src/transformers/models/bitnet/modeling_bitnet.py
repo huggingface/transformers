@@ -49,7 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_bitnet import BitNetConfig, BitNetModelConfig
+from .configuration_bitnet import BitNetConfig
 
 
 if is_torch_flex_attn_available():
@@ -84,7 +84,7 @@ class BitNetRMSNorm(nn.Module):
 
 
 class BitNetMLP(nn.Module):
-    def __init__(self, config: BitNetModelConfig):
+    def __init__(self, config: BitNetConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -175,7 +175,7 @@ def eager_attention_forward(
 class BitNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: BitNetModelConfig, layer_idx: int):
+    def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -252,7 +252,7 @@ class BitNetAttention(nn.Module):
 
 
 class BitNetDecoderLayer(nn.Module):
-    def __init__(self, config: BitNetModelConfig, layer_idx: int):
+    def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = BitNetAttention(config=config, layer_idx=layer_idx)
@@ -336,7 +336,7 @@ class BitNetRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-BIT_NET_START_DOCSTRING = r"""
+BITNET_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -355,7 +355,7 @@ BIT_NET_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare BitNet Model outputting raw hidden-states without any specific head on top.",
-    BIT_NET_START_DOCSTRING,
+    BITNET_START_DOCSTRING,
 )
 class BitNetPreTrainedModel(PreTrainedModel):
     config_class = BitNetConfig
@@ -385,7 +385,7 @@ class BitNetPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-BIT_NET_INPUTS_DOCSTRING = r"""
+BITNET_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -457,7 +457,7 @@ BIT_NET_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare BitNet Model outputting raw hidden-states without any specific head on top.",
-    BIT_NET_START_DOCSTRING,
+    BITNET_START_DOCSTRING,
 )
 class BitNetModel(BitNetPreTrainedModel):
     """
@@ -490,7 +490,7 @@ class BitNetModel(BitNetPreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(BIT_NET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BITNET_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -762,7 +762,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(BIT_NET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BITNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
