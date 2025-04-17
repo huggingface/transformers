@@ -499,8 +499,13 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, AIMv2RMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
+        elif hasattr(module, "logit_scale"):
+            if isinstance(module.logit_scale, nn.Parameter):
+                module.logit_scale.data.fill_(math.log(1 / 0.07))
 
 
 class AIMv2VisionModel(AIMv2PreTrainedModel):
