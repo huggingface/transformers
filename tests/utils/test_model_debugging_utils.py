@@ -1,25 +1,20 @@
-
-import unittest
-
-import numpy as np
-
-from transformers import is_torch_available, is_vision_available
-from transformers.processing_utils import _validate_images_text_input_order
-from transformers.testing_utils import require_torch, require_vision
-from pathlib import Path
-from transformers.model_debugging_utils import model_addition_debugger_context
-import unittest
-import tempfile
-import shutil
 import gc
 import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from transformers import is_torch_available, is_vision_available
+from transformers.model_debugging_utils import model_addition_debugger_context
+
 
 if is_vision_available():
-    import PIL
+    pass
 
 if is_torch_available():
     import torch
     from torch import nn
+
 
 class ToyModel(nn.Module):
     def __init__(self):

@@ -909,7 +909,6 @@ if TYPE_CHECKING:
             convert_and_export_with_cache,
         )
         from .model_debugging_utils import (
-            model_addition_debugger,
             model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
