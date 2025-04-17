@@ -18,8 +18,6 @@ import math
 from collections.abc import Iterable
 from typing import Optional, Tuple, Union
 
-import numpy as np
-
 from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import (
     get_resize_output_image_size,
@@ -42,7 +40,6 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
     get_image_size_for_max_height_width,
-    infer_channel_dimension_format,
     is_pil_image,
 )
 from ...utils import (
@@ -267,7 +264,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
-    
+
     def _prepare_segmentation_maps(self, segmentation_maps: ImageInput) -> "torch.Tensor":
         """
         Prepares segmentation maps for processing. Leverages _prepare_input_images,
@@ -311,19 +308,19 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
-        if(image.ndim >= 4):
+        if image.ndim >= 4:
             # If images is a batch of images, get the first image's size
             height, width = get_image_size(image[0], input_data_format)
         else:
             height, width = get_image_size(image, input_data_format)
- 
+
         def _get_pad(size, size_divisor):
             new_size = math.ceil(size / size_divisor) * size_divisor
             pad_size = new_size - size
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
- 
+
         pad_top, pad_bottom = _get_pad(height, size_divisor)
         pad_left, pad_right = _get_pad(width, size_divisor)
         padding = (pad_left, pad_top, pad_right, pad_bottom)
