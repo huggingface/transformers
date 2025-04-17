@@ -141,8 +141,10 @@ class PaliGemmaProcessor(ProcessorMixin):
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
             self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
         else:
             self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
 
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
@@ -296,23 +298,21 @@ class PaliGemmaProcessor(ProcessorMixin):
             suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
         pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
-        # max_length has to account for the image tokens
-        if output_kwargs["text_kwargs"].get("max_length", None) is not None:
-            output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
-
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
             return_token_type_ids=return_token_type_ids,
             **output_kwargs["text_kwargs"],
         )
+        self._check_special_mm_tokens(input_strings, inputs, modalities=["image"])
 
         return_data = {**inputs, "pixel_values": pixel_values}
 
         if return_token_type_ids:
             labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
             return_data.update({"labels": labels})
-        return BatchFeature(data=return_data)
+        return BatchFeature(data=return_data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

@@ -32,7 +32,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_vipllava import VipLlavaConfig
 
@@ -128,7 +127,6 @@ VIPLLAVA_START_DOCSTRING = r"""
     "The bare VipLlava Model outputting raw hidden-states without any specific head on top.",
     VIPLLAVA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VipLlava,llava->vipllava
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config_class = VipLlavaConfig
     base_model_prefix = "model"
@@ -142,26 +140,15 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        # important: this ported version of VipLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/vipllava should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
@@ -300,7 +287,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
