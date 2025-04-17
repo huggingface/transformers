@@ -1207,7 +1207,6 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
     config_class = DinoDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
     _no_split_modules = [
         r"DinoDetrConvEncoder",
         r"DinoDetrEncoderLayer",
