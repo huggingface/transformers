@@ -247,7 +247,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phimoe
     def setUp(self):
         self.model_tester = PhimoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PhimoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=PhimoeConfig)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):

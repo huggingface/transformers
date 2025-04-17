@@ -77,7 +77,7 @@ class Glm4ModelTest(GemmaModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Glm4ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Glm4Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Glm4Config)
 
 
 @slow

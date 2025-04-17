@@ -193,7 +193,7 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def setUp(self):
         self.model_tester = StableLmModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=StableLmConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=StableLmConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

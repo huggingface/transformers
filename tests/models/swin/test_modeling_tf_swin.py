@@ -200,7 +200,7 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = TFSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
+        self.config_tester = ConfigTester(self, config_class=SwinConfig)
 
     def test_config(self):
         self.create_and_test_config_common_properties()

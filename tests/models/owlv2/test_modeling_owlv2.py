@@ -313,7 +313,7 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

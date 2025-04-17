@@ -198,7 +198,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi
     def setUp(self):
         self.model_tester = PhiModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PhiConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=PhiConfig)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):

@@ -226,7 +226,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = GemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GemmaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GemmaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -239,7 +239,7 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = TFDebertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DebertaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

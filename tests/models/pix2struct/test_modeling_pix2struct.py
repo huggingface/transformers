@@ -319,7 +319,7 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

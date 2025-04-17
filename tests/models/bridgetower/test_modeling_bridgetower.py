@@ -332,7 +332,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -575,7 +575,7 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig)
 
     def _prepare_inputs_for_training(self, model_class):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

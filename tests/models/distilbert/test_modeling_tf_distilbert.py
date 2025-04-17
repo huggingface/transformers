@@ -200,7 +200,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = TFDistilBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DistilBertConfig, dim=37)
+        self.config_tester = ConfigTester(self, config_class=DistilBertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

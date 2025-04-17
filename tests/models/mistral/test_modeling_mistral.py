@@ -218,7 +218,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = MistralModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MistralConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MistralConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

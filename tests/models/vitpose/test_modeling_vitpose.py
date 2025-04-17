@@ -157,7 +157,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()

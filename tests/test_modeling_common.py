@@ -4612,7 +4612,6 @@ class ModelTesterMixin:
                 f"All parameters should be on meta device, but found {unique_devices}.",
             )
 
-
 global_rng = random.Random()
 
 

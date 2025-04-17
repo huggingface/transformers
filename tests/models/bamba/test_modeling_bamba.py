@@ -270,7 +270,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+        self.config_tester = ConfigTester(self, config_class=BambaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

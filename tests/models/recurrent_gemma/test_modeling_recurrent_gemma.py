@@ -208,7 +208,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         # We don't output attentions
         self.has_attentions = False
         self.model_tester = RecurrentGemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RecurrentGemmaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RecurrentGemmaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

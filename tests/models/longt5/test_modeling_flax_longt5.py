@@ -236,7 +236,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxLongT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -467,7 +467,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
     def setUp(self):
         self.model_tester = FlaxLongT5ModelTester(self, encoder_attention_type="transient-global")
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

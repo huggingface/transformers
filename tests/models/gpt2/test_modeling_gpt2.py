@@ -533,7 +533,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=GPT2Config)
 
     def tearDown(self):
         super().tearDown()

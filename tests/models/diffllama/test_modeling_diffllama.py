@@ -211,7 +211,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

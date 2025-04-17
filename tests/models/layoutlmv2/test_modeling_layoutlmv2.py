@@ -283,7 +283,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LayoutLMv2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LayoutLMv2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -244,7 +244,7 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = SqueezeBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SqueezeBertConfig, dim=37)
+        self.config_tester = ConfigTester(self, config_class=SqueezeBertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

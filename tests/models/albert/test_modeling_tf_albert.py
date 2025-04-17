@@ -269,7 +269,7 @@ class TFAlbertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AlbertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

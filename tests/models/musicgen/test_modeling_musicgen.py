@@ -186,7 +186,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = MusicgenDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MusicgenDecoderConfig, hidden_size=16)
+        self.config_tester = ConfigTester(self, config_class=MusicgenDecoderConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

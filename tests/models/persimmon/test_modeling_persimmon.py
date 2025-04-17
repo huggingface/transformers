@@ -191,7 +191,7 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Persimmon
     def setUp(self):
         self.model_tester = PersimmonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PersimmonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=PersimmonConfig)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):

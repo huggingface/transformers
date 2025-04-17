@@ -168,7 +168,7 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ClvpEncoderTester(self)
-        self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig, hidden_size=32)
+        self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig)
 
     def tearDown(self):
         super().tearDown()
@@ -286,7 +286,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
-        self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=32)
+        self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig)
 
     def tearDown(self):
         super().tearDown()

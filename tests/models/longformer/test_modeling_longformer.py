@@ -353,7 +353,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LongformerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

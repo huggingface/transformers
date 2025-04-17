@@ -150,7 +150,7 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = TFCvtModelTester(self)
-        self.config_tester = TFCvtConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = TFCvtConfigTester(self, config_class=CvtConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.create_and_test_config_common_properties()

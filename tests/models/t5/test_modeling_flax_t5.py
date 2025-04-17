@@ -223,7 +223,7 @@ class FlaxT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=T5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -479,7 +479,7 @@ class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxT5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=T5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

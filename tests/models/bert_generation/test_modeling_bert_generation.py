@@ -250,7 +250,7 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BertGenerationConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

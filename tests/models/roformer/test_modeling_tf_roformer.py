@@ -290,7 +290,7 @@ class TFRoFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFRoFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoFormerConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

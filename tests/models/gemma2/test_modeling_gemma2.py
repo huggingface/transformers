@@ -81,7 +81,7 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Gemma2Config)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):

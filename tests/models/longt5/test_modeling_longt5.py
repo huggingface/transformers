@@ -520,7 +520,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = LongT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -791,7 +791,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
         self.model_tester = LongT5ModelTester(
             self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
         )
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -1050,7 +1050,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1135,7 +1135,7 @@ class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
         self.model_tester = LongT5EncoderOnlyModelTester(
             self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
         )
-        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

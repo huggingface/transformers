@@ -229,7 +229,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = Qwen2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Qwen2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -414,7 +414,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = GPTBigCodeModelTester(self, multi_query=self.multi_query)
-        self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig)
 
     def tearDown(self):
         super().tearDown()

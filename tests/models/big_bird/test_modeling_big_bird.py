@@ -464,7 +464,7 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = BigBirdModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BigBirdConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

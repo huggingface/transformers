@@ -385,7 +385,7 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
+        self.config_tester = ConfigTester(self, config_class=XLNetConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

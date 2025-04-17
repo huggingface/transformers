@@ -427,7 +427,7 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = XLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
+        self.config_tester = ConfigTester(self, config_class=XLMConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -397,7 +397,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = RobertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RobertaConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -235,7 +235,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = TFOpenAIGPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OpenAIGPTConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=OpenAIGPTConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

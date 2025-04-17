@@ -580,7 +580,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -858,7 +858,7 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

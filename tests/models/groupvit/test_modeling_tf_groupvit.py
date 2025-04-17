@@ -438,7 +438,7 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFGroupViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -95,7 +95,7 @@ class NemotronModelTest(GemmaModelTest):
 
     def setUp(self):
         self.model_tester = NemotronModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=NemotronConfig)
 
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):

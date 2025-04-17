@@ -500,7 +500,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = Pop2PianoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

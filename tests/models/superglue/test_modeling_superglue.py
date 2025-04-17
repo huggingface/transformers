@@ -127,7 +127,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SuperGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64)
+        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()

@@ -257,7 +257,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def setUp(self):
         self.model_tester = Qwen2MoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2MoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Qwen2MoeConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

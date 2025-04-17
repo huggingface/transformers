@@ -570,7 +570,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = XLNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
+        self.config_tester = ConfigTester(self, config_class=XLNetConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

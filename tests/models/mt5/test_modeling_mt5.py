@@ -573,7 +573,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = MT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=MT5Config)
 
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
@@ -1054,7 +1054,7 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = MT5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=MT5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

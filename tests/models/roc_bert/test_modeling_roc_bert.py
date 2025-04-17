@@ -611,7 +611,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = RoCBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoCBertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

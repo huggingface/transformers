@@ -344,7 +344,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = TFGPTJModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTJConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=GPTJConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

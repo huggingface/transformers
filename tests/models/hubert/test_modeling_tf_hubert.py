@@ -229,7 +229,7 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = TFHubertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=HubertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -350,7 +350,7 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
             do_stable_layer_norm=True,
             scope="robust",
         )
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=HubertConfig)
 
     # overwrite because input_values != input_ids
     def test_forward_signature(self):

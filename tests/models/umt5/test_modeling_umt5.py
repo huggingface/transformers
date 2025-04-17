@@ -692,7 +692,7 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UMT5Config, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=UMT5Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

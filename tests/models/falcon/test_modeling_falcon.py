@@ -209,7 +209,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = FalconModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FalconConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FalconConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

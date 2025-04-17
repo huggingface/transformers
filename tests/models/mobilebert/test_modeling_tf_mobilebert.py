@@ -273,7 +273,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = TFMobileBertModelTest.TFMobileBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MobileBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MobileBertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

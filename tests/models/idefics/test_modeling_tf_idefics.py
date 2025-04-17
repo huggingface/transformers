@@ -278,7 +278,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IdeficsConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -481,7 +481,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
             self,
             modality_type_vocab_size=3,
         )
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IdeficsConfig)
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_model(self):

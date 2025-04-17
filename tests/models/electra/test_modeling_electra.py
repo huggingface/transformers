@@ -418,7 +418,7 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ElectraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ElectraConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ElectraConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

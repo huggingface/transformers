@@ -385,7 +385,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = TFGPT2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=GPT2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

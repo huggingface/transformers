@@ -216,7 +216,7 @@ class TFMPNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = TFMPNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MPNetConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MPNetConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

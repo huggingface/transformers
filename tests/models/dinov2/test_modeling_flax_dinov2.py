@@ -140,7 +140,7 @@ class FlaxDionv2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self) -> None:
         self.model_tester = FlaxDinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -257,7 +257,7 @@ class TFConvBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFConvBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ConvBertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

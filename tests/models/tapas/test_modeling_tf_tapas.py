@@ -501,7 +501,7 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = TFTapasModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TapasConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=TapasConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

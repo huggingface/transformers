@@ -541,7 +541,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = BarkSemanticModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -631,7 +631,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = BarkCoarseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -721,7 +721,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BarkFineModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BarkFineConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=BarkFineConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

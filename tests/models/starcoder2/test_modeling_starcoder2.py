@@ -209,7 +209,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = Starcoder2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Starcoder2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Starcoder2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()

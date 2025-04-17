@@ -372,7 +372,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = MptModelTester(self)
-        self.config_tester = MptConfigTester(self, config_class=MptConfig, n_embd=37)
+        self.config_tester = MptConfigTester(self, config_class=MptConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

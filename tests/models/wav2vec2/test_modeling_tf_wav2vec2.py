@@ -328,7 +328,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFWav2Vec2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -452,7 +452,7 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
             do_stable_layer_norm=True,
             scope="robust",
         )
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config)
 
     # overwrite because input_values != input_ids
     def test_forward_signature(self):

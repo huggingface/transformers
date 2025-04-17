@@ -367,7 +367,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IdeficsConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -596,7 +596,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             self,
             modality_type_vocab_size=3,
         )
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IdeficsConfig)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")

@@ -331,7 +331,7 @@ class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFFlaubertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlaubertConfig, emb_dim=37)
+        self.config_tester = ConfigTester(self, config_class=FlaubertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

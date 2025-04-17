@@ -152,7 +152,7 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = TFXGLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XGLMConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=XGLMConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

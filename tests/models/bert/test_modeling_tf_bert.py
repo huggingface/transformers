@@ -637,7 +637,7 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = TFBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BertConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()

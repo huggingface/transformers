@@ -292,7 +292,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = UdopModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=UdopConfig)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -575,7 +575,7 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=UdopConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
