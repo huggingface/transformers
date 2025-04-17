@@ -199,7 +199,7 @@ class BitNetIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [128000, 128000, 1502, 25, 2650, 527, 499, 30, 128009, 72803, 25, 220]
-        model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T", revision='dev')
+        model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -234,11 +234,11 @@ class BitNetIntegrationTest(unittest.TestCase):
     @slow
     def test_model_generation(self):
         EXPECTED_TEXT_COMPLETION = """User: What is your favourite food?Assistant: As an AI, I don't have personal preferences or the ability to eat food. However, I"""
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/bitnet-b1.58-2B-4T", revision='dev')
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
         prompt = tokenizer.apply_chat_template(
             [{"role": "user", "content": "What is your favourite food?"}], add_generation_prompt=True, tokenize=False
         )
-        model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T", revision='dev')
+        model = BitNetForCausalLM.from_pretrained("microsoft/bitnet-b1.58-2B-4T")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
