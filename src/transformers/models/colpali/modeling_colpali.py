@@ -214,7 +214,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vlm(
+        vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
@@ -223,8 +223,10 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             output_attentions=output_attentions,
             **kwargs,
         )
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
-        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_output.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -233,17 +235,24 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         if not return_dict:
-            output = (embeddings,) + outputs[2:]
-            output[2] = output[2] if output_hidden_states else None
-            output[-1] = outputs.image_hidden_states if pixel_values is not None else None
-            return output
+            return tuple(
+                v
+                for v in [
+                    embeddings,
+                    vlm_output.past_key_values,
+                    vlm_hidden_states,
+                    vlm_output.attentions,
+                    vlm_image_hidden_states,
+                ]
+                if v is not None
+            )
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states if pixel_values is not None else None,
+            past_key_values=vlm_output.past_key_values,
+            hidden_states=vlm_hidden_states,
+            attentions=vlm_output.attentions,
+            image_hidden_states=vlm_image_hidden_states,
         )
 
     def get_input_embeddings(self):

@@ -301,7 +301,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        outputs = self.inner_forward(
+        vlm_output = self.inner_forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -315,8 +315,9 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             image_grid_thw=image_grid_thw,
             cache_position=cache_position,
         )
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
 
-        last_hidden_states = outputs[0]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -324,15 +325,17 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         if not return_dict:
-            output = (embeddings,) + outputs[2:]
-            output[2] = output[2] if output_hidden_states is not None else None
-            return output
+            return tuple(
+                v
+                for v in [embeddings, vlm_output.past_key_values, vlm_hidden_states, vlm_output.attentions]
+                if v is not None
+            )
 
         return ColQwen2ForRetrievalOutput(
             embeddings=embeddings,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
+            past_key_values=vlm_output.past_key_values,
+            hidden_states=vlm_hidden_states,
+            attentions=vlm_output.attentions,
         )
 
     def resize_token_embeddings(
