@@ -333,6 +333,38 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.blip"].append("BlipImageProcessorFast")
+    _import_structure["models.clip"].append("CLIPImageProcessorFast")
+    _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
+    _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.deit"].append("DeiTImageProcessorFast")
+    _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
+    _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
+    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
+    _import_structure["models.llava"].append("LlavaImageProcessorFast")
+    _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
+    _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+    _import_structure["models.mobilenet_v1"].append("MobileNetV1ImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
+    _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
+    _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
+    _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
+    _import_structure["models.siglip"].append("SiglipImageProcessorFast")
+    _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
+    _import_structure["models.vit"].append("ViTImageProcessorFast")
+
+try:
+    if not (is_torchvision_available() and is_timm_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_timm_and_torchvision_objects
+
+    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
+        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
 
 # PyTorch-backed objects
 try:
@@ -807,6 +839,26 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.blip import BlipImageProcessorFast
+        from .models.clip import CLIPImageProcessorFast
+        from .models.convnext import ConvNextImageProcessorFast
+        from .models.deformable_detr import DeformableDetrImageProcessorFast
+        from .models.deit import DeiTImageProcessorFast
+        from .models.depth_pro import DepthProImageProcessorFast
+        from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
+        from .models.got_ocr2 import GotOcr2ImageProcessorFast
+        from .models.llava import LlavaImageProcessorFast
+        from .models.llava_next import LlavaNextImageProcessorFast
+        from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.mobilenet_v1 import MobileNetV1ImageProcessorFast
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
+        from .models.pixtral import PixtralImageProcessorFast
+        from .models.qwen2_vl import Qwen2VLImageProcessorFast
+        from .models.rt_detr import RTDetrImageProcessorFast
+        from .models.siglip import SiglipImageProcessorFast
+        from .models.siglip2 import Siglip2ImageProcessorFast
+        from .models.vit import ViTImageProcessorFast
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
