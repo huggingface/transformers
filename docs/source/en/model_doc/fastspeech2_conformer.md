@@ -91,8 +91,6 @@ sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 
 ## Notes
 
-- FastSpeech2Conformer uses a non-autoregressive architecture, making it significantly faster than autoregressive TTS models like Tacotron.
-- The model combines a duration predictor, pitch predictor, and energy predictor to control various aspects of speech generation.
 - Use the matching [HiFi-GAN vocoder](https://huggingface.co/espnet/fastspeech2_conformer_hifigan) for optimal audio quality.
 - Use the combined model, [`FastSpeech2ConformerWithHiFiGan`], for faster generation speed since it handles both spectrogram generation and vocoding in a single step.
 - You could also use the [`FastSpeech2ConformerModel`] and [`FastSpeech2ConformerHiFiGan`] separately as shown below.
