@@ -61,7 +61,6 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("pixel_values", batch_feature)
         self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 56, 1176]))
 
-
     def test_process_queries(self):
         # Inputs
         queries = [
