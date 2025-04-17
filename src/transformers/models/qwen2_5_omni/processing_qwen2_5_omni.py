@@ -24,9 +24,10 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput, make_batched_videos
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
@@ -87,14 +88,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["image_processor", "feature_extractor", "tokenizer"]
+    attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "Qwen2VLImageProcessor"
+    video_processor_class = "Qwen2VLVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
     valid_kwargs = ["chat_template"]
 
-    def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None):
-        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
+    def __init__(
+        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+    ):
+        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
