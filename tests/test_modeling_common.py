@@ -89,6 +89,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     set_model_tester_for_less_flaky_test,
@@ -4527,6 +4528,13 @@ class ModelTesterMixin:
                 ),
             )
 
+    def test_can_be_initialized_on_meta(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # If it does not raise here, the test passes
+            with torch.device("meta"):
+                _ = model_class(config)
+
     @require_torch_accelerator
     def test_can_load_with_device_context_manager(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4550,6 +4558,9 @@ class ModelTesterMixin:
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
             )
 
+    # Here we need to run with a subprocess as otherwise setting back the default device to the default value ("cpu")
+    # may bring unwanted consequences on other tests. See PR #37553
+    @run_test_using_subprocess
     @require_torch_accelerator
     def test_can_load_with_global_device_set(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
