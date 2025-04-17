@@ -18,8 +18,10 @@ It also supports tuning and inference across multiple hardware platforms, includ
 AutoRound also offers a variety of useful features, including mixed-bit tuning and inference, lm-head quantization, support for exporting to formats like GPTQ/AWQ/GGUF, and flexible tuning recipes. 
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
 
+AutoRound was originally developed as part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor), serving as a general-purpose model compression library for deep learning. 
+It has since evolved into a standalone library focused specifically on low-precision optimization for large language models (LLMs). 
+AutoRound remains fully integrated with the Intel Neural Compressor, and you can explore the repository for more details.
 
-AutoRound is part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor). For more model compression technicals optimized for Intel devices, please check it out
 
 ## Installation
 
@@ -57,8 +59,8 @@ auto-round \
     --output_dir ./tmp_autoround
 ```
 
-AutoRound also offer two configurations, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively. 
-For 2 bits, we recommend using `auto-round-best` and `auto-round`.
+AutoRound also offer another two configurations, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively. 
+For 2 bits, we recommend using `auto-round-best` or `auto-round`.
 </hfoption>
 
 <hfoption id="quantization auto-round api">
@@ -96,7 +98,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 <hfoption id="quantization auto-round-best">
 
 ### AutoRoundBest recipe
-This setting provides the best accuracy but is 2-3x slower than the AutoRound recipe. It is especially recommended for 2-bit quantization.
+This setting provides the best accuracy in most scenarios but is 2–3× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
@@ -169,7 +171,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2,4,8 bits, we recommend to use intel-extension-for-pytorch for 4 bits 
+Supports 2,4,8 bits, we recommend to use intel-extension-for-pytorch (IPEX) for 4 bits 
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -187,7 +189,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption id="inference xpu">
 ### XPU
 
-Supports 4 bits,  IPEX(intel-extension-for-pytorch) is required
+Supports 4 bits, intel-extension-for-pytorch (IPEX) is required
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
