@@ -522,6 +522,8 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.cuda.is_bf16_supported()
     if torch.xpu.is_available():
         return torch.xpu.is_bf16_supported()
+    if torch.hpu.is_available():
+        return torch.hpu.is_bf16_supported()
     return False
 
 
