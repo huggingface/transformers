@@ -147,7 +147,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     ):
         """Preprocesses a single segmentation map."""
         processed_segmentation_maps = []
-        added_dimension = False # we will assume that the batch of maps will all either have added dims or not
+        added_dimension = False  # we will assume that the batch of maps will all either have added dims or not
         for segmentation_map in segmentation_maps:
             segmentation_map = to_numpy_array(segmentation_map)
             # Add an axis to the segmentation maps for transformations.
@@ -165,10 +165,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
-        processed_segmentation_maps = self._preprocess(
-            images=processed_segmentation_maps,
-            **kwargs
-        )
+        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
         if added_dimension:
             processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
