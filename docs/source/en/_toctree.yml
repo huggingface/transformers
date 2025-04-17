@@ -163,6 +163,8 @@
     title: Overview
   - local: quantization/selecting
     title: Selecting a quantization method
+  - local: quantization/concept_guide
+    title: Quantization concepts
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/awq
@@ -1061,6 +1063,8 @@
         title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
+      - local: model_doc/timesfm
+        title: TimesFM
       title: Time series models
     - sections:
       - local: model_doc/graphormer
