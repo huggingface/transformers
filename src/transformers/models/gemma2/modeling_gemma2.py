@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_gemma2 import Gemma2Config
 
 

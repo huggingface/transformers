@@ -27,7 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import is_torch_flex_attn_available, logging, add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
