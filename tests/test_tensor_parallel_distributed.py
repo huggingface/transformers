@@ -3,7 +3,6 @@ import torch
 import torch.distributed as dist
 from torch.distributed import DeviceMesh
 from transformers.integrations.tensor_parallel import ColwiseParallel, get_tensor_shard
-from tqdm import tqdm
 
 def setup_distributed():
     """Set up distributed environment"""
@@ -47,8 +46,6 @@ def test_distributed_colwise_parallel_layer():
     rank = dist.get_rank()
     world_size = dist.get_world_size()
     
-    print(f"Rank {rank}: world_size = {world_size}")
-    
     # Create a linear layer
     if rank == 0:
         layer = torch.nn.Linear(8, 4)
@@ -70,13 +67,8 @@ def test_distributed_colwise_parallel_layer():
     weight = layer.weight
     empty_weight = torch.empty_like(weight)
     
-    print(f"Rank {rank}: weight shape = {weight.shape}")
-    
     # Get shard for current process
     shard = get_tensor_shard(weight, empty_weight, device_mesh, rank, 0)  # Modified to shard along first dimension
-    
-    print(f"Rank {rank}: shard shape = {shard.shape}")
-    print(f"Rank {rank}: expected shape = ({4 // world_size}, 8)")
     
     # Verify shard shape
     assert shard.shape == (4 // world_size, 8)
@@ -84,20 +76,4 @@ def test_distributed_colwise_parallel_layer():
     # Verify shard content
     start_row = rank * (4 // world_size)
     end_row = (rank + 1) * (4 // world_size)
-    assert torch.allclose(shard, weight[start_row:end_row, :])
-
-if __name__ == "__main__":
-    # Initialize distributed environment
-    setup_distributed()
-    
-    test_functions = [test_distributed_colwise_split, test_distributed_colwise_parallel_layer]
-    
-    if dist.get_rank() == 0:
-        print("Starting distributed tests...")
-        for test_func in tqdm(test_functions, desc="Test progress"):
-            test_func()
-        print(f"Rank {dist.get_rank()}: All tests passed!")
-    else:
-        for test_func in test_functions:
-            test_func()
-        print(f"Rank {dist.get_rank()}: All tests passed!") 
+    assert torch.allclose(shard, weight[start_row:end_row, :]) 
