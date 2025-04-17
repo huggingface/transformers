@@ -91,11 +91,11 @@ class Qwen2AudioProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method prepares one or more sequences and audio inputs for the model.
-        
+
         If a text input is provided, it forwards the text and kwargs arguments to Qwen2TokenizerFast’s [~Qwen2TokenizerFast.__call__] method to encode the text.
-        
+
         Similarly, if audio input(s) are provided, it forwards the audios and kwargs to WhisperFeatureExtractor’s [~WhisperFeatureExtractor.__call__] method to process the audio.
-        
+
         For additional details, please refer to the docstrings of these two methods.
 
         Args:

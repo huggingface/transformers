@@ -2,12 +2,12 @@ import copy
 import importlib.metadata
 import json
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
-from abc import ABC, abstractmethod
 
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
@@ -55,7 +55,7 @@ class Cache(ABC):
         Return:
             A tuple containing the updated key and value states.
         """
-                # Update the number of seen tokens
+        # Update the number of seen tokens
         if layer_idx == 0:
             self._seen_tokens += key_states.shape[-2]
 
@@ -86,7 +86,7 @@ class Cache(ABC):
                 return new_keys, new_values
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
-    
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
