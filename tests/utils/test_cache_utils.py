@@ -747,22 +747,29 @@ class CacheIntegrationTest(unittest.TestCase):
     )
     def test_compilable_cache_smaller_batch_size(self, name, cache_cls):
         """
-        Tests that compilable caches, whose shape needs to be set in advance, can be used with smaller batch sizes.
+        Tests that compilable caches, whose shape need to be set in advance, can be used with smaller batch sizes.
         """
-        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"  # has sliding window
+        # Mistral has sliding window, can test related caches
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_repo)
         inputs_ids = tokenizer(["foo bar"], return_tensors="pt").input_ids.to(torch_device)
         cache_position = torch.arange(inputs_ids.shape[1]).to(torch_device)
 
         # cache with a large batch size, >> input batch size (1)
+        batch_size = 16
         cache = cache_cls(
             config=model.config,
-            max_batch_size=16,
+            max_batch_size=batch_size,
             max_cache_len=20,
             device=torch_device,
             dtype=model.dtype,
         )
 
         # the forward pass should work with this cache, even though the input batch size is smaller than the cache's
+        _ = model(inputs_ids, cache_position=cache_position, past_key_values=cache)
+
+        # if we expand the input batch size to the cache's batch size, the same cache can be reused
+        cache.reset()
+        inputs_ids = torch.cat([inputs_ids] * batch_size, dim=0)
         _ = model(inputs_ids, cache_position=cache_position, past_key_values=cache)
