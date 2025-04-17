@@ -139,7 +139,6 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_available_on_device,
     is_torch_bf16_gpu_available,
-    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -1027,6 +1026,19 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
+def require_torch_large_accelerator(test_case, memory: float = 20):
+    """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
+    if torch_device != "cuda" and torch_device != "xpu":
+        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
+
+    torch_accelerator_module = getattr(torch, torch_device)
+
+    return unittest.skipUnless(
+        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU or XPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1073,12 +1085,19 @@ def require_torch_bf16_gpu(test_case):
 
 
 def require_deterministic_for_xpu(test_case):
-    if is_torch_xpu_available():
-        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
-            test_case
-        )
-    else:
-        return test_case
+    @wraps(test_case)
+    def wrapper(*args, **kwargs):
+        if is_torch_xpu_available():
+            original_state = torch.are_deterministic_algorithms_enabled()
+            try:
+                torch.use_deterministic_algorithms(True)
+                return test_case(*args, **kwargs)
+            finally:
+                torch.use_deterministic_algorithms(original_state)
+        else:
+            return test_case(*args, **kwargs)
+
+    return wrapper
 
 
 def require_torch_tf32(test_case):

@@ -68,6 +68,8 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+else:
+    pil_torch_interpolation_mapping = None
 
 logger = logging.get_logger(__name__)
 
@@ -689,8 +691,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # torch resize uses interpolation instead of resample
         resample = kwargs.pop("resample")
+
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
         kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (int, PILImageResampling)) else resample
         )
 
         # Pop kwargs that are not needed in _preprocess

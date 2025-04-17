@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_optimum_quanto,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -125,9 +126,11 @@ VLM_CLASS_NAMES = [
     "qwen2vl",
     "qwen2_5_vl",
     "ayavision",
+    "janus",
     "gemma3",
     "mistral3",
     "chameleon",
+    "qwen2_5_omni",
 ]
 
 
@@ -226,6 +229,10 @@ class GenerationTesterMixin:
                 "video_token_index",
                 "video_token_id",
                 "vision_start_token_id",
+                "audio_token_index",
+                "audio_start_token_id",
+                "audio_end_token_id",
+                "vision_end_token_id",
             ]:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
@@ -1659,6 +1666,12 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values", None)
                 inputs_dict.pop("pixel_values_videos", None)
                 inputs_dict.pop("pixel_values_images", None)
+            # HACK - in the case of granite speech, input_features and inputs_embeds are mutually exclusive;
+            # this is similar to VLMs and should likely be standardized for similar audio models in the future,
+            # then made generic here.
+            if "granitespeech" in model_class.__name__.lower():
+                inputs_dict.pop("input_features", None)
+
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
@@ -1935,7 +1948,7 @@ class GenerationTesterMixin:
                     )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
         """Tests we can generate by indicating `cache_implementation` for each possible cache class"""
@@ -4277,6 +4290,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
+    @require_read_token
+    @slow
     def test_assisted_generation_early_exit(self):
         """
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
@@ -4785,6 +4800,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_cache_device_map_with_vision_layer_device_map(self):

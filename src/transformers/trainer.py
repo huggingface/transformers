@@ -177,6 +177,7 @@ from .utils import (
     strtobool,
 )
 from .utils.deprecation import deprecate_kwarg
+from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -312,6 +313,12 @@ SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
+@requires(
+    backends=(
+        "torch",
+        "accelerate",
+    )
+)
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -932,7 +939,7 @@ class Trainer:
         columns = [k for k in signature_columns if k in dataset.column_names]
         if len(columns) == 0:
             raise ValueError(
-                "No columns in the dataset match the model's forward method signature. "
+                "No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
                 f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
                 "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
             )
@@ -1356,7 +1363,6 @@ class Trainer:
                 and args.optim_target_modules.replace("_", "-") == "all-linear"
             )
 
-            target_params = []
             target_params_names = []
             for module_name, module in model.named_modules():
                 target_module_exists, is_regex = check_target_module_exists(
@@ -1373,12 +1379,12 @@ class Trainer:
                 if not target_module_exists and not all_linear:
                     continue
 
-                target_params.append(module.weight)
                 target_params_names.append(module_name + ".weight")
 
-            if len(target_params) == 0:
+            if len(target_params_names) == 0:
                 raise ValueError(f"No target modules found for {optimizer_name} ({args.optim_target_modules}).")
 
+            target_params = [p for n, p in model.named_parameters() if n in target_params_names]
             non_target_params = [p for n, p in model.named_parameters() if n not in target_params_names]
             optim_kwargs.update(optim_args)
 

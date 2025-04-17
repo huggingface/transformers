@@ -26,7 +26,7 @@ There are two main venues to receive support: [the forums](https://discuss.huggi
 
 [The user forums](https://discuss.huggingface.co/) are supported by the wide community of the library users and backed up by developers when needed.
 
-If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystalized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
+If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystallized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
 
 In particular all "Please explain" questions or objectively very user-specific feature requests belong to the forums. Here are some example of such questions:
 
