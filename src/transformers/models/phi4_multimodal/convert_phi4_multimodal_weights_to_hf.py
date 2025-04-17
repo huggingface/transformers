@@ -178,6 +178,27 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
     )
     converted_processor.save_pretrained(output_dir)
 
+    # we need to rename a few tokens but tokenizers doesn't allow doing that programatically
+    # To avoid consufion and manual renaming, the below part load and re-saved each json file
+    vocab = json.load(open(f"{output_dir}/vocab.json", "r"))
+    vocab["<|endoftext11|>"] = "<|audio|>"
+    vocab["<|endoftext10|>"] = "<|image|>"
+    json.dump(vocab, open(f"{output_dir}/vocab.json", "w"))
+
+    tokenizer = json.load(open(f"{output_dir}/tokenizer.json", "r"))
+    tokenizer["added_tokens"][1]["content"] = "<|image|>"
+    tokenizer["added_tokens"][2]["content"] = "<|audio|>"
+    tokenizer["model"]["vocab"]["<|audio|>"] = tokenizer["model"]["vocab"]["<|endoftext11|>"]
+    tokenizer["model"]["vocab"]["<|image|>"] = tokenizer["model"]["vocab"]["<|endoftext10|>"]
+    del tokenizer["model"]["vocab"]["<|endoftext11|>"]
+    del tokenizer["model"]["vocab"]["<|endoftext10|>"]
+    json.dump(tokenizer, open(f"{output_dir}/tokenizer.json", "w"))
+
+    tokenizer_config = json.load(open(f"{output_dir}/tokenizer_config.json", "r"))
+    tokenizer_config["added_tokens_decoder"]["200010"]["content"] = "<|image|>"
+    tokenizer_config["added_tokens_decoder"]["200011"]["content"] = "<|audio|>"
+    json.dump(tokenizer_config, open(f"{output_dir}/tokenizer_config.json", "w"))
+
 
 def extract_adapters_data(input_dir: str, output_dir: str):
     """Extract adapters data from the state dict and save weights and configs."""
