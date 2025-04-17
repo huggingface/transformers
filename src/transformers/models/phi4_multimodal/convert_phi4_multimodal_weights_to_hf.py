@@ -21,13 +21,18 @@ from peft import LoraConfig
 from safetensors.torch import load_file, save_file
 
 from transformers import (
+    AutoProcessor,
     Phi4MultimodalAudioConfig,
     Phi4MultimodalConfig,
+    Phi4MultimodalFeatureExtractor,
     Phi4MultimodalForCausalLM,
+    Phi4MultimodalImageProcessorFast,
     Phi4MultimodalProcessor,
     Phi4MultimodalVisionConfig,
 )
 
+
+CHAT_TEMPLATE = "{% for message in messages %}{{ '<|' + message['role'] + '|>' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'audio' %}{{ '<|audio|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{% if message['role'] == 'system' and 'tools' in message and message['tools'] is not none %}{{ '<|tool|>' + message['tools'] + '<|/tool|>' + '<|end|>' }}{% endif %}{{ '<|end|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|assistant|>' }}{% else %}{{ eos_token }}{% endif %}"
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -163,12 +168,15 @@ def convert_and_write_model(input_dir: str, output_dir: str):
 
 def convert_and_save_processor(input_dir: str, output_dir: str):
     """Convert the processor."""
-    processor = Phi4MultimodalProcessor.from_pretrained(input_dir)
-    del processor.image_processor.auto_map
-    del processor.audio_processor.auto_map
-    processor.chat_template = processor.tokenizer.chat_template
-    processor.tokenizer.extra_special_tokens = {"image_token": "<|endoftext10|>", "audio_token": "<|endoftext11|>"}
-    processor.save_pretrained(output_dir)
+    original_processor = AutoProcessor.from_pretrained(input_dir, trust_remote_code=True)
+    original_processor.tokenizer.extra_special_tokens = {"image_token": "<|image|>", "audio_token": "<|audio|>"}
+    converted_processor = Phi4MultimodalProcessor(
+        tokenizer=original_processor.tokenizer,
+        image_processor=Phi4MultimodalImageProcessorFast(),
+        audio_processor=Phi4MultimodalFeatureExtractor(),
+        chat_template=CHAT_TEMPLATE,
+    )
+    converted_processor.save_pretrained(output_dir)
 
 
 def extract_adapters_data(input_dir: str, output_dir: str):
