@@ -28,15 +28,16 @@ rendered properly in your Markdown viewer.
 
 Unlike CLIP, SigLIP employs a pairwise sigmoid loss on image-text pairs during training. This training loss eliminates the need for a global view of all pairwise similarities between images and texts within a batch. Consequently, it enables more efficient scaling to larger batch sizes while also delivering superior performance with smaller batch sizes.
 
-You can find all the original [SigLIP] checkpoints under the [SigLIP](https://huggingface.co/collections/google/siglip-659d5e62f0ae1a57ae0e83ba) collection.
+You can find all the original SigLIP checkpoints under the [SigLIP](https://huggingface.co/collections/google/siglip-659d5e62f0ae1a57ae0e83ba) collection.
 
 
 > [!TIP]
-> Click on the [SigLIP] models in the right sidebar for more examples of how to apply [SigLIP] to different image and text tasks.
+> Click on the SigLIP models in the right sidebar for more examples of how to apply SigLIP to different image and text tasks.
 
-The example below demonstrates how to generate similarity scores between text(s) and image(s) with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate similarity scores between texts and image(s) with [`Pipeline`] or the [`AutoModel`] class.
+
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 from transformers import pipeline
