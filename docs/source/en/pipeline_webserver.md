@@ -52,10 +52,10 @@ async def homepage(request):
     return JSONResponse(output)
 
 async def server_loop(q):
-    pipeline = pipeline(task="fill-mask",model="google-bert/bert-base-uncased")
+    pipe = pipeline(task="fill-mask",model="google-bert/bert-base-uncased")
     while True:
         (string, response_q) = await q.get()
-        out = pipeline(string)
+        out = pipe(string)
         await response_q.put(out)
 
 app = Starlette(
@@ -81,6 +81,10 @@ Query the server with a POST request.
 
 ```bash
 curl -X POST -d "Paris is the [MASK] of France." http://localhost:8000/
+```
+This should return the output below.
+
+```bash
 [{'score': 0.9969332218170166,
   'token': 3007,
   'token_str': 'capital',
@@ -112,23 +116,27 @@ The example below is written in pseudocode for readability rather than performan
 1. There is no batch size limit.
 2. The timeout is reset on every queue fetch, so you could end up waiting much longer than the `timeout` value before processing a request. This would also delay the first inference request by that amount of time. The web server always waits 1ms even if the queue is empty, which is inefficient, because that time can be used to start inference. It could make sense though if batching is essential to your use case.
 
-    It would be better to have a single 1ms deadline, instead of resetting it on every fetch.
+    It would be better to have a single 1ms deadline, instead of resetting it on every fetch, as shown below.
 
 ```py
-(string, rq) = await q.get()
-strings = []
-queues = []
-while True:
-    try:
-        (string, rq) = await asyncio.wait_for(q.get(), timeout=0.001)
-    except asyncio.exceptions.TimeoutError:
-        break
-    strings.append(string)
-    queues.append(rq)
-strings
-outs = pipeline(strings, batch_size=len(strings))
-for rq, out in zip(queues, outs):
-    await rq.put(out)
+async def server_loop(q):
+    pipe = pipeline(task="fill-mask", model="google-bert/bert-base-uncased")
+    while True:
+        (string, rq) = await q.get()
+        strings = []
+        queues = []
+        strings.append(string)
+        queues.append(rq)
+        while True:
+            try:
+                (string, rq) = await asyncio.wait_for(q.get(), timeout=1)
+            except asyncio.exceptions.TimeoutError:
+                break
+            strings.append(string)
+            queues.append(rq)
+        outs = pipe(strings, batch_size=len(strings))
+        for rq, out in zip(queues, outs):
+            await rq.put(out)
 ```
 
 ## Error checking

@@ -1974,9 +1974,11 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     """
     Data collator used for padding free approach. Does the following:
 
-    - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - concatenates the entire mini batch into single long sequence of shape [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
-    - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+    - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
+    - optionally returns the kwargs contained in FlashAttentionKwargs
+    - optionally returns seq_idx indicating which sequence each token belongs to
 
     <Tip warning={true}>
 
@@ -1986,10 +1988,23 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     </Tip>
     """
 
-    def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
+    def __init__(
+        self,
+        *args,
+        return_position_ids=True,
+        separator_id=-100,
+        return_flash_attn_kwargs=False,
+        return_seq_idx=False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
         self.separator_id = separator_id
+        self.return_flash_attn_kwargs = return_flash_attn_kwargs
+        self.return_seq_idx = return_seq_idx
+        self._int_64_keys = {"labels", "position_ids", "input_ids"}
+        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
+        self._py_int_keys = {"max_length_q", "max_length_k"}
 
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
@@ -1997,15 +2012,52 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if separator_id is None:
             separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
-        ret = {"input_ids": [], "labels": []}
+        batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:
-            ret.update({"position_ids": []})
-        for idx in range(0, len(features)):
-            ret["input_ids"] += features[idx]["input_ids"]
+            batch.update({"position_ids": []})
+        if self.return_seq_idx:
+            batch.update({"seq_idx": []})
+        if self.return_flash_attn_kwargs:
+            cu_seq_lens = [0]
+            max_length = 0
+        for seq_idx, sample in enumerate(features):
+            input_ids = sample["input_ids"]
+            batch["input_ids"] += input_ids
             if is_labels_provided:
-                ret["labels"] += [separator_id] + features[idx]["labels"][1:]
+                batch["labels"] += [separator_id] + sample["labels"][1:]
             else:
-                ret["labels"] += [separator_id] + features[idx]["input_ids"][1:]
+                batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
-        return default_data_collator([ret], return_tensors)
+                batch["position_ids"] += list(range(len(input_ids)))
+            if self.return_seq_idx:
+                batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
+            if self.return_flash_attn_kwargs:
+                cu_seq_lens.append(cu_seq_lens[-1] + len(input_ids))
+                max_length = max(max_length, len(input_ids))
+
+        if self.return_flash_attn_kwargs:
+            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
+            batch["max_length_q"] = batch["max_length_k"] = max_length
+
+        # FlashAttentionKwargs and seq_idx are expected to be int32s.
+        if return_tensors == "pt":
+            import torch
+
+            data_cls = torch.tensor
+            dtype_64 = torch.int64
+            dtype_32 = torch.int32
+        elif return_tensors == "np":
+            data_cls = np.array
+            dtype_64 = np.int64
+            dtype_32 = np.int32
+        else:
+            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not suported')
+
+        for k, v in batch.items():
+            if k in self._batch_dim_keys:
+                v = [v]
+            # Flash attention max_len_{q,k} are python ints
+            if k not in self._py_int_keys:
+                batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
+
+        return batch
