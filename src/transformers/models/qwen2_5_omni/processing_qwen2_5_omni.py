@@ -80,6 +80,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     Args:
         image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor.
+        video_processor  ([`Qwen2VLVideoProcessor`], *optional*):
+            The video processor.
         feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The audio feature extractor.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
