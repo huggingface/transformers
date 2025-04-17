@@ -230,10 +230,10 @@ class AutoRoundConfig(QuantizationConfigMixin):
         self.group_size = group_size
         self.sym = sym
         self.backend = backend
-        self.packing_format = "auto_round:auto_gptq"
+        self.packing_format = "auto_round:gptq"
         if kwargs is not None:
-            for key in kwargs.keys():
-                setattr(self, key, kwargs[key])
+            for key, value in kwargs.items():
+                setattr(self, key, value)
         self.quant_method = QuantizationMethod.AUTOROUND
         self.post_init()
 
@@ -265,11 +265,9 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
         if "awq" in quant_method and config_dict.get("version", "gemm") != "gemm":
             raise NotImplementedError(
-                "Failed to convert awq format to auto_round format. Only supports  awq format with gemm version"
+                "Failed to convert awq format to auto_round format. Only supports awq format with gemm version"
             )
 
-        if "auto-round" not in quant_method:
-            config_dict["packing_format"] = f"auto_round:{quant_method}"
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
 

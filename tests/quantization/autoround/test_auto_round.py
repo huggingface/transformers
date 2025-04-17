@@ -31,7 +31,6 @@ from transformers.utils import is_torch_available
 if is_torch_available():
     import torch
 
-
 @slow
 @require_torch_gpu
 @require_auto_round

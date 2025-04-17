@@ -33,8 +33,8 @@ class AutoRoundQuantizer(HfQuantizer):
     """
     Quantizer of the AutoRound method. (https://arxiv.org/pdf/2309.05516)
     """
-
-    requires_calibration = False
+    # AutoRound requires data calibration - we support only inference
+    requires_calibration = True
     required_packages = ["auto_round"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -69,7 +69,7 @@ class AutoRoundQuantizer(HfQuantizer):
 
             post_init(model, self.used_backends)
         else:
-            raise NotImplementedError
+            raise NotImplementedError("AutoRound only sports pre-quantized models.")
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

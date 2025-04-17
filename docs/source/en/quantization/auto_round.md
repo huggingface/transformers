@@ -61,9 +61,10 @@ AutoRound also offer two configurations, `auto-round-best` and `auto-round-light
 For 2 bits, we recommend using `auto-round-best` and `auto-round`.
 </hfoption>
 
-<hfoption id="quantization api">
+<hfoption id="quantization auto-round api">
 
-### API Usage
+### AutoRound API Usage
+This setting offers a better trade-off between accuracy and tuning cost, and is recommended in all scenarios.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -72,29 +73,78 @@ from auto_round import AutoRound
 model_name = "facebook/opt-125m"
 model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-
 bits, group_size, sym = 4, 128, True
 # mixed bits config
 # layer_config = {"model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
-
 autoround = AutoRound(
-    model, 
-    tokenizer, 
-    bits=bits, 
-    group_size=group_size, 
+    model,
+    tokenizer,
+    bits=bits,
+    group_size=group_size,
     sym=sym,
     # enable_torch_compile=True,
     # layer_config=layer_config,
 )
 
-## the best accuracy, 3X slower, low_gpu_mem_usage could save ~20G but ~30% slower
-# autoround = AutoRound(model, tokenizer, nsamples=512, iters=1000, low_gpu_mem_usage=True, bits=bits, group_size=group_size, sym=sym)
+output_dir = "./tmp_autoround"
+# format= 'auto_round'(default), 'auto_gptq', 'auto_awq'
+autoround.quantize_and_save(output_dir, format='auto_round') 
+```
 
-## 2-3X speedup, slight accuracy drop at W4G128
-# autoround = AutoRound(model, tokenizer, nsamples=128, iters=50, lr=5e-3, bits=bits, group_size=group_size, sym=sym )
+</hfoption>
+
+<hfoption id="quantization auto-round-best">
+
+### AutoRoundBest recipe
+This setting provides the best accuracy but is 2-3x slower than the AutoRound recipe. It is especially recommended for 2-bit quantization.
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from auto_round import AutoRound
+
+model_name = "facebook/opt-125m"
+model = AutoModelForCausalLM.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+bits, group_size, sym = 4, 128, True
+autoround = AutoRound(
+    model,
+    tokenizer,
+    bits=bits,
+    group_size=group_size,
+    sym=sym,
+    nsamples=512,
+    iters=1000,
+    low_gpu_mem_usage=True
+)
 
 output_dir = "./tmp_autoround"
-## format= 'auto_round'(default), 'auto_gptq', 'auto_awq'
+autoround.quantize_and_save(output_dir, format='auto_round') 
+```
+</hfoption>
+
+<hfoption id="quantization auto-round-light">
+
+### AutoRoundLight recipe
+This setting offers the best speed (2–3X faster than AutoRound), but it may cause a significant accuracy drop for small models and 2-bit quantization. It is recommended for 4-bit settings and models larger than 3B.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from auto_round import AutoRound
+
+model_name = "facebook/opt-125m"
+model = AutoModelForCausalLM.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+bits, group_size, sym = 4, 128, True
+autoround = AutoRound(
+    model,
+    tokenizer,
+    bits=bits,
+    group_size=group_size,
+    sym=sym,
+    iters=50,
+    lr=5e-3,
+)
+
+output_dir = "./tmp_autoround"
 autoround.quantize_and_save(output_dir, format='auto_round') 
 ```
 
@@ -134,9 +184,9 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 <hfoption>
 
+<hfoption id="inference xpu">
 ### XPU
 
-<hfoption id="inference xpu">
 Supports 4 bits,  IPEX(intel-extension-for-pytorch) is required
 
 ```python
@@ -152,9 +202,9 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 <hfoption>
 
+<hfoption id="inference cuda">
 ### CUDA
 
-<hfoption id="inference cuda">
 Supports 2,3 4,8 bits, we recommend to use GPTQModel for 4,8 bits
 
 ```python
@@ -170,9 +220,8 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 <hfoption>
 
-### Specify Backend
-
 <hfoption id="specific backend">
+### Specify Backend
 
 The automatically selected backend may not always be the most suitable for certain devices. 
 You can specify your preferred backend, such as "ipex"(cpu/xpu), "itrex"(cpu), "marlin"(cuda), "exllamav2"(cuda), "triton"(cuda) and others, according to your needs or hardware compatibility. Please note that some corresponding libraries  may need to be installed.
@@ -192,9 +241,9 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption>
 
 
+<hfoption id="format convert">
 ### Convert GPTQ/AWQ to AutoRound
 
-<hfoption id="format convert">
 Most GPTQ/AWQ models can be converted to the AutoRound format for better compatibility and support with Intel devices. Please note that the quantization config will be changed if the model is serialized.
 
 ```python
@@ -210,8 +259,6 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 ```
 
 <hfoption>
-
-
 
 <hfoptions>
 
