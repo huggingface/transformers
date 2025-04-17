@@ -5961,7 +5961,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             param = next(model.parameters())
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
-    
+
     def test_bnb_8bit_optimizer_skip_embedding(self):
         model = BasicTextGenerationModel(8, 4)
         with tempfile.TemporaryDirectory() as tmp_dir:
