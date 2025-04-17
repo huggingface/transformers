@@ -123,7 +123,6 @@ class BitNetConfig(PretrainedConfig):
         rope_theta=500000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        online_quant=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -145,7 +144,6 @@ class BitNetConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.online_quant = online_quant
 
         super().__init__(
             pad_token_id=pad_token_id,
