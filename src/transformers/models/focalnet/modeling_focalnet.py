@@ -486,7 +486,7 @@ class FocalNetStage(nn.Module):
         downsample = FocalNetPatchEmbeddings if (index < self.num_stages - 1) else None
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
         self.layers = nn.ModuleList(
