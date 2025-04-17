@@ -86,6 +86,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("minicpm_o_2_6", "MiniCPM_o_2_6Processor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
