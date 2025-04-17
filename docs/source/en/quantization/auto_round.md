@@ -77,10 +77,15 @@ bits, group_size, sym = 4, 128, True
 # mixed bits config
 # layer_config = {"model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
 
-autoround = AutoRound(model, tokenizer, bits=bits, group_size=group_size, sym=sym,
-                      # enable_torch_compile=True,
-                      # layer_config=layer_config,
-                      )
+autoround = AutoRound(
+    model, 
+    tokenizer, 
+    bits=bits, 
+    group_size=group_size, 
+    sym=sym,
+    # enable_torch_compile=True,
+    # layer_config=layer_config,
+)
 
 ## the best accuracy, 3X slower, low_gpu_mem_usage could save ~20G but ~30% slower
 # autoround = AutoRound(model, tokenizer, nsamples=512, iters=1000, low_gpu_mem_usage=True, bits=bits, group_size=group_size, sym=sym)
