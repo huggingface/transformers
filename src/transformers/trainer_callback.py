@@ -583,7 +583,7 @@ class DefaultFlowCallback(TrainerCallback):
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         current_time = time.time()
-        
+
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
@@ -597,7 +597,11 @@ class DefaultFlowCallback(TrainerCallback):
             elif current_time - self.last_eval_time >= args.eval_minutes * 60:
                 control.should_evaluate = True
                 self.last_eval_time = current_time
-        elif args.eval_strategy == IntervalStrategy.STEPS and state.global_step % state.eval_steps == 0 and args.eval_delay <= state.global_step:
+        elif (
+            args.eval_strategy == IntervalStrategy.STEPS
+            and state.global_step % state.eval_steps == 0
+            and args.eval_delay <= state.global_step
+        ):
             control.should_evaluate = True
 
         # Save
@@ -607,7 +611,11 @@ class DefaultFlowCallback(TrainerCallback):
             elif current_time - self.last_save_time >= args.save_minutes * 60:
                 control.should_save = True
                 self.last_save_time = current_time
-        elif args.save_strategy == SaveStrategy.STEPS and state.save_steps > 0 and state.global_step % state.save_steps == 0:
+        elif (
+            args.save_strategy == SaveStrategy.STEPS
+            and state.save_steps > 0
+            and state.global_step % state.save_steps == 0
+        ):
             control.should_save = True
 
         # End training

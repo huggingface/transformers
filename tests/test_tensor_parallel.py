@@ -1,9 +1,10 @@
 import os
+
 import torch
 import torch.distributed as dist
 from torch.distributed import DeviceMesh
+
 from transformers.integrations.tensor_parallel import ColwiseParallel, get_tensor_shard
-import torch.multiprocessing as mp
 
 
 def setup_distributed(rank, world_size):
@@ -21,11 +22,11 @@ def cleanup_distributed():
 def test_colwise_split(rank, world_size):
     """Test column-wise splitting functionality"""
     setup_distributed(rank, world_size)
-    
+
     tensor = torch.randn(4, 8)
     empty_tensor = torch.empty_like(tensor)
     device_mesh = DeviceMesh("cpu", torch.arange(world_size))
-    
+
     # Get shard for current rank
     rank_shard = get_tensor_shard(tensor, empty_tensor, device_mesh, rank, -1)
     if rank == 0:
@@ -34,31 +35,31 @@ def test_colwise_split(rank, world_size):
     else:
         assert rank_shard.shape == (4, 4)
         assert torch.allclose(rank_shard, tensor[:, 4:])
-    
+
     cleanup_distributed()
 
 
 def test_colwise_parallel_layer(rank, world_size):
     """Test ColwiseParallel layer functionality"""
     setup_distributed(rank, world_size)
-    
+
     # Create a linear layer
     layer = torch.nn.Linear(8, 4)
     device_mesh = DeviceMesh("cpu", torch.arange(world_size))
-    
+
     # Create ColwiseParallel instance
     colwise_parallel = ColwiseParallel()
-    
+
     # Prepare module
     parallel_layer = colwise_parallel.prepare_module_tp(layer, device_mesh)
-    
+
     # Verify weight sharding
     weight = layer.weight
     empty_weight = torch.empty_like(weight)
-    
+
     # Get shard
     rank_weight = get_tensor_shard(weight, empty_weight, device_mesh, rank, -2)
-    
+
     # In ColwiseParallel, weights are sharded along the first dimension
     if rank == 0:
         assert rank_weight.shape == (2, 8)  # Modified to correct shape
@@ -66,5 +67,5 @@ def test_colwise_parallel_layer(rank, world_size):
     else:
         assert rank_weight.shape == (2, 8)  # Modified to correct shape
         assert torch.allclose(rank_weight, weight[2:, :])  # Modified to correct shard
-    
-    cleanup_distributed() 
+
+    cleanup_distributed()
