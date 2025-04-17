@@ -20,7 +20,7 @@ specific language governing permissions and limitations under the License.
 
 [FastSpeech2Conformer](https://huggingface.co/papers/2010.13956) is a non-autoregressive text-to-speech (TTS) model that combines FastSpeech2's architecture with [Conformer](https://huggingface.co/papers/2005.08100) blocks for improved performance.
 
-FastSpeech2Conformer can synthesize speech significantly faster than autoregressive models while maintaining high quality. Unlike the original FastSpeech, it trains directly on ground-truth data and incorporates speech variation information like pitch, energy, and duration for more natural-sounding output. The conformer architecture combines the strengths of convolution and attention mechanisms to better capture both local and global dependencies in speech.
+FastSpeech2Conformer can synthesize speech significantly faster than autoregressive models while maintaining high quality. Unlike the original FastSpeech, it trains directly on ground-truth data and incorporates speech variation information like pitch, energy, and duration for more natural-sounding output. The Conformer architecture combines the strengths of convolution and attention mechanisms to better capture both local and global dependencies in speech.
 
 You can find the FastSpeech2Conformer checkpoints under the [ESPnet](https://huggingface.co/espnet) organization.
 
