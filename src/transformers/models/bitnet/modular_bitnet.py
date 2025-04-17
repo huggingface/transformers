@@ -58,7 +58,7 @@ class BitNetMLP(GemmaMLP):
     def __init__(self, config: BitNetModelConfig):
         super().__init__(config)
         self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
-    
+
     def forward(self, x):
         down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
@@ -167,8 +167,9 @@ class BitNetForCausalLM(LlamaForCausalLM):
         ```"""
         return super().forward(**super_kwargs)
 
+
 __all__ = [
     "BitNetForCausalLM",
     "BitNetModel",
-    "BitNetPreTrainedModel",
+    "BitNetPreTrainedModel",  # noqa: F822
 ]

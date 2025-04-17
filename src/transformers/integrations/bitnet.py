@@ -190,7 +190,6 @@ class BitLinear(nn.Module):
         return y
 
 
-
 class WeightQuant(torch.autograd.Function):
     @staticmethod
     @torch.compile
