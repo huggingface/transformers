@@ -92,7 +92,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
+        self_attn_weights = None
         if self.layer_type == "mamba":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
@@ -100,7 +100,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
             )
-            self_attn_weights = None
         elif self.layer_type == "attention": 
             hidden_states, self_attn_weights, _ = self.self_attn(
                 hidden_states=hidden_states,
