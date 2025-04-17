@@ -55,7 +55,7 @@ if is_torch_available():
 class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backend=("torchvision",))
+@requires(backends=("torchvision",))
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

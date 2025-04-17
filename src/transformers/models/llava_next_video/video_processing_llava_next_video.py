@@ -33,7 +33,7 @@ if is_vision_available():
 class LlavaNextVideoFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backend=("torchvision",))
+@requires(backends=("torchvision",))
 class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

@@ -87,7 +87,7 @@ class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
             The merge size of the vision encoder to llm encoder.
     """,
 )
-@requires(backend=("torchvision",))
+@requires(backends=("torchvision",))
 class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
