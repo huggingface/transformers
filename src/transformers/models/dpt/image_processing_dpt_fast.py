@@ -110,7 +110,8 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     keep_aspect_ratio: Optional[bool]
     segmentation_maps: Optional[ImageInput] = (None,)
 
-DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = """
+
+DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = r"""
  Args:
     ensure_multiple_of (`int`, *optional*, defaults to 1):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
@@ -127,6 +128,7 @@ DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = """
     segmentation_maps (`ImageInput`, *optional*):
         Segmentation map to preprocess.
 """
+
 
 @add_start_docstrings(
     "Constructs a fast DPT image processor.",
@@ -175,7 +177,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional[ImageInput] = None,
         **kwargs,
     ) -> BatchFeature:
-
         processed_images = self._preprocess_images(
             images=images,
             do_resize=do_resize,
@@ -222,7 +223,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def  _preprocess_images(
+    def _preprocess_images(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
