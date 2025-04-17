@@ -81,6 +81,9 @@ echo -e "The weather is so nice here" | transformers-cli run --task text-classif
 
 - The tokenizer used for this model is identical to the [CodeGenTokenizer](https://huggingface.co/docs/transformers/v4.51.3/en/model_doc/codegen#transformers.CodeGenTokenizer).
 
+ ## PhiConfig
+[[autodoc]] PhiConfig
+
 ## PhiModel
 
 [[autodoc]] PhiModel - forward
