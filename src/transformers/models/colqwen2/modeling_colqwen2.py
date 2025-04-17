@@ -182,7 +182,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             self.embedding_dim,
         )
         self._tied_weights_keys = ["vlm.model.embed_tokens.weight", "vlm.lm_head.weight"]
-        self.padding_side = "left"
         self.post_init()
 
     def get_input_embeddings(self):
