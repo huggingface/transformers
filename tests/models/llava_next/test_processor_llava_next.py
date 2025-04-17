@@ -40,6 +40,7 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_processor = LlavaNextImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         processor_kwargs = cls.prepare_processor_dict()
         processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
