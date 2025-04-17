@@ -25,14 +25,14 @@ class ToyModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.embed = nn.Embedding(10, 4)
-        self.fc1 = nn.Linear(4, 8)
-        self.fc2 = nn.Linear(8, 2)
+        self.linear_1 = nn.Linear(4, 8)
+        self.linear_2 = nn.Linear(8, 2)
         self.act = nn.ReLU()
 
     def forward(self, input_ids: str):
-        x = self.embed(input_ids).mean(dim=1)
-        x = self.act(self.fc1(x))
-        return self.fc2(x)
+        hidden_states = self.embed(input_ids).mean(dim=1)
+        hidden_states = self.act(self.linear_1(hidden_states))
+        return self.linear_2(hidden_states)
 
 
 class TestModelAdditionDebugger(unittest.TestCase):
