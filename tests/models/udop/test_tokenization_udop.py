@@ -1316,6 +1316,22 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
                 self.assertSequenceEqual(tokens_r, tokens_p)
 
+    def test_call_empty_strings(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            self.skipTest(reason="test_slow_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+
+                boxes = [[1, 8], [1, 8]]
+                input_p = tokenizer_p(["", ""], boxes=boxes)
+                input_r = tokenizer_r(["", ""], boxes=boxes)
+
+                self.assertEqual(input_p["input_ids"], input_r["input_ids"])
+
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
