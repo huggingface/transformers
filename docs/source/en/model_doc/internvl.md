@@ -14,30 +14,33 @@ rendered properly in your Markdown viewer.
 
 -->
 
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    </div>
+</div>
+
 # InternVL
 
-## Overview
-
-The InternVL2.5-MPO family of models was introduced in [Enhancing the Reasoning Ability of Multimodal Large Language Models via Mixed Preference Optimization](https://huggingface.co/papers/2411.10442) by Weiyun Wang, Zhe Chen, Wenhai Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Jinguo Zhu, Xizhou Zhu, Lewei Lu, Yu Qiao and Jifeng Dai.
-
-The InternVL2.5-MPO family of models is a state-of-the-art series of multimodal large language models built to improve reasoning and understanding across text, images and videos.
-A key innovation behind these models is Mixed Preference Optimization (MPO), a training approach that strengthens multimodal reasoning by leveraging a specialized Multi-Modal Preference Dataset (MMPR) with 3 million carefully curated examples. By balancing preference loss, quality loss, and generation loss, MPO helps the models generate more relevant, coherent, and insightful responses.
-To handle visual inputs more effectively, the InternVL2.5-MPO models also incorporate techniques like pixel unshuffle operations and dynamic resolution strategies, ensuring efficient processing without sacrificing detail.
+The InternVL3 family of Visual Language Models was introduced in [InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models](https://huggingface.co/papers/2504.10479).
 
 The abstract from the paper is the following:
 
-*Existing open-source multimodal large language models (MLLMs) generally follow a training process involving pre-training and supervised fine-tuning. However, these models suffer from distribution shifts, which limit their multimodal reasoning, particularly in the Chain-of-Thought (CoT) performance. To address this, we introduce a preference optimization (PO) process to enhance the multimodal reasoning capabilities of MLLMs. Specifically, (1) on the data side, we design an automated preference data construction pipeline to create MMPR, a high-quality, large-scale multimodal reasoning preference dataset. and (2) on the model side, we explore integrating PO with MLLMs, developing a simple yet effective method, termed Mixed Preference Optimization (MPO), which boosts multimodal CoT performance. Our approach demonstrates improved performance across multiple benchmarks, particularly in multimodal reasoning tasks. Notably, our model, InternVL2-8B-MPO, achieves an accuracy of 67.0 on MathVista, outperforming InternVL2-8B by 8.7 points and achieving performance comparable to the 10x larger InternVL2-76B. We hope this study could inspire further advancements in MLLMs. Code, data, and model shall be publicly released.*
+*We introduce InternVL3, a significant advancement in the InternVL series featuring a native multimodal pre-training paradigm. Rather than adapting a text-only large language model (LLM) into a multimodal large language model (MLLM) that supports visual inputs, InternVL3 jointly acquires multimodal and linguistic capabilities from both diverse multimodal data and pure-text corpora during a single pre-training stage. This unified training paradigm effectively addresses the complexities and alignment challenges commonly encountered in conventional post-hoc training pipelines for MLLMs. To further improve performance and scalability, InternVL3 incorporates variable visual position encoding (V2PE) to support extended multimodal contexts, employs advanced post-training techniques such as supervised fine-tuning (SFT) and mixed preference optimization (MPO), and adopts test-time scaling strategies alongside an optimized training infrastructure. Extensive empirical evaluations demonstrate that InternVL3 delivers superior performance across a wide range of multi-modal tasks. In particular, InternVL3-78B achieves a score of 72.2 on the MMMU benchmark, setting a new state-of-the-art among open-source MLLMs. Its capabilities remain highly competitive with leading proprietary models, including ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 2.5 Pro, while also maintaining strong pure-language proficiency. In pursuit of open-science principles, we will publicly release both the training data and model weights to foster further research and development in next-generation MLLMs.*
 
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/internvl_architecture.png" alt="drawing" width="600"/>
 
-<small> Overview of InternVL2.5-MPO models architecture. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL2_5-1B-MPO">original checkpoint.</a> </small>
+<small> Overview of InternVL3 models architecture, which is the same as InternVL2.5. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL3-1B">original checkpoint.</a> </small>
 
 
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/internvl_overview_performance.png" alt="drawing" width="600"/>
 
-<small> Comparison of InternVL2.5-MPO performance on OpenCompass against other SOTA VLLMs. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL2_5-1B-MPO">original checkpoint.</a> </small>
+<small> Comparison of InternVL3 performance on OpenCompass against other SOTA VLLMs. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL3-1B">original checkpoint.</a> </small>
 
 
 
@@ -48,7 +51,8 @@ The original code can be found [here](https://github.com/OpenGVLab/InternVL).
 
 ### Inference with Pipeline
 
-Here is how you can use the `image-text-to-text` pipeline to perform inference with the `InternVL2.5-MPO` models in just a few lines of code:
+Here is how you can use the `image-text-to-text` pipeline to perform inference with the `InternVL3` models in just a few lines of code:
+
 ```python
 >>> from transformers import pipeline
 
@@ -65,21 +69,24 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 ...     },
 ... ]
 
->>> pipe = pipeline("image-text-to-text", model="yonigozlan/InternVL2_5-1B-MPO-hf")
+>>> pipe = pipeline("image-text-to-text", model="yonigozlan/InternVL3-1B-hf")
 >>> outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 >>> outputs[0]["generated_text"]
-'The image depicts a close-up view of a vibrant garden scene, featuring several flowers in various stages of bloom. The primary focus is on a cluster of pink cosmos flowers, which are characterized by their large, five-petaled petals and prominent yellow centers'
+'The image showcases a vibrant scene of nature, featuring several flowers and a bee. \n\n1. **Foreground Flowers**: \n   - The primary focus is on a large, pink cosmos flower with a prominent yellow center. The petals are soft and slightly r'
 ```
 ### Inference on a single image
 
 This example demonstrates how to perform inference on a single image with the InternVL models using chat templates.
+
+> [!NOTE]
+> Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -99,7 +106,7 @@ This example demonstrates how to perform inference on a single image with the In
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
 >>> decoded_output
-'The image shows two cats lying on a pink couch. One cat is on the left side of the couch, and the other is on the right. Both cats are sleeping. Between the two cats, there are two remote controls, one on each side'
+'The image shows two cats lying on a pink blanket. The cat on the left is a tabby with a mix of brown, black, and white fur, and it appears to be sleeping with its head resting on the blanket. The cat on the'
 ```
 
 ### Text-only generation
@@ -111,7 +118,7 @@ This example shows how to generate text using the InternVL model without providi
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -130,7 +137,7 @@ This example shows how to generate text using the InternVL model without providi
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
 >>> print(decoded_output)
-'Whispers of dawn,\nLeaves rustle in the breeze,\nNew day begins.'
+"Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins."
 ```
 
 ### Batched image and text inputs
@@ -141,7 +148,7 @@ InternVL models also support batched image and text inputs.
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -173,8 +180,8 @@ InternVL models also support batched image and text inputs.
 
 >>> decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
 >>> decoded_outputs
-["user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn misty mountains, nature's still,\nPeace awaits beneath the sky.",
- 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, featuring red pillars and ornate decorations. There is']
+["user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
+ 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of']
 ```
 
 ### Batched multi-image input
@@ -185,7 +192,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -217,19 +224,17 @@ This implementation of the InternVL models supports batched text-images inputs w
 
 >>> decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
 >>> decoded_outputs
-["user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn the stillness of the lake, a quiet dream,\nNature's peace unfolds.",
- 'user\n\n\nThese images depict two different landmarks. Can you identify them?\nassistant\nThe images depict the Statue of Liberty and the Golden Gate Bridge.']
+["user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
+ 'user\n\n\nThese images depict two different landmarks. Can you identify them?\nassistant\nYes, these images depict the Statue of Liberty and the Golden Gate Bridge.']
 ```
 
 ### Video input
 InternVL models can also handle video inputs. Here is an example of how to perform inference on a video input using chat templates.
 
-TODO modify video loading
-
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 
->>> model_checkpoint = "yonigozlan/InternVL2_5-4B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-8B-hf"
 >>> quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config)
@@ -258,7 +263,7 @@ TODO modify video loading
 
 >>> decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 >>> decoded_output
-'The man is performing a forehand stroke. This is evident from his stance and the position of his body relative to the net'
+'The man is performing a forehand shot.'
 ```
 
 ### Interleaved image and video inputs
@@ -269,7 +274,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "yonigozlan/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -312,13 +317,13 @@ This example showcases how to handle a batch of chat conversations with interlea
 ...     return_tensors="pt",
 >>> ).to(model.device, dtype=torch.bfloat16)
 
->>> output = model.generate(**inputs, max_new_tokens=25)
+>>> outputs = model.generate(**inputs, max_new_tokens=25)
 
 >>> decoded_outputs = processor.batch_decode(outputs, skip_special_tokens=True)
 >>> decoded_outputs
 ['user\n\n\nThese images depict two different landmarks. Can you identify them?\nassistant\nThe images depict the Statue of Liberty and the Golden Gate Bridge.',
- 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.',
- "user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn the stillness, nature's calm is found,\nPeace awaits beneath the sky."]
+ 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
+ "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."]
 ```
 
 ## InternVLVisionConfig

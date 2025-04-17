@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GotOcr2 model."""
+"""Testing suite for the PyTorch InternVL model."""
 
 import unittest
 from io import BytesIO
@@ -282,8 +282,8 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch_gpu
 class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "../InternVLTest-1B-sdpa"
-        self.medium_model_checkpoint = "../InternVLTest-4B-sdpa"
+        self.small_model_checkpoint = "yonigozlan/InternVL3-1B-hf"
+        self.medium_model_checkpoint = "yonigozlan/InternVL3-2B-hf"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -303,7 +303,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
+        expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_forward(self):
@@ -322,7 +322,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([11.7500, 10.0625, 14.5000, 10.1250, 8.5625], dtype=torch.bfloat16)
+        expected_logits = torch.tensor([11.9375, 14.8750, 14.0625, 10.7500, 6.9062], dtype=torch.bfloat16)
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -342,7 +342,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Whispers of dawn,\nLeaves rustle in the breeze,\nNew day begins."
+        expected_output = "Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins."
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_generate_chat_template(self):
@@ -368,7 +368,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
+        expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_batched_generate(self):
@@ -392,7 +392,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nWhere mountains meet a tranquil lake,\nDreams of the unknown begin.'  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -400,7 +400,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, featuring red pillars and ornate decorations. There's"  # fmt: skip
+        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -442,7 +442,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nWhere mountains meet a tranquil lake,\nDreams of the unknown begin.'  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -451,7 +451,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the differences between these two images?\nassistant\nThe image on the right appears to be a different scene from the one on the left. Here are some differences:\n\n1.'  # fmt: skip
+        expected_output = 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Angle'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -490,7 +490,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = 'The man is performing a forehand stroke. This is evident from his stance and the position of his body relative to the net'  # fmt: skip
+        expected_output = 'The man is performing a forehand shot.'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -558,7 +558,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe image on the right has a few notable differences compared to the image on the left:\n\n1. **Foreground Vegetation**:'  # fmt: skip
+        expected_output = 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image**: This shows the Statue of Liberty on Liberty Island, with the'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -566,7 +566,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.'  # fmt: skip
+        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -575,7 +575,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn a lake of dreams, where mountains stand tall,\nPeace finds its quiet retreat.'  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -587,8 +587,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 @require_torch_gpu
 class InternVLLlamaIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "../InternVLTest-2B-sdpa"
-        self.medium_model_checkpoint = "../InternVLTest-8B-sdpa"
+        self.small_model_checkpoint = "yonigozlan/InternVL2_5-2B-MPO-hf"
+        self.medium_model_checkpoint = "yonigozlan/InternVL2_5-8B-MPO-hf"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -701,7 +701,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic mountains stand,\nA wooden path leads to the lake,\nPeaceful, calm, and clear.'  # fmt: skip
+        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -752,7 +752,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'  # fmt: skip
+        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, still waters.'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -761,7 +761,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion earlier. Upon closer inspection, here are the differences between the two images:\n\n1. **Foreground:'  # fmt: skip
+        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -886,7 +886,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'  # fmt: skip
+        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, untouched dreams.'  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
