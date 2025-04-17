@@ -30,6 +30,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
+    SemanticSegmentationMixin,
 )
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -135,7 +136,7 @@ DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = r"""
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING,
 )
-class DPTImageProcessorFast(BaseImageProcessorFast):
+class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
