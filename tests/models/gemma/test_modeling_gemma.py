@@ -55,15 +55,13 @@ class GemmaModelTester(CausalLMModelTester):
         causal_lm_class = GemmaForCausalLM
         sequence_classification_class = GemmaForSequenceClassification
         token_classification_class = GemmaForTokenClassification
-        pipeline_model_mapping = (
-                {
-                    "feature-extraction": GemmaModel,
-                    "text-classification": GemmaForSequenceClassification,
-                    "token-classification": GemmaForTokenClassification,
-                    "text-generation": GemmaForCausalLM,
-                    "zero-shot": GemmaForSequenceClassification,
-                }
-        )
+        pipeline_model_mapping = {
+            "feature-extraction": GemmaModel,
+            "text-classification": GemmaForSequenceClassification,
+            "token-classification": GemmaForTokenClassification,
+            "text-generation": GemmaForCausalLM,
+            "zero-shot": GemmaForSequenceClassification,
+        }
 
 
 @require_torch

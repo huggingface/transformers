@@ -1,5 +1,4 @@
 import tempfile
-import unittest
 
 import pytest
 
