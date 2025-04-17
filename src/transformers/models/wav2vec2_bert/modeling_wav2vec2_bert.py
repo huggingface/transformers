@@ -609,16 +609,17 @@ class Wav2Vec2BertAdapter(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
+
     Args:
         hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
             The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
             Each element represents the length of the sequence at the same index in `hidden_states`
+
     Returns:
         `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
     """
