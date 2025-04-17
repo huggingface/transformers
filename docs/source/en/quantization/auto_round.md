@@ -126,7 +126,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 <hfoption id="quantization auto-round-light">
 
 ### AutoRoundLight recipe
-This setting offers the best speed (2–3X faster than AutoRound), but it may cause a significant accuracy drop for small models and 2-bit quantization. It is recommended for 4-bit settings and models larger than 3B.
+This setting offers the best speed (2 - 3X faster than AutoRound), but it may cause a significant accuracy drop for small models and 2-bit quantization. It is recommended for 4-bit settings and models larger than 3B.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -154,7 +154,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 
 </hfoptions>
 
-W4G128 Average Accuracy of 13 tasks (mmlu-pro,if_eval,gsm8k,etc) and Time Cost Results(Testing was conducted on the Nvidia A100 80G using the version of PyTorch 2.6.0 with enable_torch_compile):
+W4G128 Average Accuracy of 13 tasks (mmlu-pro, if_eval, gsm8k, etc) and Time Cost Results (Testing was conducted on the Nvidia A100 80G using the version of PyTorch 2.6.0 with enable_torch_compile):
 
 | Model   | Qwen2.5-0.5B-Instruct | Falcon3-3B       | Qwen2.5-7B-Instruct | Meta-Llama-3.1-8B-Instruct | Falcon3-10B      | Qwen2.5-72B-Instruct |
 |---------|-----------------------|------------------|---------------------|----------------------------|------------------|----------------------|
@@ -171,7 +171,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2,4,8 bits, we recommend to use intel-extension-for-pytorch (IPEX) for 4 bits 
+Supports 2, 4, and 8 bits. We recommend using intel-extension-for-pytorch (IPEX) for 4 bits inference.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -189,7 +189,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption id="inference xpu">
 ### XPU
 
-Supports 4 bits, intel-extension-for-pytorch (IPEX) is required
+Supports 4 bits only. We recommend using intel-extension-for-pytorch (IPEX) for inference.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -207,7 +207,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption id="inference cuda">
 ### CUDA
 
-Supports 2,3 4,8 bits, we recommend to use GPTQModel for 4,8 bits
+Supports 2, 3, 4, and 8 bits. We recommend using GPTQModel for 4 and 8 bits inference.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -222,11 +222,11 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 <hfoption>
 
-<hfoption id="specific backend">
-### Specify Backend
+<hfoption id="inference backend">
+### Specify Inference Backend
 
 The automatically selected backend may not always be the most suitable for certain devices. 
-You can specify your preferred backend, such as "ipex"(cpu/xpu), "itrex"(cpu), "marlin"(cuda), "exllamav2"(cuda), "triton"(cuda) and others, according to your needs or hardware compatibility. Please note that some corresponding libraries  may need to be installed.
+You can specify your preferred backend such as "ipex" for CPU and CPU, "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
@@ -273,4 +273,4 @@ the [auto-round](https://github.com/intel/auto-round/issues) repository.
 
 
 ## Acknowledgement
-Special thanks to AutoGPTQ, AutoAWQ, GPTQModel, Triton, Marlin, and ExLLaMAV2 for providing low-precision CUDA kernels, which were leveraged in AutoRound.
+Special thanks to open-source low precision libraries such as AutoGPTQ, AutoAWQ, GPTQModel, Triton, Marlin, and ExLLaMAV2 for providing low-precision CUDA kernels, which are leveraged in AutoRound.
