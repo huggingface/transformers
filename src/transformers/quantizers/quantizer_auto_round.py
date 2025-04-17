@@ -70,7 +70,7 @@ class AutoRoundQuantizer(HfQuantizer):
 
             post_init(model, self.used_backends)
         else:
-            raise NotImplementedError("AutoRound only sports pre-quantized models.")
+            raise ValueError("AutoRound only sports pre-quantized models.")
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

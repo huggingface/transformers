@@ -77,7 +77,7 @@ class AutoRoundTest(unittest.TestCase):
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
         quantization_config = AutoRoundConfig(bits=4)
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
     def test_quantized_model_bf16(self):

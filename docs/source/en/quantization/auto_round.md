@@ -98,7 +98,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 <hfoption id="quantization auto-round-best">
 
 ### AutoRoundBest recipe
-This setting provides the best accuracy in most scenarios but is 2–3× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
+This setting provides the best accuracy in most scenarios but is 4–5× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
@@ -156,12 +156,12 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 
 W4G128 Average Accuracy of 13 tasks (mmlu-pro,if_eval,gsm8k,etc) and Time Cost Results(Testing was conducted on the Nvidia A100 80G using the version of PyTorch 2.6.0 with enable_torch_compile):
 
-| Model   | Qwen2.5-0.5B-Instruct | Falcon3-3B      | Qwen2.5-7B-Instruct | Meta-Llama-3.1-8B-Instruct | Falcon3-10B     | Qwen2.5-72B-Instruct |
-|---------|-----------------------|-----------------|---------------------|----------------------------|-----------------|----------------------|
-| 16bits  | 0.4192                | 0.5203          | 0.6470              | 0.6212                     | 0.6151          | 0.7229               |
-| Best    | **0.4137**(7m)        | **0.5142**(23m) | 0.6426(58m)         | **0.6116**(81m)            | **0.6092**(81m) | 0.7242(575m)         |
-| Default | 0.4129(2m)            | 0.5133(6m)      | 0.6441(13m)         | 0.6106(13m)                | 0.6080(18m)     | **0.7252**(118m)     |
-| Light   | 0.4052(2m)            | 0.5108(3m)      | **0.6453**(5m)      | 0.6104(6m)                 | 0.6063(6m)      | 0.7243(37m)          |
+| Model   | Qwen2.5-0.5B-Instruct | Falcon3-3B       | Qwen2.5-7B-Instruct | Meta-Llama-3.1-8B-Instruct | Falcon3-10B      | Qwen2.5-72B-Instruct |
+|---------|-----------------------|------------------|---------------------|----------------------------|------------------|----------------------|
+| 16bits  | 0.4192                | 0.5203           | 0.6470              | 0.6212                     | 0.6151           | 0.7229               |
+| Best    | **0.4137** (7m)       | **0.5142** (23m) | 0.6426 (58m)        | **0.6116** (81m)           | **0.6092** (81m) | 0.7242 (575m)        |
+| Default | 0.4129 (2m)           | 0.5133 (6m)      | 0.6441 (13m)        | 0.6106 (13m)               | 0.6080 (18m)     | **0.7252** (118m)    |
+| Light   | 0.4052 (2m)           | 0.5108 (3m)      | **0.6453** (5m)     | 0.6104 (6m)                | 0.6063 (6m)      | 0.7243 (37m)         |
 
 ## Inference
 
