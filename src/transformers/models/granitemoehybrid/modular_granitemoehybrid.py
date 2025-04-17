@@ -33,95 +33,6 @@ from ..granitemoeshared.modeling_granitemoeshared import (
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 from ...utils import add_start_docstrings
 
-class GraniteMultiHeadLatentAttention(nn.Module):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super(GraniteMultiHeadLatentAttention, self).__init__()
-
-        self.causal = True
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        # TO DO add this bias later
-        self.add_bias = config.attention_bias
-        self.query_compression_size = config.mla_query_comp_size
-        self.key_value_compression_size = config.mla_key_value_comp_size
-
-        self.head_dim = self.hidden_size // self.num_heads 
-        self.attention_multiplier = config.attention_multiplier
-        self.layer_idx = layer_idx
-
-        # TO DO- will bias be a flag in config?
-        self.c_attn_down_projection = nn.Linear(self.hidden_size, self.query_compression_size + 2 * self.key_value_compression_size, bias=self.add_bias)
-        self.query_up_projection = nn.Linear(
-                self.query_compression_size, self.hidden_size, bias=self.add_bias
-            )
-        self.key_up_projection = nn.Linear(
-                self.key_value_compression_size, self.hidden_size, bias=self.add_bias
-            )
-        self.value_up_projection = nn.Linear(
-                self.key_value_compression_size, self.hidden_size, bias=self.add_bias
-            )
-        self.c_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=self.add_bias)
-        # TO confirm the softmax_dropout and dropout variable names
-        self.softmax_dropout_p = config.mla_softmax_dropout
-        self.softmax_dropout = nn.Identity() if config.mla_softmax_dropout == 0 else nn.Dropout(config.mla_softmax_dropout)
-        self.dropout = nn.Identity() if config.mla_dropout == 0 else nn.Dropout(config.mla_dropout)
-    
-    def forward(self,  hidden_states: torch.Tensor,
-        past_key_value: DynamicCache | None = None,
-        attention_mask: torch.Tensor | None = None,   
-    ) -> torch.Tensor:
-        
-        hidden_states = self.c_attn_down_projection(hidden_states)
-
-        query, key, value = hidden_states.split(
-                (self.query_compression_size, self.key_value_compression_size, self.key_value_compression_size), dim=-1
-            )
-        if past_key_value is not None:
-            key, value = past_key_value.update(key.unsqueeze(1), value.unsqueeze(1), self.layer_idx)
-            key = key.squeeze(1)
-            value = value.squeeze(1)
-
-        query = self.query_up_projection(query)
-        key = self.key_up_projection(key)
-        value = self.value_up_projection(value)
-        # reference 
-        # https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/modeling_utils/sequence_mixer_blocks/multihead_latent_attention.py#L177
-        batch_size, query_length = query.shape[:-1]
-        key_length = key.shape[1]
-
-        query = query.view(batch_size, query_length, self.num_heads, -1).transpose(1, 2)
-        key = key.view(batch_size, key_length, self.num_heads, -1).transpose(1, 2)
-        value = value.view(batch_size, key_length, self.num_heads, -1).transpose(1, 2)
-
-        hidden_states = F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attn_mask=attention_mask,
-            dropout_p=self.softmax_dropout_p if self.training else 0,
-            is_causal=self.causal if attention_mask is None else False,
-            scale=self._get_softmax_scale(),
-        )
-
-        del query, key, value
-
-        batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = hidden_states.reshape(batch_size, -1, self.num_heads * self.head_dim)
-
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-        
-    def _get_softmax_scale(self) -> float:
-        if self.attention_multiplier is None:
-            softmax_scale = None
-        else:
-            softmax_scale = self.attention_multiplier
-
-        return softmax_scale   
  
 class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
@@ -138,13 +49,8 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
-        self.self_attn = None
-        if config.layers_block_type[layer_idx] == "multihead_latent_attention":
-            self.self_attn = GraniteMultiHeadLatentAttention(config, layer_idx)
-        elif config.layers_block_type[layer_idx] == "mamba":
+        if config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
-        else:
-             raise ValueError("unsupported layer type")
         self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(
@@ -194,12 +100,19 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
             )
-        else: 
-            hidden_states = self.self_attn(
+            self_attn_weights = None
+        elif self.layer_type == "attention": 
+            hidden_states, self_attn_weights, _ = self.self_attn(
                 hidden_states=hidden_states,
-                past_key_value=past_key_value,
                 attention_mask=attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
             )
+        else:
+            raise ValueError("\n unrecognized layer type")
 
         hidden_states = residual + hidden_states * self.residual_multiplier
 
@@ -219,9 +132,8 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
         outputs = (hidden_states,)
 
-        # TODO: understand what this is and if/how to enable
-        # if output_attentions:
-        #     outputs += (self_attn_weights,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
 
         if use_cache:
             outputs += (past_key_value,)

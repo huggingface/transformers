@@ -144,6 +144,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         logits_scaling=1.0,
         residual_multiplier=1.0,
         attention_multiplier=1.0,
+        attention_dropout=0.0,
         num_local_experts=8,
         num_experts_per_tok=2,
         output_router_logits=False,
@@ -165,12 +166,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_conv_bias=True,
         mamba_proj_bias=False,
         logits_to_keep=1,
-        # mla variables
-        mla_dropout = 0,
-        # rename attention_dropout to mla_softmax_dropout
-        mla_softmax_dropout=0.0,
-        mla_query_comp_size = 384,
-        mla_key_value_comp_size = 96,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -196,6 +191,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.logits_scaling = logits_scaling
         self.residual_multiplier = residual_multiplier
         self.attention_multiplier = attention_multiplier
+        self.attention_dropout = attention_dropout
 
         self.num_local_experts = num_local_experts
         self.num_experts_per_tok = num_experts_per_tok
@@ -231,11 +227,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.logits_to_keep = logits_to_keep
         self.layer_types = layer_types
 
-        self.mla_query_comp_size = mla_query_comp_size
-        self.mla_key_value_comp_size = mla_key_value_comp_size
-        self.mla_dropout = mla_dropout
-        self.mla_softmax_dropout = mla_softmax_dropout
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -246,7 +237,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         rope_config_validation(self)
     
-    # overwrite the function in mamba to use `HybridMambaAttentionDynamicCache`
+    # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property
     def layers_block_type(self):
         return self.layer_types if self.layer_types else ["mamba"] * self.num_hidden_layers
