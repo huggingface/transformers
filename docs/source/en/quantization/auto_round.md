@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 [AutoRound](https://github.com/intel/auto-round) is an advanced quantization algorithm that delivers strong accuracy, even at 2-bit precision. 
 It leverages sign gradient descent to fine-tune both rounding values and min-max clipping thresholds in just 200 steps. Designed for broad compatibility, it seamlessly supports a wide range of LLMs and is actively expanding to cover more VLMs as well. 
-It also supports tuning and inference across multiple hardware platforms, including CPU, XPU, and CUDA.
+It also supports quantization and inference across multiple hardware platforms, including CPU, XPU, and CUDA.
 
 AutoRound also offers a variety of useful features, including mixed-bit tuning and inference, lm-head quantization, support for exporting to formats like GPTQ/AWQ/GGUF, and flexible tuning recipes. 
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
@@ -59,7 +59,7 @@ auto-round \
     --output_dir ./tmp_autoround
 ```
 
-AutoRound also offer another two configurations, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively. 
+AutoRound also offer another two recipes, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively. 
 For 2 bits, we recommend using `auto-round-best` or `auto-round`.
 </hfoption>
 
@@ -187,6 +187,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption>
 
 <hfoption id="inference xpu">
+
 ### XPU
 
 Supports 4 bits only. We recommend using intel-extension-for-pytorch (IPEX) for inference.
@@ -205,6 +206,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption>
 
 <hfoption id="inference cuda">
+
 ### CUDA
 
 Supports 2, 3, 4, and 8 bits. We recommend using GPTQModel for 4 and 8 bits inference.
@@ -223,6 +225,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 <hfoption>
 
 <hfoption id="inference backend">
+
 ### Specify Inference Backend
 
 The automatically selected backend may not always be the most suitable for certain devices. 
@@ -244,6 +247,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 
 <hfoption id="format convert">
+
 ### Convert GPTQ/AWQ to AutoRound
 
 Most GPTQ/AWQ models can be converted to the AutoRound format for better compatibility and support with Intel devices. Please note that the quantization config will be changed if the model is serialized.
@@ -274,3 +278,7 @@ the [auto-round](https://github.com/intel/auto-round/issues) repository.
 
 ## Acknowledgement
 Special thanks to open-source low precision libraries such as AutoGPTQ, AutoAWQ, GPTQModel, Triton, Marlin, and ExLLaMAV2 for providing low-precision CUDA kernels, which are leveraged in AutoRound.
+
+## Contribution
+Contributions to [AutoRound](https://github.com/intel/auto-round/pulls) are welcome and greatly appreciated!
+Whether it's fixing bugs, improving documentation, adding new features, or suggesting improvements, your help is always valued.
