@@ -918,6 +918,7 @@ class KosmosTextAttention(nn.Module):
         bias: bool = True,
     ):
         super().__init__()
+        self.config = config
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -995,7 +996,7 @@ class KosmosTextAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
 
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
@@ -1018,7 +1019,7 @@ class KosmosTextAttention(nn.Module):
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
 
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, past_key_value
 

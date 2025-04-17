@@ -198,8 +198,8 @@ class InstructBlipAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = nn.Dropout(config.attention_dropout)
         self.is_causal = False
+        self.attention_dropout = config.attention_dropout
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -241,7 +241,7 @@ class InstructBlipAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
 
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
@@ -255,7 +255,7 @@ class InstructBlipAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
             **kwargs,
         )

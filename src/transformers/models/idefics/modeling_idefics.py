@@ -538,6 +538,7 @@ class IdeficsAttention(nn.Module):
         layer_idx: Optional[int] = None,
     ):
         super().__init__()
+        self.config = config
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
@@ -659,7 +660,7 @@ class IdeficsAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
 
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
