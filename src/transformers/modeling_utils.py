@@ -5898,7 +5898,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
-            byte_count = min(byte_count, int(device_memory - 1.2 * 1024**3))
+            byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
