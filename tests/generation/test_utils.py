@@ -126,6 +126,7 @@ VLM_CLASS_NAMES = [
     "qwen2vl",
     "qwen2_5_vl",
     "ayavision",
+    "janus",
     "gemma3",
     "mistral3",
     "chameleon",
@@ -1947,7 +1948,7 @@ class GenerationTesterMixin:
                     )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
         """Tests we can generate by indicating `cache_implementation` for each possible cache class"""

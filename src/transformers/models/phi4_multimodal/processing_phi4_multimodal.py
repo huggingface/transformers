@@ -71,6 +71,10 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         tokenizer,
         **kwargs,
     ):
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
+        self.audio_token = tokenizer.audio_token
+        self.audio_token_id = tokenizer.audio_token_id
         super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
 
     def __call__(
@@ -113,7 +117,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         output_kwargs = self._merge_kwargs(Phi4MultimodalProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
         image_kwargs = output_kwargs["images_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        text_kwargs = output_kwargs["text_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
         audio_inputs = self.audio_processor(audio, **audio_kwargs) if audio is not None else {}
@@ -154,7 +157,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
         ]
 
-        text_inputs = self.tokenizer(processed_text, **text_kwargs)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(processed_text, text_inputs, modalities=["image"])
 
         # prepare batch feature
         data = {
@@ -163,7 +168,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             **audio_inputs,
         }
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
