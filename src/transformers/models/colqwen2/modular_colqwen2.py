@@ -71,9 +71,11 @@ class ColQwen2Processor(ColPaliProcessor):
             in a chat into a tokenizable string.
         visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
         query_prefix (`str`, *optional*): A prefix to be used for the query.
+        padding_side (`str`, *optional*, defaults to `"left"`): Padding side used for the tokenizer. Overrides the
+            initial `padding_side` attribute of the tokenizer.
     """
 
-    valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
+    valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens", "padding_side"]
     image_processor_class = "Qwen2VLImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
@@ -84,6 +86,7 @@ class ColQwen2Processor(ColPaliProcessor):
         chat_template=None,
         visual_prompt_prefix: Optional[str] = None,
         query_prefix: Optional[str] = None,
+        padding_side: str = "left",
         **kwargs,
     ):
         ColPaliProcessor().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -98,7 +101,7 @@ class ColQwen2Processor(ColPaliProcessor):
             query_prefix = "Query: "
         self.query_prefix = query_prefix
 
-        self.tokenizer.padding_side = "left"
+        self.tokenizer.padding_side = padding_side
 
     def __call__(
         self,
