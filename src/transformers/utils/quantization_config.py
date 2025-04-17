@@ -214,7 +214,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
         bits (`int`, *optional*, defaults to 4):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
-        sym (`bool`, *optional*, defaults to `False`): Symmetric quantization or not
+        sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
         backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ipex,marlin,etc.
     """
 
@@ -222,7 +222,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
         self,
         bits: int = 4,
         group_size: int = 128,
-        sym: bool = False,
+        sym: bool = True,
         backend: str = "auto",
         **kwargs,
     ):
