@@ -62,8 +62,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"patch_embedding":                             r"patch_embeddings.projection",
     r"ls(\d+)":                                     r"lambda_\1",
     r"attn.proj":                                   r"attention.output",
-    r"attn.q_norm":                                 r"attention.q_norm",
-    r"attn.k_norm":                                 r"attention.k_norm",
+    r"attn":                                        r"attention",
     r"mlp.fc1":                                     r"mlp.up_proj",
     r"mlp.fc2":                                     r"mlp.down_proj",
     r"norm1":                                       r"layernorm_before",
@@ -180,9 +179,6 @@ def get_internvl_config(input_base_path):
     llm_config["use_cache"] = True
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
-    if "qkv_bias" in vision_config:
-        qkv_bias = vision_config.pop("qkv_bias")
-        vision_config["attention_bias"] = qkv_bias
 
     return InternVLConfig(
         text_config=language_config_class(**llm_config),
@@ -221,13 +217,13 @@ def write_model(
     for key in all_keys:
         new_key = new_keys[key]
         if "attn.qkv" in key:
-            new_key_query = new_key.replace("attn.qkv", "attention.query")
+            new_key_query = new_key.replace("attention.qkv", "attention.query")
             state_dict[new_key_query] = state_dict_old[key][:dim]
 
-            new_key_key = new_key.replace("attn.qkv", "attention.key")
+            new_key_key = new_key.replace("attention.qkv", "attention.key")
             state_dict[new_key_key] = state_dict_old[key][dim : 2 * dim]
 
-            new_key_value = new_key.replace("attn.qkv", "attention.value")
+            new_key_value = new_key.replace("attention.qkv", "attention.value")
             state_dict[new_key_value] = state_dict_old[key][-dim:]
         elif "attention.wqkv" in key:
             num_key_value_groups = config.text_config.num_attention_heads // config.text_config.num_key_value_heads
@@ -353,17 +349,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="OpenGVLab/InternVL3-8B",
+        default="OpenGVLab/InternVL3-38B",
         help="Location of original InternVL model",
     )
     parser.add_argument(
         "--output_dir",
-        default="InternVL3-8B-hf",
+        default="InternVL3-38B-hf",
         help="Location to write HF model and processors",
     )
     parser.add_argument(
         "--hub_dir",
-        default="yonigozlan/InternVL3-8B-hf",
+        default="yonigozlan/InternVL3-38B-hf",
         help="Location to write HF model and processors",
     )
 
