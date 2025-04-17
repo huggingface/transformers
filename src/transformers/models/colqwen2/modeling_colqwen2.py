@@ -273,7 +273,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     ) -> Union[Tuple, ColQwen2ForRetrievalOutput]:  # noqa: F821
         r"""
         Returns:
-        ```"""
+        """
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)  # (batch_size, max_num_patches, pixel_values)
 
