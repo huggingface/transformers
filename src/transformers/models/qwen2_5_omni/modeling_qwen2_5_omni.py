@@ -1792,7 +1792,7 @@ QWEN2_5_OMNI_ATTENTION_CLASSES = {
 
 
 class Qwen2_5OmniDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int):
+    def __init__(self, config: Qwen2_5OmniTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 

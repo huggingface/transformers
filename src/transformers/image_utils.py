@@ -19,6 +19,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Callable, Optional, Union
+from urllib.parse import urlparse
 
 import numpy as np
 import requests
@@ -833,7 +834,7 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
-    if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
+    if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
