@@ -204,6 +204,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         ```python
@@ -339,6 +340,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -365,6 +367,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 return_dict=return_dict,
                 labels=labels,
                 use_cache=use_cache,
+                **kwargs,
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]

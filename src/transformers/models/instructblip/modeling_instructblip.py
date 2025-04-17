@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -159,6 +159,29 @@ class InstructBlipVisionEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2Attention with Blip2->InstructBlip
 class InstructBlipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -174,8 +197,9 @@ class InstructBlipAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
         self.dropout = nn.Dropout(config.attention_dropout)
+        self.is_causal = False
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -201,6 +225,7 @@ class InstructBlipAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -213,31 +238,32 @@ class InstructBlipAttention(nn.Module):
         )
         query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
 
-        attention_scores = attention_scores * self.scale
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.projection(attn_output)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        output = self.projection(context_layer)
-
-        outputs = (output, attention_probs) if output_attentions else (output, None)
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output, None)
         return outputs
 
 
@@ -315,6 +341,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
 
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
@@ -1084,6 +1111,8 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     instruction as input.
     """
 
+    _supports_attention_backend = False  # adds position on attn weights before last matmul
+
     def __init__(self, config: InstructBlipQFormerConfig):
         super().__init__(config)
         self.config = config
@@ -1380,6 +1409,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, InstructBlipForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1491,6 +1521,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -1517,6 +1548,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 return_dict=return_dict,
                 labels=labels,
                 use_cache=use_cache,
+                **kwargs,
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]

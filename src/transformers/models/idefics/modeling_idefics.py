@@ -20,7 +20,7 @@
 """PyTorch Idefics model."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -33,7 +33,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PretrainedConfig, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -500,6 +500,29 @@ class IdeficsMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # this was adapted from LlamaAttention
 class IdeficsAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -520,6 +543,7 @@ class IdeficsAttention(nn.Module):
         self.head_dim = hidden_size // num_heads
         self.dropout = dropout
         self.is_causal = True
+        self.scaling = self.head_dim**-0.5
 
         self.layer_idx = layer_idx
         if layer_idx is None:
@@ -596,6 +620,7 @@ class IdeficsAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # if key_value_states are provided this layer is used as a cross-attention layer
         is_cross_attention = self.is_cross_attention or key_value_states is not None
@@ -631,47 +656,33 @@ class IdeficsAttention(nn.Module):
             query_states = self.q_layer_norm(query_states)
             key_states = self.k_layer_norm(key_states)
 
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+        attention_interface: Callable = eager_attention_forward
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-        is_causal = True if self.is_causal and causal_mask is None and q_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
 
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        attn_weights = None
         if output_attentions:
-            logger.warning_once(
-                "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
-            )
+            attn_weights = None
 
         return attn_output, attn_weights, past_key_value
 
@@ -706,6 +717,7 @@ class IdeficsDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -734,6 +746,7 @@ class IdeficsDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -833,6 +846,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -875,6 +889,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             key_value_states=image_hidden_states,
             attention_mask=image_attention_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
         # Fill in zeros for cross_attention hidden_states of tokens attending to no images
@@ -927,7 +942,9 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_flash_attn_2 = True
     _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
@@ -1130,6 +1147,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1292,6 +1310,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                         output_attentions=output_attentions,
                         use_cache=use_cache,
                         past_key_value=None,  # not implemented
+                        **kwargs,
                     )
                     hidden_states = outputs[0]
 
@@ -1303,6 +1322,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    **kwargs,
                 )
 
                 return layer_outputs
@@ -1348,6 +1368,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     cross_layer_interval=self.cross_layer_interval,
                     gated_cross_attn_layers=self.gated_cross_attn_layers,
                     cache_position=cache_position,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1589,6 +1610,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1647,6 +1669,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

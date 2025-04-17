@@ -736,6 +736,7 @@ class Emu3VQVAE(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
+    _supports_attention_backend = True
     _no_split_modules = [
         "Emu3VQVAETemporalResnetBlock",
         "Emu3VQVAEAttentionBlock",
@@ -898,6 +899,7 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
         "Emu3DecoderLayer",
     ]
     _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -1194,6 +1196,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1278,6 +1281,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
     def prepare_inputs_for_generation(

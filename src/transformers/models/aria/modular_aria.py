@@ -1243,6 +1243,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1468,7 +1469,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
-        **loss_kwargs,
+        **kwargs,
     ) -> AriaCausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1575,6 +1576,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             logits_to_keep=logits_to_keep,
             cache_position=cache_position,
+            **kwargs,
         )
 
         logits = outputs.logits
@@ -1582,7 +1584,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return AriaCausalLMOutputWithPast(

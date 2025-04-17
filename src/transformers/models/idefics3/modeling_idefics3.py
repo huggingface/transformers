@@ -532,6 +532,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
@@ -843,6 +844,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, Idefics3BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -940,6 +942,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=return_dict,
+            **kwargs,
         )
 
         if not return_dict:
@@ -1028,6 +1031,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[Tuple, Idefics3CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1118,6 +1122,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

@@ -194,6 +194,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only

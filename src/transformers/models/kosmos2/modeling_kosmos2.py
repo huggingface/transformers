@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -880,6 +880,29 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class KosmosTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -932,6 +955,7 @@ class KosmosTextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -956,8 +980,7 @@ class KosmosTextAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
-        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2))
+        query_states = self._shape(self.q_proj(hidden_states))
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -969,32 +992,33 @@ class KosmosTextAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        src_len = key_states.size(2)
+        attention_interface: Callable = eager_attention_forward
 
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_length, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.inner_attn_ln is not None:
-            context_states = self.inner_attn_ln(context_states)
+            attn_output = self.inner_attn_ln(attn_output)
 
-        attn_output = self.out_proj(context_states)
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights, past_key_value
 
@@ -1063,6 +1087,7 @@ class Kosmos2TextBlock(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
@@ -1079,6 +1104,7 @@ class Kosmos2TextBlock(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -1106,6 +1132,7 @@ class Kosmos2TextBlock(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -1390,6 +1417,9 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     config_class = Kosmos2Config
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1825,6 +1855,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
         r"""
         Returns:
@@ -1897,6 +1928,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         if not return_dict:
@@ -1967,6 +1999,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2052,6 +2085,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         if not return_dict:

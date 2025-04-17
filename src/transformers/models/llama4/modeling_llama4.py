@@ -1588,7 +1588,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {}
     base_model_prefix = ""
     config_class = Llama4Config
-    _supports_flex_attn = True
 
     def __init__(self, config: Llama4Config):
         super().__init__(config)

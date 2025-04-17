@@ -413,6 +413,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> GotOcr2CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -498,6 +499,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
         logits = outputs.logits
