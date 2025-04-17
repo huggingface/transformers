@@ -167,7 +167,6 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             else:
                 image_processor = image_processing_class(**self.image_processor_dict)
                 image = np.random.randn(3, 249, 491)
-                # TODO handle input data format and ouput data format
                 image = image_processor.pad_image(image, size_divisor=4)
                 self.assertTrue(image.shape[1] % 4 == 0)
                 self.assertTrue(image.shape[2] % 4 == 0)
