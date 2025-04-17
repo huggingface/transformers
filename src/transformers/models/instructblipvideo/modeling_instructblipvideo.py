@@ -167,7 +167,7 @@ class InstructBlipVideoAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scale = self.head_dim**-0.5
         self.dropout = nn.Dropout(config.attention_dropout)
         self.is_causal = False
 
@@ -226,7 +226,7 @@ class InstructBlipVideoAttention(nn.Module):
             value_states,
             attention_mask=None,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
+            scaling=self.scale,
             **kwargs,
         )
 
