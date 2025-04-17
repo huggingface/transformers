@@ -53,9 +53,9 @@ output = pipe(message)
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, PhiForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model = PhiForCausalLM.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1")
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
 
 prompt = "Hey, are you conscious? Can you talk to me?"
