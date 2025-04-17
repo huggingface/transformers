@@ -21,17 +21,13 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
-from transformers.utils.import_utils import export
-
 from .utils import is_torch_available
 
 
 if is_torch_available():
     import torch
     import torch.distributed.tensor
-    from torch import nn
 
-    from .modeling_utils import PreTrainedModel
 
 from .utils import logging
 
@@ -97,12 +93,14 @@ def _serialize_io(value):
         }
         if value._local_tensor.dtype in {torch.float16, torch.float32, torch.bfloat16}:
             value = value._local_tensor.clone()
-            out.update({
-                "mean": _sanitize_repr_for_diff(repr(value.mean())),
-                "std": _sanitize_repr_for_diff(repr(value.std())),
-                "min": _sanitize_repr_for_diff(repr(value.min())),
-                "max": _sanitize_repr_for_diff(repr(value.max())),
-            })
+            out.update(
+                {
+                    "mean": _sanitize_repr_for_diff(repr(value.mean())),
+                    "std": _sanitize_repr_for_diff(repr(value.std())),
+                    "min": _sanitize_repr_for_diff(repr(value.min())),
+                    "max": _sanitize_repr_for_diff(repr(value.max())),
+                }
+            )
         return out
 
     if isinstance(value, torch.Tensor):
@@ -114,25 +112,30 @@ def _serialize_io(value):
             "value": val_repr,
         }
         if value.dtype in {torch.float16, torch.float32, torch.bfloat16}:
-            out.update({
-                "mean": _sanitize_repr_for_diff(repr(value.mean())),
-                "std": _sanitize_repr_for_diff(repr(value.std())),
-                "min": _sanitize_repr_for_diff(repr(value.min())),
-                "max": _sanitize_repr_for_diff(repr(value.max())),
-            })
+            out.update(
+                {
+                    "mean": _sanitize_repr_for_diff(repr(value.mean())),
+                    "std": _sanitize_repr_for_diff(repr(value.std())),
+                    "min": _sanitize_repr_for_diff(repr(value.min())),
+                    "max": _sanitize_repr_for_diff(repr(value.max())),
+                }
+            )
         return out
 
     return _sanitize_repr_for_diff(repr(value))
 
+
 def _repr_to_list(val):
     return _sanitize_repr_for_diff(repr(val)).splitlines()
+
 
 def _repr_to_list(value: torch.Tensor):
     torch.set_printoptions(sci_mode=True, linewidth=120)
     with StringIO() as buf, redirect_stdout(buf):
-        print(value) # to redirected stdout to avoid line splits
+        print(value)  # to redirected stdout to avoid line splits
         raw = buf.getvalue()
     return _sanitize_repr_for_diff(raw).splitlines()
+
 
 def prune_outputs_if_children(node):
     # if there are children, remove this node's "outputs"
@@ -143,7 +146,8 @@ def prune_outputs_if_children(node):
             prune_outputs_if_children(child)
 
 
-LAYER_SUFFIX_RE = re.compile(r"(.*)\.(\d+)$") # should be generic enough, ends with a number
+LAYER_SUFFIX_RE = re.compile(r"(.*)\.(\d+)$")  # should be generic enough, ends with a number
+
 
 def is_layer_block(node):
     match = LAYER_SUFFIX_RE.match(node.get("module_path", ""))
@@ -203,7 +207,6 @@ def log_model_debug_trace(debug_path, model):
         for child in node.get("children", []):
             strip_values(child)
 
-
     tree_copy = json.loads(json.dumps(model._call_tree))  # deep copy
     strip_values(tree_copy)
 
@@ -211,13 +214,12 @@ def log_model_debug_trace(debug_path, model):
         json.dump(tree_copy, f, indent=2)
 
 
-
-
 def _attach_debugger_logic(model, class_name, debug_path: str):
     # Prepare data structures on the model object
     model._call_tree = {"module_path": class_name, "inputs": None, "outputs": None, "children": []}
     model._debugger_model_call_stack = []
     model._debugger_module_dump_name = class_name  # used for final JSON filename
+
     def wrap_forward(module, full_path):
         orig_forward = module.forward
 
@@ -292,64 +294,7 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
     model.forward = top_wrapped_forward
 
 
-@export(backends=("torch",))
-def model_addition_debugger(cls):
-    """
-    # Model addition debugger - a model adder tracer
-    This decorator is a power user tool intended for model adders.
-    It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
-    To note, this decorator enforces `torch.no_grad()`.
-    ## Usage
-
-    add decorator to your model class
-    ```python
-    from ...modeling_utils import model_addition_debugger
-
-    @model_addition_debugger
-    class MyModel(nn.Module) # Can inherit from PreTrainedModel too
-        # ... nothing else changes
-    ```
-    Then, in a separate script (example is for Llava)
-
-    ```python
-    import torch
-    from PIL import Image
-    import requests
-    from transformers import LlavaProcessor, LlavaForConditionalGeneration
-    torch.random.manual_seed(673)
-
-    # load pretrained model and processor
-    model_id = "llava-hf/llava-1.5-7b-hf"
-    processor = LlavaProcessor.from_pretrained(model_id)
-    model = LlavaForConditionalGeneration.from_pretrained(model_id, low_cpu_mem_usage=True)
-
-    # create random image input
-    random_image = Image.fromarray(torch.randint(0, 256, (224, 224, 3), dtype=torch.uint8).numpy())
-
-    # prompt
-    prompt = "<image>Describe this image."
-
-    # process inputs
-    inputs = processor(text=prompt, images=random_image, return_tensors="pt")
-
-    # call forward method (not .generate!)
-    with torch.no_grad():
-        output = model.forward(**inputs)
-    ```
-
-    """
-    orig_init = cls.__init__
-
-    @functools.wraps(cls.__init__)
-    def wrapped_init(self, *args, **kwargs):
-        orig_init(self, *args, **kwargs)
-        _attach_debugger_logic(self, cls.__name__)
-
-    cls.__init__ = wrapped_init
-    return cls
-
-
-@export(backends=("torch",))
+@requires(backends=("torch",))
 @contextmanager
 def model_addition_debugger_context(model, debug_path: Optional[str] = None):
     """
@@ -367,6 +312,7 @@ def model_addition_debugger_context(model, debug_path: Optional[str] = None):
     from PIL import Image
     import requests
     from transformers import LlavaProcessor, LlavaForConditionalGeneration
+    from transformers.model_debugging_utils import model_addition_debugger_context
     torch.random.manual_seed(673)
 
     # load pretrained model and processor
@@ -389,8 +335,11 @@ def model_addition_debugger_context(model, debug_path: Optional[str] = None):
     ```
 
     """
+    orig_forwards = {m: m.forward for _, m in model.named_modules()}
+    orig_forwards[model] = model.forward
     _attach_debugger_logic(model, model.__class__.__name__, debug_path)
     try:
         yield model
     finally:
-        pass
+        for module_instance, forward_method in orig_forwards.items():
+            module_instance.forward = forward_method
