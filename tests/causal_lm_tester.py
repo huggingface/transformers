@@ -1,32 +1,36 @@
-# TODO Matt: Add this to a proper file later
 from .test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor, torch_device, is_torch_available, require_torch
 from .test_configuration_common import ConfigTester
 from .test_pipeline_mixin import PipelineTesterMixin
-import transformers
+from transformers.testing_utils import is_flaky, require_torch_sdpa, require_torch_accelerator, slow, require_flash_attn, require_torch_gpu
+import pytest
 import unittest
 import tempfile
 if is_torch_available():
     import torch
 
+# TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
-    _allowed_model_classes = ("Base", "ForCausalLM", "ForSequenceClassification", "ForTokenClassification")
+    _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
     config_class = None
-    model_classes = None
+    base_model_class = None
+    causal_lm_class = None
+    sequence_classification_class = None
+    token_classification_class = None
     pipeline_model_mapping = None
 
     def _verify_model_attributes(self):
-        if not isinstance(self.config_class, str):
-            raise ValueError("You have inherited from CausalLMModelTester but did not set the config_class attribute.")
-        if not isinstance(self.model_classes, dict):
-            raise ValueError("You have inherited from CausalLMModelTester but did not set the model_classes attribute. "
-                             "This should be a dictionary mapping model tasks to model classes , like "
-                             "{'Base': MyModel, 'ForCausalLM': MyModelForCausalLM}")
-        if unknown_tasks := set(self.model_classes.keys()) - set(self._allowed_model_classes):
-            raise ValueError(f"Unknown tasks {unknown_tasks} in model_classes. Allowed tasks are: {self._allowed_model_classes}")
+        for required_attribute in self._required_attributes:
+            if getattr(self, required_attribute) is None:
+                raise ValueError(f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute.")
         if not isinstance(self.pipeline_model_mapping, dict):
             raise ValueError("You have inherited from CausalLMModelTester but did not set the pipeline_model_mapping attribute. "
                              "This should be a dictionary mapping pipeline tasks to model classes, like "
                              "{'feature-extraction': MyModel, 'text-classification': MyModelForSequenceClassification}")
+
+    @property
+    def all_model_classes(self):
+        return [model_class for model_class in (self.base_model_class, self.causal_lm_class, self.sequence_classification_class, self.token_classification_class) if model_class is not None]
+
 
     def __init__(
             self,
@@ -153,15 +157,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_headmasking = False
     test_pruning = False
     model_tester_class = None
-
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None
+    all_model_classes = None
 
     def setUp(self):
         if self.model_tester_class is None:
             raise ValueError("You have inherited from CausalLMModelTest but did not set the model_tester_class attribute.")
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
+        if self.all_model_classes is None:
+            self.all_model_classes = self.model_tester.all_model_classes
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -170,13 +174,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_Gemma_sequence_classification_model(self):
+    def test_sequence_classification_model(self):
+        if "ForSequenceClassification" not in self.model_tester.model_classes:
+            self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
@@ -188,7 +188,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Gemma_sequence_classification_model_for_single_label(self):
+    def test_sequence_classification_model_for_single_label(self):
+        if "ForSequenceClassification" not in self.model_tester.model_classes:
+            self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
@@ -201,7 +203,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Gemma_sequence_classification_model_for_multi_label(self):
+    def test_sequence_classification_model_for_multi_label(self):
+        if "ForSequenceClassification" not in self.model_tester.model_classes:
+            self.skipTest("Model does not support sequence classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -216,7 +220,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Gemma_token_classification_model(self):
+    def test_token_classification_model(self):
+        if "ForTokenClassification" not in self.model_tester.model_classes:
+            self.skipTest("Model does not support token classification")
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
@@ -230,17 +236,6 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
-
-    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Gemma flash attention does not support right padding")
 
     @require_torch_sdpa
     @require_torch_accelerator
@@ -256,11 +251,11 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
                 )
                 model_sdpa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16,
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16,
                                                     attn_implementation="eager")
                 model.to(torch_device)
 
@@ -272,8 +267,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits = outputs.hidden_states[-1]
                 logits_sdpa = outputs_sdpa.hidden_states[-1]
 
-                # gemma sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
+                assert torch.allclose(logits_sdpa, logits, atol=2e-3)
 
     @require_flash_attn
     @require_torch_gpu
@@ -291,11 +285,11 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16,
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16,
                                                     attn_implementation="eager")
                 model.to(torch_device)
 
@@ -307,5 +301,4 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
 
-                # gemma flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=3e-3)
+                assert torch.allclose(logits_fa, logits, atol=2e-3)
