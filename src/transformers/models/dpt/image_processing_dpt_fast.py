@@ -110,14 +110,23 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     keep_aspect_ratio: Optional[bool]
     segmentation_maps: Optional[ImageInput] = (None,)
 
-
 DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = """
  Args:
     ensure_multiple_of (`int`, *optional*, defaults to 1):
-    If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
     by `ensure_multiple_of` in `preprocess`.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
+        DINOv2 paper, which uses the model in combination with DPT.
+    do_pad (`bool`, *optional*, defaults to `False`):
+        Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
+        combination with DPT.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overidden by `keep_aspect_ratio` in `preprocess`.
+    segmentation_maps (`ImageInput`, *optional*):
+        Segmentation map to preprocess.
 """
-
 
 @add_start_docstrings(
     "Constructs a fast DPT image processor.",
@@ -139,9 +148,10 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
-    # Overrides BaseImageProcessor `__call__` so that segmentation maps can be passed
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
     def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     def _preprocess(
@@ -165,7 +175,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional[ImageInput] = None,
         **kwargs,
     ) -> BatchFeature:
-        # Group images by size for batched resizing
+
         processed_images = self._preprocess_images(
             images=images,
             do_resize=do_resize,
@@ -212,7 +222,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def _preprocess_images(
+    def  _preprocess_images(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -232,6 +242,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         size_divisor: Optional[int],
         **kwargs,
     ) -> "torch.Tensor":
+        # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -344,12 +355,14 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 Image to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
             antialias (`bool`, *optional*, defaults to `True`):
                 Whether to use antialiasing when resizing the image
             ensure_multiple_of (`int`, *optional*):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value
+            keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+                If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
 
         Returns:
             `torch.Tensor`: The resized image.
