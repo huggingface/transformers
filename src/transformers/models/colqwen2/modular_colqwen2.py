@@ -73,7 +73,7 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens", "padding_side"]
+    valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
     image_processor_class = "Qwen2VLImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
@@ -97,8 +97,6 @@ class ColQwen2Processor(ColPaliProcessor):
         if query_prefix is None:
             query_prefix = "Query: "
         self.query_prefix = query_prefix
-
-        self.tokenizer.padding_side = kwargs.get("padding_side", "left")
 
     def __call__(
         self,
