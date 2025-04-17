@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -330,17 +329,15 @@ class GraniteMoeSharedIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEANS = Expectations({("xpu", 3): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]), ("cuda", 7): torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]]),})
+        EXPECTED_MEANS = Expectations({("xpu", 3): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]), ("cuda", 7): torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]]), ("cuda", 8): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]),})
 
         EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
-        print(f"out.logits.float().mean(-1): {out.logits.float().mean(-1)}")
         torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICES = Expectations({("xpu", 3): torch.tensor([[2.5479, -9.2123, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2161, -9.2122, -6.3100, -3.6223, -3.6377, -5.2542, -5.2523]]), ("cuda", 7): torch.tensor([[4.8785, -2.2890, -2.2892, -2.2885, -2.2890, -3.5007, -2.2897, -2.2892,
-        -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]])})
+        -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]]), ("cuda", 8): torch.tensor([[2.5479, -9.2123, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2161, -9.2122, -6.3100, -3.6223, -3.6377, -5.2542, -5.2523]]),})
         EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
-        print(f"out.logits[0, 0, :15].float(): {out.logits[0, 0, :15].float()}")
         # fmt: on
 
         self.assertTrue(
