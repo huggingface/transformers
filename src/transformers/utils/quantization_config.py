@@ -1695,10 +1695,14 @@ class BitNetConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
+        online_quantization: bool = False,
+        offline_quantization: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITNET
         self.modules_to_not_convert = modules_to_not_convert
+        self.online_quantization = online_quantization
+        self.offline_quantization = offline_quantization
         self.post_init()
 
     def post_init(self):
