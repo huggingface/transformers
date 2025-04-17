@@ -50,22 +50,19 @@ sf.write("speech.wav", speech["audio"], samplerate=speech["sampling_rate"])
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoModel, AutoTokenizer
+# pip install -U -q g2p-en
 import soundfile as sf
+import torch
+from transformers import AutoTokenizer, FastSpeech2ConformerWithHifiGan
 
 tokenizer = AutoTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-model = AutoModel.from_pretrained("espnet/fastspeech2_conformer")
+model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan", torch_dtype=torch.float16, device_map="auto")
 
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to("cuda")
 input_ids = inputs["input_ids"]
 
 output_dict = model(input_ids, return_dict=True)
-spectrogram = output_dict["spectrogram"]
-
-from transformers import FastSpeech2ConformerHifiGan
-hifigan = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
-waveform = hifigan(spectrogram)
-
+waveform = output_dict["waveform"]
 sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 ```
 
