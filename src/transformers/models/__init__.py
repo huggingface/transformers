@@ -145,6 +145,7 @@ if TYPE_CHECKING:
     from .instructblipvideo import *
     from .internvl import *
     from .jamba import *
+    from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
     from .layoutlm import *

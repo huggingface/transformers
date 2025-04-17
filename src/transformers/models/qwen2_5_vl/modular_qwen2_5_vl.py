@@ -28,7 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
@@ -110,9 +110,13 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
+class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
+    model_type = "qwen2_5_vl_text"
+
+
 class Qwen2_5_VLConfig(Qwen2VLConfig):
     model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
+    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig, "text_config": Qwen2_5_VLTextConfig}
 
 
 class Qwen2_5_VLMLP(nn.Module):
@@ -227,7 +231,7 @@ class Qwen2_5_VLVisionBlock(nn.Module):
 
 class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.get_text_config().initializer_range
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -971,6 +975,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Qwen2_5_VLConfig",
+    "Qwen2_5_VLTextConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
