@@ -5837,11 +5837,10 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
     """Check if the device is an accelerator. We need to function, as device_map can be "disk" as well, which is not
     a proper `torch.device`.
     """
-    try:
-        return torch.device(device).type not in ["meta", "cpu"]
-    # Handle `device="disk"` case
-    except RuntimeError:
+    if device == "disk":
         return False
+    else:
+        return torch.device(device).type not in ["meta", "cpu"]
 
 
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, factor=2):
