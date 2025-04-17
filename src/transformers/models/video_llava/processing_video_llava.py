@@ -193,13 +193,13 @@ class VideoLlavaProcessor(ProcessorMixin):
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         text_inputs = self.tokenizer(
-            prompt_strings,
+            text,
             return_tensors=None,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         data.update(text_inputs)
 
