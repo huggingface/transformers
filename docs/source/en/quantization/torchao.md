@@ -151,8 +151,9 @@ import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
 
-# our default int4 weight only quantization option is only optimized for batch size 1
-quant_config = Int4WeightOnlyConfig(group_size=128)
+# Note: our default int4 weight only quantization option is only optimized for batch size 1
+# Note: we can set use_hqq to True for better accuracy
+quant_config = Int4WeightOnlyConfig(group_size=128, use_hqq=True)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
