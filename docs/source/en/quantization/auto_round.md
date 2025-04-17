@@ -45,11 +45,10 @@ CPU, XPU, and CUDA for both quantization and inference.
 
 Currently, only offline mode is supported to generate quantized models.
 
-### Command Line Usage
-
 <hfoptions id="quantization">
 <hfoption id="quantization cmd">
 
+### Command Line Usage
 ```bash
 auto-round \
     --model facebook/opt-125m \
