@@ -22,11 +22,9 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_torch_gpu,
     require_torch_multi_gpu,
-    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -39,12 +37,16 @@ if is_torch_available():
 class AutoRoundTest(unittest.TestCase):
     model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
     input_text = "There is a girl who likes adventure,"
-
-    EXPECTED_OUTPUT = (
+    EXPECTED_OUTPUTS = set()
+    ## different backends will have a little variation of  output
+    EXPECTED_OUTPUTS.add(
         "There is a girl who likes adventure, and she has been exploring the world "
         "for many years. She travels to different countries and cultures, trying new "
         "things every day. One of her favorite places to visit is a small village in "
         "the mountains where"
+    )
+    EXPECTED_OUTPUTS.add(
+        "There is a girl who likes adventure, and she has been exploring the world for many years. She has visited every country in Europe and has even traveled to some of the most remote parts of Africa. She enjoys hiking through the mountains and discovering"
     )
 
     device_map = "cuda"
@@ -72,7 +74,7 @@ class AutoRoundTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
@@ -85,38 +87,51 @@ class AutoRoundTest(unittest.TestCase):
         Simple test that checks if the quantized model is working properly with bf16
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
+        quantization_config = AutoRoundConfig(backend="triton")
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=torch.bfloat16, device_map="cuda"
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map=self.device_map,
+            quantization_config=quantization_config,
         )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     @require_intel_extension_for_pytorch
     def test_quantized_model_on_cpu(self):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt")
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(torch_device)
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name)
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
         """
+
+        ## some backends like marlin/ipex will repack the weight that caused the weight shape changed
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            quantization_config = AutoRoundConfig(backend="triton")
+            quantized_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map=self.device_map,
+                torch_dtype=torch.float16,
+                quantization_config=quantization_config,
+            )
+
+            quantized_model.save_pretrained(tmpdirname)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="cuda")
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             output = model.generate(**input_ids, max_new_tokens=40, do_sample=False)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
@@ -124,12 +139,14 @@ class AutoRoundTest(unittest.TestCase):
         Simple test that checks if the quantized model is working properly with multiple GPUs
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        quantization_config = AutoRoundConfig(backend="triton")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map="auto", quantization_config=quantization_config
+        )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_convert_from_gptq(self):
         """
