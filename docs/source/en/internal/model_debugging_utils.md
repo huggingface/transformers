@@ -61,7 +61,11 @@ prompt = "<image>Describe this image."
 inputs = processor(text=prompt, images=random_image, return_tensors="pt")
 
 # call forward method (not .generate!)
-with model_addition_debugger_context(model, "optional_path_to_your_output_file.json"):
+with model_addition_debugger_context(
+  model,
+  debug_path="optional_path_to_your_directory",
+  do_prune_layers=False # This will output ALL the layers of a model.
+  ):
     output = model.forward(**inputs)
 
 ```
@@ -203,5 +207,7 @@ Once the forward passes of two models have been traced by the debugger, one can 
 ### Limitations and scope
 
 This feature will only work for torch-based models, and would require more work and case-by-case approach for say `jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be traced once instead of reran N times with breakpoints.
+
+If you pass `do_prune_layers=False` to your model debugger, ALL the layers will be outputted to `json`. Else, only the first and last layer will be shown. This is useful when some layers (typically cross-attention) appear only after N layers. 
 
 [[autodoc]] model_addition_debugger_context
