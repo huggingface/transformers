@@ -65,7 +65,7 @@ try:
         Expands `kernels`' `use_kernel_forward_from_hub` to NOT use a kernel at compile time. This should be removed
         when `kernels` supports `torch.compile`.
 
-        If the layer has a `config` attribute, we can also set `config.disable_custom_kernels =True` to disable the
+        If the layer has a `config` attribute, we can also set `config.disable_custom_kernels = True` to disable the
         kernel.
         """
 
