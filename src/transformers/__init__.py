@@ -538,7 +538,6 @@ else:
             "FlaxSuppressTokensLogitsProcessor",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
-            "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
     _import_structure["modeling_flax_outputs"] = []
@@ -869,7 +868,6 @@ if TYPE_CHECKING:
             EpsilonLogitsWarper,
             EtaLogitsWarper,
             ExponentialDecayLengthPenalty,
-            FlaxWhisperTimeStampLogitsProcessor,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
             GenerationMixin,
