@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-<!-- BADGES -->
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -77,7 +76,6 @@ print("Translated:", translated)
 - **Applications:** Ideal for translation and other sequence-to-sequence tasks.
 - **Further Reading:** See the [paper](https://arxiv.org/abs/2001.08210) for more in-depth details about the model.
 
-<!-- BADGES -->
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
