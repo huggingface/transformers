@@ -351,6 +351,41 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
 
 
 @dataclass
+class DinoDetrEncoderOutput(ModelOutput):
+    """
+    Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    output: torch.FloatTensor = None
+    intermediate_output: Optional[torch.FloatTensor] = None
+    intermediate_ref: Optional[torch.FloatTensor] = None
+    encoder_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class DinoDetrDecoderOutput(ModelOutput):
     """
     Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
@@ -379,12 +414,45 @@ class DinoDetrDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate: List[torch.FloatTensor] = None
+    ref_points: List[torch.FloatTensor] = None
+
+
+@dataclass
+class DinoDetrDeformableTransformerOutput(ModelOutput):
+    """
+    Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    hs: torch.FloatTensor = None
+    references: torch.FloatTensor = None
+    hs_enc: torch.FloatTensor = None
+    ref_enc: torch.FloatTensor = None
+    init_box_proposal: torch.FloatTensor = None
+    encoder_states: torch.FloatTensor = None
 
 
 @dataclass
@@ -1663,6 +1731,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         key_padding_mask: Tensor,
         ref_token_index: Optional[Tensor] = None,
         ref_token_coord: Optional[Tensor] = None,
+        return_dict: Optional[bool] = None,
     ):
         """
         Input:
@@ -1680,6 +1749,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         Outpus:
             - output: [bs, sum(hi*wi), 256]
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if self.two_stage_type in ["no", "standard", "enceachlayer", "enclayer1"]:
             assert ref_token_index is None
 
@@ -1759,7 +1829,18 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         else:
             intermediate_output = intermediate_ref = None
 
-        return output, intermediate_output, intermediate_ref, encoder_states
+        if not return_dict:
+            return tuple(
+                v
+                for v in [output, intermediate_output, intermediate_ref, encoder_states]
+                # if v is not None
+            )
+        return DinoDetrEncoderOutput(
+            output=output,  # last layer
+            intermediate_output=intermediate_output,  # all layers
+            intermediate_ref=intermediate_ref,  # all layers
+            encoder_states=encoder_states,  # all layers
+        )
 
 
 class DinoDetrDecoder(DinoDetrPreTrainedModel):
@@ -1856,6 +1937,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
         spatial_shapes_list: Optional[List] = None,
         valid_ratios: Optional[Tensor] = None,
+        return_dict: Optional[bool] = None,
     ):
         """
         Input:
@@ -1865,6 +1947,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             - refpoints_unsigmoid: nq, bs, 2/4
             - valid_ratios/spatial_shapes: bs, nlevel, 2
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output = tgt
 
         intermediate = [output]
@@ -1969,10 +2052,15 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                         topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
                     )  # unsigmoid
 
-        return [
-            [itm_out.transpose(0, 1) for itm_out in intermediate],
-            [itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
-        ]
+        if not return_dict:
+            return (
+                [itm_out.transpose(0, 1) for itm_out in intermediate],
+                [itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
+            )
+        return DinoDetrDecoderOutput(
+            intermediate=[itm_out.transpose(0, 1) for itm_out in intermediate],
+            ref_points=[itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
+        )
 
 
 class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
@@ -2208,7 +2296,16 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
-    def forward(self, srcs, masks, refpoint_embed, pos_embeds, tgt, attn_mask=None):
+    def forward(
+        self,
+        srcs,
+        masks,
+        refpoint_embed,
+        pos_embeds,
+        tgt,
+        attn_mask=None,
+        return_dict: Optional[bool] = None,
+    ):
         """
         Input:
             - srcs: List of multi features [bs, ci, hi, wi]
@@ -2218,6 +2315,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             - tgt: [bs, num_dn, d_model]. None in infer
 
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         # prepare input for encoder
         src_flatten = []
         mask_flatten = []
@@ -2251,7 +2349,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         #########################################################
         # Begin Encoder
         #########################################################
-        memory, enc_intermediate_output, enc_intermediate_refpoints, encoder_states = self.encoder(
+        outputs_encoder_part = self.encoder(
             src_flatten,
             pos=lvl_pos_embed_flatten,
             level_start_index=level_start_index,
@@ -2261,7 +2359,33 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             key_padding_mask=mask_flatten,
             ref_token_index=enc_topk_proposals,  # bs, nq
             ref_token_coord=enc_refpoint_embed,  # bs, nq, 4
+            return_dict=return_dict,
         )
+        if not return_dict:
+            (
+                memory,
+                # enc_intermediate_output,
+                # enc_intermediate_refpoints,
+                encoder_states,
+            ) = (
+                outputs_encoder_part[0],
+                # outputs_encoder_part[1],
+                # outputs_encoder_part[2],
+                outputs_encoder_part[3],
+            )
+        else:
+            (
+                memory,
+                # enc_intermediate_output,
+                # enc_intermediate_refpoints,
+                encoder_states,
+            ) = (
+                outputs_encoder_part["output"],
+                # outputs_encoder_part["intermediate_output"],
+                # outputs_encoder_part["intermediate_ref"],
+                outputs_encoder_part["encoder_states"],
+            )
+
         #########################################################
         # End Encoder
         # - memory: bs, \sum{hw}, c
@@ -2361,7 +2485,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         #########################################################
         # Begin Decoder
         #########################################################
-        hs, references = self.decoder(
+        outputs_decoder_part = self.decoder(
             tgt=tgt.transpose(0, 1),
             memory=memory.transpose(0, 1),
             memory_key_padding_mask=mask_flatten,
@@ -2372,7 +2496,15 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
             tgt_mask=attn_mask,
+            return_dict=return_dict,
         )
+        if not return_dict:
+            hs, references = outputs_decoder_part[0], outputs_decoder_part[1]
+        else:
+            hs, references = (
+                outputs_decoder_part["intermediate"],
+                outputs_decoder_part["ref_points"],
+            )
         #########################################################
         # End Decoder
         # hs: n_dec, bs, nq, d_model
@@ -2399,7 +2531,27 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         # ref_enc: (n_enc+1, bs, nq, query_dim) or (1, bs, nq, query_dim) or (n_enc, bs, nq, d_model) or None
         #########################################################
 
-        return hs, references, hs_enc, ref_enc, init_box_proposal, encoder_states
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hs,
+                    references,
+                    hs_enc,
+                    ref_enc,
+                    init_box_proposal,
+                    encoder_states,
+                ]
+                # if v is not None
+            )
+        return DinoDetrDeformableTransformerOutput(
+            hs=hs,
+            references=references,
+            hs_enc=hs_enc,
+            ref_enc=ref_enc,
+            init_box_proposal=init_box_proposal,
+            encoder_states=encoder_states,
+        )
         # hs: (n_dec, bs, nq, d_model)
         # references: sigmoid coordinates. (n_dec+1, bs, bq, 4)
         # hs_enc: (n_enc+1, bs, nq, d_model) or (1, bs, nq, d_model) or None
@@ -2672,6 +2824,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         pixel_mask=None,
         labels: List = None,
         output_hidden_states=False,
+        return_dict: Optional[bool] = None,
     ):
         """
         Returns:
@@ -2697,6 +2850,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -2743,9 +2898,49 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         else:
             assert labels is None
             input_query_bbox = input_query_label = attn_mask = dn_meta = None
-        hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = self.transformer(
-            srcs, masks, input_query_bbox, poss, input_query_label, attn_mask
+        outputs_transformer_part = self.transformer(
+            srcs,
+            masks,
+            input_query_bbox,
+            poss,
+            input_query_label,
+            attn_mask,
+            return_dict=return_dict,
         )
+        if not return_dict:
+            hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
+                outputs_transformer_part[0],
+                outputs_transformer_part[1],
+                outputs_transformer_part[2],
+                outputs_transformer_part[3],
+                outputs_transformer_part[4],
+                outputs_transformer_part[5],
+            )
+        else:
+            hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
+                outputs_transformer_part["hs"],
+                outputs_transformer_part["references"],
+                outputs_transformer_part["hs_enc"],
+                outputs_transformer_part["ref_enc"],
+                outputs_transformer_part["init_box_proposal"],
+                outputs_transformer_part["encoder_states"],
+            )
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hs,
+                    reference,
+                    hs_enc,
+                    ref_enc,
+                    init_box_proposal,
+                    dn_meta,
+                    hs if output_hidden_states or self.output_hidden_states else None,
+                    (encoder_states if output_hidden_states or self.output_hidden_states else None),
+                ]
+                if v is not None
+            )
         return DinoDetrModelOutput(
             hidden_states=hs,
             references=reference,
@@ -2788,6 +2983,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         pixel_mask=None,
         labels: List = None,
         output_hidden_states=False,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2829,6 +3025,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -2836,14 +3033,47 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
+        dn_meta = None
         # First, sent images through DETR base model to obtain encoder + decoder outputs
-        outs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-        hs = outs.hidden_states[1:]
-        reference = outs.references
-        hs_enc = outs.encoder_last_hidden_state
-        ref_enc = outs.encoder_reference
-        init_box_proposal = outs.init_box_proposal
-        dn_meta = outs.denoising_meta
+        outputs_model_part = self.model(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            labels=labels,
+            return_dict=return_dict,
+        )
+        if not return_dict:
+            (
+                hs,
+                reference,
+                hs_enc,
+                ref_enc,
+                init_box_proposal,
+            ) = (
+                outputs_model_part[0][1:],
+                outputs_model_part[1],
+                outputs_model_part[2],
+                outputs_model_part[3],
+                outputs_model_part[4],
+            )
+            if self.training:
+                dn_meta = outputs_model_part[5]
+            if self.training and (output_hidden_states or self.model.output_hidden_states):
+                decoder_hidden_states = outputs_model_part[6]
+                encoder_hidden_states = outputs_model_part[7]
+            if not self.training and (output_hidden_states or self.model.output_hidden_states):
+                decoder_hidden_states = outputs_model_part[5]
+                encoder_hidden_states = outputs_model_part[6]
+        else:
+            hs = outputs_model_part.hidden_states[1:]
+            reference = outputs_model_part.references
+            hs_enc = outputs_model_part.encoder_last_hidden_state
+            ref_enc = outputs_model_part.encoder_reference
+            init_box_proposal = outputs_model_part.init_box_proposal
+            if self.training:
+                dn_meta = outputs_model_part.denoising_meta
+            if output_hidden_states or self.model.output_hidden_states:
+                decoder_hidden_states = outputs_model_part.decoder_hidden_states
+                encoder_hidden_states = outputs_model_part.encoder_hidden_states
 
         # In case num object=0
         hs[0] += self.model.label_enc.weight[0, 0] * 0.0
@@ -2937,6 +3167,26 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
         out["loss"] = loss
         out["loss_dict"] = loss_dict
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hs[-1],
+                    reference[-1],
+                    hs_enc,
+                    ref_enc,
+                    loss,
+                    loss_dict,
+                    out["logits"],
+                    out["pred_boxes"],
+                    out["aux_outputs"],
+                    out["denoising_meta"],
+                    (encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
+                    (decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
+                ]
+                if v is not None
+            )
         dict_outputs = DinoDetrObjectDetectionOutput(
             last_hidden_state=hs[-1],
             reference=reference[-1],
@@ -2949,13 +3199,12 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             auxiliary_outputs=out["aux_outputs"],
             denoising_meta=out["denoising_meta"],
             encoder_hidden_states=(
-                outs["encoder_hidden_states"] if output_hidden_states or self.model.output_hidden_states else None
+                encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
             ),
             decoder_hidden_states=(
-                outs["decoder_hidden_states"] if output_hidden_states or self.model.output_hidden_states else None
+                decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
             ),
         )
-
         return dict_outputs
 
     @torch.jit.unused
