@@ -407,6 +407,10 @@ generation_output[:2]
     - update_ssm_state
     - reset
 
+[[autodoc]] xLSTMCache
+    - update_rnn_state
+    - reset
+
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 
 [[autodoc]] WatermarkDetector

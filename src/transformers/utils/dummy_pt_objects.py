@@ -107,6 +107,13 @@ class StaticCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class xLSTMCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GlueDataset(metaclass=DummyObject):
     _backends = ["torch"]
 
