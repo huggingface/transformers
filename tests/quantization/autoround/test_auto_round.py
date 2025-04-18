@@ -22,9 +22,11 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_torch_gpu,
     require_torch_multi_gpu,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
+
 
 if is_torch_available():
     import torch
