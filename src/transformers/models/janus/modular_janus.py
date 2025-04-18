@@ -306,6 +306,8 @@ class JanusConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         vq_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVQVAEConfig`):
             The config object or dictionary of the VQVAE backbone.
+        image_token_index (`int`, *optional*, defaults to 100581):
+            Token index of a placeholder image token.
 
     Example:
 
