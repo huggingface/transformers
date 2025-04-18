@@ -36,8 +36,8 @@ from transformers.models.bark.generation_configuration_bark import (
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
-    require_torch_fp16,
     require_torch_accelerator,
+    require_torch_fp16,
     require_torch_gpu,
     slow,
     torch_device,
