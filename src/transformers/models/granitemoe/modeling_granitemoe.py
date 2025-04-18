@@ -442,7 +442,7 @@ class GraniteMoeAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # None or rope embeddings
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -455,8 +455,12 @@ class GraniteMoeAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if position_embeddings == None:
+            cos = None
+            sin = None
+        else: 
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -537,8 +541,12 @@ class GraniteMoeFlashAttention2(GraniteMoeAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if position_embeddings == None:
+            cos = None
+            sin = None
+        else: 
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -651,8 +659,12 @@ class GraniteMoeSdpaAttention(GraniteMoeAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if position_embeddings == None:
+            cos = None
+            sin = None
+        else: 
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -947,8 +959,9 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
 
-        # rope
-        self.rotary_emb = GraniteMoeRotaryEmbedding(config)
+        self.position_embedding_type = config.position_embedding_type
+        if self.position_embedding_type == "rope":
+            self.rotary_emb = GraniteMoeRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1019,8 +1032,10 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         # embed positions
         hidden_states = inputs_embeds
 
+        position_embeddings = None
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        if self.position_embedding_type == "rope":
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

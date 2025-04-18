@@ -235,7 +235,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             **kwargs,
         )
 
-        rope_config_validation(self)
+        if self.position_embedding_type == "rope":
+            rope_config_validation(self)
     
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property
