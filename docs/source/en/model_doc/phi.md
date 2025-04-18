@@ -30,7 +30,7 @@ You can find all the original Phi checkpoints under the [Phi-1](https://huggingf
 > [!TIP]
 > Click on the Phi models in the right sidebar for more examples of how to apply Phi to different language tasks.
 
-The example below demonstrates how to generate and classify text with [`Pipeline`], [`AutoModel`] and from the command line.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
