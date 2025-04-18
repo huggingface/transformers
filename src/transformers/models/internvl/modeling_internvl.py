@@ -125,7 +125,7 @@ class InternVLVisionAttention(nn.Module):
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
 
-        # InternVLVision has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
+        # InternVL has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
         self.num_key_value_groups = 1
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
@@ -136,7 +136,6 @@ class InternVLVisionAttention(nn.Module):
 
         self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
         self.k_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-
         # Needed for flash attention
         self.is_causal = False
 
@@ -709,10 +708,10 @@ INTERNVL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(seq_length, num_channels * image_size * image_size)):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`InternVLProcessor`] uses
-            [`GotOcr2ImageProcessor`] for processing images.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`InternVLProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -761,10 +760,6 @@ INTERNVL_INPUTS_DOCSTRING = r"""
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -773,6 +768,10 @@ INTERNVL_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
