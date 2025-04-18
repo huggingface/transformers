@@ -1717,7 +1717,7 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             *Note*: It's generally expected that only one of `online_quantization`
             or `offline_quantization` is set to `True` to define the primary
             quantization strategy.
-        **kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
     """
