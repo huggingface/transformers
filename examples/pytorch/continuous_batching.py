@@ -9,7 +9,7 @@ from transformers.generation import GenerationConfig
 
 
 # --- Common Setup ---
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="eager", torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16)
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16)
 
 # Ensure model has a device and dtype attribute if not automatically set
