@@ -234,7 +234,7 @@ class DinoDetrConfig(PretrainedConfig):
         enc_layer_share=None,
         dec_layer_share=None,
         backbone_config=None,
-        backbone_kwargs={"out_indices": [1, 2, 3]},
+        backbone_kwargs={"out_indices": [2, 3, 4]},
         is_encoder_decoder=True,
         pe_temperatureH=20,
         pe_temperatureW=20,
@@ -277,6 +277,8 @@ class DinoDetrConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.dilation = dilation
         self.backbone = backbone
+        self.backbone_config = backbone_config
+        self.backbone_kwargs = backbone_kwargs
         self.use_pretrained_backbone = use_pretrained_backbone
 
         self.position_embedding_type = position_embedding_type

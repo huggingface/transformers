@@ -1003,12 +1003,12 @@ def _get_activation_fn(activation, d_model=256, batch_dim=0):
     raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
 
 
-def gen_sineembed_for_position(pos_tensor):
+def gen_sineembed_for_position(pos_tensor, d_model):
     # n_query, bs, _ = pos_tensor.size()
     # sineembed_tensor = torch.zeros(n_query, bs, 256)
     scale = 2 * math.pi
-    dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * (dim_t // 2) / 128)
+    dim_t = torch.arange(d_model / 2, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = 10000 ** (2 * (dim_t // 2) / (d_model / 2))
     x_embed = pos_tensor[:, :, 0] * scale
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
@@ -1884,9 +1884,11 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                 else:
                     assert reference_points.shape[-1] == 2
                     reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
-                query_sine_embed = gen_sineembed_for_position(reference_points_input[:, :, 0, :])  # nq, bs, 256*2
+                query_sine_embed = gen_sineembed_for_position(
+                    reference_points_input[:, :, 0, :], d_model=self.d_model
+                )  # nq, bs, 256*2
             else:
-                query_sine_embed = gen_sineembed_for_position(reference_points)  # nq, bs, 256*2
+                query_sine_embed = gen_sineembed_for_position(reference_points, d_model=self.d_model)  # nq, bs, 256*2
                 reference_points_input = None
 
             # conditional query
