@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [Phi](https://huggingface.co/papers/2306.11644) is a 1.3B parameter transformer model optimized for Python code generation. It focuses on "textbook-quality" training data of code examples, exercises and synthetic Python problems rather than scaling the model size or compute.
 
-You can find all the original Phi checkpoints under the [Phi](https://huggingface.co/collections/microsoft/phi-1-6626e29134744e94e222d572) collection.
+You can find all the original Phi checkpoints under the [Phi-1](https://huggingface.co/collections/microsoft/phi-1-6626e29134744e94e222d572) collection.
 
 > [!TIP]
 > Click on the Phi models in the right sidebar for more examples of how to apply Phi to different language tasks.
