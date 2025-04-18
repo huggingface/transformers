@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
-from packaging import version
 
 from .base import HfQuantizer
 
@@ -48,9 +45,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+        if not is_torch_available():
             raise ImportError(
-                "Using fbgemm fp8 quantization requires torch > 2.1.0"
+                "Using fbgemm fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
         if not is_fbgemm_gpu_available():
@@ -243,6 +240,42 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     ):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
+
+    def update_tp_plan(self, config):
+        text_plan = {
+            "layers.*.self_attn.q_proj.weight": "local_colwise",
+            "layers.*.self_attn.q_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.k_proj.weight": "local_colwise",
+            "layers.*.self_attn.k_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.v_proj.weight": "local_colwise",
+            "layers.*.self_attn.v_proj.weight_scale": "local_colwise",
+            "layers.*.self_attn.o_proj.weight": "local_rowwise",
+            "layers.*.self_attn": "gather",
+            "layers.*.input_layernorm.weight": "sequence_parallel",
+            "layers.*.post_attention_layernorm.weight": "sequence_parallel",
+            "norm.weight": "sequence_parallel",
+            "layers.*.feed_forward.shared_expert.gate_proj.weight": "local_colwise",
+            "layers.*.feed_forward.shared_expert.gate_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.shared_expert.up_proj.weight": "local_colwise",
+            "layers.*.feed_forward.shared_expert.up_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.shared_expert.down_proj.weight": "local_rowwise",
+            "layers.*.feed_forward.experts": "local",
+            "layers.*.feed_forward": "gather",
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
+            "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+            # For Fused implementation
+            "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",
+            "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
+            "layers.*.feed_forward.experts.down_proj": "local_colwise",
+        }
+        if config.get_text_config() is not None:
+            config.get_text_config().base_model_tp_plan = text_plan
+        else:
+            config.base_model_tp_plan = text_plan
+        return config
 
     def is_serializable(self, safe_serialization=None):
         return True

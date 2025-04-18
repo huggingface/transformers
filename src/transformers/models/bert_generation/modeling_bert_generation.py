@@ -608,6 +608,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BertGenerationOnlyLMHead):
+            module.bias.data.zero_()
 
 
 BERT_GENERATION_START_DOCSTRING = r"""

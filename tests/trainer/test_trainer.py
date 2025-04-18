@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -4923,8 +4922,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
             "git log".split(),
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             check=True,
             encoding="utf-8",
             cwd=repo,
