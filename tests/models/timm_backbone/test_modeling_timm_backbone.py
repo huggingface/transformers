@@ -168,6 +168,18 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_device_context_manager(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_global_device_set(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_cannot_load_with_meta_device_context_manager(self):
+        pass
+
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
     def test_tie_model_weights(self):
         pass
