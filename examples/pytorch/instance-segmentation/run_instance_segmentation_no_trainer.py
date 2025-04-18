@@ -714,9 +714,6 @@ def main():
 
     logger.info(f"Test metrics: {metrics}")
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -738,6 +735,9 @@ def main():
                     token=args.hub_token,
                     ignore_patterns=["epoch_*"],
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

@@ -130,6 +130,7 @@ VLM_CLASS_NAMES = [
     "gemma3",
     "mistral3",
     "chameleon",
+    "internvl",
     "qwen2_5_omni",
 ]
 
@@ -224,12 +225,9 @@ class GenerationTesterMixin:
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
             for key in [
-                "image_token_index",
                 "image_token_id",
-                "video_token_index",
                 "video_token_id",
                 "vision_start_token_id",
-                "audio_token_index",
                 "audio_start_token_id",
                 "audio_end_token_id",
                 "vision_end_token_id",
