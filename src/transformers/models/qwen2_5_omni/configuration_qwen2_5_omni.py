@@ -458,6 +458,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "audio_config": Qwen2_5OmniAudioEncoderConfig,
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
@@ -662,6 +667,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
 
     def __init__(
         self,

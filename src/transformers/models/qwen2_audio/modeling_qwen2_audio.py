@@ -932,7 +932,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
         # 1. Create a mask to know where special audio tokens are
-        special_audio_token_mask = input_ids == self.config.audio_token_index
+        special_audio_token_mask = input_ids == self.config.audio_token_id
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
         # In case the Audio model or the Language model has been offloaded to CPU, we need to manually
@@ -942,7 +942,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
         batch_indices, non_audio_indices = torch.where(
-            (input_ids != self.config.audio_token_index) & (attention_mask == 1)
+            (input_ids != self.config.audio_token_id) & (attention_mask == 1)
         )
 
         # 2. Compute the positions where text should be written
@@ -1114,7 +1114,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 audio_features = self.multi_modal_projector(selected_audio_feature)
 
                 # if we have consecutive audio tokens, then it means we expanded input_ids in processing
-                audio_tokens = input_ids == self.config.audio_token_index
+                audio_tokens = input_ids == self.config.audio_token_id
                 legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
 
                 if legacy_processing:
@@ -1130,14 +1130,14 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
                     audio_features = audio_features[audio_features_mask]
 
-                    n_audio_tokens = (input_ids == self.config.audio_token_index).sum().item()
+                    n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
 
                     if n_audio_tokens != n_audio_features:
                         raise ValueError(
                             f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
                         )
-                    special_audio_mask = (input_ids == self.config.audio_token_index).to(inputs_embeds.device)
+                    special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
                     special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
