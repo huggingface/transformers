@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -312,6 +311,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
+
+    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
 
 @require_torch

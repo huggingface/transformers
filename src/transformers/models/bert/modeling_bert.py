@@ -1512,8 +1512,8 @@ class BertForMaskedLM(BertPreTrainedModel):
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Legacy correction: BertForMaskedLM can't call `generate()` from GenerationMixin.
-        Remove after v4.50, when we stop making `PreTrainedModel` inherit from `GenerationMixin`.
+        Legacy correction: BertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
+        `prepare_inputs_for_generation` method.
         """
         return False
 

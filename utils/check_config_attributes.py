@@ -236,6 +236,17 @@ SPECIAL_CASES_TO_ALLOW = {
         "text_config",
         "vision_config",
     ],
+    "Llama4Config": ["boi_token_index", "eoi_token_index"],
+    "Llama4TextConfig": [
+        "interleave_moe_layer_step",
+        "no_rope_layer_interval",
+        "no_rope_layers",
+        "output_router_logits",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+        "cache_implementation",
+    ],
+    "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
 
 
@@ -334,16 +345,18 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
         "unk_index",
         "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",
@@ -358,6 +371,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
+        "boi_token_index",
+        "eoi_token_index",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
