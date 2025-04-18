@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # SigLIP
 
-[SigLIP](https://huggingface.co/papers/2303.15343) is a multimodal image and text model similar to [CLIP](clip), It uses separate image and text encoders to generate representations for both modalities.
+[SigLIP](https://huggingface.co/papers/2303.15343) is a multimodal image-text model similar to [CLIP](clip). It uses separate image and text encoders to generate representations for both modalities.
 
 Unlike CLIP, SigLIP employs a pairwise sigmoid loss on image-text pairs during training. This training loss eliminates the need for a global view of all pairwise similarities between images and texts within a batch. Consequently, it enables more efficient scaling to larger batch sizes while also delivering superior performance with smaller batch sizes.
 
