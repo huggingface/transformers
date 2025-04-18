@@ -64,7 +64,7 @@ pip install --upgrade torchao transformers
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
 ```bash
-pip install torchao --extra-index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
+pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
 </hfoption>
 </hfoptions>
