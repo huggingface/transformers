@@ -22,57 +22,44 @@ rendered properly in your Markdown viewer.
 
 # Autoformer
 
-[Autoformer](https://huggingface.co/papers/2106.13008) is a time series forecasting model that rethinks Transformers with a twist — instead of just using attention, it brings in a **decomposition-based architecture** and a new **Auto-Correlation mechanism** to capture complex patterns in time series data.
+[Autoformer](https://huggingface.co/papers/2106.13008) is a model designed for long-term forecasting. It modifies the Transformer architecture with decomposition blocks that breaks down long-term trends, and it also adds an Auto-Correlation mechanism in place of self-attention to discover repeating patterns. The model combines these two designs to make better predictions.
 
-What makes Autoformer unique? It doesn't treat trend and seasonal patterns as noise — it learns to **decompose** them, improving both performance and interpretability. Plus, it's super efficient for **long-term forecasting**, avoiding the bottlenecks of traditional Transformer-based approaches.
-
-It’s especially great for scenarios like energy consumption, traffic flow, economic indicators, weather patterns, and disease spread forecasting.
-
-You can explore the model on the [Autoformer Hub Page](https://huggingface.co/elisim/autoformer-energy) or other community-hosted variants.
+You can find all the original Autoformer checkpoints on the [Hub](https://huggingface.co/models?search=autoformer).
 
 > [!TIP]
 > Click on the Autoformer model cards in the right sidebar to explore more examples and use cases like weather or energy time series forecasting.
 
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`]
+The example below demonstrates how to make a prediction with [`AutoformerForPrediction`].
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
 
-```py
-from transformers import pipeline
-
-forecast = pipeline(task="time-series-forecasting", model="elisim/autoformer-energy")
-output = forecast("energy.csv")  # this assumes a supported dataset format
-```
-</hfoption> 
-
-<hfoption id="AutoModel">
+<hfoption id="AutoformerForPrediction">
 
 ```py
 import torch
+from huggingface_hub import hf_hub_download
 from transformers import AutoformerForPrediction, AutoformerConfig
 
-model = AutoformerForPrediction.from_pretrained("elisim/autoformer-energy")
-config = AutoformerConfig.from_pretrained("elisim/autoformer-energy")
+file = hf_hub_download(
+    repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+)
+batch = torch.load(file)
 
-# Autoformer expects inputs like encoder_input: [batch_size, context_len, input_dim]
-# Depending on how the model is implemented, check for the exact expected input name
+model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly")
 
-dummy_input = torch.rand(1, config.seq_len, config.input_size)
+outputs = model.generate(
+    past_values=batch["past_values"],
+    past_time_features=batch["past_time_features"],
+    past_observed_mask=batch["past_observed_mask"],
+    static_categorical_features=batch["static_categorical_features"],
+    future_time_features=batch["future_time_features"],
+)
 
-# Wrap the tensor in a dictionary, assuming input is named "past_values" or similar
-output = model(past_values=dummy_input)  # Replace with correct input name if different
-
-print(output)
+mean_prediction = outputs.sequences.mean(dim=1)
+print(f"Mean prediction: {mean_prediction}")
 ```
 </hfoption> 
 
-<hfoption id="transformers-cli">
-
-```bash
-transformers-cli env  # transformers-cli doesn't currently support time series inputs
-```
-</hfoption> 
 </hfoptions>
 
 Quantization
@@ -91,10 +78,7 @@ Autoformer currently does not use standard attention mechanisms, so it isn't com
 
 ## Notes
 
-- Autoformer was proposed in the paper [Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting](https://arxiv.org/abs/2106.13008) by Haixu Wu et al.
-- The model was contributed by [@elisim](https://huggingface.co/elisim) and [@kashif](https://huggingface.co/kashif).
-- The official implementation is available on [GitHub](https://github.com/thuml/Autoformer).
-- Check out Hugging Face’s blog post on this model: [Yes, Transformers are Effective for Time Series Forecasting (+ Autoformer)](https://huggingface.co/blog/autoformer).
+- Read the [Yes, Transformers are Effective for Time Series Forecasting (+ Autoformer)](https://huggingface.co/blog/autoformer) blog post for more details about using Autoformer to make predictions.
 
 ## AutoformerConfig
 
@@ -103,9 +87,9 @@ Autoformer currently does not use standard attention mechanisms, so it isn't com
 ## AutoformerModel
 
 [[autodoc]] AutoformerModel
-- forward
+    - forward
 
 ## AutoformerForPrediction
 
 [[autodoc]] AutoformerForPrediction
-- forward
+    - forward
