@@ -22,7 +22,7 @@ This repository contains the weights for **BitNet b1.58 2B4T**, the first open-s
 
 Trained on a corpus of 4 trillion tokens, this model demonstrates that native 1-bit LLMs can achieve performance comparable to leading open-weight, full-precision models of similar size, while offering substantial advantages in computational efficiency (memory, energy, latency).
 
-➡️ **Technical Report:** [BitNet b1.58 2B4T Technical Report](https://arxiv.org)
+➡️ **Technical Report:** [BitNet b1.58 2B4T Technical Report](https://arxiv.org/abs/2504.12285)
 
 ➡️ **Official Inference Code:** [microsoft/BitNet (bitnet.cpp)](https://github.com/microsoft/BitNet)
 
