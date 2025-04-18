@@ -84,6 +84,7 @@ class MolmoVisionConfig(PretrainedConfig):
         intermediate_size=4096,
         num_hidden_layers=23,
         num_attention_heads=16,
+        num_key_value_groups=1,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
@@ -98,6 +99,7 @@ class MolmoVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_groups = num_key_value_groups
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range

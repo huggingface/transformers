@@ -169,7 +169,9 @@ def write_model(
         max_position_embeddings=original_config["max_position_embeddings"],
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
-        vocab_size=original_config["vocab_size"] + 128 if variant != "7B-O" else original_config["vocab_size"] + 74, # 202,
+        vocab_size=original_config["vocab_size"] + 128
+        if variant != "7B-O"
+        else original_config["vocab_size"] + 74,  # 202,
         tie_word_embeddings=original_config["tie_word_embeddings"],
         use_qk_norm=True if variant == "7B-O" else False,
     )
@@ -241,9 +243,9 @@ def write_model(
                 state_dict[new_key.replace("qkv_proj", "v_proj")] = v_proj.clone()
             del state_dict[new_key]
         elif "q_norm" in new_key:
-            state_dict[new_key] = state_dict[new_key]#.reshape(config.text_config.num_attention_heads, -1)
+            state_dict[new_key] = state_dict[new_key]  # .reshape(config.text_config.num_attention_heads, -1)
         elif "k_norm" in new_key:
-            state_dict[new_key] = state_dict[new_key]#.reshape(config.text_config.num_key_value_heads, -1)
+            state_dict[new_key] = state_dict[new_key]  # .reshape(config.text_config.num_key_value_heads, -1)
 
     gc.collect()
     print("Loading the checkpoint in a Molmo model.")

@@ -189,8 +189,8 @@ if TYPE_CHECKING:
     from .mobilevit import *
     from .mobilevitv2 import *
     from .modernbert import *
-    from .moonshine import *
     from .molmo import *
+    from .moonshine import *
     from .moshi import *
     from .mpnet import *
     from .mpt import *

@@ -869,6 +869,7 @@ if TYPE_CHECKING:
             EpsilonLogitsWarper,
             EtaLogitsWarper,
             ExponentialDecayLengthPenalty,
+            FlaxWhisperTimeStampLogitsProcessor,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
             GenerationMixin,
@@ -904,7 +905,6 @@ if TYPE_CHECKING:
             WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
-            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,

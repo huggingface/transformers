@@ -34,6 +34,7 @@ from ...utils import (
 )
 from ..clip.modeling_clip import (
     CLIPMLP,
+    CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
     CLIPVisionModel,
@@ -41,12 +42,10 @@ from ..clip.modeling_clip import (
 )
 from ..cohere.configuration_cohere import CohereConfig
 from ..cohere.modeling_cohere import (
-    CohereAttention,
     CohereModel,
     CoherePreTrainedModel,
 )
-
-from ..llama.modeling_llama import LlamaAttention
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, apply_rotary_pos_emb
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer,
@@ -117,6 +116,7 @@ class MolmoVisionConfig(PretrainedConfig):
         intermediate_size=4096,
         num_hidden_layers=23,
         num_attention_heads=16,
+        num_key_value_groups=1,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
@@ -131,6 +131,7 @@ class MolmoVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_groups = num_key_value_groups
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
@@ -524,42 +525,6 @@ class MolmoTextMLP(CLIPMLP):
 class MolmoTextRotaryEmbedding(Qwen2RotaryEmbedding):
     pass  # cohere has special RoPE so we need to get qwen2
 
-
-# cohere has special RoPE so we need to copy to not dispatch all dependencies of attn class
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 class MolmoTextLayerNorm(Qwen2RMSNorm):
     pass
 
@@ -580,7 +545,6 @@ class MolmoTextAttention(LlamaAttention):
             self.k_norm = MolmoTextLayerNorm(
                 hidden_size=(config.num_key_value_heads * self.head_dim), eps=config.layer_norm_eps
             )
-
 
     def forward(
         self,
@@ -638,6 +602,7 @@ class MolmoTextAttention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
 
 class MolmoTextDecoderLayer(Qwen2DecoderLayer):
     def __init__(self, config, layer_idx: int):
@@ -774,6 +739,7 @@ class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
 
         return outputs
 
+
 MOLMO_TEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -789,6 +755,8 @@ MOLMO_TEXT_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
 @add_start_docstrings(
     "The bare Molmo Model outputting raw hidden-states without any specific head on top.",
     MOLMO_TEXT_START_DOCSTRING,
@@ -796,9 +764,6 @@ MOLMO_TEXT_START_DOCSTRING = r"""
 class MolmoPreTrainedModel(CoherePreTrainedModel):
     config_class = MolmoTextConfig
     _no_split_modules = ["MolmoTextDecoderLayer", "MolmoTextPrenormDecoderLayer"]
-
-
-
 
 
 @add_start_docstrings(
@@ -830,8 +795,8 @@ class MolmoTextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-class MolmoTextModel(CohereModel):
 
+class MolmoTextModel(CohereModel):
     def __init__(self, config):
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
         super().__init__(config)
@@ -907,6 +872,7 @@ class MolmoForCausalLM(Qwen2ForCausalLM):
             **kwargs,
         )
 
+
 class MolmoMultiModalProjector(nn.Module):
     def __init__(self, config: MolmoPoolingConfig):
         super().__init__()
@@ -960,7 +926,7 @@ class MolmoVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size, patches, height, width = pixel_values.shape
         if height != self.image_size:
-            raise ValueError(f"Input image size ({height}) doesn't match model" f" ({self.image_size}).")
+            raise ValueError(f"Input image size ({height}) doesn't match model ({self.image_size}).")
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
@@ -970,8 +936,16 @@ class MolmoVisionEmbeddings(nn.Module):
         return embeddings.flatten(0, 1)  # NOTE: DON'T FLATTEN MORE TO MATCH ORIG IMPL
 
 
+class MolmoVisionAttention(CLIPAttention):
+    def __init__(self, config: MolmoVisionConfig):
+        super().__init__()
+        self.num_key_value_groups = config.num_key_value_groups
+
+
 class MolmoVisionEncoderLayer(CLIPEncoderLayer):
-    pass
+    def __init__(self, config: MolmoVisionConfig):
+        super().__init__()
+        self.self_attn = MolmoVisionAttention(config)
 
 
 class MolmoVisionEncoder(CLIPEncoder):
@@ -1228,7 +1202,6 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         return image_features
 
 
-
 MOLMO_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1304,6 +1277,7 @@ MOLMO_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
+
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     config_class = MolmoConfig
