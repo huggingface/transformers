@@ -73,7 +73,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 # mixed bits config
@@ -104,7 +104,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 autoround = AutoRound(
@@ -133,7 +133,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 autoround = AutoRound(
@@ -157,11 +157,11 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 W4G128 Average Accuracy of 13 tasks (mmlu-pro, if_eval, gsm8k, etc) and Time Cost Results (Testing was conducted on the Nvidia A100 80G using the version of PyTorch 2.6.0 with enable_torch_compile):
 
 | Model   | Qwen2.5-0.5B-Instruct | Falcon3-3B    | Qwen2.5-7B-Instruct | Meta-Llama-3.1-8B-Instruct | Falcon3-10B   | Qwen2.5-72B-Instruct |
-|---------|--------------------|---------------|------------------|-------------------------|---------------|-------------------|
-| 16bits  | 0.4192             | 0.5203        | 0.6470           | 0.6212                  | 0.6151        | 0.7229            |
-| Best    | **0.4137**(7m)     | **0.5142**(23m) | 0.6426(58m)      | **0.6116**(81m)         | **0.6092**(81m) | 0.7242(575m)      |
-| Default | 0.4129(2m)         | 0.5133(6m)    | 0.6441(13m)      | 0.6106(13m)             | 0.6080(18m)   | **0.7252**(118m)  |
-| Light   | 0.4052(2m)         | 0.5108(3m)    | **0.6453**(5m)   | 0.6104(6m)              | 0.6063(6m)    | 0.7243(37m)       |
+|---------|--------------------|---------------|------------------|----------------------------|---------------|-------------------|
+| 16bits  | 0.4192             | 0.5203        | 0.6470           | 0.6212                     | 0.6151        | 0.7229            |
+| Best    | **0.4137**(7m)     | **0.5142**(23m) | 0.6426(58m)      | **0.6116**(65m)            | **0.6092**(81m) | 0.7242(575m)      |
+| Default | 0.4129(2m)         | 0.5133(6m)    | 0.6441(13m)      | 0.6106(13m)                | 0.6080(18m)   | **0.7252**(118m)  |
+| Light   | 0.4052(2m)         | 0.5108(3m)    | **0.6453**(5m)   | 0.6104(6m)                 | 0.6063(6m)    | 0.7243(37m)       |
 
 ## Inference
 
@@ -177,7 +177,7 @@ Supports 2, 4, and 8 bits. We recommend using intel-extension-for-pytorch (IPEX)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -196,7 +196,7 @@ Supports 4 bits only. We recommend using intel-extension-for-pytorch (IPEX) for 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="xpu")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="xpu", torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -215,7 +215,7 @@ Supports 2, 3, 4, and 8 bits. We recommend using GPTQModel for 4 and 8 bits infe
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -236,7 +236,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
 quantization_config = AutoRoundConfig(backend="ipex")
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -257,7 +257,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
 
 model_name = "ybelkada/opt-125m-gptq-4bit"
 quantization_config = AutoRoundConfig()
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, torch_dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)

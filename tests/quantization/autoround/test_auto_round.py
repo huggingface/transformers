@@ -107,7 +107,7 @@ class AutoRoundTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt")
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto")
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
 
         self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -143,7 +143,7 @@ class AutoRoundTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = AutoRoundConfig(backend="triton")
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config
+            self.model_name, device_map="auto", quantization_config=quantization_config, torch_dtype="auto"
         )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
@@ -159,7 +159,7 @@ class AutoRoundTest(unittest.TestCase):
         quantization_config = AutoRoundConfig()
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="auto", quantization_config=quantization_config
+            model_name, device_map="auto", quantization_config=quantization_config, torch_dtype="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
