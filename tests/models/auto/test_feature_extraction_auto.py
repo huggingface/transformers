@@ -127,10 +127,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
 
-        # The feature extractor file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(feature_extractor.__class__, reloaded_feature_extractor.__class__)
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(feature_extractor.__class__, reloaded_feature_extractor.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(
