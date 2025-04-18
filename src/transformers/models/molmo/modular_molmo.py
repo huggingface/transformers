@@ -27,9 +27,10 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    add_start_docstrings,
     logging,
 )
 from ..clip.modeling_clip import (
@@ -45,7 +46,7 @@ from ..cohere.modeling_cohere import (
     CohereModel,
     CoherePreTrainedModel,
 )
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer,
@@ -524,6 +525,7 @@ class MolmoTextMLP(CLIPMLP):
 
 class MolmoTextRotaryEmbedding(Qwen2RotaryEmbedding):
     pass  # cohere has special RoPE so we need to get qwen2
+
 
 class MolmoTextLayerNorm(Qwen2RMSNorm):
     pass
