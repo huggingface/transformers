@@ -76,7 +76,7 @@ echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | tr
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses 4-bit weight-only quantization with NF4 [https://huggingface.co/docs/transformers/en/quantization/bitsandbytes] to quantize only the model weights, reducing memory usage while maintaining performance.
+The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
