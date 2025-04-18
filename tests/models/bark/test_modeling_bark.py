@@ -1057,9 +1057,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def inputs(self):
         input_ids = self.processor("In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6")
 
-        print(f"11111111 input_ids: {input_ids}")
-        input_ids = input_ids.to(torch_device)
-        print(f"xxxxxxxxxxxxxxxx input_ids: {input_ids}")
+        for k, v in input_ids.items():
+            input_ids[k] = v.to(torch_device)
 
         return input_ids
 
@@ -1302,8 +1301,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
     @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
-        input_ids["history_prompt"].to(torch_device)
-        print(f"{input_ids}")
 
         with torch.no_grad():
             # standard generation
