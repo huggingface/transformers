@@ -538,10 +538,6 @@ def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
 
 
-def model_addition_debugger(*args, **kwargs):
-    requires_backends(model_addition_debugger, ["torch"])
-
-
 def model_addition_debugger_context(*args, **kwargs):
     requires_backends(model_addition_debugger_context, ["torch"])
 

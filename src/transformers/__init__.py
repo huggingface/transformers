@@ -55,24 +55,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
-    "agents": [
-        "Agent",
-        "CodeAgent",
-        "HfApiEngine",
-        "ManagedAgent",
-        "PipelineTool",
-        "ReactAgent",
-        "ReactCodeAgent",
-        "ReactJsonAgent",
-        "Tool",
-        "Toolbox",
-        "ToolCollection",
-        "TransformersEngine",
-        "launch_gradio_demo",
-        "load_tool",
-        "stream_to_gradio",
-        "tool",
-    ],
     "audio_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -362,7 +344,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger",
         "model_addition_debugger_context",
     ]
     _import_structure["activations"] = []
@@ -566,25 +547,6 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
-    # Agents
-    from .agents import (
-        Agent,
-        CodeAgent,
-        HfApiEngine,
-        ManagedAgent,
-        PipelineTool,
-        ReactAgent,
-        ReactCodeAgent,
-        ReactJsonAgent,
-        Tool,
-        Toolbox,
-        ToolCollection,
-        TransformersEngine,
-        launch_gradio_demo,
-        load_tool,
-        stream_to_gradio,
-        tool,
-    )
     from .configuration_utils import PretrainedConfig
 
     # Data
@@ -948,7 +910,6 @@ if TYPE_CHECKING:
             convert_and_export_with_cache,
         )
         from .model_debugging_utils import (
-            model_addition_debugger,
             model_addition_debugger_context,
         )
         from .modeling_layers import GradientCheckpointingLayer

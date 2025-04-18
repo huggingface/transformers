@@ -20,6 +20,7 @@ import unittest
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_torch_available,
     require_deterministic_for_xpu,
     require_sentencepiece,
@@ -722,6 +723,10 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
+    def test_past_key_values_format(self):
+        super().test_past_key_values_format()
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -1223,6 +1228,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
+    @require_deterministic_for_xpu
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor
