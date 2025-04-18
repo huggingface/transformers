@@ -16,95 +16,18 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)
 
 
 class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`EoMTModel`]. It is used to instantiate an
-    EoMT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the EoMT
-    [google/eomt-base-patch16-224](https://huggingface.co/google/eomt-base-patch16-224) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-           Initial value to use for layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
-        use_mask_token (`bool`, *optional*, defaults to `True`):
-            Whether to use mask_token in embeddings.
-
-    Example:
-
-    ```python
-    >>> from transformers import EoMTConfig, EoMTModel
-
-    >>> # Initializing a EoMT eomt-base-patch16-224 style configuration
-    >>> configuration = EoMTConfig()
-
-    >>> # Initializing a model (with random weights) from the eomt-base-patch16-224 style configuration
-    >>> model = EoMTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
     model_type = "eomt"
 
     def __init__(
         self,
-        hidden_size=768,
+        hidden_size=384,
         num_hidden_layers=12,
         num_attention_heads=12,
         mlp_ratio=4,
@@ -114,17 +37,12 @@ class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         image_size=224,
-        patch_size=14,
+        patch_size=16,
         num_channels=3,
         qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
-        use_swiglu_ffn=False,
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        use_mask_token=True,
+        num_upscale_blocks=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -144,14 +62,10 @@ class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
-        self.use_mask_token = use_mask_token
+        self.num_queries = 200
+        self.num_register_tokens = 4
+        self.num_upscale_blocks = num_upscale_blocks
+        self.use_mask_token = False  # discard it later
 
 
 __all__ = ["EoMTConfig"]
