@@ -5140,6 +5140,7 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
+            "nanotron_plugin": self.args.nanotron_plugin,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
