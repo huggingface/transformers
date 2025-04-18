@@ -424,6 +424,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
+        # Skip multihead_attn for 4bit because MHA will read the original weight without dequantize.
+        # See https://github.com/huggingface/transformers/pull/37444#discussion_r2045852538.
         model = AriaForConditionalGeneration.from_pretrained(
             "rhymes-ai/Aria", load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]
         )
@@ -480,7 +482,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         }
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT[model.device.type])
+        self.assertListEqual(outputs, EXPECTED_OUTPUT[model.device.type])
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
