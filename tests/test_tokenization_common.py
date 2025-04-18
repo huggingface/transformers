@@ -3806,6 +3806,13 @@ class TokenizerTesterMixin:
                 output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
                 self.assertEqual(output_p, output_r)
 
+    # TODO: REMOVE test @itazap
+    @unittest.skip(
+        reason="remove for 2 reasons: 1.build_inputs_with_special_tokens is only used by "
+        "slow tokenizers by .encode (in prepare_for_model) "
+        "2. build_inputs_with_special_tokens should be internalized anyway (for slow)"
+        "3. build_inputs_with_special_tokens is tested by encode tests"
+    )
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
@@ -4208,6 +4215,12 @@ class TokenizerTesterMixin:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
+    # TODO: REMOVE test @itazap
+    @unittest.skip(
+        reason="remove for 2 reasons: 1. prepare_for_model is only used by slow tokenizers by .encode "
+        "2. prepare_for_model should be internalized anyway (for slow)"
+        "3. prepare_for_model is tested by encode tests"
+    )
     def test_compare_prepare_for_model(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
