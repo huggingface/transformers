@@ -81,7 +81,8 @@ try:
             kernel_forward = cls.forward
 
             def forward_with_compile_path(*forward_args, **forward_kwargs):
-                if is_torchdynamo_compiling() or (hasattr(cls, "config") and cls.config.disable_custom_kernels):
+                disable_custom_kernels = hasattr(cls, "config") and getattr(cls.config, "disable_custom_kernels")
+                if is_torchdynamo_compiling() or disable_custom_kernels:
                     return original_forward(*forward_args, **forward_kwargs)
                 else:
                     return kernel_forward(*forward_args, **forward_kwargs)
