@@ -31,6 +31,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -46,7 +47,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
@@ -62,6 +62,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Emu3Config"
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Emu3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -221,6 +222,7 @@ class Emu3Attention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
@@ -1017,6 +1019,10 @@ class Emu3VQVAE(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.Linear):
             nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
@@ -1024,8 +1030,12 @@ class Emu3VQVAE(PreTrainedModel):
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_()
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def __init__(self, config: Emu3VQVAEConfig):
         super().__init__(config)
@@ -1195,9 +1205,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, Emu3VQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1205,6 +1213,8 @@ class Emu3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Emu3RMSNorm):  # noqa: F821
+            module.weight.data.fill_(1.0)
 
 
 class Emu3RotaryEmbedding(nn.Module):
@@ -1457,7 +1467,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1470,8 +1480,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1514,7 +1523,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1621,7 +1630,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
     def forward(

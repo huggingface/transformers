@@ -81,7 +81,6 @@ from transformers.utils.import_utils import (
     is_tf_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
-    is_torchdynamo_available,
 )
 
 
@@ -1483,8 +1482,6 @@ class ModelUtilsTest(TestCasePlus):
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
-        if not is_torchdynamo_available():
-            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -1720,8 +1717,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
-        # `GenerationMixin`)
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
                 pass
@@ -1729,7 +1726,7 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithPrepareInputs.can_generate()
         self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
-        self.assertTrue(can_generate)
+        self.assertFalse(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """

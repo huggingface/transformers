@@ -29,6 +29,7 @@ Citation:
 from typing import Optional, Tuple, Union
 
 import torch
+from packaging import version
 
 from ..utils import is_torch_flex_attn_available
 from ..utils.import_utils import _torch_version
@@ -61,16 +62,17 @@ class WrappedFlexAttention:
         """
         Initialize or update the singleton instance.
         """
-        if not self._is_flex_compiled:
+        if not self._is_flex_compiled or training != self.training:
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            if _torch_version == "2.6.0" and training:
+            self.training = training
+            if version.parse(_torch_version).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
             else:
-                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
+                self._compiled_flex_attention = torch.compile(flex_attention)
             self._is_flex_compiled = True
 
     def __call__(self):
