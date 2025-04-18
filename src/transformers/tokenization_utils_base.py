@@ -2762,7 +2762,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
         and pad_to_max_length) and behaviors.
         """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
 
         # Backward compatibility for previous behavior, maybe we should deprecate it:
         # If you only set max_length, it activates truncation for max_length
@@ -2802,21 +2801,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 padding_strategy = padding
 
         # Get truncation strategy
-        if truncation is None and old_truncation_strategy != "do_not_truncate":
-            if verbose:
-                warnings.warn(
-                    "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
-                    " `truncation=True` to truncate examples to a max length. You can give a specific length with"
-                    " `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the maximal input"
-                    " size of the model (e.g. 512 for Bert).  If you have pairs of inputs, you can give a specific"
-                    " truncation strategy selected among `truncation='only_first'` (will only truncate the first"
-                    " sentence in the pairs) `truncation='only_second'` (will only truncate the second sentence in the"
-                    " pairs) or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence"
-                    " in the pairs).",
-                    FutureWarning,
-                )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False and truncation is not None:
+        if truncation is not False and truncation is not None:
             if truncation is True:
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST

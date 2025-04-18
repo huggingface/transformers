@@ -2478,8 +2478,8 @@ class TokenizerTesterMixin:
     # TODO: REMOVE test @itazap
     @unittest.skip(
         reason="remove:"
-               "1. deprecate test_encode_plus_with_padding (warned since 2020)"
-               "2. already supported by padding='max_length' in encode_plus, & tested in test_encode_plus_with_padding "
+        "1. deprecate test_encode_plus_with_padding (warned since 2020)"
+        "2. already supported by padding='max_length' in encode_plus, & tested in test_encode_plus_with_padding "
     )
     def test_padding_to_max_length(self):
         """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated."""
