@@ -209,6 +209,7 @@ docs/source/en/model_doc/roc_bert.md
 docs/source/en/model_doc/roformer.md
 docs/source/en/model_doc/rwkv.md
 docs/source/en/model_doc/sam.md
+docs/source/en/model_doc/sam_hq.md
 docs/source/en/model_doc/segformer.md
 docs/source/en/model_doc/sew-d.md
 docs/source/en/model_doc/sew.md
