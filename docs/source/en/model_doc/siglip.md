@@ -40,75 +40,90 @@ The example below demonstrates how to generate similarity scores between texts a
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
-from PIL import Image
-import requests
 
-# load pipe
-image_classifier = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224")
+image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-# load image
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-image = Image.open(requests.get(url, stream=True).raw)
-
-# inference
-candidate_labels = ["2 cats", "a plane", "a remote"]
-outputs = image_classifier(image, candidate_labels=candidate_labels)
-outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
-print(outputs)
-[{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
+pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-from PIL import Image
-import requests
-from transformers import AutoProcessor, AutoModel
 import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
+model = AutoModel.from_pretrained("google/siglip-base-patch16-224", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-
-candidate_labels = ["2 cats", "2 dogs"]
-# follows the pipeline prompt template to get same results
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-# important: we pass `padding=max_length` since the model was trained with this
-inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     outputs = model(**inputs)
 
 logits_per_image = outputs.logits_per_image
-probs = torch.sigmoid(logits_per_image) # these are the probabilities
+probs = torch.sigmoid(logits_per_image)
 print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-19.8% that image 0 is '2 cats'
 ```
 
 </hfoption>
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
+
+bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+model = AutoModel.from_pretrained("google/siglip-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
+```
 ## Notes
 
 - Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
 - When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` because that is how the model was trained.
 - To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
 - Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
-```python
-from transformers import SiglipModel
+    ```py
+    # pip install -U flash-attn --no-build-isolation
 
-model = SiglipModel.from_pretrained(
-    "google/siglip-so400m-patch14-384",
-    attn_implementation="sdpa",
-    torch_dtype=torch.float16,
-    device_map=device,
-)
-```
+    from transformers import SiglipModel
+
+    model = SiglipModel.from_pretrained(
+        "google/siglip-so400m-patch14-384",
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.float16,
+        device_map=device,
+    )
+    ```
 
 
 ## SiglipConfig
