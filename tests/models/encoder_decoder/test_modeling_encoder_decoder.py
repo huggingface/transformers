@@ -947,18 +947,13 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
 
         ARTICLE_TOSHIBA = """An independent panel appointed by Toshiba found institutional accounting irregularities, the firm said in a statement to investors. Toshiba said it "takes the situation it has caused very seriously" and that it "deeply apologised" to shareholders. The overstatement was roughly triple an initial Toshiba estimate. The probe could lead to a restatement of earnings, a board overhaul and potential action by regulators. "Within Toshiba, there was a corporate culture in which one could not go against the wishes of superiors," the report said. "Therefore, when top management presented 'challenges', division presidents, line managers and employees below them continually carried out inappropriate accounting practices to meet targets in line with the wishes of their superiors." The improper accounting practices stretched back to 2008."""
 
+        # fmt: off
         EXPECTED_SUMMARIES_PS3 = Expectations(
             {
-                (
-                    "xpu",
-                    3,
-                ): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer .""",
-                (
-                    "cuda",
-                    7,
-                ): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer.""",
+                ("xpu", 3): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer .""",
+                ("cuda", 7): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer.""",
             }
-        )
+        ) # fmt: on
         EXPECTED_SUMMARY_PS3 = EXPECTED_SUMMARIES_PS3.get_expectation()
 
         EXPECTED_SUMMARIES_TOSHIBA = Expectations(
