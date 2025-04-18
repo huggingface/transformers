@@ -28,12 +28,31 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedForCausalLM,
-    GraniteMoeSharedPreTrainedModel
+    GraniteMoeSharedPreTrainedModel,
+    GraniteMoeSharedAttention,
+    GraniteMoeSharedFlashAttention2,
+    GraniteMoeSharedSdpaAttention
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 from ...utils import add_start_docstrings
 
- 
+class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+class GraniteMoeHybridFlashAttention2(GraniteMoeSharedFlashAttention2):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class GraniteMoeHybridSdpaAttention(GraniteMoeSharedSdpaAttention):
+    pass
+
+GRANITEMOEHYBRID_ATTENTION_CLASSES = {
+    "eager": GraniteMoeHybridAttention,
+    "flash_attention_2": GraniteMoeHybridFlashAttention2,
+    "sdpa": GraniteMoeHybridSdpaAttention,
+}
+
 class GraniteMoeHybridMambaLayer(BambaMixer):
      def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(
@@ -49,8 +68,16 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        # attention should be initialized only if layer type is attention
+        self.self_attn = None
         if config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
+        elif config.layers_block_type[layer_idx] == "attention":
+            self.self_attn = GRANITEMOEHYBRID_ATTENTION_CLASSES[config._attn_implementation](
+                config=config, layer_idx=layer_idx
+            )
+        else:
+            raise ValueError("\n Invalid layer type \n")
         self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(
