@@ -36,7 +36,7 @@ class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        image_size=224,
+        image_size=640,
         patch_size=16,
         num_channels=3,
         qkv_bias=True,

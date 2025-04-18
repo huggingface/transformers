@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either ehidden_statespress or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import collections.abc
 from typing import Callable, List, Optional, Set, Tuple, Union
 
@@ -43,20 +42,20 @@ class EoMTPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: EoMTConfig):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.grid_size = (self.image_size[0] // self.patch_size[0], self.image_size[1] // self.patch_size[1])
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -81,11 +80,13 @@ class EoMTEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = EoMTPatchEmbeddings(config)
+
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
+        self.num_prefix_tokens = 1 + num_patches + config.num_register_tokens  # 1 for [CLS]
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -472,7 +473,7 @@ class EoMTEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layers):
             if i == len(self.layers) - self.config.num_blocks:
-                query = self.q.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
+                query = self.query.unsqueeze(0).expand(hidden_states.shape[0], -1, -1)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if output_hidden_states:
@@ -503,11 +504,13 @@ class EoMTEncoder(nn.Module):
 
 
 class MaskHead(nn.Module):
-    def __init__(self, embed_dim: int):
+    def __init__(self, config: EoMTConfig):
         super().__init__()
-        self.fc1 = nn.Linear(embed_dim, embed_dim)
-        self.fc2 = nn.Linear(embed_dim, embed_dim)
-        self.fc3 = nn.Linear(embed_dim, embed_dim)
+
+        hidden_size = config.hidden_size
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.GELU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -626,11 +629,17 @@ class EoMTForUniversalSegmentation(nn.Module):
 
     def __init__(self, config: EoMTConfig):
         super().__init__(config)
+        self.config = config
         self.model = EoMTModel(config)
-        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
+        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
         # Initialize model weights randomly.
         self.post_init()
+
+    # A better place to add this func
+    def _predict(self, logits: torch.Tensor):
+        query_tokens = logits[:, : self.config.num_queries, :]
+        class_logits = self.class_predictor(query_tokens)
 
     def forward(
         self,
