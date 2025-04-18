@@ -39,12 +39,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipe = pipeline(
-task="text-generation",
-model="microsoft/phi-1.5"
-)
-message = "Why Lebanon is a special country?"
-output = pipe(message)
+pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, torch_dtype=torch.bfloat16)
+pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n"""''')")
 
 ```
 
@@ -53,16 +49,19 @@ output = pipe(message)
 <hfoption id="AutoModel">
 
 ```py
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1")
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
-prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt")
-generate_ids = model.generate(inputs.input_ids, max_length=30)
+input_ids = tokenizer('''def print_prime(n):
+   """
+   Print all primes between 1 and n
+   """''', return_tensors="pt").to("cuda")
 
-tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -75,13 +74,62 @@ echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | tr
 </hfoption>
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses 4-bit weight-only quantization with NF4 [https://huggingface.co/docs/transformers/en/quantization/bitsandbytes] to quantize only the model weights, reducing memory usage while maintaining performance.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+import torch
+
+model_id = "microsoft/phi-1_5"
+bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    quantization_config=bnb_config,
+
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+inputs = tokenizer('''def print_prime(n):
+   """
+   Print all primes between 1 and n
+   """''', return_tensors="pt").to("cuda")
+
+outputs = model.generate(**inputs)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
+```
+
 ## Notes
 
-- This model is quite similar to `Llama` with the main difference in `PhiDecoderLayer`, where they used `PhiAttention` and `PhiMLP` layers in parallel configuration.
+- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [~AutoModel.from_pretrained]. Otherwise, make sure you update Transformers to the latest stable version.
 
-- The tokenizer used for this model is identical to the [CodeGenTokenizer](https://huggingface.co/docs/transformers/v4.51.3/en/model_doc/codegen#transformers.CodeGenTokenizer).
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
- ## PhiConfig
+tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained(
+    "microsoft/phi-1",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    trust_remote_code=True,
+    attn_implementation="sdpa")
+
+input_ids = tokenizer('''def print_prime(n):
+   """
+   Print all primes between 1 and n
+   """''', return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## PhiConfig
+
 [[autodoc]] PhiConfig
 
 ## PhiModel
