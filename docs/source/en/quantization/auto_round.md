@@ -273,7 +273,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 If you encounter any issues with the transformers integration, please open an issue on
 the [transformers](https://github.com/huggingface/transformers/issues) repository.  
 If you encounter any issues with auto-round, please open an issue on
-the [auto-round](https://github.com/intel/auto-round/issues) repository.
+the [AutoRound](https://github.com/intel/auto-round/issues) repository.
 
 
 ## Acknowledgement
