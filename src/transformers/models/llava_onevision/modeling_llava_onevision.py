@@ -700,10 +700,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 vision_aspect_ratio=vision_aspect_ratio,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -724,10 +724,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
 
-            special_video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
+            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
             special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_index).sum()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
