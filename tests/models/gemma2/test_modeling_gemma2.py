@@ -332,6 +332,34 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    @slow
+    @require_read_token
+    def test_export_hybrid_cache(self):
+        if version.parse(torch.__version__) < version.parse("2.5.0"):
+            self.skipTest(reason="This test requires torch >= 2.5 to run.")
+
+        model_id = "google/gemma-2-9b"
+        EXPECTED_TEXTS = [
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+        assert model.config._attn_implementation == "flex_attention"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model(**inputs, max_new_tokens=20, do_sample=False)
+        #print(output)
+        
+        from torch.export import export_for_training 
+        with torch.no_grad():
+            ep = export_for_training(model, (), {**inputs, "max_new_tokens":20, "do_sample":False}, strict=False)
+            ep_out = ep.module()(**inputs, max_new_tokens=20, do_sample=False)
+        self.assertTrue(torch.allclose(output, ep_out))
+
     @require_read_token
     @tooslow
     def test_model_9b_bf16_flex_attention(self):

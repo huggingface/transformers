@@ -1631,9 +1631,7 @@ class HybridCache(Cache):
 
         self.device = torch.device(device) if device is not None else torch.device("meta")
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
-        self.is_sliding = torch.tensor(
-            [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
-        )
+        self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
@@ -1743,7 +1741,7 @@ class HybridCache(Cache):
 
         if self.key_cache[layer_idx].device.type == "meta":
             return 0
-        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum().item()
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
