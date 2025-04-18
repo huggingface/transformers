@@ -83,34 +83,16 @@ class InternVLVisionRMSNorm(LlamaRMSNorm):
 class InternVLVisionAttention(JanusVisionAttention):
     def __init__(self, config: InternVLVisionConfig):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        proj_dropout = config.projection_dropout
-        qk_norm = config.use_qk_norm
 
         # InternVLVision has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
         self.num_key_value_groups = 1
 
         # Needed for flash attention
         self.is_causal = False
-
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.projection_layer = nn.Linear(self.embed_dim, self.embed_dim)
-        self.projection_dropout = nn.Dropout(proj_dropout) if proj_dropout > 0 else nn.Identity()
+        qk_norm = config.use_qk_norm
 
         self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-        self.k_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.k_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
 
 
 class InternVLVisionPreTrainedModel(PreTrainedModel):

@@ -135,7 +135,7 @@ class InternVLVisionAttention(nn.Module):
         self.projection_dropout = nn.Dropout(proj_dropout) if proj_dropout > 0 else nn.Identity()
 
         self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-        self.k_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.k_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
 
         # Needed for flash attention
         self.is_causal = False
