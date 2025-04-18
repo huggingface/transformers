@@ -699,6 +699,7 @@ class Mask4DTestHard(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
