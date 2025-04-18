@@ -109,7 +109,6 @@ model = SiglipModel.from_pretrained(
     device_map=device,
 )
 ```
-- For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
 
 
 ## SiglipConfig
