@@ -64,6 +64,9 @@ try:
         """
         Expands `kernels`' `use_kernel_forward_from_hub` to NOT use a kernel at compile time. This should be removed
         when `kernels` supports `torch.compile`.
+
+        If the layer has a `config` attribute, we can also set `disable_custom_kernels` to `True` to disable the
+        kernel.
         """
 
         def decorator_with_compile_path(cls):
@@ -78,7 +81,7 @@ try:
             kernel_forward = cls.forward
 
             def forward_with_compile_path(*forward_args, **forward_kwargs):
-                if is_torchdynamo_compiling():
+                if is_torchdynamo_compiling() or (hasattr(cls, "config") and cls.config.disable_custom_kernels):
                     return original_forward(*forward_args, **forward_kwargs)
                 else:
                     return kernel_forward(*forward_args, **forward_kwargs)
