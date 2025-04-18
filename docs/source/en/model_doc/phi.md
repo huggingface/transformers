@@ -79,28 +79,20 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import torch
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
-model_id = "microsoft/phi-1_5"
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
+tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    device_map="auto",
-    quantization_config=bnb_config,
-
-)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-inputs = tokenizer('''def print_prime(n):
+input_ids = tokenizer('''def print_prime(n):
    """
    Print all primes between 1 and n
    """''', return_tensors="pt").to("cuda")
 
-outputs = model.generate(**inputs)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Notes
@@ -134,16 +126,21 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## PhiModel
 
-[[autodoc]] PhiModel - forward
+[[autodoc]] PhiModel
+    - forward
 
 ## PhiForCausalLM
 
-[[autodoc]] PhiForCausalLM - forward - generate
+[[autodoc]] PhiForCausalLM
+    - forward
+    - generate
 
 ## PhiForSequenceClassification
 
-[[autodoc]] PhiForSequenceClassification - forward
+[[autodoc]] PhiForSequenceClassification
+    - forward
 
 ## PhiForTokenClassification
 
-[[autodoc]] PhiForTokenClassification - forward
+[[autodoc]] PhiForTokenClassification
+    - forward
