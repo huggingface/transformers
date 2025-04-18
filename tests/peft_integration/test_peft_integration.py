@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_peft,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -422,7 +421,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertNotIn("adapter_1", model.peft_config)
                 self.assertIn("adapter_2", model.peft_config)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_from_pretrained_kwargs(self):
         """
