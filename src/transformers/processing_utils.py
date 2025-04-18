@@ -1427,6 +1427,14 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        if kwargs.get("continue_final_message", False):
+            if kwargs.get("add_generation_prompt", False):
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if kwargs.get("return_assistant_tokens_mask", False):
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
             "mm_load_kwargs": {},
