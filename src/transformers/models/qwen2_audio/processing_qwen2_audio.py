@@ -76,6 +76,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         if chat_template is None:
             chat_template = self.default_chat_template
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -104,12 +105,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
 
-        # Handle BC when user passes deprecared keyword argument
+        # Handle BC when user passes deprecated keyword argument
         if audios is not None and audio is None:
             audio = audios
-            warnings.wanr(
+            warnings.warn(
                 "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
-                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the onle acceptable keyword argument.",
+                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the only acceptable keyword argument.",
                 FutureWarning,
             )
 
@@ -179,12 +180,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 expanded_text.append(sample)
             text = expanded_text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, inputs, modalities=["audio"])
 
         if audio is not None:
             inputs.update(audio_inputs)
 
-        return BatchFeature(data={**inputs})
+        return BatchFeature(data={**inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
