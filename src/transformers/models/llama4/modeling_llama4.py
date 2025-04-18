@@ -163,17 +163,15 @@ class Llama4TextMoe(nn.Module):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
 
         router_scores = (
-            torch.full_like(router_logits, float("-inf"))
-            .scatter_(1, router_indices, router_top_value)
-            .transpose(0, 1)
+            torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
         router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
 
         routed_in = hidden_states.repeat(self.num_experts, 1)
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)
-        out = self.shared_expert(hidden_states)
 
+        out = self.shared_expert(hidden_states)
         out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
 
         return out, router_scores
