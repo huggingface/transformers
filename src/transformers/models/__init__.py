@@ -101,6 +101,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .falcon import *
     from .falcon_mamba import *
+    from .fast import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
