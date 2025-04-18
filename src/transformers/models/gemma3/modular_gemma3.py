@@ -277,7 +277,7 @@ class Gemma3Config(PretrainedConfig):
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
-        image_token_id: int = 262_144,
+        image_token_index: int = 262_144,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -298,7 +298,7 @@ class Gemma3Config(PretrainedConfig):
         self.mm_tokens_per_image = mm_tokens_per_image
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
-        self.image_token_id = image_token_id
+        self.image_token_index = image_token_index
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
