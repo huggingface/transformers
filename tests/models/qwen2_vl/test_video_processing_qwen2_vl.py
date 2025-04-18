@@ -31,7 +31,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers.image_utils import get_image_size
-    from transformers.models.qwen2_vl.video_processing_qwen2_vl_fast import smart_resize
+    from transformers.models.qwen2_vl.video_processing_qwen2_vl import smart_resize
 
     if is_torchvision_available():
         from transformers import Qwen2VLVideoProcessor
