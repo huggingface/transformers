@@ -305,7 +305,15 @@ def write_model(
 
 def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, hub_dir: str = None):
     if LM_TYPE_CORRESPONDENCE[path] == "qwen2":
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", return_token_type_ids=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            return_token_type_ids=False,
+            extra_special_tokens={
+                "start_image_token": "<img>",
+                "end_image_token": "</img>",
+                "context_image_token": "<IMG_CONTEXT>",
+            },
+        )
         tokenizer.model_max_length = CONTEXT_LENGTH
         tokenizer.add_special_tokens(
             {
@@ -331,7 +339,13 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, 
         # tokenizer_llama_fast._tokenizer.pre_tokenizer.prepend_scheme = "never"
         # Then manually modifying `added_tokens_decoder` indices to match the original tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
-            "./intern_vl_hf_implem/tokenizer_internvl_llama_fast", return_token_type_ids=False
+            "./intern_vl_hf_implem/tokenizer_internvl_llama_fast",
+            return_token_type_ids=False,
+            extra_special_tokens={
+                "start_image_token": "<img>",
+                "end_image_token": "</img>",
+                "context_image_token": "<IMG_CONTEXT>",
+            },
         )
 
     tokenizer.chat_template = chat_template

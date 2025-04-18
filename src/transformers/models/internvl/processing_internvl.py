@@ -81,12 +81,6 @@ class InternVLProcessor(ProcessorMixin):
         fake_video_token (`str`, *optional*, defaults to `"<video>"`):
             The token to use for the video placeholder in the text. This token will be replaced by the
             appropriate image tokens when processing the text with videos.
-        start_image_token (`str`, *optional*, defaults to `"<img>"`):
-            The token to use at the start of the image sequence in the text.
-        end_image_token (`str`, *optional*, defaults to `"</img>"`):
-            The token to use at the end of the image sequence in the text.
-        context_image_token (`str`, *optional*, defaults to `"<IMG_CONTEXT>"`):
-            The token to use for the context of the image in the text.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -95,9 +89,6 @@ class InternVLProcessor(ProcessorMixin):
         "image_seq_length",
         "fake_image_token",
         "fake_video_token",
-        "start_image_token",
-        "end_image_token",
-        "context_image_token",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -110,17 +101,14 @@ class InternVLProcessor(ProcessorMixin):
         chat_template=None,
         fake_image_token="<image>",
         fake_video_token="<video>",
-        start_image_token="<img>",
-        end_image_token="</img>",
-        context_image_token="<IMG_CONTEXT>",
         **kwargs,
     ):
         self.image_seq_length = image_seq_length
         self.fake_image_token = fake_image_token
         self.fake_video_token = fake_video_token
-        self.start_image_token = start_image_token
-        self.end_image_token = end_image_token
-        self.context_image_token = context_image_token
+        self.start_image_token = tokenizer.start_image_token
+        self.end_image_token = tokenizer.end_image_token
+        self.context_image_token = tokenizer.context_image_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
