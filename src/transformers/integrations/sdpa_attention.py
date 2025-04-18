@@ -24,13 +24,31 @@ def sdpa_attention_forward(
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     is_causal: Optional[bool] = None,
+    cache=None,
+    cumulative_seqlens_q=None,
+    cumulative_seqlens_k=None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
+    key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+    attention_mask_ = torch.full(
+        [1, 1, query.shape[2], key.shape[2] + 1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
+    )
+    attention_mask_[0, 0, cumulative_seqlens_q[0], 0 : cumulative_seqlens_k[0]] = 0
+    for i in range(1, len(cumulative_seqlens_k)):
+        attention_mask_[
+            ...,
+            cumulative_seqlens_q[i - 1] : cumulative_seqlens_q[i],
+            cumulative_seqlens_k[i - 1] : cumulative_seqlens_k[i],
+        ] = 0
+    attention_mask_[..., cumulative_seqlens_q[i] :, cumulative_seqlens_k[i] :] = 0
+
+    if attention_mask.shape == attention_mask_.shape:
+        attention_mask_.masked_fill_(attention_mask != 0, torch.finfo(query.dtype).min)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = attention_mask
+    causal_mask = attention_mask_
     if attention_mask is not None and causal_mask.ndim == 4:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
@@ -44,7 +62,7 @@ def sdpa_attention_forward(
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
     # Note that it is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
     if is_causal is None:
-        is_causal = query.shape[2] > 1 and causal_mask is None
+        is_causal = query.shape[2] > 1 and causal_mask is None and False
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
