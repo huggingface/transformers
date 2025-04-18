@@ -122,7 +122,7 @@ import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import GemliteUIntXWeightOnlyConfig
 
-# we also integrated with gemlite, which optimizes for batch size N on A100 and H100
+# We integrated with gemlite, which optimizes for batch size N on A100 and H100
 quant_config = GemliteUIntXWeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
@@ -176,7 +176,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
 
-<hfoption id="int4 weight only">
+<hfoption id="int4-weight-only">
 
 ```py
 import torch
@@ -184,10 +184,11 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
 
 # For batch size N, we recommend gemlite, which may require autotuning
+# default is 4 bit, 8 bit is also supported by passing `bit_width=8`
 quant_config = GemliteUIntXWeightOnlyConfig(group_size=128)
 
 # For batch size 1, we also have custom tinygemm kernel that's only optimized for this
-# We can set use_hqq to True for better accuracy
+# We can set `use_hqq` to `True` for better accuracy
 # quant_config = Int4WeightOnlyConfig(group_size=128, use_hqq=True)
 
 quantization_config = TorchAoConfig(quant_type=quant_config)
