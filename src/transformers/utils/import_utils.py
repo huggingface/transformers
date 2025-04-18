@@ -522,7 +522,7 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.cuda.is_bf16_supported()
     if torch.xpu.is_available():
         return torch.xpu.is_bf16_supported()
-    if is_torch_hpu_available() and not is_habana_gaudi1():
+    if is_torch_hpu_available():
         return True
     return False
 
