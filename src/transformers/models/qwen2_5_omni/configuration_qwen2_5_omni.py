@@ -92,6 +92,7 @@ class Qwen2_5OmniVisionEncoderConfig(PretrainedConfig):
         window_size=112,
         out_hidden_size=3584,
         fullatt_block_indexes=[7, 15, 23, 31],
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -108,6 +109,7 @@ class Qwen2_5OmniVisionEncoderConfig(PretrainedConfig):
         self.window_size = window_size
         self.fullatt_block_indexes = fullatt_block_indexes
         self.out_hidden_size = out_hidden_size
+        self.initializer_range = initializer_range
 
 
 class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
@@ -456,6 +458,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "audio_config": Qwen2_5OmniAudioEncoderConfig,
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
@@ -660,6 +667,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
 
     def __init__(
         self,
@@ -933,6 +945,7 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "qwen2_5_omni_token2wav"

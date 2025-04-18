@@ -36,6 +36,7 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
+    Qwen2RMSNorm,
 )
 from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
@@ -130,6 +131,7 @@ class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
         window_size=112,
         out_hidden_size=3584,
         fullatt_block_indexes=[7, 15, 23, 31],
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -145,6 +147,7 @@ class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
             window_size,
             out_hidden_size,
             fullatt_block_indexes,
+            initializer_range=initializer_range,
             **kwargs,
         )
         del self.tokens_per_second
@@ -440,6 +443,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "audio_config": Qwen2_5OmniAudioEncoderConfig,
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
@@ -644,6 +652,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
 
     def __init__(
         self,
@@ -917,6 +930,7 @@ class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "qwen2_5_omni_token2wav"
@@ -1026,7 +1040,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         # inference and fine-tuning - so the proper init weights code has been removed
         std = self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
 
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1034,6 +1048,11 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Qwen2RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -1216,9 +1235,9 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.spatial_merge_size
-        image_token_id = self.config.image_token_index
-        video_token_id = self.config.video_token_index
-        audio_token_id = self.config.audio_token_index
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        audio_token_id = self.config.audio_token_id
         vision_start_token_id = self.config.vision_start_token_id
         audio_start_token_id = self.config.audio_start_token_id
         position_id_per_seconds = self.config.position_id_per_seconds
@@ -2391,7 +2410,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
                     raise ValueError("length of audio_features should match audio_output_lengths")
                 audio_mask = (
-                    (input_ids == self.config.audio_token_index)
+                    (input_ids == self.config.audio_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2403,7 +2422,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
-                    (input_ids == self.config.image_token_index)
+                    (input_ids == self.config.image_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2415,7 +2434,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 video_mask = (
-                    (input_ids == self.config.video_token_index)
+                    (input_ids == self.config.video_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
