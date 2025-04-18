@@ -155,7 +155,7 @@ class InternVLConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 151667):
+        image_token_id (`int`, *optional*, defaults to 151667):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 256):
             Number of image tokens to use per image patch.
@@ -189,7 +189,7 @@ class InternVLConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=151667,
+        image_token_id=151667,
         image_seq_length=256,
         downsample_ratio=0.5,
         projector_hidden_act="gelu",
@@ -197,7 +197,7 @@ class InternVLConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         **kwargs,
     ):
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.image_seq_length = image_seq_length
         self.downsample_ratio = downsample_ratio
         self.projector_hidden_act = projector_hidden_act

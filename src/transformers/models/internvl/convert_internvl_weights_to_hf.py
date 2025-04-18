@@ -167,10 +167,10 @@ def get_internvl_config(input_base_path):
     vision_config = base_config.vision_config.to_dict()
     vision_config["use_absolute_position_embeddings"] = True
     if LM_TYPE_CORRESPONDENCE[input_base_path] == "qwen2":
-        image_token_index = 151667
+        image_token_id = 151667
         language_config_class = Qwen2Config
     else:
-        image_token_index = 92546
+        image_token_id = 92546
         language_config_class = LlamaConfig
 
     llm_config = {k: v for k, v in llm_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
@@ -195,7 +195,7 @@ def get_internvl_config(input_base_path):
     return InternVLConfig(
         text_config=language_config_class(**llm_config),
         vision_config=InternVLVisionConfig(**vision_config),
-        image_token_index=image_token_index,
+        image_token_id=image_token_id,
     )
 
 

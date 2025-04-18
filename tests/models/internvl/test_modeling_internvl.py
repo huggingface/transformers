@@ -66,7 +66,7 @@ class InternVLVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
-        image_token_index=1,
+        image_token_id=1,
         num_channels=3,
         image_size=64,
         model_type="internvl",
@@ -106,7 +106,7 @@ class InternVLVisionText2TextModelTester:
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.model_type = model_type
         self.text_config = text_config
         self.vision_config = vision_config
@@ -131,7 +131,7 @@ class InternVLVisionText2TextModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_id,
             image_seq_length=self.image_seq_length,
             vision_feature_layer=self.vision_feature_layer,
         )
@@ -149,8 +149,8 @@ class InternVLVisionText2TextModelTester:
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
         # input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.image_token_index] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = self.image_token_index
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
 
         inputs_dict = {
             "pixel_values": pixel_values,
