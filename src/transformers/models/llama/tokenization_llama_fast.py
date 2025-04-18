@@ -240,16 +240,20 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
+    # def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+    #     # bos_token_id = [self.bos_token_id] if self.add_bos_token else []
+    #     # eos_token_id = [self.eos_token_id] if self.add_eos_token else []
+    #     #
+    #     # output = bos_token_id + token_ids_0 + eos_token_id
+    #     #
+    #     # if token_ids_1 is not None:
+    #     #     output = output + bos_token_id + token_ids_1 + eos_token_id
+    #
+    #     output = self.encode(self.decode(token_ids_0), add_special_tokens=True)
+    #     if token_ids_1 is not None:
+    #         output = output + self.encode(self.decode(token_ids_1), add_special_tokens=True)
+    #
+    #     return output
 
 
 __all__ = ["LlamaTokenizerFast"]
