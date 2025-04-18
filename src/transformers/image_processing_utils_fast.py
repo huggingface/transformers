@@ -667,7 +667,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
 
     @add_start_docstrings(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        # The arguments in *args are specific to the __call__/preprocess methods, and not present in the __init__ method.
+        # However these args should be set as additional (often optional) kwargs in the preprocess method of inherited classes,
+        # then passed as args to the super class, so as not to include them in the "ModelFastImageProcessorKwargs" typed kwargs.
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
@@ -703,7 +706,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(images=images, **kwargs)
+        return self._preprocess(images, *args, **kwargs)
 
     def _preprocess(
         self,
