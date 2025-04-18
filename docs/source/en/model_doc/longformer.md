@@ -96,7 +96,7 @@ bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.
 tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 model = AutoModelForMaskedLM.from_pretrained(
     "allenai/longformer-base-4096",
-    quantization_config=bnb_config
+    torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config
     )
 
 text = (
@@ -191,48 +191,60 @@ tokenizer.decode(predictions).split()
 
 ## LongformerModel
 
-[[autodoc]] LongformerModel - forward
+[[autodoc]] LongformerModel
+    - forward
 
 ## LongformerForMaskedLM
 
-[[autodoc]] LongformerForMaskedLM - forward
+[[autodoc]] LongformerForMaskedLM 
+    - forward
 
 ## LongformerForSequenceClassification
 
-[[autodoc]] LongformerForSequenceClassification - forward
+[[autodoc]] LongformerForSequenceClassification 
+    - forward
 
 ## LongformerForMultipleChoice
 
-[[autodoc]] LongformerForMultipleChoice - forward
+[[autodoc]] LongformerForMultipleChoice 
+    - forward
 
 ## LongformerForTokenClassification
 
-[[autodoc]] LongformerForTokenClassification - forward
+[[autodoc]] LongformerForTokenClassification 
+    - forward
 
 ## LongformerForQuestionAnswering
 
-[[autodoc]] LongformerForQuestionAnswering - forward
+[[autodoc]] LongformerForQuestionAnswering 
+    - forward
 
 ## TFLongformerModel
 
-[[autodoc]] TFLongformerModel - call
+[[autodoc]] TFLongformerModel    
+    - call
 
 ## TFLongformerForMaskedLM
 
-[[autodoc]] TFLongformerForMaskedLM - call
+[[autodoc]] TFLongformerForMaskedLM 
+    - call
 
 ## TFLongformerForQuestionAnswering
 
-[[autodoc]] TFLongformerForQuestionAnswering - call
+[[autodoc]] TFLongformerForQuestionAnswering 
+    - call
 
 ## TFLongformerForSequenceClassification
 
-[[autodoc]] TFLongformerForSequenceClassification - call
+[[autodoc]] TFLongformerForSequenceClassification
+    - call
 
 ## TFLongformerForTokenClassification
 
-[[autodoc]] TFLongformerForTokenClassification - call
+[[autodoc]] TFLongformerForTokenClassification 
+    - call
 
 ## TFLongformerForMultipleChoice
 
-[[autodoc]] TFLongformerForMultipleChoice - call
+[[autodoc]] TFLongformerForMultipleChoice 
+    - call
