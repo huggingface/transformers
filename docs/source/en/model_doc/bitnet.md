@@ -65,7 +65,7 @@ Several versions of the model weights are available on Hugging Face:
 
 **VERY IMPORTANT NOTE ON EFFICIENCY**
 
-> Please do NOT expect performance efficiency gains (in terms of speed, latency, or energy consumption) when using this model with the standard transformers library, even with the required fork.
+> Please do NOT expect performance efficiency gains (in terms of speed, latency, or energy consumption) when using this model with the standard transformers library.
 >
 > The current execution paths within transformers do not contain the specialized, highly optimized computational kernels required to leverage the advantages of the BitNet architecture. Running the model via transformers will likely result in inference speeds and energy usage comparable to, or potentially worse than, standard full-precision models within this framework on both CPU and GPU.
 >
