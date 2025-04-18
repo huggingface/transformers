@@ -23,6 +23,7 @@ import numpy as np
 
 from transformers import (
     DinoDetrConfig,
+    ResNetConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -61,8 +62,8 @@ class DinoDetrModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
-        num_hidden_layers=6,
+        hidden_size=32,
+        num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
         hidden_act="gelu",
@@ -129,11 +130,35 @@ class DinoDetrModelTester:
                 )
                 labels.append(target)
 
-        config = self.get_config()
+        config = self.get_config(
+            d_model=self.hidden_size,
+            num_queries=self.num_queries,
+            num_hidden_layers=self.num_hidden_layers,
+        )
         return config, pixel_values, pixel_mask, labels
 
-    def get_config(self):
-        return DinoDetrConfig()
+    def get_config(self, d_model, num_queries, num_hidden_layers):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
+        return DinoDetrConfig(
+            d_model=d_model,
+            num_queries=num_queries,
+            num_encoder_layers=num_hidden_layers,
+            num_decoder_layers=num_hidden_layers,
+            backbone=None,
+            use_timm_backbone=False,
+            backbone_kwargs=None,
+            use_pretrained_backbone=False,
+            backbone_config=resnet_config,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
