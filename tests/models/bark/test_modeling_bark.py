@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_fp16,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -1056,7 +1057,9 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def inputs(self):
         input_ids = self.processor("In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6")
 
+        print(f"11111111 input_ids: {input_ids}")
         input_ids = input_ids.to(torch_device)
+        print(f"xxxxxxxxxxxxxxxx input_ids: {input_ids}")
 
         return input_ids
 
@@ -1295,24 +1298,28 @@ class BarkModelIntegrationTests(unittest.TestCase):
             len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
+        input_ids["history_prompt"].to(torch_device)
+        print(f"{input_ids}")
 
         with torch.no_grad():
             # standard generation
             output_with_no_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
-            torch.cuda.empty_cache()
+            torch_accelerator_module = getattr(torch, torch_device)
 
-            memory_before_offload = torch.cuda.memory_allocated()
+            torch_accelerator_module.empty_cache()
+
+            memory_before_offload = torch_accelerator_module.memory_allocated()
             model_memory_footprint = self.model.get_memory_footprint()
 
             # activate cpu offload
             self.model.enable_cpu_offload()
 
-            memory_after_offload = torch.cuda.memory_allocated()
+            memory_after_offload = torch_accelerator_module.memory_allocated()
 
             # checks if the model have been offloaded
 

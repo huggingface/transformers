@@ -36,6 +36,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_accelerate_available,
+    is_torch_accelerator_available,
     logging,
 )
 from ..auto import AutoModel
@@ -1613,11 +1614,15 @@ class BarkModel(BarkPreTrainedModel):
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
 
-        device = torch.device(f"cuda:{gpu_id}")
+        device_type = "cuda"
+        if is_torch_accelerator_available():
+            device_type = torch.accelerator.current_accelerator().type
+        device = torch.device(f"{device_type}:{gpu_id}")
 
+        torch_accelerator_module = getattr(torch, device_type) if hasattr(torch, device_type) else torch.cuda
         if self.device.type != "cpu":
             self.to("cpu")
-            torch.cuda.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
+            torch_accelerator_module.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
 
         # this layer is used outside the first foward pass of semantic so need to be loaded before semantic
         self.semantic.input_embeds_layer, _ = cpu_offload_with_hook(self.semantic.input_embeds_layer, device)
