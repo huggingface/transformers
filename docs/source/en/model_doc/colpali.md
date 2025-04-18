@@ -40,7 +40,7 @@ from PIL import Image
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
 
-model_name = "vidore/colpali-v1.2-hf"
+model_name = "vidore/colpali-v1.3-hf"
 
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
@@ -94,7 +94,7 @@ from PIL import Image
 from transformers import BitsAndBytesConfig, ColPaliForRetrieval, ColPaliProcessor
 
 
-model_name = "vidore/colpali-v1.2-hf"
+model_name = "vidore/colpali-v1.3-hf"
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
