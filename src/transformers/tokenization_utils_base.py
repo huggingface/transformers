@@ -2763,7 +2763,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         and pad_to_max_length) and behaviors.
         """
         old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
 
         # Backward compatibility for previous behavior, maybe we should deprecate it:
         # If you only set max_length, it activates truncation for max_length
@@ -2781,21 +2780,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation = "longest_first"
 
         # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            if verbose:
-                warnings.warn(
-                    "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                    "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                    "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                    "maximal input size of the model (e.g. 512 for Bert).",
-                    FutureWarning,
-                )
+        if padding is False:
             if max_length is None:
                 padding_strategy = PaddingStrategy.LONGEST
             else:
                 padding_strategy = PaddingStrategy.MAX_LENGTH
-        elif padding is not False:
+        else:
             if padding is True:
                 if verbose:
                     if max_length is not None and (
@@ -2805,15 +2795,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
                             "To pad to max length, use `padding='max_length'`."
                         )
-                    if old_pad_to_max_length is not False:
-                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
             elif isinstance(padding, PaddingStrategy):
                 padding_strategy = padding
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
 
         # Get truncation strategy
         if truncation is None and old_truncation_strategy != "do_not_truncate":
