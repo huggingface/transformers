@@ -16,8 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint

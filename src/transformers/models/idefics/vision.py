@@ -16,8 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -25,12 +24,8 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...utils import ModelOutput, can_return_tuple, logging
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import (
-    ModelOutput,
-    logging,
-)
+from ...utils import ModelOutput, can_return_tuple, logging
 from .configuration_idefics import IdeficsVisionConfig
 
 

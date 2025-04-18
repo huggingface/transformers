@@ -16,8 +16,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
