@@ -21,13 +21,18 @@ from peft import LoraConfig
 from safetensors.torch import load_file, save_file
 
 from transformers import (
+    AutoProcessor,
     Phi4MultimodalAudioConfig,
     Phi4MultimodalConfig,
+    Phi4MultimodalFeatureExtractor,
     Phi4MultimodalForCausalLM,
+    Phi4MultimodalImageProcessorFast,
     Phi4MultimodalProcessor,
     Phi4MultimodalVisionConfig,
 )
 
+
+CHAT_TEMPLATE = "{% for message in messages %}{{ '<|' + message['role'] + '|>' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'audio' %}{{ '<|audio|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{% if message['role'] == 'system' and 'tools' in message and message['tools'] is not none %}{{ '<|tool|>' + message['tools'] + '<|/tool|>' + '<|end|>' }}{% endif %}{{ '<|end|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|assistant|>' }}{% else %}{{ eos_token }}{% endif %}"
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -163,12 +168,49 @@ def convert_and_write_model(input_dir: str, output_dir: str):
 
 def convert_and_save_processor(input_dir: str, output_dir: str):
     """Convert the processor."""
-    processor = Phi4MultimodalProcessor.from_pretrained(input_dir)
-    del processor.image_processor.auto_map
-    del processor.audio_processor.auto_map
-    processor.chat_template = processor.tokenizer.chat_template
-    processor.tokenizer.extra_special_tokens = {"image_token": "<|endoftext10|>", "audio_token": "<|endoftext11|>"}
-    processor.save_pretrained(output_dir)
+    original_processor = AutoProcessor.from_pretrained(input_dir, trust_remote_code=True)
+    original_processor.tokenizer.extra_special_tokens = {"image_token": "<|image|>", "audio_token": "<|audio|>"}
+    # We need to add those temporarily to instantiate the processor
+    original_processor.tokenizer.image_token = "<|image|>"
+    original_processor.tokenizer.audio_token = "<|audio|>"
+    original_processor.tokenizer.image_token_id = 200010
+    original_processor.tokenizer.audio_token_id = 200011
+
+    converted_processor = Phi4MultimodalProcessor(
+        tokenizer=original_processor.tokenizer,
+        image_processor=Phi4MultimodalImageProcessorFast(),
+        audio_processor=Phi4MultimodalFeatureExtractor(),
+        chat_template=CHAT_TEMPLATE,
+    )
+    # We remove them before saving to avoid polluting somehow
+    del converted_processor.tokenizer.image_token
+    del converted_processor.tokenizer.image_token_id
+    del converted_processor.tokenizer.audio_token
+    del converted_processor.tokenizer.audio_token_id
+
+    # Save the processor
+    converted_processor.save_pretrained(output_dir)
+
+    # we need to rename a few tokens but tokenizers doesn't allow doing that programatically
+    # To avoid consufion and manual renaming, the below part load and re-saved each json file
+    vocab = json.load(open(f"{output_dir}/vocab.json", "r"))
+    vocab["<|endoftext11|>"] = "<|audio|>"
+    vocab["<|endoftext10|>"] = "<|image|>"
+    json.dump(vocab, open(f"{output_dir}/vocab.json", "w"))
+
+    tokenizer = json.load(open(f"{output_dir}/tokenizer.json", "r"))
+    tokenizer["added_tokens"][1]["content"] = "<|image|>"
+    tokenizer["added_tokens"][2]["content"] = "<|audio|>"
+    tokenizer["model"]["vocab"]["<|audio|>"] = tokenizer["model"]["vocab"]["<|endoftext11|>"]
+    tokenizer["model"]["vocab"]["<|image|>"] = tokenizer["model"]["vocab"]["<|endoftext10|>"]
+    del tokenizer["model"]["vocab"]["<|endoftext11|>"]
+    del tokenizer["model"]["vocab"]["<|endoftext10|>"]
+    json.dump(tokenizer, open(f"{output_dir}/tokenizer.json", "w"))
+
+    tokenizer_config = json.load(open(f"{output_dir}/tokenizer_config.json", "r"))
+    tokenizer_config["added_tokens_decoder"]["200010"]["content"] = "<|image|>"
+    tokenizer_config["added_tokens_decoder"]["200011"]["content"] = "<|audio|>"
+    json.dump(tokenizer_config, open(f"{output_dir}/tokenizer_config.json", "w"))
 
 
 def extract_adapters_data(input_dir: str, output_dir: str):
