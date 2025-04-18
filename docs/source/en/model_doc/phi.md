@@ -69,7 +69,7 @@ tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 <hfoption id="transformers-cli">
 
 ```bash
-echo -e "The weather is so nice here" | transformers-cli run --task text-classification --model microsoft/phi-1.5 --device 0
+echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers-cli run --task text-classification --model microsoft/phi-1.5 --device 0
 ```
 
 </hfoption>
