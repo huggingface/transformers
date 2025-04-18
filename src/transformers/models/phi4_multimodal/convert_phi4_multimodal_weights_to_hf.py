@@ -170,12 +170,25 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
     """Convert the processor."""
     original_processor = AutoProcessor.from_pretrained(input_dir, trust_remote_code=True)
     original_processor.tokenizer.extra_special_tokens = {"image_token": "<|image|>", "audio_token": "<|audio|>"}
+    # We need to add those temporarily to instantiate the processor
+    original_processor.tokenizer.image_token = "<|image|>"
+    original_processor.tokenizer.audio_token = "<|audio|>"
+    original_processor.tokenizer.image_token_id = 200010
+    original_processor.tokenizer.audio_token_id = 200011
+
     converted_processor = Phi4MultimodalProcessor(
         tokenizer=original_processor.tokenizer,
         image_processor=Phi4MultimodalImageProcessorFast(),
         audio_processor=Phi4MultimodalFeatureExtractor(),
         chat_template=CHAT_TEMPLATE,
     )
+    # We remove them before saving to avoid polluting somehow
+    del converted_processor.tokenizer.image_token
+    del converted_processor.tokenizer.image_token_id
+    del converted_processor.tokenizer.audio_token
+    del converted_processor.tokenizer.audio_token_id
+
+    # Save the processor
     converted_processor.save_pretrained(output_dir)
 
     # we need to rename a few tokens but tokenizers doesn't allow doing that programatically
