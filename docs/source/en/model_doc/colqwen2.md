@@ -69,8 +69,8 @@ queries = [
 ]
 
 # Process the inputs
-inputs_images = processor(images=images, return_tensors="pt").to(model.device)
-inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
+inputs_images = processor(images=images).to(model.device)
+inputs_text = processor(text=queries).to(model.device)
 
 # Forward pass
 with torch.no_grad():
