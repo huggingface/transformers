@@ -22,8 +22,8 @@ class InternVLVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLVisionModel`]. It is used to instantiate an InternVLVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the InternVL2_5-1B-MPO.
-    e.g. [yonigozlan/InternVL2_5-1B-MPO-hf](https://huggingface.co/yonigozlan/InternVL2_5-1B-MPO-hf)
+    a similar configuration to that of the InternVL3-1B.
+    e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -74,10 +74,10 @@ class InternVLVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import InternVLVisionConfig, InternVLVisionModel
 
-    >>> # Initializing a InternVLVisionModel yonigozlan/InternVL2_5-1B-MPO-hf style configuration
+    >>> # Initializing a InternVLVisionModel OpenGVLab/InternVL3-1B-hf style configuration
     >>> configuration = InternVLVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the yonigozlan/InternVL2_5-1B-MPO-hf configuration
+    >>> # Initializing a model (with random weights) from the OpenGVLab/InternVL3-1B-hf configuration
     >>> model = InternVLVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -143,8 +143,8 @@ class InternVLConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of InternVL2_5-1B-MPO.
-    e.g. [yonigozlan/InternVL2_5-1B-MPO-hf](https://huggingface.co/yonigozlan/InternVL2_5-1B-MPO-hf)
+    with the defaults will yield a similar configuration to that of InternVL3-1B.
+    e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -175,7 +175,7 @@ class InternVLConfig(PretrainedConfig):
     >>> # Initializing a InternVL style configuration
     >>> configuration = InternVLConfig()
 
-    >>> # Initializing a model (with random weights) from the yonigozlan/InternVL2_5-1B-MPO-hf configuration
+    >>> # Initializing a model (with random weights) from the OpenGVLab/InternVL3-1B-hf configuration
     >>> model = InternVLForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

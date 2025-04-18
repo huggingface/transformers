@@ -371,7 +371,7 @@ def main():
     )
     parser.add_argument(
         "--hub_dir",
-        default="yonigozlan/InternVL3-1B-hf",
+        default="OpenGVLab/InternVL3-1B-hf",
         help="Location to write HF model and processors",
     )
 

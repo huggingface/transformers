@@ -55,10 +55,10 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("yonigozlan/InternVL2_5-1B-MPO-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
         processor_kwargs = cls.prepare_processor_dict()
         processor = InternVLProcessor.from_pretrained(
-            "yonigozlan/InternVL2_5-1B-MPO-hf",
+            "OpenGVLab/InternVL3-1B-hf",
             image_processor=image_processor,
             tokenizer=tokenizer,
             **processor_kwargs,
