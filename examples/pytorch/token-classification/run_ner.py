@@ -529,6 +529,9 @@ def main():
 
     def compute_metrics(p):
         predictions, labels = p
+        if not training_args.eval_do_concat_batches:
+            predictions = np.hstack(predictions)
+            labels = np.hstack(labels)
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)
