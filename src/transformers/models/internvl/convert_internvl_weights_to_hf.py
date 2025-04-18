@@ -61,10 +61,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"position_embedding":                          r"position_embeddings",
     r"patch_embedding":                             r"patch_embeddings.projection",
     r"ls(\d+)":                                     r"lambda_\1",
-    r"attn.proj":                                   r"attention.output",
+    r"attn.proj":                                   r"attention.projection_layer",
+    r"attn.dropout":                                r"attention.projection_dropout",
     r"attn":                                        r"attention",
-    r"mlp.fc1":                                     r"mlp.up_proj",
-    r"mlp.fc2":                                     r"mlp.down_proj",
     r"norm1":                                       r"layernorm_before",
     r"norm2":                                       r"layernorm_after",
 
@@ -182,6 +181,16 @@ def get_internvl_config(input_base_path):
         llm_config["eos_token_id"] = 151645
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
+    if "attention_probs_dropout_prob" in vision_config:
+        attention_dropout = vision_config.pop("attention_probs_dropout_prob")
+        vision_config["attention_dropout"] = attention_dropout
+        vision_config["projection_dropout"] = attention_dropout
+    if "qk_normalization" in vision_config:
+        use_qk_norm = vision_config.pop("qk_normalization")
+        vision_config["use_qk_norm"] = use_qk_norm
+    if "qkv_bias" in vision_config:
+        attention_bias = vision_config.pop("qkv_bias")
+        vision_config["attention_bias"] = attention_bias
 
     return InternVLConfig(
         text_config=language_config_class(**llm_config),
@@ -220,13 +229,13 @@ def write_model(
     for key in all_keys:
         new_key = new_keys[key]
         if "attn.qkv" in key:
-            new_key_query = new_key.replace("attention.qkv", "attention.query")
+            new_key_query = new_key.replace("attention.qkv", "attention.q_proj")
             state_dict[new_key_query] = state_dict_old[key][:dim]
 
-            new_key_key = new_key.replace("attention.qkv", "attention.key")
+            new_key_key = new_key.replace("attention.qkv", "attention.k_proj")
             state_dict[new_key_key] = state_dict_old[key][dim : 2 * dim]
 
-            new_key_value = new_key.replace("attention.qkv", "attention.value")
+            new_key_value = new_key.replace("attention.qkv", "attention.v_proj")
             state_dict[new_key_value] = state_dict_old[key][-dim:]
         elif "attention.wqkv" in key:
             num_key_value_groups = config.text_config.num_attention_heads // config.text_config.num_key_value_heads
@@ -352,17 +361,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="OpenGVLab/InternVL3-38B",
+        default="OpenGVLab/InternVL3-1B",
         help="Location of original InternVL model",
     )
     parser.add_argument(
         "--output_dir",
-        default="InternVL3-38B-hf",
+        default="InternVL3-1B-hf",
         help="Location to write HF model and processors",
     )
     parser.add_argument(
         "--hub_dir",
-        default="yonigozlan/InternVL3-38B-hf",
+        default="yonigozlan/InternVL3-1B-hf",
         help="Location to write HF model and processors",
     )
 

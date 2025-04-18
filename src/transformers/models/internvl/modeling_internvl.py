@@ -5,7 +5,7 @@
 #                          modular_internvl.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,8 +21,6 @@
 
 
 import collections.abc
-import math
-import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -33,10 +31,11 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -98,6 +97,7 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
+    # No upcasting of the attention weights to float32 in this implementation
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -107,88 +107,90 @@ def eager_attention_forward(
 
 
 class InternVLVisionAttention(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
+    """Attention Class for InternVL Vision Encoder"""
+
+    def __init__(self, config: InternVLVisionConfig):
         super().__init__()
         self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
+        self.scale = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        proj_dropout = config.projection_dropout
+        qk_norm = config.use_qk_norm
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = 1 / math.sqrt(self.attention_head_size)
+        # InternVLVision has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
+        self.num_key_value_groups = 1
+
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.projection_layer = nn.Linear(self.embed_dim, self.embed_dim)
+        self.projection_dropout = nn.Dropout(proj_dropout) if proj_dropout > 0 else nn.Identity()
+
+        self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.k_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
+
+        # Needed for flash attention
         self.is_causal = False
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, config.qkv_bias)
-
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-        self.qk_normalization = config.qk_normalization
-        if self.qk_normalization:
-            self.q_norm = InternVLVisionRMSNorm(self.all_head_size, eps=config.layer_norm_eps)
-            self.k_norm = InternVLVisionRMSNorm(self.all_head_size, eps=config.layer_norm_eps)
-
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, self.num_attention_heads, self.attention_head_size)
+    ):
+        batch_size, seq_len, _ = hidden_states.size()
 
-        query_states = self.query(hidden_states)
-        key_states = self.key(hidden_states)
-        value_states = self.value(hidden_states)
-        if self.qk_normalization:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
+        query_states = self.q_norm(query_states)
+
+        key_states = key_states.reshape(-1, self.num_heads, self.head_dim)
+        key_states = self.k_norm(key_states)
+
+        query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
-                    "`sdpa` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                    "support `output_attentions=True`. Falling back to the eager implementation, "
-                    "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                    'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            None,
-            output_attentions=output_attentions,
-            dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
-            scaling=self.scaling,
-            is_causal=self.is_causal,  # Force to `self.is_causal` for SDPA
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
             **kwargs,
         )
+        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
 
-        new_context_layer_shape = attn_output.size()[:-2] + (self.all_head_size,)
-        attn_output = attn_output.view(*new_context_layer_shape)
-        attn_output = self.output(attn_output)
-        attn_output = self.dropout(attn_output)
-        return attn_output, attn_weights
+        output = self.projection_layer(attn_output)
+        output = self.projection_dropout(output)
+
+        outputs = (output, attn_weights) if output_attentions else (output, None)
+        return outputs
 
 
 class InternVLVisionPreTrainedModel(PreTrainedModel):
@@ -202,7 +204,6 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
-    _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -368,14 +369,7 @@ class InternVLVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
-        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
-            warnings.warn(
-                "`interpolate_pos_encoding` argument has no effect for InternVLVisionEmbeddings, embeddings are always "
-                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
-            )
-
         _, _, height, width = pixel_values.shape
         embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -398,22 +392,17 @@ class InternVLVisionEmbeddings(nn.Module):
 
 
 class InternVLVisionMLP(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 
@@ -436,18 +425,17 @@ class InternVLVisionLayer(nn.Module):
         init_values = config.layer_scale_init_value
         self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
         self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        self_attention_outputs = self.attention(
+        attention_output, attention_weights = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
             output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         attention_output = self.lambda_1 * attention_output
 
@@ -458,6 +446,7 @@ class InternVLVisionLayer(nn.Module):
         layer_output = self.layernorm_after(hidden_states)
 
         layer_output = self.mlp(layer_output)
+        layer_output = self.dropout(layer_output)
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
@@ -465,9 +454,7 @@ class InternVLVisionLayer(nn.Module):
         # second residual connection
         layer_output = layer_output + hidden_states
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output, attention_weights
 
 
 class InternVLVisionEncoder(nn.Module):
@@ -831,7 +818,8 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Union[int, List[int]],
-        downsample_ratio: float,
+        vision_feature_select_strategy: str,
+        **kwargs,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -841,16 +829,16 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
                The tensors corresponding to the input images.
             vision_feature_layer (`int` or `List[int]`):
                 Layer index or list of layer indices to extract features from.
-            downsample_ratio (`float`):
-                Factor by which to downsample the image features.
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
+        downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
             vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
         else:
             vision_features = self.vision_model(pixel_values=pixel_values).hidden_states[vision_feature_layer]
-        vision_features = vision_features[:, 1:, :]
+        if vision_feature_select_strategy == "default":
+            vision_features = vision_features[:, 1:, :]
 
         # Calculate dimensions based on vision features
         channels = vision_features.shape[1]
@@ -871,7 +859,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         return vision_features
 
-    @can_return_tuple
     @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -883,13 +870,15 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[int] = None,
-        downsample_ratio: Optional[float] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        image_sizes: Optional[torch.Tensor] = None,
         **lm_kwargs,
     ) -> Union[Tuple, InternVLCausalLMOutputWithPast]:
         r"""
@@ -947,10 +936,15 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
-        downsample_ratio = downsample_ratio if downsample_ratio is not None else self.config.downsample_ratio
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -965,16 +959,20 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layer=vision_feature_layer, downsample_ratio=downsample_ratio
+                pixel_values=pixel_values,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+                image_sizes=image_sizes,
             )
-            n_image_tokens = (input_ids == self.config.image_token_index).sum()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
+
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -986,6 +984,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
@@ -1010,6 +1009,10 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             loss = loss_fct(
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
         return InternVLCausalLMOutputWithPast(
             loss=loss,

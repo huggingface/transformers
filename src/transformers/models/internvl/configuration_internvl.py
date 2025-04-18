@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-import collections.abc
-
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -34,9 +32,9 @@ class InternVLVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        qk_normalization (`bool`, *optional*, defaults to `False`):
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply normalization to the queries and keys before the attention operation.
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
@@ -45,17 +43,19 @@ class InternVLVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for attention weights.
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for the projection layer.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         norm_type (`str`, *optional*, defaults to `"layer_norm"`):
             The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `[448, 448]`):
+        image_size (`int` or `list[int]`, *optional*, defaults to `[448, 448]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `[14, 14]`):
+        patch_size (`int` or `list[int]`, *optional*, defaults to `[14, 14]`):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -92,12 +92,13 @@ class InternVLVisionConfig(PretrainedConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        qkv_bias=False,
-        qk_normalization=False,
+        attention_bias=False,
+        use_qk_norm=False,
         intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
+        attention_dropout=0.0,
+        projection_dropout=0.0,
         initializer_range=0.02,
         norm_type="layer_norm",
         layer_norm_eps=1e-06,
@@ -115,18 +116,19 @@ class InternVLVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.qkv_bias = qkv_bias
-        self.qk_normalization = qk_normalization
+        self.attention_bias = attention_bias
+        self.use_qk_norm = use_qk_norm
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.attention_dropout = attention_dropout
+        self.projection_dropout = projection_dropout
         self.initializer_range = initializer_range
         self.norm_type = norm_type
         self.layer_norm_eps = layer_norm_eps
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
         self.image_size = image_size
         self.patch_size = patch_size
 
@@ -163,6 +165,9 @@ class InternVLConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the projector.
         vision_feature_layer (`int`, *optional*, defaults to -1):
             The index of the layer to use as the image features.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`.
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig
@@ -189,6 +194,7 @@ class InternVLConfig(PretrainedConfig):
         downsample_ratio=0.5,
         projector_hidden_act="gelu",
         vision_feature_layer=-1,
+        vision_feature_select_strategy="default",
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -196,6 +202,7 @@ class InternVLConfig(PretrainedConfig):
         self.downsample_ratio = downsample_ratio
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_layer = vision_feature_layer
+        self.vision_feature_select_strategy = vision_feature_select_strategy
 
         if isinstance(vision_config, dict):
             self.vision_config = InternVLVisionConfig(**vision_config)

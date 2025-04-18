@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -282,7 +282,7 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch_gpu
 class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "yonigozlan/InternVL3-1B-hf"
+        self.small_model_checkpoint = "../InternVL3-1B-hf"
         self.medium_model_checkpoint = "yonigozlan/InternVL3-2B-hf"
 
     def tearDown(self):
