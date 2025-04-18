@@ -316,10 +316,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     # todo: yoni - fix or improve the test
     @unittest.skip("Difference is slightly higher than the threshold")
     def test_batching_equivalence(self):
