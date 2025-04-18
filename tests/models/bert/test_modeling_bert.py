@@ -463,7 +463,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model

@@ -35,6 +35,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -643,11 +644,11 @@ class AlignVisionEncoder(nn.Module):
 
         self.blocks = nn.ModuleList(blocks)
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -655,9 +656,6 @@ class AlignVisionEncoder(nn.Module):
             hidden_states = block(hidden_states)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
@@ -1063,6 +1061,7 @@ class AlignTextEncoder(nn.Module):
         self.layer = nn.ModuleList([AlignTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1074,8 +1073,7 @@ class AlignTextEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -1128,18 +1126,6 @@ class AlignTextEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -1220,6 +1206,7 @@ class AlignTextModel(AlignPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALIGN_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=AlignTextConfig)
     def forward(
@@ -1232,8 +1219,7 @@ class AlignTextModel(AlignPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         Returns:
 
@@ -1255,7 +1241,6 @@ class AlignTextModel(AlignPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1298,19 +1283,15 @@ class AlignTextModel(AlignPreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1350,14 +1331,14 @@ class AlignVisionModel(AlignPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.convolution
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALIGN_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndNoAttention, config_class=AlignVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         r"""
         Returns:
 
@@ -1383,25 +1364,20 @@ class AlignVisionModel(AlignPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPoolingAndNoAttention = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         # Apply pooling
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(last_hidden_state)
         # Reshape (batch_size, projection_dim, 1 , 1) -> (batch_size, projection_dim)
         pooled_output = pooled_output.reshape(pooled_output.shape[:2])
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -1453,9 +1429,6 @@ class AlignModel(AlignPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1473,37 +1446,22 @@ class AlignModel(AlignPreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=False,
+            output_hidden_states=False,
         )
-
-        last_hidden_state = text_outputs[0][:, 0, :]
+        last_hidden_state = text_outputs.last_hidden_state[:, 0, :]
         text_features = self.text_projection(last_hidden_state)
-
         return text_features
 
     @add_start_docstrings_to_model_forward(ALIGN_VISION_INPUTS_DOCSTRING)
-    def get_image_features(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+    def get_image_features(self, pixel_values: Optional[torch.FloatTensor] = None) -> torch.FloatTensor:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -1526,22 +1484,15 @@ class AlignModel(AlignPreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPoolingAndNoAttention = self.vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_hidden_states=False,
         )
-
-        image_features = vision_outputs[1]  # pooled_output
-
+        image_features = vision_outputs.pooler_output
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ALIGN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AlignOutput, config_class=AlignConfig)
     def forward(
@@ -1556,8 +1507,7 @@ class AlignModel(AlignPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, AlignOutput]:
+    ) -> AlignOutput:
         r"""
         Returns:
 
@@ -1587,15 +1537,13 @@ class AlignModel(AlignPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPoolingAndNoAttention = self.vision_model(
             pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1604,11 +1552,10 @@ class AlignModel(AlignPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
-        text_embeds = text_outputs[0][:, 0, :]
+        image_embeds = vision_outputs.pooler_output
+        text_embeds = text_outputs.last_hidden_state[:, 0, :]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1622,10 +1569,6 @@ class AlignModel(AlignPreTrainedModel):
         loss = None
         if return_loss:
             loss = align_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return AlignOutput(
             loss=loss,
