@@ -41,11 +41,11 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
-    if is_torchvision_available():
-        if is_torchvision_v2_available():
-            from torchvision.transforms.v2 import functional as F
-        else:
-            from torchvision.transforms import functional as F
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 if is_torch_available():

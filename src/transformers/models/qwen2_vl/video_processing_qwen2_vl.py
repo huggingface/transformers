@@ -42,7 +42,7 @@ from ...utils import (
 )
 from ...utils.import_utils import requires
 from ...video_processing_utils_fast import (
-    BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
     BaseVideoProcessor,
 )
 from ...video_utils import group_videos_by_shape, reorder_videos
@@ -52,11 +52,11 @@ if is_vision_available():
     from ...image_utils import PILImageResampling
     from .image_processing_qwen2_vl import smart_resize
 
-    if is_torchvision_available():
-        if is_torchvision_v2_available():
-            from torchvision.transforms.v2 import functional as F
-        else:
-            from torchvision.transforms import functional as F
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 if is_torch_available():
@@ -73,7 +73,7 @@ class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
 
 @add_start_docstrings(
     "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         min_pixels (`int`, *optional*, defaults to `56 * 56`):
             The min pixels of the image to resize the image.

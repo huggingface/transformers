@@ -78,7 +78,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
+BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
     Args:
         do_resize (`bool`, *optional*, defaults to `self.do_resize`):
             Whether to resize the video's (height, width) dimensions to the specified `size`. Can be overridden by the
@@ -138,8 +138,8 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "Constructs a fast base VideoProcessor.",
-    BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
+    "Constructs a base VideoProcessor.",
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
 class BaseVideoProcessor(BaseImageProcessorFast):
@@ -246,7 +246,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             processed_videos.append(video)
         return processed_videos
 
-    @add_start_docstrings(BASE_VIDEO_PROCESSOR_FAST_DOCSTRING)
+    @add_start_docstrings(BASE_VIDEO_PROCESSOR_DOCSTRING)
     def preprocess(
         self,
         videos: VideoInput,

@@ -30,7 +30,6 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import (
     FEATURE_EXTRACTOR_NAME,
-    IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     cached_file,
@@ -293,7 +292,7 @@ class AutoProcessor:
         if processor_class is None:
             # If not found, let's check whether the processor class is saved in an image processor config
             preprocessor_config_file = cached_file(
-                pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME, **cached_file_kwargs
+                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
             )
             if preprocessor_config_file is not None:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)

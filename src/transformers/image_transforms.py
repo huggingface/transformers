@@ -56,7 +56,9 @@ def to_channel_dimension_format(
     input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
 ) -> np.ndarray:
     """
-    Converts `image` to the channel dimension format specified by `channel_dim`.
+    Converts `image` to the channel dimension format specified by `channel_dim`. The input
+    can have arbitrary number of leading dimensions. Only last three dimension will be permuted
+    to format the `image`.
 
     Args:
         image (`numpy.ndarray`):
