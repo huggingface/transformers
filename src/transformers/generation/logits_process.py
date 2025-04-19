@@ -292,7 +292,8 @@ class TemperatureLogitsWarper(LogitsProcessor):
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
-    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt.
+    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt
+    by default.
 
     In the original [paper](https://arxiv.org/pdf/1909.05858.pdf), the authors suggest the use of a penalty of around
     1.2 to achieve a good balance between truthful generation and lack of repetition. To penalize and reduce
@@ -303,6 +304,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
+        input_ids_seq_length (`int`, *optional*, defaults to 0):
+            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
 
     Examples:
 
@@ -326,14 +329,18 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float):
+    def __init__(self, penalty: float, input_ids_seq_length: Optional[int] = 0):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = penalty
+        self.input_ids_seq_length = input_ids_seq_length
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.input_ids_seq_length:
+            input_ids = input_ids[:, self.input_ids_seq_length :]
+
         score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
