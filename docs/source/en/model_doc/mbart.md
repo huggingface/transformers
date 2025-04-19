@@ -81,30 +81,38 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 - You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.
 - mBART requires a special language id token in the source and target text during training. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The target text format is `[tgt_lang_code] X [eos]`. The `bos` token is never used. The [`~PreTrainedTokenizerBase._call_`] encodes the source text format passed as the first argument or with the `text` keyword. The target text format is passed with the `text_label` keyword.
 - Set the `decoder_start_token_id` to the target language id for mBART.
-```py
-import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
-tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
-article = "UN Chief Says There Is No Military Solution in Syria"
-inputs = tokenizer(article, return_tensors="pt")
-translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
-tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-```
+
+    ```py
+    import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
+
+    article = "UN Chief Says There Is No Military Solution in Syria"
+    inputs = tokenizer(article, return_tensors="pt")
+
+    translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
+    tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    ```
+
 - mBART-50 has a different text format. The language id token is used as the prefix for the source and target text. The text format is `[lang_code] X [eos]` where `lang_code` is the source language id for the source text and target language id for the target text. `X` is the source or target text respectively.
 - Set the `eos_token_id` as the `decoder_start_token_id` for mBART-50. The target language id is used as the first generated token by passing `forced_bos_token_id` to [`~GenerationMixin.generate`].
-```py
-import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
-tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
-tokenizer.src_lang = "ar_AR"
-encoded_ar = tokenizer(article_ar, return_tensors="pt")
-generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
-tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-```
+    ```py
+    import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+
+    article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
+    tokenizer.src_lang = "ar_AR"
+
+    encoded_ar = tokenizer(article_ar, return_tensors="pt")
+    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
+    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    ```
 
 ## Documentation resources
 
@@ -115,47 +123,47 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
 
-## mBARTConfig
+## MBartConfig
 
 [[autodoc]] MBartConfig
 
-## mBARTTokenizer
+## MBartTokenizer
 
 [[autodoc]] MBartTokenizer
     - build_inputs_with_special_tokens
 
-## mBARTTokenizerFast
+## MBartTokenizerFast
 
 [[autodoc]] MBartTokenizerFast
 
-## mBART50Tokenizer
+## MBart50Tokenizer
 
 [[autodoc]] MBart50Tokenizer
 
-## mBART50TokenizerFast
+## MBart50TokenizerFast
 
 [[autodoc]] MBart50TokenizerFast
 
 <frameworkcontent>
 <pt>
 
-## mBARTModel
+## MBartModel
 
 [[autodoc]] MBartModel
 
-## mBARTForConditionalGeneration
+## MBartForConditionalGeneration
 
 [[autodoc]] MBartForConditionalGeneration
 
-## mBARTForQuestionAnswering
+## MBartForQuestionAnswering
 
 [[autodoc]] MBartForQuestionAnswering
 
-## mBARTForSequenceClassification
+## MBartForSequenceClassification
 
 [[autodoc]] MBartForSequenceClassification
 
-## mBARTForCausalLM
+## MBartForCausalLM
 
 [[autodoc]] MBartForCausalLM
     - forward
@@ -163,12 +171,12 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 </pt>
 <tf>
 
-## TFmBARTModel
+## TFMBartModel
 
 [[autodoc]] TFMBartModel
     - call
 
-## TFmBARTForConditionalGeneration
+## TFMBartForConditionalGeneration
 
 [[autodoc]] TFMBartForConditionalGeneration
     - call
@@ -176,28 +184,28 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 </tf>
 <jax>
 
-## FlaxmBARTModel
+## FlaxMBartModel
 
 [[autodoc]] FlaxMBartModel
     - __call__
     - encode
     - decode
 
-## FlaxmBARTForConditionalGeneration
+## FlaxMBartForConditionalGeneration
 
 [[autodoc]] FlaxMBartForConditionalGeneration
     - __call__
     - encode
     - decode
 
-## FlaxmBARTForSequenceClassification
+## FlaxMBartForSequenceClassification
 
 [[autodoc]] FlaxMBartForSequenceClassification
     - __call__
     - encode
     - decode
 
-## FlaxmBARTForQuestionAnswering
+## FlaxMBartForQuestionAnswering
 
 [[autodoc]] FlaxMBartForQuestionAnswering
     - __call__
