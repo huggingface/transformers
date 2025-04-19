@@ -213,6 +213,7 @@ def convert_model(
     config.patch_size = config_data["patch_size"]
     config.num_queries = config_data["num_queries"]
     config.num_labels = config_data["num_labels"]
+    config.num_blocks = config_data["num_blocks"]
 
     # Save the config
     if output_dir:

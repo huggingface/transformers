@@ -44,7 +44,6 @@ class EoMTConfig(PretrainedConfig):
         num_upscale_blocks=2,
         attention_dropout=0.0,
         projection_dropout=0.0,
-        num_labels=80,
         num_blocks=4,
         **kwargs,
     ):
@@ -70,7 +69,6 @@ class EoMTConfig(PretrainedConfig):
         self.num_upscale_blocks = num_upscale_blocks
         self.attention_dropout = attention_dropout
         self.projection_dropout = projection_dropout
-        self.num_labels = num_labels
         self.num_blocks = num_blocks
 
 
