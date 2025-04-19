@@ -43,7 +43,7 @@ docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingf
 
 Transformers 구현에서는 양자화, LoRA 어댑터, 분산 추론 및 서빙과 같은 다양한 기능이 지원됩니다.
 
-> [!팁]
+> [!TIP]
 > [Transformers fallback](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers-fallback) 섹션에서 더 자세한 내용을 확인할 수 있습니다.
 
 기본적으로 vLLM은 네이티브 구현을 서빙할 수 있지만, 해당 구현이 존재하지 않으면 Transformers 구현을 사용합니다. 하지만 `--model-impl transformers` 옵션을 설정하면 명시적으로 Transformers 모델 구현을 사용할 수 있습니다.
