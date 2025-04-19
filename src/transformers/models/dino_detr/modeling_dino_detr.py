@@ -2558,6 +2558,18 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrModel(DinoDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _tied_weights_keys = [
+        "bbox_embed",
+        "class_embed",
+        r"bbox_embed\.[1-9]\d*",
+        r"class_embed\.[1-9]\d*",
+        r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
+        r"transformer\.decoder\.class_embed\.[1-9]\d*",
+    ]
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+
     def __init__(self, config: DinoDetrConfig):
         """
         backbone,
@@ -2662,25 +2674,25 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
         # prepare class & box embed
-        _class_embed = nn.Linear(config.d_model, config.num_classes)
-        _bbox_embed = DinoDetrMLP(d_model, d_model, 4, 3)
+        self.class_embed = nn.Linear(config.d_model, config.num_classes)
+        self.bbox_embed = DinoDetrMLP(d_model, d_model, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
-        _class_embed.bias.data = torch.ones(self.num_classes) * bias_value
-        nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
+        self.class_embed.bias.data = torch.ones(self.num_classes) * bias_value
+        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
         if config.dec_pred_bbox_embed_share:
-            box_embed_layerlist = [_bbox_embed for _ in range(self.transformer.num_decoder_layers)]
+            self.bbox_embed = _get_clones(self.bbox_embed, self.transformer.num_decoder_layers, layer_share=True)
         else:
-            box_embed_layerlist = [copy.deepcopy(_bbox_embed) for _ in range(self.transformer.num_decoder_layers)]
+            self.bbox_embed = [copy.deepcopy(self.bbox_embed) for _ in range(self.transformer.num_decoder_layers)]
         if config.dec_pred_class_embed_share:
-            class_embed_layerlist = [_class_embed for _ in range(self.transformer.num_decoder_layers)]
+            self.class_embed = _get_clones(self.class_embed, self.transformer.num_decoder_layers, layer_share=True)
         else:
-            class_embed_layerlist = [copy.deepcopy(_class_embed) for _ in range(self.transformer.num_decoder_layers)]
-        self.transformer.decoder.bbox_embed = nn.ModuleList(box_embed_layerlist)
-        self.transformer.decoder.class_embed = nn.ModuleList(class_embed_layerlist)
+            self.class_embed = [copy.deepcopy(self.class_embed) for _ in range(self.transformer.num_decoder_layers)]
+        self.transformer.decoder.bbox_embed = self.bbox_embed
+        self.transformer.decoder.class_embed = self.class_embed
 
         # two stage
         self.two_stage_type = config.two_stage_type
@@ -2692,15 +2704,15 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         if config.two_stage_type != "no":
             if config.two_stage_bbox_embed_share:
                 assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
-                self.transformer.enc_out_bbox_embed = _bbox_embed
+                self.transformer.enc_out_bbox_embed = self.bbox_embed[0]
             else:
-                self.transformer.enc_out_bbox_embed = copy.deepcopy(_bbox_embed)
+                self.transformer.enc_out_bbox_embed = copy.deepcopy(self.bbox_embed[0])
 
             if config.two_stage_class_embed_share:
                 assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
-                self.transformer.enc_out_class_embed = _class_embed
+                self.transformer.enc_out_class_embed = self.class_embed[0]
             else:
-                self.transformer.enc_out_class_embed = copy.deepcopy(_class_embed)
+                self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
 
             self.refpoint_embed = None
             if self.two_stage_add_query_num > 0:
@@ -2913,10 +2925,14 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
-    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
-    # We can't initialize the model on meta device as some weights are modified during the initialization
-    _no_split_modules = None
+    _tied_weights_keys = [
+        "bbox_embed",
+        "class_embed",
+        r"bbox_embed\.[1-9]\d*",
+        r"class_embed\.[1-9]\d*",
+        r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
+        r"transformer\.decoder\.class_embed\.[1-9]\d*",
+    ]
 
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
