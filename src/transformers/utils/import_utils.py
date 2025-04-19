@@ -107,7 +107,7 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
-
+AUTOROUND_MIN_VERSION = "0.5.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -159,6 +159,7 @@ _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
+_auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
@@ -1099,6 +1100,10 @@ def is_optimum_available():
 
 def is_auto_awq_available():
     return _auto_awq_available
+
+
+def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION):
+    return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
 
 
 def is_optimum_quanto_available():
