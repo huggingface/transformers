@@ -28,7 +28,7 @@ You can find all the original Longformer checkpoints under the [Ai2](https://hug
 > [!TIP]
 > Click on the Longformer models in the right sidebar for more examples of how to apply Longformer to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
+The example below demonstrates how to fill the `<mask>` token with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
