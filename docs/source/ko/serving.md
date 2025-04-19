@@ -22,7 +22,7 @@ Text Generation Inference (TGI) 및 vLLM과 같은 특수한 라이브러리를 
 
 [네이티브로 구현된 모델](https://huggingface.co/docs/text-generation-inference/supported_models)이 아니더라도 TGI로 Transformers 구현 모델을 서빙할 수 있습니다. TGI에서 제공하는 일부 고성능 기능은 지원하지 않을 수 있지만 연속 배칭이나 스트리밍과 같은 기능들은 사용할 수 있습니다.
 
-> [!팁]
+> [!TIP]
 > 더 자세한 내용은 [논-코어 모델 서빙](https://huggingface.co/docs/text-generation-inference/basic_tutorials/non_core_models) 가이드를 참고하세요.
 
 TGI 모델을 서빙하는 방식과 동일한 방식으로 Transformer 구현 모델을 서빙할 수 있습니다.
