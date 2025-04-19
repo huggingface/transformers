@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -202,6 +203,7 @@ class AwqTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
 
+    @require_torch_gpu
     def test_quantized_model_exllama(self):
         """
         Simple test that checks if the quantized model is working properly with exllama backend
@@ -240,7 +242,7 @@ class AwqTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=40)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -275,7 +277,7 @@ class AwqTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqFusedTest(unittest.TestCase):

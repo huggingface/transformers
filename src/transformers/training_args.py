@@ -2498,6 +2498,11 @@ class TrainingArguments:
             # Handle the accelerator_config if passed
             if is_accelerate_available() and isinstance(v, AcceleratorConfig):
                 d[k] = v.to_dict()
+            # Handle the quantization_config if passed
+            if k == "model_init_kwargs" and isinstance(v, dict) and "quantization_config" in v:
+                quantization_config = v.get("quantization_config")
+                if quantization_config and not isinstance(quantization_config, dict):
+                    d[k]["quantization_config"] = quantization_config.to_dict()
         self._dict_torch_dtype_to_str(d)
 
         return d

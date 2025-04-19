@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -309,7 +309,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 
 @slow
-@require_torch_large_gpu
+@require_torch_large_accelerator
 class GlmIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "THUDM/glm-4-9b"

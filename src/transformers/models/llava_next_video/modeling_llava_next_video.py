@@ -39,7 +39,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next_video import LlavaNextVideoConfig
 
@@ -565,7 +564,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         image_features = torch.split(image_features, image_num_patches, dim=0)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -705,10 +703,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                 image_newline=self.image_newline,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -727,10 +725,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
 
-            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
