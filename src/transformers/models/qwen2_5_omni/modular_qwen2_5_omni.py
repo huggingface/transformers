@@ -1145,7 +1145,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of 
+            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
                                 token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
             remove_index (`int`) An index id to subtract from `token_indices` before chunking
