@@ -1020,7 +1020,7 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        use_input_ids_in_repetition_penalty: Optional[bool] = False,
+        use_input_ids_in_repetition_penalty: Optional[bool] = True,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -2117,7 +2117,7 @@ class GenerationMixin:
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
-        use_input_ids_in_repetition_penalty: Optional[bool] = False,
+        use_input_ids_in_repetition_penalty: Optional[bool] = True,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
