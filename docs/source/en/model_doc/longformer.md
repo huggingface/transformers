@@ -21,7 +21,9 @@ rendered properly in your Markdown viewer.
 
 # Longformer
 
-[Longformer](https://huggingface.co/papers/2004.05150) is a transformer model designed for long-document processing. It introduces a novel attention mechanism that scales linearly with sequence length by combining local windowed attention with task-specific global attention, enabling efficient processing of documents with thousands of tokens.
+[Longformer](https://huggingface.co/papers/2004.05150) is a transformer model designed for processing long documents. The self-attention operation usually scales quadratically with sequence length, preventing transformers from processing longer sequences. The Longformer attention mechanism overcomes this by scaling linearly with sequence length. It combines local windowed attention with task-specific global attention, enabling efficient processing of documents with thousands of tokens.
+
+You can find all the original Longformer checkpoints under the [Ai2](https://huggingface.co/allenai?search_models=longformer) organization.
 
 > [!TIP]
 > Click on the Longformer models in the right sidebar for more examples of how to apply Longformer to different language tasks.
