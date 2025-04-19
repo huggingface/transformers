@@ -298,16 +298,19 @@ class ColwiseParallel(TensorParallelLayer):
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
             shard = [Shard(-1)]
+        elif param_type.find("_scale") != -1 or param_type.find("_zero_point") != -1:
+            parameter = empty_param
+            shard = [Replicate()]
         else:
             shard = [Shard(-2)]
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)           
 
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
-        return nn.Parameter(parameter)
+        return nn.Parameter(parameter,requires_grad=False)
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
@@ -369,7 +372,11 @@ class RowwiseParallel(TensorParallelLayer):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
         # means Rowwise as nn.Linear is input * weight^T + bias, where
         # weight would become Shard(0)
-        if param_type != "bias":
+        if param_type.find("_scale") != -1 or param_type.find("_zero_point") != -1:
+            shard = [Replicate()]
+            parameter = empty_param.detach().clone().requires_grad_(False)
+            parameter = parameter.to(torch.float)
+        elif param_type != "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
             shard = [Shard(-1)]
         else:
@@ -381,7 +388,7 @@ class RowwiseParallel(TensorParallelLayer):
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
-        return nn.Parameter(parameter)
+        return nn.Parameter(parameter,requires_grad=False)
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
