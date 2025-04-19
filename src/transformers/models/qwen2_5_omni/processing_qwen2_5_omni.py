@@ -289,7 +289,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
 
         Returns:
