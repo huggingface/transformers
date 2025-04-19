@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
@@ -102,6 +103,7 @@ if is_torch_available():
         SynthIDTextWatermarkingConfig,
         WatermarkDetector,
         WatermarkingConfig,
+        CompileConfig,
     )
     from transformers.generation.candidate_generator import (
         AssistedCandidateGenerator,
@@ -2068,15 +2070,19 @@ class GenerationTesterMixin:
                 model.generate(**generation_kwargs, **inputs_dict)
 
     @pytest.mark.generate
+    @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
     def test_generate_compile_model_forward(self):
         """
-        Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
+        Tests that `.generate` is compatible with torch.compile without graph breaks or any recompilation,
+        keeping the same results.
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
         for model_class in self.all_generative_model_classes:
+            # 1. Test exclusion criteria
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
 
+            # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
 
             model = model_class(config).to(torch_device)
@@ -2099,27 +2105,21 @@ class GenerationTesterMixin:
                 model_input_sets[0][model.main_input_name].shape == model_input_sets[1][model.main_input_name].shape
             )
 
-            # compilation-specific setup
+            # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-
-            # BLIP is the only exception with custom generate which call `self.lm.generate()`
-            # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
-            # compatible with multimodality
-            if "blip" in model.__class__.__name__.lower():
-                model.language_model.generation_config.compile_config._compile_all_devices = True
-            else:
-                # force compilation (e.g. fast CI, CPU
-                model.generation_config.compile_config._compile_all_devices = True
+            compile_config = CompileConfig(dynamic=False)  # Error out on dynamic shapes
+            compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "return_dict_in_generate": True,
                 "output_scores": True,
+                "compile_config": compile_config
             }
 
-            # get eager + dynamic cache results for future comparison
+            # 4. get eager + dynamic cache results for future comparison
             dynamic_outputs = []
             for model_inputs in model_input_sets:
                 gen_out = model.generate(**model_inputs, **generation_kwargs)
@@ -2135,12 +2135,13 @@ class GenerationTesterMixin:
                     self.assertFalse(decoder_cache.is_compileable)
                     self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
 
-            # get compiled results -- relies on the automatic compilation triggered by specific "cache_implementation"
+            # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
                 generation_kwargs["cache_implementation"] = "static"
 
             compiled_outputs = []
             for model_inputs in model_input_sets:
+                # with torch.compiler.set_stance("fail_on_recompile"):
                 gen_out = model.generate(**model_inputs, **generation_kwargs)
                 compiled_outputs.append(gen_out)
                 # sanity checks
