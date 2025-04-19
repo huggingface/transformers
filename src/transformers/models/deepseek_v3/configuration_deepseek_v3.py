@@ -61,6 +61,10 @@ class DeepseekV3Config(PretrainedConfig):
             Number of routed experts.
         routed_scaling_factor (`float`, *optional*, defaults to 2.5):
             Scaling factor or routed experts.
+        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
+            Auxiliary loss weight coefficient.
+        seq_aux = (`bool`, *optional*, defaults to True):
+            Whether to compute the auxiliary loss for each individual sample.
         kv_lora_rank (`int`, *optional*, defaults to 512):
             Rank of the LoRA matrices for key and value projections.
         q_lora_rank (`int`, *optional*, defaults to 1536):
@@ -164,6 +168,8 @@ class DeepseekV3Config(PretrainedConfig):
         n_shared_experts=1,
         n_routed_experts=256,
         routed_scaling_factor=2.5,
+        aux_loss_alpha = 0,
+        seq_aux = False,
         kv_lora_rank=512,
         q_lora_rank=1536,
         qk_rope_head_dim=64,
@@ -201,6 +207,8 @@ class DeepseekV3Config(PretrainedConfig):
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.routed_scaling_factor = routed_scaling_factor
+        self.aux_loss_alpha = aux_loss_alpha
+        self.seq_aux = seq_aux
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
