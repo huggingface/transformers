@@ -215,7 +215,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
             penalty=2.0,
-            input_ids=input_ids,
+            input_ids_seq_length=input_ids.shape[-1],
         )
 
         processed_scores = rep_penalty_proc(input_ids, scores)
