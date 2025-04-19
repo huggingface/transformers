@@ -407,10 +407,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @pytest.mark.generate
     @require_torch_sdpa
     @slow

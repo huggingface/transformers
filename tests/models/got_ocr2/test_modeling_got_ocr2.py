@@ -228,10 +228,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
 
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):
