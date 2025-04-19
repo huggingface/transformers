@@ -5,7 +5,7 @@
 #                          modular_eomt.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file ehidden_statescept in compliance with the License.
@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections.abc
-from typing import Callable, List, Optional, Set, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -27,8 +27,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import can_return_tuple, logging, torch_int
+from ...utils import can_return_tuple, logging
 from .configuration_eomt import EoMTConfig
 
 
@@ -76,97 +75,45 @@ class EoMTEmbeddings(nn.Module):
     def __init__(self, config: EoMTConfig) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = EoMTPatchEmbeddings(config)
-
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
         self.config = config
+        self.patch_size = config.patch_size
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+
+        self.patch_embeddings = EoMTPatchEmbeddings(config)
+        num_patches = self.patch_embeddings.num_patches
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + num_patches + config.num_register_tokens  # 1 for [CLS]
+        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
+        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
-        with the original implementation.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
-        - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
-        """
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-
-        # Skip interpolation for matching dimensions (unless tracing)
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        # Handle class token and patch embeddings separately
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-
-        # Calculate new dimensions
-        height = height // self.config.patch_size
-        width = width // self.config.patch_size
-
-        # Reshape for interpolation
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        # Store original dtype for restoration after interpolation
-        target_dtype = patch_pos_embed.dtype
-
-        # Interpolate at float32 precision
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(dtype=torch.float32),
-            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
-            mode="bicubic",
-            align_corners=False,
-            antialias=True,
-        ).to(dtype=target_dtype)
-
-        # Validate output dimensions if not tracing
-        if not torch.jit.is_tracing():
-            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-                raise ValueError("Width or height does not match with the interpolated position embeddings")
-
-        # Reshape back to original format
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        # Combine class and patch embeddings
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, _, _, _ = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        if bool_masked_pos is not None:
-            embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
-            )
-
-        # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
 
-        # add positional encoding to each token
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-
-        # add register tokens
-        embeddings = torch.cat(
-            (embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1), embeddings[:, 1:]), dim=1
-        )
+        embeddings = embeddings + self.position_embeddings(self.position_ids)
+        embeddings = torch.cat([cls_tokens, register_tokens, embeddings], dim=1)
 
         embeddings = self.dropout(embeddings)
 
         return embeddings
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -179,58 +126,66 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
-    attn_output = torch.matmul(attn_weights, value)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
 
-class EoMTSelfAttention(nn.Module):
-    def __init__(self, config: EoMTConfig) -> None:
+class EoMTAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.attention_dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_drop = nn.Dropout(config.projection_dropout)
+
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+        batch_size, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -242,80 +197,26 @@ class EoMTSelfAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        context_layer, attention_probs = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            is_causal=self.is_causal,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
+            is_causal=self.is_causal,
+            **kwargs,
         )
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        attn_output = self.proj_out(attn_output)
+        attn_output = self.proj_drop(attn_output)
 
-        return outputs
+        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
 
-
-class EoMTSelfOutput(nn.Module):
-    """
-    The residual connection is defined in EoMTLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-class EoMTAttention(nn.Module):
-    def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
-        self.attention = EoMTSelfAttention(config)
-        self.output = EoMTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        return output
 
 
 class EoMTMLP(nn.Module):
@@ -398,23 +299,20 @@ class EoMTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in EoMT, layernorm is applied before self-attention
-            head_mask,
+            self.norm1(hidden_states),  # In EoMT, layernorm is applied before self-attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-
         attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
-        # in EoMT, layernorm is also applied after self-attention
+        # In EoMT, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
@@ -473,7 +371,7 @@ class EoMTEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layers):
             if i == len(self.layers) - self.config.num_blocks:
-                query = self.query.unsqueeze(0).expand(hidden_states.shape[0], -1, -1)
+                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if output_hidden_states:
@@ -547,21 +445,10 @@ class EoMTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, EoMTEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
-
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
-
-            if self.config.use_mask_token:
-                module.mask_token.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, EoMTLayerScale):
             module.lambda1.data.fill_(self.config.layerscale_value)
 
@@ -572,8 +459,8 @@ class EoMTModel(EoMTPreTrainedModel):
         self.config = config
 
         self.embeddings = EoMTEmbeddings(config)
-        self.encoder = EoMTEncoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.encoder = EoMTEncoder(config)
         self.upscale_block = nn.ModuleList([EoMTScaleBlock(config) for _ in range(config.num_upscale_blocks)])
         self.mask_head = MaskHead(config)
 
@@ -586,7 +473,6 @@ class EoMTModel(EoMTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -600,7 +486,7 @@ class EoMTModel(EoMTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -609,7 +495,6 @@ class EoMTModel(EoMTPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, 0, :]
 
         if not return_dict:
@@ -624,7 +509,7 @@ class EoMTModel(EoMTPreTrainedModel):
         )
 
 
-class EoMTForUniversalSegmentation(nn.Module):
+class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config: EoMTConfig):
@@ -640,6 +525,18 @@ class EoMTForUniversalSegmentation(nn.Module):
     def _predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
+
+        prefix_tokens = logits[:, self.config.num_queries + self.model.embeddings.num_prefix_tokens :, :]
+        prefix_tokens = prefix_tokens.transpose(1, 2)
+
+        grid_size = self.model.embeddings.patch_embeddings.grid_size
+        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *grid_size)
+
+        mask_logits = torch.einsum(
+            "bqc, bchw -> bqhw", self.model.mask_head(query_tokens), self.model.upscale_block(prefix_tokens)
+        )
+
+        return mask_logits, class_logits
 
     def forward(
         self,
@@ -658,19 +555,11 @@ class EoMTForUniversalSegmentation(nn.Module):
 
         outputs = self.model(
             pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
+            output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=True,
         )
 
-        class_queries_logits = ()
-
-        for decoder_output in outputs.transformer_decoder_intermediate_states:
-            class_prediction = self.class_predictor(decoder_output.transpose(0, 1))
-            class_queries_logits += (class_prediction,)
-
-        masks_queries_logits = outputs.masks_queries_logits
+        masks_queries_logits, class_queries_logits = self._predict(outputs.pooler_output)
 
         return masks_queries_logits, class_queries_logits
 

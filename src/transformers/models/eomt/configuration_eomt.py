@@ -16,20 +16,19 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)
 
 
-class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
+class EoMTConfig(PretrainedConfig):
     model_type = "eomt"
 
     def __init__(
         self,
-        hidden_size=384,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         mlp_ratio=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
@@ -40,9 +39,13 @@ class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        layerscale_value=1.0,
+        layerscale_value=1e-5,
         drop_path_rate=0.0,
         num_upscale_blocks=2,
+        attention_dropout=0.0,
+        projection_dropout=0.0,
+        num_labels=80,
+        num_blocks=4,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -65,7 +68,10 @@ class EoMTConfig(BackboneConfigMixin, PretrainedConfig):
         self.num_queries = 200
         self.num_register_tokens = 4
         self.num_upscale_blocks = num_upscale_blocks
-        self.use_mask_token = False  # discard it later
+        self.attention_dropout = attention_dropout
+        self.projection_dropout = projection_dropout
+        self.num_labels = num_labels
+        self.num_blocks = num_blocks
 
 
 __all__ = ["EoMTConfig"]
