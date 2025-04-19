@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     is_torch_available,
     require_gptq,
     require_non_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -227,8 +226,6 @@ class CacheTest(unittest.TestCase):
         for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
             self.assertTrue(torch.allclose(v1, v2))
 
-    @slow
-    @require_read_token
     def test_static_cache_exportability(self):
         """
         Tests that static cache works with `torch.export()`
@@ -243,8 +240,9 @@ class CacheTest(unittest.TestCase):
         attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
         batch_size = 1
         max_cache_len = 1234
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(
-            "google/gemma-2b",
+            model_id,
             device_map=device,
             torch_dtype=dtype,
             attn_implementation=attn_implementation,
@@ -282,6 +280,17 @@ class CacheTest(unittest.TestCase):
                 n_static_value_caches = n_static_value_caches + 1
         self.assertEqual(n_static_key_caches, model.config.num_hidden_layers)
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
+
+        # Export with dynamic shapes using Dim.AUTO
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        input_ids = tokenizer("Here's everything I know", return_tensors="pt").input_ids
+        dynamic_shapes = {"input_ids": {1: torch.export.Dim.AUTO}, "cache_position": None}
+        exported_program = convert_and_export_with_cache(
+            model,
+            example_input_ids=input_ids,
+            dynamic_shapes=dynamic_shapes,
+            strict=False,
+        )
 
 
 @require_torch_accelerator
