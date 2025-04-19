@@ -369,6 +369,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)

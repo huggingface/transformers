@@ -78,6 +78,7 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
@@ -773,6 +774,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -875,6 +877,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         if not return_dict:
@@ -998,6 +1001,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[Tuple, SmolVLMCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1067,6 +1071,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
