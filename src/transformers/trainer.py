@@ -629,18 +629,16 @@ class Trainer:
 
         # Just in case the model was wrapped outside of the `Trainer`
         unwrapped_model = self.accelerator.unwrap_model(model)
-        model_forward = (
-            unwrapped_model.forward
-            if not _is_peft_model(unwrapped_model)
-            else unwrapped_model.get_base_model().forward
-        )
-        forward_params = inspect.signature(model_forward).parameters
+        # We also unwrap peft model
+        if _is_peft_model(unwrapped_model):
+            unwrapped_model = unwrapped_model.get_base_model()
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
-        if hasattr(model, "accepts_loss_kwargs"):
-            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        if hasattr(unwrapped_model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
+            forward_params = inspect.signature(unwrapped_model.forward).parameters
             self.model_accepts_loss_kwargs = any(
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )

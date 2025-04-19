@@ -756,6 +756,9 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
+
     def tie_weights(self):
         return self.language_model.tie_weights()
 
