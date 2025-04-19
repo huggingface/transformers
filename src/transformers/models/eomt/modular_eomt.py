@@ -75,7 +75,7 @@ class EoMTEmbeddings(nn.Module):
         self.patch_embeddings = EoMTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.num_prefix_tokens = 1 + num_patches + config.num_register_tokens  # 1 for [CLS]
+        self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
@@ -378,13 +378,11 @@ class EoMTModel(EoMTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -395,18 +393,12 @@ class EoMTModel(EoMTPreTrainedModel):
             embedding_output,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = sequence_output[:, 0, :]
+        sequence_output = self.layernorm(sequence_output)
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output)
-            return head_outputs + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -435,8 +427,12 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         grid_size = self.model.embeddings.patch_embeddings.grid_size
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *grid_size)
 
+        # Refactor this upscale block
+        for block in self.model.upscale_block:
+            prefix_tokens = block(prefix_tokens)
+
         mask_logits = torch.einsum(
-            "bqc, bchw -> bqhw", self.model.mask_head(query_tokens), self.model.upscale_block(prefix_tokens)
+            "bqc, bchw -> bqhw", self.model.mask_head(query_tokens), prefix_tokens
         )
 
         return mask_logits, class_logits
@@ -461,8 +457,9 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
+        print(outputs.last_hidden_state.shape)
 
-        masks_queries_logits, class_queries_logits = self._predict(outputs.pooler_output)
+        masks_queries_logits, class_queries_logits = self._predict(outputs.last_hidden_state)
 
         return masks_queries_logits, class_queries_logits
 
