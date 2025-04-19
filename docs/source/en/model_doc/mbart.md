@@ -26,7 +26,11 @@ rendered properly in your Markdown viewer.
 
 # MBart
 
-[Mbart](https://huggingface.co/papers/2001.08210) is a multilingual encoder–decoder model introduced in [Multilingual Denoising Pre-training for Neural Machine Translation](https://arxiv.org/abs/2001.08210). What makes MBart unique is its ability to pretrain a full sequence-to-sequence model via a denoising objective on large-scale monolingual corpora across many languages—ideal for tasks such as translation and summarization. Official checkpoints are available on the [Hugging Face Hub](https://huggingface.co/facebook/mbart-large-en-ro).
+[mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.
+
+[mBART-50](https://huggingface.co/paper/2008.00401) is pretrained on an additional 25 languages.
+
+You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
 
 > [!TIP]
 > Click on the MBart models in the right sidebar for more examples of applying MBart to different language tasks.
