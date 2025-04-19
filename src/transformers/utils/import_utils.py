@@ -345,6 +345,12 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+def is_torch_accelerator_available():
+    import torch
+
+    return is_torch_available() and hasattr(torch, "accelerator")
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
