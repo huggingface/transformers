@@ -22,6 +22,7 @@ import collections.abc
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -325,14 +326,24 @@ class EoMTLayer(nn.Module):
         return outputs
 
 
-# ToDo: Check if layernorm2d == groupnorm with num_groups=1
-class EoMTScaleBlock(nn.Module):
+class LayerNorm2d(nn.LayerNorm):
+    def __init__(self, num_channels, eps=1e-6, affine=True):
+        super().__init__(num_channels, eps=eps, elementwise_affine=affine)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = hidden_state.permute(0, 2, 3, 1)
+        hidden_state = F.layer_norm(hidden_state, self.normalized_shape, self.weight, self.bias, self.eps)
+        hidden_state = hidden_state.permute(0, 3, 1, 2)
+        return hidden_state
+
+
+class EoMTScaleLayer(nn.Module):
     def __init__(self, config: EoMTConfig):
         super().__init__()
         hidden_size = config.hidden_size
-        self.deconv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+        self.conv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
         self.activation = ACT2FN[config.hidden_act]
-        self.deconv2 = nn.Conv2d(
+        self.conv2 = nn.Conv2d(
             hidden_size,
             hidden_size,
             kernel_size=3,
@@ -340,14 +351,26 @@ class EoMTScaleBlock(nn.Module):
             groups=hidden_size,
             bias=False,
         )
-        # Refer this: https://discuss.pytorch.org/t/groupnorm-num-groups-1-and-layernorm-are-not-equivalent/145468/2
-        self.layernorm2d = nn.GroupNorm(num_groups=1, num_channels=hidden_size, eps=config.layer_norm_eps)
+
+        self.layernorm2d = LayerNorm2d(hidden_size)
 
     def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
-        hidden_states = self.deconv1(hidden_states)
+        hidden_states = self.conv1(hidden_states)
         hidden_states = self.activation(hidden_states)
-        hidden_states = self.deconv2(hidden_states)
+        hidden_states = self.conv2(hidden_states)
         hidden_states = self.layernorm2d(hidden_states)
+        return hidden_states
+
+
+class EoMTScaleBlock(nn.Module):
+    def __init__(self, config: EoMTConfig):
+        super().__init__()
+        self.num_blocks = config.num_upscale_blocks
+        self.block = nn.ModuleList([EoMTScaleLayer(config) for _ in range(self.num_blocks)])
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for block in self.block:
+            hidden_states = block(hidden_states)
         return hidden_states
 
 
@@ -461,7 +484,7 @@ class EoMTModel(EoMTPreTrainedModel):
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = EoMTEncoder(config)
-        self.upscale_block = nn.ModuleList([EoMTScaleBlock(config) for _ in range(config.num_upscale_blocks)])
+        self.upscale_block = EoMTScaleBlock(config)
         self.mask_head = MaskHead(config)
 
         # Initialize weights and apply final processing
@@ -524,11 +547,10 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         grid_size = self.model.embeddings.patch_embeddings.grid_size
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *grid_size)
 
-        # Refactor this upscale block
-        for block in self.model.upscale_block:
-            prefix_tokens = block(prefix_tokens)
+        query_tokens = self.model.mask_head(query_tokens)
+        prefix_tokens = self.model.upscale_block(prefix_tokens)
 
-        mask_logits = torch.einsum("bqc, bchw -> bqhw", self.model.mask_head(query_tokens), prefix_tokens)
+        mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
 
         return mask_logits, class_logits
 

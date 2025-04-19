@@ -48,9 +48,9 @@ MAPPINGS = {
     # Others
     r"network.q.weight": r"model.encoder.query.weight",
     r"network.class_head": r"class_predictor",
-    r"network.upscale.(\d+).conv1": r"model.upscale_block.\1.deconv1",
-    r"network.upscale.(\d+).conv2": r"model.upscale_block.\1.deconv2",
-    r"network.upscale.(\d+).norm": r"model.upscale_block.\1.layernorm2d",
+    r"network.upscale.(\d+).conv1": r"model.upscale_block.block.\1.conv1",
+    r"network.upscale.(\d+).conv2": r"model.upscale_block.block.\1.conv2",
+    r"network.upscale.(\d+).norm":  r"model.upscale_block.block.\1.layernorm2d",
     r"network.mask_head.0": r"model.mask_head.fc1",
     r"network.mask_head.2": r"model.mask_head.fc2",
     r"network.mask_head.4": r"model.mask_head.fc3",
