@@ -1020,6 +1020,7 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        use_input_ids_in_repetition_penalty: Optional[bool] = False,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -1067,7 +1068,12 @@ class GenerationMixin:
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            processors.append(
+                RepetitionPenaltyLogitsProcessor(
+                    penalty=generation_config.repetition_penalty,
+                    input_ids_seq_length=0 if use_input_ids_in_repetition_penalty else input_ids_seq_length,
+                )
+            )
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         if (
@@ -2111,6 +2117,7 @@ class GenerationMixin:
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
+        use_input_ids_in_repetition_penalty: Optional[bool] = False,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2180,6 +2187,8 @@ class GenerationMixin:
                 generation configuration (`model.generation_config`), as opposed to the global defaults
                 (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
                 `True`.
+            use_input_ids_in_repetition_penalty (`bool`, *optional*):
+                Indicates whether the original input_ids should be included in repetition penalty computations.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2352,6 +2361,7 @@ class GenerationMixin:
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
+            use_input_ids_in_repetition_penalty=use_input_ids_in_repetition_penalty,
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs

@@ -228,7 +228,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_repetition_penalty_dist_process_exclusion_with_new_input_ids(self):
         orig_input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         curr_input_ids = torch.tensor([[0, 1, 0, 1], [5, 0, 5, 0]], device=torch_device, dtype=torch.long)
-
         vocab_size = 10
 
         scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
@@ -239,7 +238,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
             penalty=2.0,
-            input_ids=orig_input_ids,
+            input_ids_seq_length=orig_input_ids.shape[-1],
         )
 
         processed_scores = rep_penalty_proc(curr_input_ids, scores)
