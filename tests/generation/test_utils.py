@@ -1953,6 +1953,8 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_cache_class:
                 self.skipTest(reason="This model does not support the new cache format")
+            if any(model_name in model_class.__name__.lower() for model_name in ["mamba", "jamba", "zamba", "bamba"]):
+                self.skipTest(reason="This model does not support offloaded cache")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -4846,6 +4848,26 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+
+    @slow
+    def test_large_cache_is_reused_with_smaller_batch_size(self):
+        """
+        Test that a large compilable cache is reused with a smaller batch size.
+        """
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+
+        inputs_2 = tokenizer(["foo bar"] * 2, return_tensors="pt").to(model.device)
+        inputs_1 = tokenizer(["foo bar"], return_tensors="pt").to(model.device)
+
+        # Generate with a large batch size, then with a smaller one
+        _ = model.generate(**inputs_2, max_new_tokens=3, do_sample=False, cache_implementation="static")
+        _ = model.generate(**inputs_1, max_new_tokens=3, do_sample=False, cache_implementation="static")
+
+        # What is expected: the cache is reused, i.e. it retains the batch size of the first generation call
+        self.assertIsInstance(model._cache, StaticCache)
+        self.assertEqual(model._cache.max_batch_size, 2)
 
 
 @require_torch

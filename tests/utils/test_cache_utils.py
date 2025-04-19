@@ -48,6 +48,7 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
+    from transformers.generation.configuration_utils import NEED_SETUP_CACHE_CLASSES_MAPPING
     from transformers.utils import is_torch_greater_or_equal
 
 
@@ -285,8 +286,8 @@ class CacheTest(unittest.TestCase):
 
 
 @require_torch_accelerator
-@slow
 class CacheIntegrationTest(unittest.TestCase):
+    @slow
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(
@@ -316,6 +317,7 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(decoded[0], expected_text)
 
+    @slow
     def test_dynamic_cache_batched(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
@@ -352,6 +354,7 @@ class CacheIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(decoded, expected_text)
 
+    @slow
     def test_hybrid_cache_n_sequences(self):
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
         model = AutoModelForCausalLM.from_pretrained(
@@ -379,6 +382,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_non_xpu
     @require_gptq
+    @slow
     def test_sink_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/LLaMa-7B-GPTQ")
         model = AutoModelForCausalLM.from_pretrained("TheBloke/LLaMa-7B-GPTQ", device_map="auto")
@@ -392,6 +396,7 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))
 
+    @slow
     def test_sink_cache_iterative_prompts(self):
         """Tests that SinkCache supports more than one new token at once, when shifting the cache"""
         tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
@@ -441,6 +446,7 @@ class CacheIntegrationTest(unittest.TestCase):
             ("sdpa", "static"),
         ]
     )
+    @slow
     def test_static_cache_greedy_decoding_pad_left(self, attn_implementation, cache_implementation):
         EXPECTED_GENERATION = [
             "The best color is the one that complements the skin tone of the",
@@ -479,44 +485,7 @@ class CacheIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @require_torch_gpu
-    @parameterized.expand(
-        [
-            ("eager", "static"),
-            ("sdpa", "static"),
-        ]
-    )
-    def test_static_cache_greedy_decoding_pad_right(self, attn_implementation, cache_implementation):
-        EXPECTED_GENERATION = [
-            "The best color isЋ the one that complements the skin tone of",
-            "We should not undermind the issues at hand.\nWe should not undermind the issues",
-        ]
-
-        tokenizer = AutoTokenizer.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf", padding_side="right", pad_token="<s>"
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf",
-            torch_dtype=torch.bfloat16,
-            attn_implementation=attn_implementation,
-        ).to(torch_device)
-        inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
-        ).to(model.device)
-
-        set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        with self.subTest(f"{attn_implementation}, dynamic"):
-            self.assertListEqual(decoded, EXPECTED_GENERATION)
-
-        set_seed(0)
-        model.generation_config.cache_implementation = cache_implementation
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        with self.subTest(f"{attn_implementation}, static, eager"):
-            self.assertListEqual(decoded, EXPECTED_GENERATION)
-
+    @slow
     def test_dynamic_cache_extra_left_padding(self):
         """Tests that adding extra left-padding does not affect the generation with the dynamic cache"""
         EXPECTED_GENERATION = [
@@ -556,6 +525,7 @@ class CacheIntegrationTest(unittest.TestCase):
             "static",
         ]
     )
+    @slow
     def test_static_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the static cache"""
         EXPECTED_GENERATION = [
@@ -597,6 +567,7 @@ class CacheIntegrationTest(unittest.TestCase):
         pass
 
     @require_torch_accelerator
+    @slow
     def test_offloaded_cache_equivalent_to_dynamic_cache(self):
         """Tests that OffloadedCache produces the same result as the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
@@ -625,6 +596,7 @@ class CacheIntegrationTest(unittest.TestCase):
             assert torch.all(original_output == offloaded_output).item()
 
     @require_torch_accelerator
+    @slow
     def test_offloaded_cache_uses_less_memory_than_dynamic_cache(self):
         """Tests that OffloadedCache uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
@@ -664,6 +636,7 @@ class CacheIntegrationTest(unittest.TestCase):
         assert offloaded_peak_memory < original_peak_memory
 
     @require_torch_gpu
+    @slow
     def test_cache_copy(self):
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -743,8 +716,10 @@ class CacheIntegrationTest(unittest.TestCase):
         with CaptureStderr() as cap:
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertEqual(cap.err, "")
+        self.assertTrue(hasattr(model, "_compiled_call"))  # Our auto compile should have been called
 
     @require_torch_multi_gpu
+    @slow
     def test_static_cache_multi_gpu(self):
         """Regression test for #35164: static cache with multi-gpu"""
 
@@ -764,3 +739,37 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
         _ = model(**inputs)
         _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")
+
+    @parameterized.expand(
+        (name, cache_cls)
+        for name, cache_cls in NEED_SETUP_CACHE_CLASSES_MAPPING.items()
+        if name != "mamba"  # `MambaCache` doesn't support the feature tested here
+    )
+    def test_compilable_cache_smaller_batch_size(self, name, cache_cls):
+        """
+        Tests that compilable caches, whose shape need to be set in advance, can be used with smaller batch sizes.
+        """
+        # Mistral has sliding window, can test related caches
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs_ids = tokenizer(["foo bar"], return_tensors="pt").input_ids.to(torch_device)
+        cache_position = torch.arange(inputs_ids.shape[1]).to(torch_device)
+
+        # cache with a large batch size, >> input batch size (1)
+        batch_size = 16
+        cache = cache_cls(
+            config=model.config,
+            max_batch_size=batch_size,
+            max_cache_len=20,
+            device=torch_device,
+            dtype=model.dtype,
+        )
+
+        # the forward pass should work with this cache, even though the input batch size is smaller than the cache's
+        _ = model(inputs_ids, cache_position=cache_position, past_key_values=cache)
+
+        # if we expand the input batch size to the cache's batch size, the same cache can be reused
+        cache.reset()
+        inputs_ids = torch.cat([inputs_ids] * batch_size, dim=0)
+        _ = model(inputs_ids, cache_position=cache_position, past_key_values=cache)

@@ -1834,7 +1834,7 @@ class GenerationMixin:
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
-            or cache_to_check.max_batch_size != batch_size
+            or cache_to_check.max_batch_size < batch_size
             or isinstance(
                 cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
             )  # due to internal slicing, we always re-init
@@ -1855,7 +1855,7 @@ class GenerationMixin:
                 cache_dtype = self.dtype
 
             layer_device_map = self._get_layer_device_map_for_cache_init()
-            cache_kwargs = {
+            all_possible_cache_kwargs = {
                 "config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
@@ -1863,6 +1863,8 @@ class GenerationMixin:
                 "device": device,
                 "layer_device_map": layer_device_map,
             }
+            cache_signature = inspect.signature(cache_cls.__init__)
+            cache_kwargs = {k: v for k, v in all_possible_cache_kwargs.items() if k in cache_signature.parameters}
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1871,21 +1873,6 @@ class GenerationMixin:
         else:
             self._cache.reset()
         return self._cache
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return (
-            self._supports_cache_class
-            and "jamba" not in self.__class__.__name__.lower()
-            and "zamba" not in self.__class__.__name__.lower()
-            and "bamba" not in self.__class__.__name__.lower()
-        )
 
     def _prepare_cache_for_generation(
         self,
@@ -1916,7 +1903,7 @@ class GenerationMixin:
                     f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                     "Cache object) is unsupported. Please use only one of the two."
                 )
-            if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
+            if isinstance(user_defined_cache, tuple) and self._supports_cache_class:
                 model_kwargs[cache_name] = (
                     DynamicCache.from_legacy_cache(user_defined_cache)
                     if not requires_cross_attention_cache
@@ -1930,7 +1917,10 @@ class GenerationMixin:
             return
 
         # Quick escape route 3: model that only supports legacy caches = nothing to prepare
-        if not self._supports_default_dynamic_cache():
+        is_model_with_custom_cache = any(
+            model_name in self.__class__.__name__.lower() for model_name in ["mamba", "jamba", "zamba", "bamba"]
+        )
+        if not self._supports_cache_class and not is_model_with_custom_cache:
             if generation_config.cache_implementation is not None:
                 warnings.warn(
                     "This model does not support `Cache` instances, it only supports the legacy cache format (tuple "
@@ -2001,7 +1991,7 @@ class GenerationMixin:
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
-        else:
+        elif not is_model_with_custom_cache:
             model_kwargs[cache_name] = (
                 DynamicCache()
                 if not requires_cross_attention_cache

@@ -1139,15 +1139,14 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
     """
-    Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
+    Static Cache class to be used with `torch.compile(model)` and `torch.export()`. At initialization, the cache is
+    preallocated to its maximum possible shape, but can it be used with any shape that fits in it.
 
     Parameters:
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used. If you are manually setting the batch size, make sure to take into account the
-            number of beams if you are running beam search
+            The maximum batch size with which the model will be used.
         max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
@@ -1253,8 +1252,10 @@ class StaticCache(Cache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        batch_size = key_states.shape[0]
+
+        k_out = self.key_cache[layer_idx][:batch_size, ...]
+        v_out = self.value_cache[layer_idx][:batch_size, ...]
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
@@ -1295,10 +1296,14 @@ class StaticCache(Cache):
 
 class SlidingWindowCache(StaticCache):
     """
-    Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
-    Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.config.sliding_window - 1`,
-    if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
-    we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
+    Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window
+    attention. As in `StaticCache`, the cache is preallocated to its maximum possible shape, but can it be used with
+    any shape that fits in it.
+
+    Every time when we try to update the cache, we compute the `indices` based on
+    `cache_position >= self.config.sliding_window - 1`, if true(which means the cache can not hold all the old key
+    value states and new states together because of the sliding window constraint), we need to do a cycle shift based
+    on `indices` to replace the oldest states by the new key value states passed in.
 
     The `to_shift` is only true once we are above sliding_window. Thus with `sliding_window==64`:
 
@@ -1314,8 +1319,7 @@ class SlidingWindowCache(StaticCache):
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
+            The maximum batch size with which the model will be used.
         max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
@@ -1386,8 +1390,10 @@ class SlidingWindowCache(StaticCache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        batch_size = key_states.shape[0]
+
+        k_out = self.key_cache[layer_idx][:batch_size, ...]
+        v_out = self.value_cache[layer_idx][:batch_size, ...]
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
@@ -1614,14 +1620,13 @@ class HybridCache(Cache):
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
     attention and global attention in every other layer (originally implemented for Gemma2).
     Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
-    for global attention.For more information, see the documentation of each subcomponent cache class.
+    for global attention. For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
+            The maximum batch size with which the model will be used.
         max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
@@ -1675,9 +1680,7 @@ class HybridCache(Cache):
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         self._dtype = dtype
         self.num_key_value_heads = (
@@ -1714,12 +1717,13 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        batch_size = key_states.shape[0]
         if cache_position.shape[0] > max_cache_len:
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
-            self.key_cache[layer_idx] += k_out
-            self.value_cache[layer_idx] += v_out
+            self.key_cache[layer_idx][:batch_size, ...] += k_out
+            self.value_cache[layer_idx][:batch_size, ...] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
             return key_states, value_states
@@ -1734,19 +1738,20 @@ class HybridCache(Cache):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
-        self.key_cache[layer_idx].zero_()
-        self.value_cache[layer_idx].zero_()
+        self.key_cache[layer_idx][:batch_size, ...].zero_()
+        self.value_cache[layer_idx][:batch_size, ...].zero_()
 
-        self.key_cache[layer_idx] += k_out
-        self.value_cache[layer_idx] += v_out
+        self.key_cache[layer_idx][:batch_size, ...] += k_out
+        self.value_cache[layer_idx][:batch_size, ...] += v_out
         return k_out, v_out
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
-        self.key_cache[layer_idx] = k_out
-        self.value_cache[layer_idx] = v_out
+        batch_size = key_states.shape[0]
+        self.key_cache[layer_idx][:batch_size, ...] = k_out
+        self.value_cache[layer_idx][:batch_size, ...] = v_out
         return k_out, v_out
 
     def update(
@@ -1760,6 +1765,7 @@ class HybridCache(Cache):
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
+        batch_size = key_states.shape[0]
 
         # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)
@@ -1768,8 +1774,8 @@ class HybridCache(Cache):
         if self.value_cache[layer_idx].device != value_states.device:
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
 
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        k_out = self.key_cache[layer_idx][:batch_size, ...]
+        v_out = self.value_cache[layer_idx][:batch_size, ...]
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
@@ -1822,8 +1828,7 @@ class HybridChunkedCache(Cache):
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
+            The maximum batch size with which the model will be used.
         max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
@@ -1874,7 +1879,7 @@ class HybridChunkedCache(Cache):
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self._dtype = dtype
 
         if hasattr(config.get_text_config(), "no_rope_layers"):
@@ -1894,12 +1899,7 @@ class HybridChunkedCache(Cache):
         num_key_value_heads = key_states.shape[1]
         device = key_states.device
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (
-            self.max_batch_size,
-            num_key_value_heads,
-            self.sliding_window,
-            self.head_dim,
-        )
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
@@ -1912,6 +1912,7 @@ class HybridChunkedCache(Cache):
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         cumulative_length = self.cumulative_length[layer_idx]
+        batch_size = key_states.shape[0]
         # Update it now that we saved the value above
         self.cumulative_length[layer_idx] += key_states.shape[-2]
         is_full = cumulative_length >= max_cache_len
@@ -1922,9 +1923,9 @@ class HybridChunkedCache(Cache):
             # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed adress
             # in memory (the values are the same as the full states, but not the address!!)
             if key_states.shape[-2] == 1:
-                self.key_cache[layer_idx].copy_(full_key_states)
-                self.value_cache[layer_idx].copy_(full_value_states)
-                return self.key_cache[layer_idx], self.value_cache[layer_idx]
+                self.key_cache[layer_idx][:batch_size, ...].copy_(full_key_states)
+                self.value_cache[layer_idx][:batch_size, ...].copy_(full_value_states)
+                return self.key_cache[layer_idx][:batch_size, ...], self.value_cache[layer_idx][:batch_size, ...]
         elif not is_full and cumulative_length + key_states.shape[2] > max_cache_len:
             # Fast prefill path, no need to cat() in this case (which creates a copy even if cating from 0 dim)
             if cumulative_length == 0:
@@ -1934,12 +1935,12 @@ class HybridChunkedCache(Cache):
                 full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
                 full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
-            self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-            self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
-            return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            self.key_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, key_states)
+            self.value_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, value_states)
+            return self.key_cache[layer_idx][:batch_size, ...], self.value_cache[layer_idx][:batch_size, ...]
 
-        self.key_cache[layer_idx].copy_(full_key_states[:, :, -max_cache_len:, :])
-        self.value_cache[layer_idx].copy_(full_value_states[:, :, -max_cache_len:, :])
+        self.key_cache[layer_idx][:batch_size, ...].copy_(full_key_states[:, :, -max_cache_len:, :])
+        self.value_cache[layer_idx][:batch_size, ...].copy_(full_value_states[:, :, -max_cache_len:, :])
         # we should return the whole states instead of k_out, v_out to take the whole prompt
         # into consideration when building kv cache instead of just throwing away tokens outside of the window
         return full_key_states, full_value_states
@@ -1948,8 +1949,9 @@ class HybridChunkedCache(Cache):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
-        self.key_cache[layer_idx] = k_out
-        self.value_cache[layer_idx] = v_out
+        batch_size = key_states.shape[0]
+        self.key_cache[layer_idx][:batch_size, ...] = k_out
+        self.value_cache[layer_idx][:batch_size, ...] = v_out
         return k_out, v_out
 
     def update(
@@ -1962,10 +1964,11 @@ class HybridChunkedCache(Cache):
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
+        batch_size = key_states.shape[0]
         self.initialise_cache_layer(layer_idx, key_states)
 
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        k_out = self.key_cache[layer_idx][:batch_size, ...]
+        v_out = self.value_cache[layer_idx][:batch_size, ...]
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
@@ -2069,13 +2072,14 @@ class OffloadedHybridCache(HybridChunkedCache):
                 self.device_value_cache.append(device_layer_value_cache)
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        batch_size = key_states.shape[0]
         # Wait for prefetch stream if needed
         if self._prefetch_stream is not None:
             torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
 
         # Get correct on-device layer
-        k_out = self.device_key_cache[self.active_device_layer]
-        v_out = self.device_value_cache[self.active_device_layer]
+        k_out = self.device_key_cache[self.active_device_layer][:batch_size, ...]
+        v_out = self.device_value_cache[self.active_device_layer][:batch_size, ...]
 
         # Let's prefetch the next layer as soon as possible
         self._prefetch_next_layer(layer_idx)
@@ -2085,8 +2089,8 @@ class OffloadedHybridCache(HybridChunkedCache):
         v_out[:, :, cache_position] = value_states
 
         # Copy to offloaded device
-        self.key_cache[layer_idx][:, :, cache_position] = key_states.to(self.offload_device)
-        self.value_cache[layer_idx][:, :, cache_position] = value_states.to(self.offload_device)
+        self.key_cache[layer_idx][:batch_size, :, cache_position] = key_states.to(self.offload_device)
+        self.value_cache[layer_idx][:batch_size, :, cache_position] = value_states.to(self.offload_device)
 
         return k_out, v_out
 
@@ -2123,10 +2127,12 @@ class OffloadedHybridCache(HybridChunkedCache):
 
 class MambaCache:
     """
-    Cache for mamba model which does not have attention mechanism and key value states.
+    Cache for mamba model which does not have attention mechanism and key value states.  At initialization, the cache
+    is preallocated to its maximum possible shape. Contrarily to other caches, `max_batch_size` must match the
+    batch size used at inference time.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a smaller batch size is used.
@@ -2223,8 +2229,9 @@ class MambaCache:
 
 class OffloadedStaticCache(StaticCache):
     """
-    Static cache class to be used with `torch.compile(model)` that offloads to the CPU or
-    another device.
+    Static cache class to be used with `torch.compile(model)` that offloads to the CPU or another device. As in
+    `StaticCache`, the cache is preallocated to its maximum possible shape, but can it be used with any shape that
+    fits in it.
 
     Args:
         config (`PretrainedConfig):
@@ -2285,7 +2292,7 @@ class OffloadedStaticCache(StaticCache):
         self._dtype = dtype if dtype is not None else torch.float32
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         num_key_value_heads = (
             config.num_attention_heads
@@ -2370,14 +2377,18 @@ class OffloadedStaticCache(StaticCache):
         self._prefetch_layer(layer_idx + 1)
 
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        batch_size = key_states.shape[0]
+        k_out = k_out[:batch_size, ...]
+        v_out = v_out[:batch_size, ...]
+
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
 
             # Copy the values to the offloaded device as well.
             if layer_idx == 0:
-                self.key_cache[layer_idx].copy_(key_states.to(self.offload_device))
-                self.value_cache[layer_idx].copy_(value_states.to(self.offload_device))
+                self.key_cache[layer_idx][:batch_size, ...].copy_(key_states.to(self.offload_device))
+                self.value_cache[layer_idx][:batch_size, ...].copy_(value_states.to(self.offload_device))
         else:
             # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does
@@ -2398,13 +2409,13 @@ class OffloadedStaticCache(StaticCache):
                 value_states = value_states.to(self.offload_device)
 
                 try:
-                    self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-                    self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
+                    self.key_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, key_states)
+                    self.value_cache[layer_idx][:batch_size, ...].index_copy_(2, cache_position, value_states)
                 except NotImplementedError:
                     # The operator 'aten::index_copy.out' is not currently implemented for the MPS
                     # device.
-                    self.key_cache[layer_idx][:, :, cache_position] = key_states
-                    self.value_cache[layer_idx][:, :, cache_position] = value_states
+                    self.key_cache[layer_idx][:batch_size, :, cache_position] = key_states
+                    self.value_cache[layer_idx][:batch_size, :, cache_position] = value_states
 
         return k_out, v_out
 
