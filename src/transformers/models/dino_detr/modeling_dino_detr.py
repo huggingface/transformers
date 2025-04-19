@@ -31,7 +31,6 @@ from torch.autograd.function import once_differentiable
 from torch.nn.init import constant_, xavier_uniform_
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -248,7 +247,7 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = None,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
@@ -383,6 +382,7 @@ class DinoDetrEncoderOutput(ModelOutput):
     intermediate_output: Optional[torch.FloatTensor] = None
     intermediate_ref: Optional[torch.FloatTensor] = None
     encoder_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -416,6 +416,7 @@ class DinoDetrDecoderOutput(ModelOutput):
 
     intermediate: List[torch.FloatTensor] = None
     ref_points: List[torch.FloatTensor] = None
+    attentions: List[torch.FloatTensor] = None
 
 
 @dataclass
@@ -453,6 +454,8 @@ class DinoDetrDeformableTransformerOutput(ModelOutput):
     ref_enc: torch.FloatTensor = None
     init_box_proposal: torch.FloatTensor = None
     encoder_states: torch.FloatTensor = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -507,6 +510,8 @@ class DinoDetrModelOutput(ModelOutput):
     denoising_meta: dict = None
     encoder_hidden_states: Tuple[torch.FloatTensor] = None
     decoder_hidden_states: Tuple[torch.FloatTensor] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -582,6 +587,8 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
     denoising_meta: dict = None
     encoder_hidden_states: Tuple[torch.FloatTensor] = None
     decoder_hidden_states: Tuple[torch.FloatTensor] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def _get_clones(module, N, layer_share=False):
@@ -1150,127 +1157,6 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
     return output_memory, output_proposals
 
 
-class DinoDetrMultiheadAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-
-    Here, we add position embeddings to the queries and keys (as explained in the Dino DETR paper).
-    """
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, target_len, embed_dim = hidden_states.size()
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
-
-        # get queries, keys and values
-        query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
-
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (
-            batch_size * self.num_heads,
-            target_len,
-            self.head_dim,
-        ):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
-
-
 class DinoDetrPreTrainedModel(PreTrainedModel):
     config_class = DinoDetrConfig
     base_model_prefix = "model"
@@ -1352,7 +1238,7 @@ class DinoDetrEncoderLayer(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Args:
@@ -1495,16 +1381,17 @@ class DinoDetrDecoderLayer(nn.Module):
         cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
     ):
         # self attention
+        attn_weights = None
         if self.self_attn is not None:
             if self.decoder_sa_type == "sa":
                 q = k = self.with_pos_embed(tgt, tgt_query_pos)
-                tgt2 = self.self_attn(q, k, tgt, attn_mask=self_attn_mask)[0]
+                tgt2, attn_weights = self.self_attn(q, k, tgt, attn_mask=self_attn_mask)
                 tgt = tgt + self.dropout2(tgt2)
                 tgt = self.norm2(tgt)
             elif self.decoder_sa_type == "ca_label":
                 bs = tgt.shape[1]
                 k = v = self.label_embedding.weight[:, None, :].repeat(1, bs, 1)
-                tgt2 = self.self_attn(tgt, k, v, attn_mask=self_attn_mask)[0]
+                tgt2, attn_weights = self.self_attn(tgt, k, v, attn_mask=self_attn_mask)
                 tgt = tgt + self.dropout2(tgt2)
                 tgt = self.norm2(tgt)
             elif self.decoder_sa_type == "ca_content":
@@ -1523,7 +1410,7 @@ class DinoDetrDecoderLayer(nn.Module):
             else:
                 raise NotImplementedError("Unknown decoder_sa_type {}".format(self.decoder_sa_type))
 
-        return tgt
+        return tgt, attn_weights
 
     def forward_ca(
         self,
@@ -1565,7 +1452,7 @@ class DinoDetrDecoderLayer(nn.Module):
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
 
-        return tgt
+        return tgt, attn_weights
 
     def forward(
         self,
@@ -1585,12 +1472,14 @@ class DinoDetrDecoderLayer(nn.Module):
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
         cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
+        output_attentions: Optional[bool] = None,
     ):
+        attn_weights_total = ()
         for funcname in self.module_seq:
             if funcname == "ffn":
                 tgt = self.forward_ffn(tgt)
             elif funcname == "ca":
-                tgt = self.forward_ca(
+                tgt, attn_weights = self.forward_ca(
                     tgt,
                     tgt_query_pos,
                     tgt_query_sine_embed,
@@ -1605,8 +1494,9 @@ class DinoDetrDecoderLayer(nn.Module):
                     self_attn_mask,
                     cross_attn_mask,
                 )
+                attn_weights_total += (attn_weights,)
             elif funcname == "sa":
-                tgt = self.forward_sa(
+                tgt, attn_weights = self.forward_sa(
                     tgt,
                     tgt_query_pos,
                     tgt_query_sine_embed,
@@ -1620,10 +1510,15 @@ class DinoDetrDecoderLayer(nn.Module):
                     self_attn_mask,
                     cross_attn_mask,
                 )
+                attn_weights_total += (attn_weights,)
             else:
                 raise ValueError("unknown funcname {}".format(funcname))
 
-        return tgt
+        outputs = (tgt,)
+        if output_attentions:
+            outputs += (attn_weights_total,)
+
+        return outputs
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
@@ -1732,6 +1627,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         ref_token_index: Optional[Tensor] = None,
         ref_token_coord: Optional[Tensor] = None,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Input:
@@ -1749,6 +1645,8 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         Outpus:
             - output: [bs, sum(hi*wi), 256]
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        all_self_attns = () if output_attentions else None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if self.two_stage_type in ["no", "standard", "enceachlayer", "enclayer1"]:
             assert ref_token_index is None
@@ -1778,7 +1676,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
 
             if not dropflag:
                 if self.deformable_encoder:
-                    output = layer(
+                    output_layer = layer(
                         hidden_states=output,
                         position_embeddings=pos,
                         reference_points=reference_points,
@@ -1786,15 +1684,18 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                         spatial_shapes_list=spatial_shapes_list,
                         level_start_index=level_start_index,
                         attention_mask=key_padding_mask,
+                        output_attentions=output_attentions,
                     )
                 else:
-                    output = layer(
+                    output_layer = layer(
                         src=output.transpose(0, 1),
                         pos=pos.transpose(0, 1),
                         key_padding_mask=key_padding_mask,
                     ).transpose(0, 1)
 
-            output = output[0]
+            output = output_layer[0]
+            if output_attentions:
+                all_self_attns += (output_layer[1],)
 
             if (
                 (layer_id == 0 and self.two_stage_type in ["enceachlayer", "enclayer1"])
@@ -1832,7 +1733,13 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [output, intermediate_output, intermediate_ref, encoder_states]
+                for v in [
+                    output,
+                    intermediate_output,
+                    intermediate_ref,
+                    encoder_states,
+                    all_self_attns,
+                ]
                 # if v is not None
             )
         return DinoDetrEncoderOutput(
@@ -1840,6 +1747,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             intermediate_output=intermediate_output,  # all layers
             intermediate_ref=intermediate_ref,  # all layers
             encoder_states=encoder_states,  # all layers
+            attentions=all_self_attns,  # all layers
         )
 
 
@@ -1938,6 +1846,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         spatial_shapes_list: Optional[List] = None,
         valid_ratios: Optional[Tensor] = None,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Input:
@@ -1947,6 +1856,9 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             - refpoints_unsigmoid: nq, bs, 2/4
             - valid_ratios/spatial_shapes: bs, nlevel, 2
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        all_attns = () if output_attentions else None
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output = tgt
 
@@ -1998,7 +1910,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                 if prob < self.dec_layer_dropout_prob[layer_id]:
                     dropflag = True
             if not dropflag:
-                output = layer(
+                output_layer = layer(
                     tgt=output,
                     tgt_query_pos=query_pos,
                     tgt_query_sine_embed=query_sine_embed,
@@ -2012,7 +1924,11 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                     memory_pos=pos,
                     self_attn_mask=tgt_mask,
                     cross_attn_mask=memory_mask,
+                    output_attentions=output_attentions,
                 )
+                output = output_layer[0]
+                if output_attentions:
+                    all_attns += (output_layer[1],)
 
             # iter update
             if self.bbox_embed is not None:
@@ -2056,10 +1972,12 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             return (
                 [itm_out.transpose(0, 1) for itm_out in intermediate],
                 [itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
+                all_attns,
             )
         return DinoDetrDecoderOutput(
             intermediate=[itm_out.transpose(0, 1) for itm_out in intermediate],
             ref_points=[itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
+            attentions=all_attns,
         )
 
 
@@ -2305,6 +2223,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         tgt,
         attn_mask=None,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Input:
@@ -2315,6 +2234,9 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             - tgt: [bs, num_dn, d_model]. None in infer
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        encoder_attentions = None
+        decoder_attentions = None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         # prepare input for encoder
         src_flatten = []
@@ -2360,6 +2282,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             ref_token_index=enc_topk_proposals,  # bs, nq
             ref_token_coord=enc_refpoint_embed,  # bs, nq, 4
             return_dict=return_dict,
+            output_attentions=output_attentions,
         )
         if not return_dict:
             (
@@ -2373,6 +2296,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 # outputs_encoder_part[2],
                 outputs_encoder_part[3],
             )
+            if output_attentions:
+                encoder_attentions = outputs_encoder_part[-1]
         else:
             (
                 memory,
@@ -2385,6 +2310,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 # outputs_encoder_part["intermediate_ref"],
                 outputs_encoder_part["encoder_states"],
             )
+            if output_attentions:
+                encoder_attentions = outputs_encoder_part["attentions"]
 
         #########################################################
         # End Encoder
@@ -2497,14 +2424,19 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             valid_ratios=valid_ratios,
             tgt_mask=attn_mask,
             return_dict=return_dict,
+            output_attentions=output_attentions,
         )
         if not return_dict:
             hs, references = outputs_decoder_part[0], outputs_decoder_part[1]
+            if output_attentions:
+                decoder_attentions = outputs_decoder_part[-1]
         else:
             hs, references = (
                 outputs_decoder_part["intermediate"],
                 outputs_decoder_part["ref_points"],
             )
+            if output_attentions:
+                decoder_attentions = outputs_decoder_part["attentions"]
         #########################################################
         # End Decoder
         # hs: n_dec, bs, nq, d_model
@@ -2541,6 +2473,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                     ref_enc,
                     init_box_proposal,
                     encoder_states,
+                    encoder_attentions,
+                    decoder_attentions,
                 ]
                 # if v is not None
             )
@@ -2551,6 +2485,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             ref_enc=ref_enc,
             init_box_proposal=init_box_proposal,
             encoder_states=encoder_states,
+            encoder_attentions=encoder_attentions,
+            decoder_attentions=decoder_attentions,
         )
         # hs: (n_dec, bs, nq, d_model)
         # references: sigmoid coordinates. (n_dec+1, bs, bq, 4)
@@ -2825,6 +2761,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         labels: List = None,
         output_hidden_states=False,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Returns:
@@ -2850,6 +2787,10 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        encoder_attentions = None
+        decoder_attentions = None
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2906,6 +2847,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             input_query_label,
             attn_mask,
             return_dict=return_dict,
+            output_attentions=output_attentions,
         )
         if not return_dict:
             hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
@@ -2916,6 +2858,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 outputs_transformer_part[4],
                 outputs_transformer_part[5],
             )
+            if output_attentions:
+                encoder_attentions = outputs_transformer_part[-2]
+                decoder_attentions = outputs_transformer_part[-1]
         else:
             hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
                 outputs_transformer_part["hs"],
@@ -2925,6 +2870,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 outputs_transformer_part["init_box_proposal"],
                 outputs_transformer_part["encoder_states"],
             )
+            if output_attentions:
+                encoder_attentions = outputs_transformer_part["encoder_attentions"]
+                decoder_attentions = outputs_transformer_part["decoder_attentions"]
 
         if not return_dict:
             return tuple(
@@ -2938,6 +2886,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                     dn_meta,
                     hs if output_hidden_states or self.output_hidden_states else None,
                     (encoder_states if output_hidden_states or self.output_hidden_states else None),
+                    encoder_attentions,
+                    decoder_attentions,
                 ]
                 if v is not None
             )
@@ -2950,6 +2900,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             denoising_meta=dn_meta,
             decoder_hidden_states=(hs if output_hidden_states or self.output_hidden_states else None),
             encoder_hidden_states=(encoder_states if output_hidden_states or self.output_hidden_states else None),
+            encoder_attentions=encoder_attentions,
+            decoder_attentions=decoder_attentions,
         )
 
 
@@ -2984,6 +2936,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         labels: List = None,
         output_hidden_states=False,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -3026,6 +2979,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        encoder_attentions = None
+        decoder_attentions = None
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -3040,6 +2996,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             pixel_mask=pixel_mask,
             labels=labels,
             return_dict=return_dict,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         if not return_dict:
             (
@@ -3063,6 +3021,10 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             if not self.training and (output_hidden_states or self.model.output_hidden_states):
                 decoder_hidden_states = outputs_model_part[5]
                 encoder_hidden_states = outputs_model_part[6]
+            if output_attentions:
+                encoder_attentions = outputs_model_part[-2]
+                decoder_attentions = outputs_model_part[-1]
+
         else:
             hs = outputs_model_part.hidden_states[1:]
             reference = outputs_model_part.references
@@ -3074,6 +3036,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             if output_hidden_states or self.model.output_hidden_states:
                 decoder_hidden_states = outputs_model_part.decoder_hidden_states
                 encoder_hidden_states = outputs_model_part.encoder_hidden_states
+            if output_attentions:
+                encoder_attentions = outputs_model_part.encoder_attentions
+                decoder_attentions = outputs_model_part.decoder_attentions
 
         # In case num object=0
         hs[0] += self.model.label_enc.weight[0, 0] * 0.0
@@ -3184,6 +3149,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     out["denoising_meta"],
                     (encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
                     (decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
+                    encoder_attentions,
+                    decoder_attentions,
                 ]
                 if v is not None
             )
@@ -3204,6 +3171,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             decoder_hidden_states=(
                 decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
             ),
+            encoder_attentions=encoder_attentions,
+            decoder_attentions=decoder_attentions,
         )
         return dict_outputs
 
