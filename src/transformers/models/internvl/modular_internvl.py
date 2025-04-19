@@ -108,7 +108,6 @@ class InternVLVisionAttention(JanusVisionAttention):
         value_states = self.v_proj(hidden_states)
 
         query_states = self.q_norm(query_states)
-
         key_states = self.k_norm(key_states)
 
         query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
