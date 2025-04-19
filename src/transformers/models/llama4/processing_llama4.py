@@ -122,6 +122,7 @@ class Llama4Processor(ProcessorMixin):
 
         self.fake_image_token = fake_image_token
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.start_of_img_token = start_of_image_token
         self.end_of_img_token = end_of_image_token
         self.img_patch_token = patch_token
@@ -148,6 +149,7 @@ class Llama4Processor(ProcessorMixin):
                         img_string += "<|tile_x_separator|>"
 
                 img_string += "<|tile_y_separator|>"
+
         img_string += "<|image|>"
         img_string += "<|patch|>" * num_patches_per_chunk
         img_string += "<|image_end|>"
@@ -247,9 +249,11 @@ class Llama4Processor(ProcessorMixin):
 
             text = processed_text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

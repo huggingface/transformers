@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -517,7 +518,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_training_kernel(self):
         model_id = "tiiuae/falcon-mamba-7b"
 
