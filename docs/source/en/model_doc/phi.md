@@ -99,26 +99,26 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 - If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [~AutoModel.from_pretrained]. Otherwise, make sure you update Transformers to the latest stable version.
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained(
-    "microsoft/phi-1",
-    torch_dtype=torch.float16,
-    device_map="auto",
-    trust_remote_code=True,
-    attn_implementation="sdpa")
-
-input_ids = tokenizer('''def print_prime(n):
-   """
-   Print all primes between 1 and n
-   """''', return_tensors="pt").to("cuda")
-
-output = model.generate(**input_ids, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
+    ```py
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+    model = AutoModelForCausalLM.from_pretrained(
+        "microsoft/phi-1",
+        torch_dtype=torch.float16,
+        device_map="auto",
+        trust_remote_code=True,
+        attn_implementation="sdpa")
+    
+    input_ids = tokenizer('''def print_prime(n):
+       """
+       Print all primes between 1 and n
+       """''', return_tensors="pt").to("cuda")
+    
+    output = model.generate(**input_ids, cache_implementation="static")
+    print(tokenizer.decode(output[0], skip_special_tokens=True))
+    ```
 
 ## PhiConfig
 
