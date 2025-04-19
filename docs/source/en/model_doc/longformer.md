@@ -85,69 +85,18 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 </hfoption>
 </hfoptions
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [https://huggingface.co/docs/transformers/en/quantization/bitsandbytes](bitsandbytes) to only quantize the weights to 4-bits.
-
-```py
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer, BitsAndBytesConfig
-
-bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
-
-tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = AutoModelForMaskedLM.from_pretrained(
-    "allenai/longformer-base-4096",
-    torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config
-    )
-
-text = (
-"""
-San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
-Spencer, a fifth-year pro, will be placed on injured reserve soon after undergoing surgery Wednesday to repair the ligament. He injured his knee late in the 49ers’ road victory at Seattle on Sept. 14, and missed last week’s victory over Detroit.
-Tarell Brown and Donald Strickland will compete to replace Spencer with the 49ers, who kept 12 defensive backs on their 53-man roster to start the season. Brown, a second-year pro, got his first career interception last weekend while filling in for Strickland, who also sat out with a knee injury.
-"""
-)
-
-input_ids = tokenizer([text], return_tensors="pt")["input_ids"]
-logits = model(input_ids).logits
-
-masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-probs = logits[0, masked_index].softmax(dim=0)
-values, predictions = probs.topk(5)
-tokenizer.decode(predictions).split()
-```
 
 ## Notes
 
-- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [~AutoModel.from_pretrained]. Otherwise, make sure you update Transformers to the latest stable version.
+- Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.
+- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [example](https://huggingface.co/docs/transformers/en/model_doc/longformer#transformers.LongformerModel.forward.example) for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
+- [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
 
-```python
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = AutoModelForMaskedLM.from_pretrained(
-    "allenai/longformer-base-4096",
-    trust_remote_code=True,
-    )
-
-text = (
-"""
-San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
-Spencer, a fifth-year pro, will be placed on injured reserve soon after undergoing surgery Wednesday to repair the ligament. He injured his knee late in the 49ers’ road victory at Seattle on Sept. 14, and missed last week’s victory over Detroit.
-Tarell Brown and Donald Strickland will compete to replace Spencer with the 49ers, who kept 12 defensive backs on their 53-man roster to start the season. Brown, a second-year pro, got his first career interception last weekend while filling in for Strickland, who also sat out with a knee injury.
-"""
-)
-
-input_ids = tokenizer([text], return_tensors="pt")["input_ids"]
-logits = model(input_ids).logits
-
-masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-probs = logits[0, masked_index].softmax(dim=0)
-values, predictions = probs.topk(5)
-tokenizer.decode(predictions).split()
-```
+  ```py
+    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt")
+    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
+    loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
+    ```
 
 ## LongformerConfig
 
