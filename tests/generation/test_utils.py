@@ -130,6 +130,7 @@ VLM_CLASS_NAMES = [
     "gemma3",
     "mistral3",
     "chameleon",
+    "internvl",
     "qwen2_5_omni",
 ]
 
@@ -224,12 +225,9 @@ class GenerationTesterMixin:
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
             for key in [
-                "image_token_index",
                 "image_token_id",
-                "video_token_index",
                 "video_token_id",
                 "vision_start_token_id",
-                "audio_token_index",
                 "audio_start_token_id",
                 "audio_end_token_id",
                 "vision_end_token_id",
@@ -2075,9 +2073,6 @@ class GenerationTesterMixin:
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
-        # Monkey-patching the HybridCache at test-time to continue testing compilation support
-        HybridCache.is_compileable = True
-
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2174,9 +2169,6 @@ class GenerationTesterMixin:
         Tests that all optional outputs are behaving as expected when compilation is triggered.
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
-        # Monkey-patching the HybridCache at test-time to continue testing compilation support
-        HybridCache.is_compileable = True
-
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")

@@ -327,17 +327,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 is not None
             ):
                 attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
             if attribute_used:
                 break
         if attribute_used:
@@ -351,8 +340,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
         "image_seq_length",
         "video_seq_length",
         "image_size",
