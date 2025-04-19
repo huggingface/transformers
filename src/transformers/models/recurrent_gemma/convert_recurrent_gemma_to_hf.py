@@ -71,7 +71,7 @@ LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False, dtype=torch.float32):
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
-    model_state_dict = torch.load(input_base_path, map_location="cpu")
+    model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)
 
     REPLACEMENT = {
         "blocks.": "layers.",

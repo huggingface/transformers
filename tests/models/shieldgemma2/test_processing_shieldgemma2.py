@@ -162,29 +162,14 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest("Processor has no chat template")
 
         images = self.prepare_image_inputs(batch_size=2)
-        print(images)
         processed_inputs = processor(images=images)
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
         self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_image_chat_template_accepts_processing_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_image_chat_template_batched(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_image_chat_template_dict_torch(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_image_chat_template_single(self):
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
