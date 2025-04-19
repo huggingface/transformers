@@ -264,10 +264,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="Glm uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
     @is_flaky()
     def test_custom_4d_attention_mask(self):
         """Overwrite the common test to use atol=1e-3 instead of 1e-4. Can still rarely fail, thus flaky."""

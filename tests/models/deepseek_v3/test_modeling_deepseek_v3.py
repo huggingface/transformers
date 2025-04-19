@@ -429,9 +429,23 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    @unittest.skip(reason="Deepseek-V3 uses MLA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
-        pass
+        """
+        Overwritting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs["input_ids"].shape
+        # difference: last dim
+        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        v_embed_dim = config.v_head_dim
+        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        # build the full cache shapes
+        num_hidden_layers = config.num_hidden_layers
+        all_cache_shapes = [
+            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
+        ]
+        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @require_torch_sdpa
     @slow

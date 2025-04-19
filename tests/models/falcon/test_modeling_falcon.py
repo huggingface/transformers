@@ -264,51 +264,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_past_key_values_format(self):
-        # Falcon can have different numbers of KV-heads than the number of query heads, so we need
-        # to override this test to use the right head counts.
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # If it doesn't support cache, pass the test
-            if not hasattr(config, "use_cache"):
-                self.skipTest(reason="Model does not support cache")
-
-            model = model_class(config).to(torch_device)
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="Model does not return past_key_values")
-
-            num_hidden_layers = (
-                getattr(config, "decoder_layers", None)
-                or getattr(config, "num_decoder_layers", None)
-                or config.num_hidden_layers
-            )
-            num_attention_heads = getattr(config, "num_kv_heads", config.num_attention_heads)
-            embed_dim = getattr(config, "d_model", config.hidden_size)
-            per_head_embed_dim = embed_dim // num_attention_heads
-
-            past_kv = outputs["past_key_values"]
-            self.assertEqual(len(past_kv), num_hidden_layers)
-
-            batch_size, seq_length = inputs["input_ids"].shape
-            for i in range(num_hidden_layers):
-                if config.new_decoder_architecture:
-                    num_attention_heads = config.num_attention_heads
-                elif config.multi_query:
-                    num_attention_heads = 1
-                self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
-                self.assertEqual(
-                    past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
-                )
-                self.assertEqual(
-                    past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
-                )
-
     @parameterized.expand([("linear",), ("dynamic",)])
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->Falcon
     def test_model_rope_scaling_from_config(self, scaling_type):
