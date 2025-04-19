@@ -1281,7 +1281,7 @@ class JanusModel(JanusPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = input_ids == self.config.image_token_index
+            image_attention_mask = input_ids == self.config.image_token_id
 
             embed_dim = inputs_embeds.shape[-1]
             image_features = image_embeds.reshape(-1, embed_dim)
