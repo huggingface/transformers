@@ -228,7 +228,9 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 ### Specify Inference Backend
 
-The automatically selected backend may not always be the most suitable for certain devices. 
+AutoRound automatically selects the  backend for each layer based on compatibility. In general, the priority order is Marlin > ExLLaMAV2 > Triton, but the final choice depends on factors such as group size, bit width, packing format, hardware device, and other implementation details.
+
+The backend may not always be the most suitable for certain devices. 
 You can specify your preferred backend such as "ipex" for CPU and CPU, "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
 
 ```python

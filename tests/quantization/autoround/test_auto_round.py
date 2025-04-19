@@ -166,6 +166,23 @@ class AutoRoundTest(unittest.TestCase):
         text = "There is a girl who likes adventure,"
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
         tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
+    @require_intel_extension_for_pytorch
+    def test_convert_from_awq_cpu(self):
+        """
+        Simple test that checks if auto-round work properly wth gptq format
+        """
+        model_name = "casperhansen/opt-125m-awq"
+
+        quantization_config = AutoRoundConfig()
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="cpu", quantization_config=quantization_config, torch_dtype="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        text = "There is a girl who likes adventure,"
+        inputs = tokenizer(text, return_tensors="pt").to(model.device)
+        tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
 
     def test_mixed_bits(self):
         """
