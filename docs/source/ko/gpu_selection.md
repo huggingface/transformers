@@ -74,7 +74,7 @@ CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 ```
 
-> [!주의]
+> [!WARNING]
 > 다른 환경 변수와 마찬가지로, CUDA_VISIBLE_DEVICES를 커맨드 라인에 추가하는 대신 export하여 설정할 수도 있습니다. 그러나 이 방식은 환경 변수가 어떻게 설정되었는지를 잊어버릴 경우, 잘못된 GPU를 사용할 위험이 있기 때문에 권장하지 않습니다. 특정 학습 실행에 대해 동일한 커맨드 라인에서 환경 변수를 설정하는 것이 일반적인 방법입니다.
 
 `CUDA_DEVICE_ORDER`는 GPU의 순서를 제어하는 데 사용할 수 있는 대체 환경 변수입니다. 이 변수를 사용하면 다음과 같은 방식으로 GPU 순서를 지정할 수 있습니다:
