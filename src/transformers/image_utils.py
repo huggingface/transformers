@@ -376,7 +376,7 @@ def infer_channel_dimension_format(
 
     if image.shape[first_dim] in num_channels and image.shape[last_dim] in num_channels:
         logger.warning(
-            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension."
+            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension."
         )
         return ChannelDimension.FIRST
     elif image.shape[first_dim] in num_channels:
