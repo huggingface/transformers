@@ -169,7 +169,7 @@ class AutoRoundTest(unittest.TestCase):
     @require_intel_extension_for_pytorch
     def test_convert_from_awq_cpu(self):
         """
-        Simple test that checks if auto-round work properly wth gptq format
+        Simple test that checks if auto-round work properly wth awq format
         """
         model_name = "casperhansen/opt-125m-awq"
 
