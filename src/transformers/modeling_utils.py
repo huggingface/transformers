@@ -3457,6 +3457,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
 
+        # if using tensor parallel we need to gather the tensors in state dict
+        gathered_state_dict = {}
+        for key, value in state_dict.items():
+            if hasattr(value, "_local_tensor"):
+                gathered_state_dict[key] = value.to_local().cpu()
+            else:
+                gathered_state_dict[key] = value.cpu()
+
+        del state_dict
+        state_dict = gathered_state_dict
+
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
