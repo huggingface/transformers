@@ -33,7 +33,7 @@ rendered properly in your Markdown viewer.
 You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
 
 > [!TIP]
-> Click on the MBart models in the right sidebar for more examples of applying MBart to different language tasks.
+> Click on the mBart models in the right sidebar for more examples of applying mBart to different language tasks.
 
 The example below demonstrates how to translate sentences with [`Pipeline`] or [`AutoModel`].
 
@@ -90,26 +90,33 @@ print("Translated:", translated)
   </div>
 </div>
 
-# MBart-50
+# mBart-50
 
-**[facebook/mbart-large-50](https://huggingface.co/papers/2001.08210)** is a multilingual machine translation model that supports 50 languages. It extends the original [mBART](https://huggingface.co/facebook/mbart-large-cc25) checkpoint (`mbart-large-cc25`) by adding embedding layers. MBart-50 was one of the first models to show that you can scale multilingual translation to 50+ languages using a single model. It can translate between any pair of languages, not just English-centric pairs! The training uses language codes which are prefixed to both input and output, helping the model stay on track with which languages to focus on. Multilingual finetuning improves on average 1 BLEU over the strongest baselines (being either multilingual from scratch or bilingual finetuning) while improving 9.3 BLEU on average over bilingual baselines from scratch.
+**[facebook/mbart-large-50](https://huggingface.co/papers/2001.08210)** is a multilingual machine translation model that supports 50 languages. It extends the original [mBart](https://huggingface.co/facebook/mbart-large-cc25) checkpoint (`mbart-large-cc25`) by adding embedding layers. mBart-50 was one of the first models to show that you can scale multilingual translation to 50+ languages using a single model. It can translate between any pair of languages, not just English-centric pairs! The training uses language codes which are prefixed to both input and output, helping the model stay on track with which languages to focus on. Multilingual finetuning improves on average 1 BLEU over the strongest baselines (being either multilingual from scratch or bilingual finetuning) while improving 9.3 BLEU on average over bilingual baselines from scratch.
 
 You can find all original "facebook/mbart-large-50" checkpoints under [facebook/mbart-large-50](https://huggingface.co/facebook/mbart-large-50)
 
 > [!TIP]
-> Click on the MBart-50 models in the right sidebar for more examples of applying MBart-50 to different translation tasks.
+> Click on the mBart-50 models in the right sidebar for more examples of applying mBart-50 to different translation tasks.
 
-The example below demonstrates how to translate sentences with [`Pipeline`] or [`AutoModel`].
+The example below demonstrates how to translate text with [`Pipeline`], [`AutoModel`], and from the command line with the [facebook/mbart-large-50-many-to-many-mmt](https://huggingface.co/facebook/mbart-large-50-many-to-many-mmt) checkpoint. Usage is different for other mBART models like [facebook/mbart-large-50-one-to-many-mmt](https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt). Refer to their Hub model cards for more details.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```python
+import torch
 from transformers import pipeline
 
-translator = pipeline("translation", model="facebook/mbart-large-50-many-to-many-mmt", tokenizer="facebook/mbart-large-50-many-to-many-mmt", src_lang="ar_AR", tgt_lang="en_XX")
-result = translator("الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا.")
-print(result)
+pipeline = pipeline(
+    task="translation",
+    model="facebook/mbart-large-50-many-to-many-mmt",
+    device=0,
+    torch_dtype=torch.float16,
+    src_lang="en_XX",
+    tgt_lang="fr_XX",
+)
+pipeline("UN Chief Says There Is No Military Solution in Syria")
 ```
 
 </hfoption>
@@ -151,47 +158,47 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
 
-## MBartConfig
+## mBartConfig
 
 [[autodoc]] MBartConfig
 
-## MBartTokenizer
+## mBartTokenizer
 
 [[autodoc]] MBartTokenizer
     - build_inputs_with_special_tokens
 
-## MBartTokenizerFast
+## mBartTokenizerFast
 
 [[autodoc]] MBartTokenizerFast
 
-## MBart50Tokenizer
+## mBart50Tokenizer
 
 [[autodoc]] MBart50Tokenizer
 
-## MBart50TokenizerFast
+## mBart50TokenizerFast
 
 [[autodoc]] MBart50TokenizerFast
 
 <frameworkcontent>
 <pt>
 
-## MBartModel
+## mBartModel
 
 [[autodoc]] MBartModel
 
-## MBartForConditionalGeneration
+## mBartForConditionalGeneration
 
 [[autodoc]] MBartForConditionalGeneration
 
-## MBartForQuestionAnswering
+## mBartForQuestionAnswering
 
 [[autodoc]] MBartForQuestionAnswering
 
-## MBartForSequenceClassification
+## mBartForSequenceClassification
 
 [[autodoc]] MBartForSequenceClassification
 
-## MBartForCausalLM
+## mBartForCausalLM
 
 [[autodoc]] MBartForCausalLM
     - forward
@@ -199,12 +206,12 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 </pt>
 <tf>
 
-## TFMBartModel
+## TFmBartModel
 
 [[autodoc]] TFMBartModel
     - call
 
-## TFMBartForConditionalGeneration
+## TFmBartForConditionalGeneration
 
 [[autodoc]] TFMBartForConditionalGeneration
     - call
@@ -212,7 +219,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 </tf>
 <jax>
 
-## FlaxMBartModel
+## FlaxmBartModel
 
 [[autodoc]] FlaxMBartModel
     - __call__
