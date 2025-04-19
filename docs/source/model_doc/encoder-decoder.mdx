@@ -1,0 +1,66 @@
+---
+id: encoder-decoder
+slug: encoder-decoder
+title: Encoder-Decoder Model Documentation
+---
+
+import { Playground } from "@site/src/components/Playground";
+
+# Encoder-Decoder Models
+
+This document describes how to instantiate, save, and fine-tune `EncoderDecoderModel` in the Transformers library.
+
+## How to create a model?
+
+To create and save an `EncoderDecoderModel`, use the following example:
+
+```python title="Example: Create & Save an EncoderDecoderModel"
+from transformers import EncoderDecoderModel
+
+# Load pretrained encoder & decoder
+model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+    "facebook/bart-base",
+    "facebook/bart-base"
+)
+
+# Save the combined model locally
+model.save_pretrained("./encoder-decoder-example")
+```
+
+## How to fine‑tune this model?
+
+To fine‑tune an existing `EncoderDecoderModel`, you can run a simple training loop as shown below:
+
+```python title="Example: Fine‑Tune an EncoderDecoderModel"
+from transformers import EncoderDecoderModel, Trainer, TrainingArguments
+from datasets import load_dataset
+
+# Load a tiny sample dataset
+dataset = load_dataset(
+    "patrickvonplaten/cnn_dailymail-sample",
+    "3.0.0",
+    split="train[:1%]"
+)
+
+# Load the model you just saved
+model = EncoderDecoderModel.from_pretrained("./encoder-decoder-example")
+
+training_args = TrainingArguments(
+    output_dir="./fine-tune-results",
+    num_train_epochs=1,
+    per_device_train_batch_size=2
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset
+)
+
+# Run one epoch of fine‑tuning
+trainer.train()
+```
+
+---
+
+*For more examples and advanced usage, refer to the [main Transformers documentation](https://huggingface.co/docs/transformers).*
