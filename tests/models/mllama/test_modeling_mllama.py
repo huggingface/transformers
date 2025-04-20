@@ -32,9 +32,11 @@ from transformers.cache_utils import Cache
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     cleanup,
+    Expectations,
     require_bitsandbytes,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -585,6 +587,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "If I had to write a haiku about my life, I think it would be something like:\n\"Life is a messy stream\nTwists and turns, ups"  # fmt: skip
 
+        print(f"decoded_output: {decoded_output}")
+        print(f"expected_output: {expected_output}")
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -625,7 +629,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_batched_generate(self):
@@ -653,8 +657,15 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a"  # fmt: skip
-
+        expected_outputs = Expectations(
+                {
+                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                 }) # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+        print(f"decoded_output: {decoded_output}")
+        print(f"expected_output: {expected_output}")
+ 
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -672,7 +683,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_multi_image_generate(self):
