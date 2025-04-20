@@ -151,7 +151,7 @@ class Qwen2VLProcessor(ProcessorMixin):
 
         text = text.copy()  # below lines change text in-place
 
-        if image_grid_thw is not None:
+        if images is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
