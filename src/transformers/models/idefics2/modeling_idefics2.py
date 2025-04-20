@@ -34,7 +34,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -1293,7 +1292,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

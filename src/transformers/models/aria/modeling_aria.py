@@ -41,7 +41,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_available
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaTextConfig
@@ -1160,7 +1159,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1417,7 +1415,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         return image_features
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(
@@ -1510,11 +1507,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
             else:
-                image_embeds = input_ids == self.config.image_token_index
+                image_embeds = input_ids == self.config.image_token_id
                 special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
                 n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
             image_features = self.get_image_features(
