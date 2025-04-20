@@ -20,7 +20,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import ModelOutput, PreTrainedModel
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_univnet import UnivNetConfig
 
@@ -46,8 +47,8 @@ class UnivNetModelOutput(ModelOutput):
             The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
-    waveforms: torch.FloatTensor = None
-    waveform_lengths: torch.FloatTensor = None
+    waveforms: Optional[torch.FloatTensor] = None
+    waveform_lengths: Optional[torch.FloatTensor] = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):

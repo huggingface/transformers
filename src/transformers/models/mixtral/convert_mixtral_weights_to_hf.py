@@ -94,7 +94,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu", weights_only=True)
+        for i in range(8)
     ]
 
     merged_state_dict = {}

@@ -60,8 +60,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             plus the initial embedding outputs.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    cls_token_value: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cls_token_value: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -449,7 +449,9 @@ class CvtStage(nn.Module):
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        drop_path_rates = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage], device="cpu")
+        ]
 
         self.layers = nn.Sequential(
             *[

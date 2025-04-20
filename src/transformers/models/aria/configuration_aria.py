@@ -258,6 +258,9 @@ class AriaConfig(PretrainedConfig):
     """
 
     model_type = "aria"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(

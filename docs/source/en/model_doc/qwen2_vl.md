@@ -278,6 +278,10 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2VLConfig
 
+## Qwen2VLTextConfig
+
+[[autodoc]] Qwen2VLTextConfig
+
 ## Qwen2VLImageProcessor
 
 [[autodoc]] Qwen2VLImageProcessor

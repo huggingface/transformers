@@ -245,7 +245,8 @@ class ConvNextV2Encoder(nn.Module):
         super().__init__()
         self.stages = nn.ModuleList()
         drop_path_rates = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").split(config.depths)
         ]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
@@ -287,7 +288,6 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -307,9 +307,12 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ConvNextV2GRN):
+            module.weight.data.zero_()
+            module.bias.data.zero_()
 
 
 CONVNEXTV2_START_DOCSTRING = r"""
@@ -365,7 +368,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -432,7 +435,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
