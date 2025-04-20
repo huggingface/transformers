@@ -28,7 +28,8 @@ class PLMConfig(PretrainedConfig):
     PLM model according to the specified arguments, defining the model architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the PLM model.
+    defaults will yield a similar configuration to that of
+    PLM-1.8B-Base [PLM-Team/PLM-1.8B-Base](https://huggingface.co/PLM-Team/PLM-1.8B-Base).
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
             Vocabulary size of the PLM model. Defines the number of different tokens that can be represented by the
