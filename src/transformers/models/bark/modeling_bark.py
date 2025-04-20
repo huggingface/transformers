@@ -1599,15 +1599,14 @@ class BarkModel(BarkPreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-    def enable_cpu_offload(self, gpu_id: Optional[int] = 0):
+    def enable_cpu_offload(self, accelerator_id: Optional[int] = 0):
         r"""
         Offloads all sub-models to CPU using accelerate, reducing memory usage with a low impact on performance. This
-        method moves one whole sub-model at a time to the GPU when it is used, and the sub-model remains in GPU until
-        the next sub-model runs.
+        method moves one whole sub-model at a time to the accelerator when it is used, and the sub-model remains in accelerator until the next sub-model runs.
 
         Args:
-            gpu_id (`int`, *optional*, defaults to 0):
-                GPU id on which the sub-models will be loaded and offloaded.
+            accelerator_id (`int`, *optional*, defaults to 0):
+                accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
@@ -1617,9 +1616,9 @@ class BarkModel(BarkPreTrainedModel):
         device_type = "cuda"
         if is_torch_accelerator_available():
             device_type = torch.accelerator.current_accelerator().type
-        device = torch.device(f"{device_type}:{gpu_id}")
+        device = torch.device(f"{device_type}:{accelerator_id}")
 
-        torch_accelerator_module = getattr(torch, device_type) if hasattr(torch, device_type) else torch.cuda
+        torch_accelerator_module = getattr(torch, device_type)
         if self.device.type != "cpu":
             self.to("cpu")
             torch_accelerator_module.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
