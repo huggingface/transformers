@@ -1,4 +1,3 @@
-import math
 from typing import Callable, Optional, Tuple
 
 import torch
@@ -15,12 +14,12 @@ from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaForSequenceClassification,
     LlamaRotaryEmbedding,
-    LlamaForTokenClassification,
     apply_rotary_pos_emb,
     eager_attention_forward,
     rotate_half,
@@ -87,7 +86,7 @@ class PLMMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-    
+
     def forward(self, hidden_state):
         h = self.up_proj(hidden_state)
         h = self.act_fn(h)
@@ -121,7 +120,7 @@ class PLMAttention(nn.Module):
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
         else:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-     
+
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -215,7 +214,6 @@ class PLMAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-    
 
 
 class PLMDecoderLayer(LlamaDecoderLayer, nn.Module):

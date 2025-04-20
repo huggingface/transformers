@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 class PLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PLMModel`]. It is used to instantiate a
-    PLM model according to the specified arguments, defining the model architecture. 
+    PLM model according to the specified arguments, defining the model architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PLM model.

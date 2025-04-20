@@ -19,12 +19,11 @@ import unittest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, PLMConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, PLMConfig, is_torch_available
 from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,9 +41,9 @@ if is_torch_available():
         PLMForCausalLM,
         PLMModel,
     )
-    from transformers.models.plm.modeling_plm import (
-        PLMRotaryEmbedding,
-    )
+    # from transformers.models.plm.modeling_plm import (
+    #     PLMRotaryEmbedding,
+    # )
 
 
 
@@ -291,10 +290,6 @@ class PLMModelTester:
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
-    
-
-
-
 
 
 @require_torch
@@ -498,7 +493,6 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     #     ).to(torch_device)
 
     #     self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-        
     #     model_eager = PLMForCausalLM.from_pretrained(
     #         "PLM-Team/PLM-1.8B-Base",
     #         torch_dtype=torch.float16,
