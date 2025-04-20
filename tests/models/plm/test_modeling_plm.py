@@ -40,6 +40,8 @@ if is_torch_available():
     from transformers import (
         PLMForCausalLM,
         PLMModel,
+        PLMForSequenceClassification,
+        PLMForTokenClassification,
     )
 
     # from transformers.models.plm.modeling_plm import (
@@ -319,6 +321,8 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         (
             PLMModel,
             PLMForCausalLM,
+            PLMForSequenceClassification,
+            PLMForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -327,7 +331,10 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": PLMModel,
+            "text-classification": PLMForSequenceClassification,
+            "token-classification": PLMForTokenClassification,
             "text-generation": PLMForCausalLM,
+            "zero-shot": PLMForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -422,6 +429,33 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_PLM_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = PLMForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
+    def test_Qwen2_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = PLMForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     #  def test_model(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
