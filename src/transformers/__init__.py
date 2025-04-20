@@ -344,7 +344,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger",
         "model_addition_debugger_context",
     ]
     _import_structure["activations"] = []
@@ -910,7 +909,6 @@ if TYPE_CHECKING:
             convert_and_export_with_cache,
         )
         from .model_debugging_utils import (
-            model_addition_debugger,
             model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update

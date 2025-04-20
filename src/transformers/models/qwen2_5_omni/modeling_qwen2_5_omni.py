@@ -43,6 +43,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
@@ -66,6 +67,12 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 if is_flash_attn_available():
@@ -327,9 +334,9 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.spatial_merge_size
-        image_token_id = self.config.image_token_index
-        video_token_id = self.config.video_token_index
-        audio_token_id = self.config.audio_token_index
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        audio_token_id = self.config.audio_token_id
         vision_start_token_id = self.config.vision_start_token_id
         audio_start_token_id = self.config.audio_start_token_id
         position_id_per_seconds = self.config.position_id_per_seconds
@@ -1785,7 +1792,7 @@ QWEN2_5_OMNI_ATTENTION_CLASSES = {
 
 
 class Qwen2_5OmniDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int):
+    def __init__(self, config: Qwen2_5OmniTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -2035,7 +2042,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -2053,6 +2060,10 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -2439,7 +2450,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
                     raise ValueError("length of audio_features should match audio_output_lengths")
                 audio_mask = (
-                    (input_ids == self.config.audio_token_index)
+                    (input_ids == self.config.audio_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2451,7 +2462,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
-                    (input_ids == self.config.image_token_index)
+                    (input_ids == self.config.image_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2463,7 +2474,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 video_mask = (
-                    (input_ids == self.config.video_token_index)
+                    (input_ids == self.config.video_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2747,7 +2758,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -2765,6 +2776,10 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
