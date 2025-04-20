@@ -33,6 +33,7 @@ if is_quark_available():
     from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
 
 
+@require_quark
 class QuarkConfigTest(unittest.TestCase):
     def test_commmon_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
