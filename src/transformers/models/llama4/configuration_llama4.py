@@ -228,9 +228,12 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layer_interval (`int`, *optional*, defaults to 4): TODO
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
-        attn_temperature_tuning (`int`, *optional*, defaults to 4): TODO
+        attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
+            Whether to dynamically scale the attention temperature for each query token based on sequence length.
+            Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
         floor_scale (`int`, *optional*, defaults to 8192): TODO
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
+        cache_implementation (`<fill_type>`, *optional*, defaults to `"hybrid"`): <fill_docstring>
 
     Example:
     """
@@ -290,9 +293,10 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
-        attn_temperature_tuning=4,
+        attn_temperature_tuning=True,
         floor_scale=8192,
         attn_scale=0.1,
+        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -314,7 +318,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
         self.attention_bias = False
-
+        self.cache_implementation = cache_implementation
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -391,6 +395,11 @@ class Llama4Config(PretrainedConfig):
     ```"""
 
     model_type = "llama4"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",
@@ -417,7 +426,6 @@ class Llama4Config(PretrainedConfig):
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
-
         if text_config is None:
             self.text_config = Llama4TextConfig()
             logger.info("text_config is None, using default llama4 text config")

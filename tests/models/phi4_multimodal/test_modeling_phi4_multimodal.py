@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,6 +85,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=48,
             depthwise_seperable_out_channel=128,
             nemo_conv_channels=128,
+            initializer_range=1e-5,
         ),
         vision_config=Phi4MultimodalVisionConfig(
             num_hidden_layers=2,
@@ -93,6 +93,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=64,
             num_attention_heads=8,
             crop_size=16,
+            initializer_range=1e-5,
         ),
     ):
         self.parent = parent

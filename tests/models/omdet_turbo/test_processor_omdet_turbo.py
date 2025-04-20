@@ -44,15 +44,16 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = OmDetTurboProcessor
     text_input_name = "classes_input_ids"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = DetrImageProcessor()
         tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
 
         processor = OmDetTurboProcessor(image_processor, tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.input_keys = [
+        cls.input_keys = [
             "tasks_input_ids",
             "tasks_attention_mask",
             "classes_input_ids",
@@ -62,9 +63,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pixel_mask",
         ]
 
-        self.batch_size = 5
-        self.num_queries = 5
-        self.embed_dim = 3
+        cls.batch_size = 5
+        cls.num_queries = 5
+        cls.embed_dim = 3
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -72,8 +73,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_fake_omdet_turbo_output(self):
         classes = self.get_fake_omdet_turbo_classes()
@@ -112,15 +114,16 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         torch.testing.assert_close(post_processed[0]["boxes"][0], expected_box_slice, rtol=1e-4, atol=1e-4)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = OmDetTurboProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = OmDetTurboProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = OmDetTurboProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = OmDetTurboProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)

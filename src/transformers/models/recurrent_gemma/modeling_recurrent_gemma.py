@@ -581,6 +581,13 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
                 torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+        elif isinstance(module, RecurrentGemmaRMSNorm):
+            module.weight.data.fill_(1.0)
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
@@ -764,7 +771,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu"]:
+        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu", "npu"]:
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213

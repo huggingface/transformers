@@ -62,6 +62,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -720,6 +721,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class YolosImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
