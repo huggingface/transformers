@@ -410,7 +410,7 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @unittest.skip("PLM uses MLA so it is not compatible with the standard cache format")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
-    # breakpoint()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -540,7 +540,7 @@ class PLMIntegrationTest(unittest.TestCase):
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
 
-    @classmeth#od
+    @classmethod
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
