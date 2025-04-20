@@ -23,9 +23,8 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
-from tqdm.auto import tqdm
 
-from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
+from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -584,7 +583,7 @@ class DefaultFlowCallback(TrainerCallback):
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         current_time = time.time()
-        
+
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
@@ -604,7 +603,11 @@ class DefaultFlowCallback(TrainerCallback):
             elif current_time - self.last_eval_time >= args.eval_minutes * 60:
                 control.should_evaluate = True
                 self.last_eval_time = current_time
-        elif args.eval_strategy == IntervalStrategy.STEPS and state.global_step % state.eval_steps == 0 and args.eval_delay <= state.global_step:
+        elif (
+            args.eval_strategy == IntervalStrategy.STEPS
+            and state.global_step % state.eval_steps == 0
+            and args.eval_delay <= state.global_step
+        ):
             control.should_evaluate = True
 
         # Save
@@ -614,7 +617,11 @@ class DefaultFlowCallback(TrainerCallback):
             elif current_time - self.last_save_time >= args.save_minutes * 60:
                 control.should_save = True
                 self.last_save_time = current_time
-        elif args.save_strategy == SaveStrategy.STEPS and state.save_steps > 0 and state.global_step % state.save_steps == 0:
+        elif (
+            args.save_strategy == SaveStrategy.STEPS
+            and state.save_steps > 0
+            and state.global_step % state.save_steps == 0
+        ):
             control.should_save = True
 
         # End training
@@ -657,42 +664,17 @@ class ProgressCallback(TrainerCallback):
                 Maximum length of strings to display in logs.
                 Longer strings will be truncated with a message.
         """
-        self.training_bar = None
-        self.prediction_bar = None
         self.max_str_len = max_str_len
+        self.current_step = 0
 
     def on_train_begin(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
-            self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
         self.current_step = 0
 
     def on_step_end(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
-            self.training_bar.update(state.global_step - self.current_step)
-            self.current_step = state.global_step
-
-    def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_world_process_zero and has_length(eval_dataloader):
-            if self.prediction_bar is None:
-                self.prediction_bar = tqdm(
-                    total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True
-                )
-            self.prediction_bar.update(1)
-
-    def on_evaluate(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
-            if self.prediction_bar is not None:
-                self.prediction_bar.close()
-            self.prediction_bar = None
-
-    def on_predict(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
-            if self.prediction_bar is not None:
-                self.prediction_bar.close()
-            self.prediction_bar = None
+        self.current_step = state.global_step
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_world_process_zero and self.training_bar is not None:
+        if state.is_world_process_zero:
             # make a shallow copy of logs so we can mutate the fields copied
             # but avoid doing any value pickling.
             shallow_logs = {}
@@ -708,12 +690,7 @@ class ProgressCallback(TrainerCallback):
             # round numbers so that it looks better in console
             if "epoch" in shallow_logs:
                 shallow_logs["epoch"] = round(shallow_logs["epoch"], 2)
-            self.training_bar.write(str(shallow_logs))
-
-    def on_train_end(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
-            self.training_bar.close()
-            self.training_bar = None
+            logger.info(str(shallow_logs))
 
 
 class PrinterCallback(TrainerCallback):
