@@ -19,9 +19,9 @@ import logging
 import os
 import random
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
-from collections import Counter
 
 import datasets
 import evaluate
@@ -474,7 +474,7 @@ def main():
         total = sum(label_counts.values())
         logger.info(f"Class distribution in {split_name} set:")
         for label, count in label_counts.items():
-            logger.info(f"  Label {label}: {count} ({count/total:.2%})")
+            logger.info(f"  Label {label}: {count} ({count / total:.2%})")
 
     if training_args.do_train:
         if "train" not in raw_datasets:
