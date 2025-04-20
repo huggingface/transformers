@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
-    from transformers.models.deepseek_v2 import DeepseekV2RotaryEmbedding
+    from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
 class DeepseekV2ModelTester:
