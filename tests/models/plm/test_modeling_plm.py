@@ -39,9 +39,10 @@ if is_torch_available():
 
     from transformers import (
         PLMForCausalLM,
-        PLMModel,
         PLMForSequenceClassification,
         PLMForTokenClassification,
+        PLMModel,
+        
     )
 
     # from transformers.models.plm.modeling_plm import (
