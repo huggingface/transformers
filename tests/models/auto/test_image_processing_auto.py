@@ -75,7 +75,7 @@ class AutoImageProcessorTest(unittest.TestCase):
 
     def test_image_processor_from_new_filename(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_tmpfile = Path(tmpdirname) / "image_preprocessor_config.json"
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
                 {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},

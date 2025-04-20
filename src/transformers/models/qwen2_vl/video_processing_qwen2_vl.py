@@ -63,7 +63,7 @@ if is_torch_available():
     import torch
 
 
-class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -102,10 +102,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_kwargs = Qwen2VLFastVideoProcessorInitKwargs
+    valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLFastVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
