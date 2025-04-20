@@ -130,6 +130,7 @@ VLM_CLASS_NAMES = [
     "gemma3",
     "mistral3",
     "chameleon",
+    "internvl",
     "qwen2_5_omni",
 ]
 
