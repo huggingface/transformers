@@ -33,8 +33,6 @@ from ...image_processing_utils import (
     get_size_dict,
 )
 
-from .image_processing_pix2struct import render_text
-
 from ...image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
@@ -78,6 +76,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from .image_processing_pix2struct import render_text
 
 class Pix2StructFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     patch_size: Optional[dict[str, int]]
@@ -127,7 +126,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
                 rendered onto the input images.
             header_text (`Union[List[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
-            font_bytes (`bytes`, *optional*, default to `None`):
+            font_bytes (`str`, *optional*, default to `None`):
                 The font bytes to use for rendering the header text. Only has an effect if `image_processor.is_vqa` is
                 `True`.
             font_path (`str`, *optional*, default to `None`):
@@ -156,49 +155,30 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         max_patches: Optional[int],
         is_vqa: Optional[bool],
         header_text: Optional[Union[List[str], str]],
-        font_bytes: Optional[str],
+        font_bytes: Optional[bytes],
         font_path: Optional[str]
     ) -> BatchFeature:
-
-        # make image list
-
-        # convert rgb if needed
-        # 
-        # convert numpy array
-        # 
-        # render header if is_vqa, render-text first, resize original image accordingly and paste with the header part 
-        # header-image可以批量生产，size需要由image与header-image一起决定，resize只有在image shape相同，resize shape也相同的情况下才能使用v2的api
-        # 
-        # normalize if needed
-        # 
-        # extract flattened patches 
-
-        # images 为经过rgb转化，input-format调整，并且放置到device上的list tensor
 
         if is_vqa:
             if header_text is None:
                 raise ValueError("A header text must be provided for VQA models.")
 
             if isinstance(header_text, str):
-                header_text = [header_text] * len(images)
-
-            header_images = [render_text(t, font_bytes=font_bytes, font_path=font_path) for t in header_text]
-            header_images = [self._process_image(img) for img in header_images]
-            
-
-            header_images = []
-            header_new_size = []
-            img_new_size = []
-            for i, text in enumerate(header_text):
-                image = images[i]
-                header_image = self._process_image(render_text(text, font_bytes=font_bytes, font_path=font_path))
-                new_width = max(header_image.width, image.width)
-                new_height = int(image.height * (new_width / image.width))
-                new_header_height = int(header_image.height * (new_width / header_image.width))
-                header_images.append(header_image)
-                header_new_size.append(SizeDict(height=new_header_height, width=new_width))
-                img_new_size.append(SizeDict(height=new_height, width=new_width))
-
+                text_image = render_text(text=header_text, font_bytes=font_bytes, font_path=font_path)
+                text_images = self._prepare_input_images(text_image) * len(images)
+            else:
+                text_images = [render_text(text=t, font_bytes=font_bytes, font_path=font_path) for t in header_text]
+                text_images = self._prepare_input_images(text_images)
+        
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_normalize:
+                means = torch.mean(stacked_images, dim=[2, 3], keepdim=True)
+                stds = torch.std(stacked_images, dim=[2, 3], keepdim=True)
+                stacked_images = (stacked_images - means) / (stds + 1e-6)
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
