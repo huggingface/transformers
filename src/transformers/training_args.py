@@ -500,6 +500,8 @@ class TrainingArguments:
             Number of minutes between two evaluations if `eval_strategy="time"`.
         save_minutes (`int`, *optional*):
             Number of minutes between two checkpoint saves if `save_strategy="time"`.
+        logging_minutes (`int`, *optional*):
+            Number of minutes between two logs if `logging_strategy="time"`.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
             fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
@@ -966,6 +968,12 @@ class TrainingArguments:
                 "Log every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
+        },
+    )
+    logging_minutes: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Log every X minutes if logging_strategy is 'time'."
         },
     )
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
@@ -1617,6 +1625,10 @@ class TrainingArguments:
         if self.save_strategy == SaveStrategy.TIME:
             if self.save_minutes is None or self.save_minutes <= 0:
                 raise ValueError("save_minutes must be a positive integer when using time-based save strategy")
+            
+        if self.logging_strategy == IntervalStrategy.TIME:
+            if self.logging_minutes is None or self.logging_minutes <= 0:
+                raise ValueError("logging_minutes must be a positive integer when using time-based evaluation strategy")
 
         if self.torch_empty_cache_steps is not None:
             if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
@@ -2748,6 +2760,7 @@ class TrainingArguments:
                     - `"no"`: No save is done during training.
                     - `"epoch"`: Save is done at the end of each epoch.
                     - `"steps"`: Save is done every `save_steps`.
+                    - `"time"`: Save is done every `save_minute` minutess.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of updates steps before two checkpoint saves if `strategy="steps"`.
@@ -2801,6 +2814,7 @@ class TrainingArguments:
                     - `"no"`: No logging is done during training.
                     - `"epoch"`: Logging is done at the end of each epoch.
                     - `"steps"`: Logging is done every `logging_steps`.
+                    - `"time"`: Logging is done every `logging_minutes` minutes.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of update steps between two logs if `strategy="steps"`.
