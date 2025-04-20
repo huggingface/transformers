@@ -94,11 +94,11 @@ class PLMConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=16,
         num_key_value_heads=16,
-        kv_lora_rank = 512,
-        q_lora_rank = None,
-        qk_rope_head_dim = 64,
-        v_head_dim = 128,
-        qk_nope_head_dim = 128,
+        kv_lora_rank=512,
+        q_lora_rank=None,
+        qk_rope_head_dim=64,
+        v_head_dim=128,
+        qk_nope_head_dim=128,
         hidden_act="relu2",
         max_position_embeddings=4096,
         initializer_range=0.02,
@@ -146,5 +146,6 @@ class PLMConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
 
 __all__ = ["PLMConfig"]

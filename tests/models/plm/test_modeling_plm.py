@@ -41,11 +41,10 @@ if is_torch_available():
         PLMForCausalLM,
         PLMModel,
     )
+
     # from transformers.models.plm.modeling_plm import (
     #     PLMRotaryEmbedding,
     # )
-
-
 
 
 class PLMModelTester:
@@ -122,19 +121,33 @@ class PLMModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return PLMConfig(
@@ -158,14 +171,24 @@ class PLMModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = PLMModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -195,7 +218,10 @@ class PLMModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -213,7 +239,9 @@ class PLMModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -269,13 +297,17 @@ class PLMModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -293,7 +325,9 @@ class PLMModelTester:
 
 
 @require_torch
-class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PLMModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     # breakpoint()
     all_model_classes = (
         (
@@ -390,19 +424,27 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_sdpa_equivalence(self):
         pass
 
-    @unittest.skip("PLM uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip(
+        "PLM uses MLA so it is not compatible with the standard cache format"
+    )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("PLM uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip(
+        "PLM uses MLA so it is not compatible with the standard cache format"
+    )
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("PLM uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip(
+        "PLM uses MLA so it is not compatible with the standard cache format"
+    )
     def test_generate_compile_model_forward(self):
         pass
 
-    @unittest.skip("PLM uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip(
+        "PLM uses MLA so it is not compatible with the standard cache format"
+    )
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
@@ -470,7 +512,6 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     #     torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
     #     torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
-
     # @unittest.skip(reason="PLM uses MLA on all models so the KV cache is a non standard format")
     # def test_past_key_values_format(self):
     #     pass
@@ -526,8 +567,6 @@ class PLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     #             )
 
 
-
-
 @require_torch_accelerator
 class PLMIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
@@ -537,7 +576,9 @@ class PLMIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     @slow
     @require_torch_accelerator
@@ -563,29 +604,43 @@ class PLMIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("PLM-Team/PLM-1.8B-Base", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "PLM-Team/PLM-1.8B-Base", use_fast=False
+        )
         model = PLMForCausalLM.from_pretrained(
             "PLM-Team/PLM-1.8B-Base", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False
+        )
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
         model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        model.forward = torch.compile(
+            model.forward, mode="reduce-overhead", fullgraph=True
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

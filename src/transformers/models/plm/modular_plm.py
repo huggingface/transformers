@@ -29,14 +29,13 @@ from .configuration_plm import PLMConfig
 
 logger = logging.get_logger(__name__)
 
+
 class PLMRMSNorm(LlamaRMSNorm):
     pass
 
 
 class PLMRotaryEmbedding(LlamaRotaryEmbedding):
     pass
-
-
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -77,7 +76,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-
 class PLMMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -94,7 +92,6 @@ class PLMMLP(nn.Module):
         return h
 
 
-
 class PLMAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -102,7 +99,9 @@ class PLMAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.num_key_value_heads
+        )
         self.attention_dropout = config.attention_dropout
         self.num_heads = config.num_attention_heads
         self.rope_theta = config.rope_theta
@@ -115,12 +114,17 @@ class PLMAttention(nn.Module):
 
         self.is_causal = True
         if config.q_lora_rank is not None:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            self.q_a_proj = nn.Linear(
+                config.hidden_size, config.q_lora_rank, bias=config.attention_bias
+            )
             self.q_a_layernorm = PLMRMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            self.q_b_proj = nn.Linear(
+                config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False
+            )
         else:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-
+            self.q_proj = nn.Linear(
+                config.hidden_size, self.num_heads * self.qk_head_dim, bias=False
+            )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -142,7 +146,6 @@ class PLMAttention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -154,23 +157,42 @@ class PLMAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+        key_shape = (
+            batch_size,
+            seq_length,
+            -1,
+            self.qk_nope_head_dim + self.v_head_dim,
+        )
         if self.q_lora_rank is not None:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(query_shape).transpose(1, 2)
+            q_states = (
+                self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+                .view(query_shape)
+                .transpose(1, 2)
+            )
         else:
             q_states = self.q_proj(hidden_states).view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_pass, q_rot = torch.split(
+            q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
+        )
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass, k_rot = torch.split(
+            compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+        )
 
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_pass = (
+            self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        )
+        k_pass, value_states = torch.split(
+            k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
+        )
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:  # support using interleaved weights for efficiency
+        if (
+            self.config.rope_interleave
+        ):  # support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
@@ -182,20 +204,29 @@ class PLMAttention(nn.Module):
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            and self.qk_head_dim != self.v_head_dim
+        ):
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -208,7 +239,10 @@ class PLMAttention(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            and self.qk_head_dim != self.v_head_dim
+        ):
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
@@ -223,7 +257,9 @@ class PLMDecoderLayer(LlamaDecoderLayer, nn.Module):
         self.self_attn = PLMAttention(config, layer_idx)
         self.mlp = PLMMLP(config)
         self.input_layernorm = PLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = PLMRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
 
 class PLMPreTrainedModel(LlamaPreTrainedModel):
@@ -240,21 +276,27 @@ class PLMPreTrainedModel(LlamaPreTrainedModel):
         elif isinstance(module, nn.Parameter):
             module.weight.data.normal_(mean=0.0, std=std)
 
+
 class PLMForTokenClassification(LlamaForTokenClassification):
     pass
+
 
 class PLMForCausalLM(LlamaForCausalLM):
     pass
 
+
 class PLMModel(LlamaModel):
     pass
+
+
 class PLMForSequenceClassification(LlamaForSequenceClassification):
     pass
+
 
 __all__ = [
     "PLMPreTrainedModel",
     "PLMModel",
     "PLMForCausalLM",
     "PLMForSequenceClassification",
-    "PLMForTokenClassification"
+    "PLMForTokenClassification",
 ]
