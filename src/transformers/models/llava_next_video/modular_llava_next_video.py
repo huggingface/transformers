@@ -104,6 +104,10 @@ class LlavaNextVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_next_video"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
@@ -489,10 +493,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                 image_newline=self.image_newline,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -511,10 +515,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
 
-            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"

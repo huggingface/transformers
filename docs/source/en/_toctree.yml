@@ -953,6 +953,8 @@
         title: InstructBLIP
       - local: model_doc/instructblipvideo
         title: InstructBlipVideo
+      - local: model_doc/internvl
+        title: InternVL
       - local: model_doc/janus
         title: Janus
       - local: model_doc/kosmos-2

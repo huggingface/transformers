@@ -156,6 +156,10 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        image_token_id (`int`, *optional*):
+            Token index used as placeholder for image embeddings.
+        video_token_id (`int`, *optional*):
+            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Qwen2_5_VLTextModel, Qwen2_5_VLConfig
@@ -209,6 +213,8 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
         max_window_layers=80,
         attention_dropout=0.0,
         rope_scaling=None,
+        image_token_id=None,
+        video_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -244,6 +250,8 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
