@@ -1745,7 +1745,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             final_mask = special_image_mask.to(inputs_embeds.device)
             inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
