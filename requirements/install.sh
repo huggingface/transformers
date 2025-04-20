@@ -5,7 +5,7 @@ set -o pipefail
 
 # === Config ===
 PYTHON_VERSION_REQUIRED=">=3.9,<3.13"
-VENV_DIR=".transformers-env"
+VENV_DIR=".my-env"
 REQUIREMENTS_URL="https://raw.githubusercontent.com/huggingface/transformers/main/examples/pytorch/_tests_requirements.txt"
 
 # === Validate Python Version ===
@@ -40,6 +40,6 @@ pip install -r <(curl -s "$REQUIREMENTS_URL")  # optional extras for tests/examp
 
 # === Validate Install ===
 echo "Validating installation..."
-python -c "from transformers import pipeline; pipeline = pipeline(task="text-generation", model="Qwen/Qwen2.5-1.5B"); print(pipeline("the secret to baking a really good cake is "))"
+python -c 'from transformers import pipeline; pipeline = pipeline(task="text-generation", model="Qwen/Qwen2.5-1.5B"); print(pipeline("the secret to baking a really good cake is "))'
 
 echo "Installation complete!"
