@@ -801,6 +801,207 @@ class TrainingArguments:
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
     """
+
+    # Sometimes users will pass in a `str` repr of a dict in the CLI
+    # We need to track what fields those can be. Each time a new arg
+    # has a dict type, it must be added to this list.
+    # Important: These should be typed with Optional[Union[dict,str,...]]
+    _VALID_DICT_FIELDS = [
+        "accelerator_config",
+        "fsdp_config",
+        "deepspeed",
+        "gradient_checkpointing_kwargs",
+        "lr_scheduler_kwargs",
+    ]
+
+    framework = "pt"
+    output_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
+        },
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    eval_strategy: Union[IntervalStrategy, str] = field(
+        default="no",
+        metadata={"help": "The evaluation strategy to use."},
+    )
+    prediction_loss_only: bool = field(
+        default=False,
+        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
+    )
+
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for evaluation."}
+    )
+
+    per_gpu_train_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
+                "Batch size per GPU/TPU core/CPU for training."
+            )
+        },
+    )
+    per_gpu_eval_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
+                "Batch size per GPU/TPU core/CPU for evaluation."
+            )
+        },
+    )
+
+    gradient_accumulation_steps: int = field(
+        default=1,
+        metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
+    )
+    eval_accumulation_steps: Optional[int] = field(
+        default=None,
+        metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
+    )
+
+    eval_delay: Optional[float] = field(
+        default=0,
+        metadata={
+            "help": (
+                "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the"
+                " eval_strategy."
+            )
+        },
+    )
+
+    torch_empty_cache_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`."
+            "This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372)."
+            "If left unset or set to None, cache will not be emptied."
+        },
+    )
+
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
+
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    max_steps: int = field(
+        default=-1,
+        metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
+    )
+    lr_scheduler_type: Union[SchedulerType, str] = field(
+        default="linear",
+        metadata={"help": "The scheduler type to use."},
+    )
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
+        default_factory=dict,
+        metadata={
+            "help": (
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
+            )
+        },
+    )
+    warmup_ratio: float = field(
+        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    )
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+
+    log_level: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": (
+                "Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug',"
+                " 'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and"
+                " lets the application set the level. Defaults to 'passive'."
+            ),
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_level_replica: Optional[str] = field(
+        default="warning",
+        metadata={
+            "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_on_each_node: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "When doing a multinode distributed training, whether to log once per node or just once on the main"
+                " node."
+            )
+        },
+    )
+    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
+    logging_strategy: Union[IntervalStrategy, str] = field(
+        default="steps",
+        metadata={"help": "The logging strategy to use."},
+    )
+    logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
+    logging_steps: float = field(
+        default=500,
+        metadata={
+            "help": (
+                "Log every X updates steps. Should be an integer or a float in range `[0,1)`. "
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
+    logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
+    save_strategy: Union[SaveStrategy, str] = field(
+        default="steps",
+        metadata={"help": "The checkpoint save strategy to use."},
+    )
+    save_steps: float = field(
+        default=500,
+        metadata={
+            "help": (
+                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
+    save_minutes: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Save checkpoint every X minutes if eval_strategy is 'time'."
+        },
+    )
+    save_total_limit: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+                " Default is unlimited checkpoints"
+            )
+        },
+    )
     
     save_safetensors: Optional[bool] = field(
         default=True,
@@ -1818,7 +2019,7 @@ class TrainingArguments:
             # - must be run before the model is created.
             if not is_accelerate_available():
                 raise ValueError(
-                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'."
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
                 )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
@@ -2342,7 +2543,7 @@ class TrainingArguments:
 
     def to_sanitized_dict(self) -> dict[str, Any]:
         """
-        Sanitized serialization to use with TensorBoard's hparams
+        Sanitized serialization to use with TensorBoard’s hparams
         """
         d = self.to_dict()
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}

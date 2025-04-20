@@ -25,7 +25,7 @@ class TestTimeBasedStrategy(unittest.TestCase):
     def test_eval_time_based(self):
         training_args = TrainingArguments(
             output_dir="./test_output",
-            evaluation_strategy=IntervalStrategy.TIME,
+            eval_strategy=IntervalStrategy.TIME,
             eval_minutes=1,
             save_strategy=IntervalStrategy.NO,
             per_device_train_batch_size=8,
@@ -52,7 +52,7 @@ class TestTimeBasedStrategy(unittest.TestCase):
         import pdb; pdb.set_trace()
         training_args = TrainingArguments(
             output_dir="./test_output",
-            evaluation_strategy=IntervalStrategy.NO,
+            eval_strategy=IntervalStrategy.NO,
             save_strategy=IntervalStrategy.TIME,
             save_minutes=1,
             per_device_train_batch_size=8,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     import pdb; pdb.set_trace()
     training_args = TrainingArguments(
         output_dir="./test_output",
-        evaluation_strategy=IntervalStrategy.TIME,
+        eval_strategy=IntervalStrategy.TIME,
         eval_minutes=1,
         save_strategy=IntervalStrategy.NO,
         per_device_train_batch_size=8,
