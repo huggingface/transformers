@@ -612,5 +612,4 @@ __all__ = [
     "DeepseekV2ForCausalLM",
     "DeepseekV2ForSequenceClassification",
     "DeepseekV2Config",
-    "DeepseekV2RotaryEmbedding",
 ]
