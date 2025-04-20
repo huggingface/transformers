@@ -28,7 +28,7 @@ from torch import nn
 import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
@@ -1625,13 +1625,11 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        ## overwritten because `HybridMambaAttentionDynamicCache` is needed
+        if use_cache and past_key_values is None:
             logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+                "GraniteMoeHybrid requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. None was "
+                "provided, so no cache will be returned."
             )
 
         if cache_position is None:
@@ -1708,8 +1706,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
