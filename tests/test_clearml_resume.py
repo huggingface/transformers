@@ -1,15 +1,17 @@
 import os
+
+import torch
+from clearml import Task
+from datasets import load_dataset
+
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    TrainingArguments,
-    Trainer,
     DataCollatorWithPadding,
+    Trainer,
+    TrainingArguments,
 )
-from datasets import load_dataset
-from clearml import Task
-import torch
-import shutil
+
 
 # Set environment variables
 os.environ["CLEARML_PROJECT"] = "Test Project"
@@ -17,11 +19,7 @@ os.environ["CLEARML_TASK"] = "Test Task"
 os.environ["CLEARML_LOG_MODEL"] = "TRUE"
 
 # Initialize ClearML task
-task = Task.init(
-    project_name="Test Project",
-    task_name="Test Task",
-    reuse_last_task_id=False
-)
+task = Task.init(project_name="Test Project", task_name="Test Task", reuse_last_task_id=False)
 
 # Load model and tokenizer
 model_name = "bert-base-uncased"
@@ -95,5 +93,5 @@ trainer.train()
 initial_params = {name: param.data.clone() for name, param in model.named_parameters()}
 trainer.train()
 for name, param in model.named_parameters():
-    if 'weight' in name:
-        diff = torch.abs(param.data - initial_params[name]).mean().item() 
+    if "weight" in name:
+        diff = torch.abs(param.data - initial_params[name]).mean().item()
