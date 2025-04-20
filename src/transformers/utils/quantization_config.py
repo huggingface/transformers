@@ -1699,24 +1699,10 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert (`Optional[List]`, *optional*):
             Optionally, provides a list of full paths of `nn.Linear` weight parameters
             that shall not be quantized. Defaults to None.
-        online_quantization (`bool`, *optional*, defaults to `False`):
-            If `True`, enables an online quantization approach, primarily for weights.
-            In this mode, the weight quantization parameters are calculated dynamically
-            during each forward pass (e.g., based on the current weight values). This can
-            adapt to weight changes during training (Quantization-Aware Training - QAT).
-            Setting this to `True` implies that layers like `AutoBitLinear` should
-            use their internal dynamic weight quantization logic (`online_quant=True`).
-        offline_quantization (`bool`, *optional*, defaults to `False`):
-            If `True`, enables an offline quantization approach. In this mode,
-            quantization parameters are pre-calculated *before* inference. These
-            parameters are then fixed and loaded into the quantized model. This
-            generally results in lower runtime overhead compared to online quantization.
-            Setting this to `True` implies that layers like `AutoBitLinear` should
-            expect pre-quantized weights and a pre-calculated `weight_scale`
-            loaded from the state dict (`online_quant=False`).
-            *Note*: It's generally expected that only one of `online_quantization`
-            or `offline_quantization` is set to `True` to define the primary
-            quantization strategy.
+        linear_class (`str`, *optional*, defaults to `"bitlinear"`):
+            The type of linear class to use. Can be either `bitlinear` or `autobitlinear`.
+        quantization_mode (`str`, *optional*, defaults to `"offline"`):
+            The quantization mode to use. Can be either `online` or `offline`.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
@@ -1725,17 +1711,20 @@ class BitNetQuantConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
-        online_quantization: bool = False,
-        offline_quantization: bool = False,
+        linear_class: Optional[str] = "bitlinear",
+        quantization_mode: Optional[str] = "offline",
         **kwargs,
     ):
-        assert not (online_quantization and offline_quantization), (
-            "Both online and offline quantization cannot be enabled at the same time. Please choose one."
+        assert linear_class in ["bitlinear", "autobitlinear"], (
+            f"linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}"
+        )
+        assert quantization_mode in ["online", "offline"], (
+            f"quantization_mode must be either 'online' or 'offline', but got {quantization_mode}"
         )
         self.quant_method = QuantizationMethod.BITNET
         self.modules_to_not_convert = modules_to_not_convert
-        self.online_quantization = online_quantization
-        self.offline_quantization = offline_quantization
+        self.linear_class = linear_class
+        self.quantization_mode = quantization_mode
         self.post_init()
 
     def post_init(self):
