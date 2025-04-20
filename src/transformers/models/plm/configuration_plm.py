@@ -33,7 +33,7 @@ class PLMConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 151936):
             Vocabulary size of the PLM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`PLMModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the MLP representations.
@@ -48,13 +48,13 @@ class PLMConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+        q_lora_rank (`int`, *optional*):
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+        v_head_dim (`int`, *optional*, defaults to 128):
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
             The non-linear activation function (function or string) in the decoder.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -64,16 +64,22 @@ class PLMConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports normal rope.
         rope_theta (`float`, *optional*, defaults to 100000.0):
             The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports normal rope.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        rope_interleave (`bool`, *optional*, defaults to `True`):
     ```python
     >>> from transformers import PLMModel, PLMConfig
     >>> # Initializing a PLM style configuration
