@@ -35,7 +35,7 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-The example below demonstrates how to translate sentences with [`Pipeline`] or [`AutoModel`].
+The example below demonstrates how to translate text with [`Pipeline`], [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
