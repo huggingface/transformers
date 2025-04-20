@@ -354,6 +354,10 @@ class DeepseekV2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
+    @unittest.skip("Model older than 2025")
+    def test_can_init_all_missing_weights(self):
+        pass
+
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):

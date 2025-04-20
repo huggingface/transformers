@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_v2 import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
