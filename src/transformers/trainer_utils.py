@@ -236,7 +236,6 @@ class SaveStrategy(ExplicitEnum):
     BEST = "best"
 
 
-
 class EvaluationStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
