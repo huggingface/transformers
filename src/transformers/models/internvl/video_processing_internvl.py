@@ -17,7 +17,6 @@
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    PILImageResampling,
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (

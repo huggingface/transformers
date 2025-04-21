@@ -24,7 +24,6 @@ from ...image_processing_utils import (
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    PILImageResampling,
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
