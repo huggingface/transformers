@@ -2227,7 +2227,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
-        if not (cls._supports_flash_attn_2 or cls._supports_attention_backend):
+        if not cls._supports_flash_attn_2:
             raise ValueError(
                 f"{cls.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{config._name_or_path}/discussions/new"
@@ -2328,7 +2328,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "sdpa" so that the model can initialize the correct attention module.
         """
         if hard_check_only:
-            if not (cls._supports_sdpa or cls._supports_attention_backend):
+            if not cls._supports_sdpa:
                 raise ValueError(
                     f"{cls.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                     " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
@@ -2339,7 +2339,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
                 )
 
-        if not is_torch_sdpa_available() or not (cls._supports_sdpa or cls._supports_attention_backend):
+        if not is_torch_sdpa_available() or not cls._supports_sdpa:
             return config
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
@@ -2358,7 +2358,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flex_attention" so that the model can initialize the correct attention module.
         """
         if hard_check_only:
-            if not (cls._supports_flex_attn or cls._supports_attention_backend):
+            if not cls._supports_flex_attn:
                 raise ValueError(
                     f"{cls.__name__} does not support an attention implementation through torch's flex_attention."
                     " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/34809."
@@ -2371,7 +2371,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
                 )
 
-        if not is_torch_flex_attn_available() or not (cls._supports_flex_attn or cls._supports_attention_backend):
+        if not is_torch_flex_attn_available() or not cls._supports_flex_attn:
             return config
 
         if not hard_check_only:

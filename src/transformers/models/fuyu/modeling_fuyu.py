@@ -67,6 +67,9 @@ class FuyuPreTrainedModel(PreTrainedModel):
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 

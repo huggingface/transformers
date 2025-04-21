@@ -978,6 +978,9 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -1080,6 +1083,9 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     """
 
     _supports_attention_backend = False  # adds position on attn weights before last matmul
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     def __init__(self, config: InstructBlipVideoQFormerConfig):
         super().__init__(config)
