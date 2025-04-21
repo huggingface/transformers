@@ -113,7 +113,7 @@ class PLMConfig(PretrainedConfig):
         rms_norm_eps=1e-6,
         use_cache=True,
         pretraining_tp=1,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
         rope_theta=100000.0,
         rope_scaling=None,
         attention_bias=False,
