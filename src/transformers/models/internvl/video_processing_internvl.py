@@ -22,6 +22,7 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     is_vision_available,
 )
+from ...utils.import_utils import requires
 from ...video_processing_utils import (
     BaseVideoProcessor,
 )
@@ -34,6 +35,7 @@ if is_vision_available():
 class InternVLVideoProcessorInitKwargs(VideosKwargs): ...
 
 
+@requires(backends=("torchvision",))
 class InternVLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

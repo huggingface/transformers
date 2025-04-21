@@ -197,11 +197,10 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
+## SmolVLMVideoProcessor
+[[autodoc]] SmolVLMVideoProcessor
+    - preprocess
 
 ## SmolVLMProcessor
 [[autodoc]] SmolVLMProcessor
     - __call__
-
-## SmolVLMVideoProcessor
-
-[[autodoc]] SmolVLMVideoProcessor

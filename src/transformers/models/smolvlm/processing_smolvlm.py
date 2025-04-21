@@ -139,7 +139,9 @@ class SmolVLMProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "SmolVLMImageProcessor"
-    video_processor_class = "SmolVLMImageProcessor" #TODO: raushan should be VideoProcessor when LANCZOS resizing is settled
+    video_processor_class = (
+        "SmolVLMImageProcessor"  # TODO: raushan should be VideoProcessor when LANCZOS resizing is settled
+    )
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
