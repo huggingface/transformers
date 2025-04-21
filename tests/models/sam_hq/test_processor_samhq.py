@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import prepare_image_inputs
+from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
 
 if is_vision_available():
@@ -34,7 +34,10 @@ if is_torch_available():
 
 @require_vision
 @require_torchvision
-class SamHQProcessorTest(unittest.TestCase):
+class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = SamHQProcessor
+
+    @classmethod
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
@@ -44,6 +47,7 @@ class SamHQProcessorTest(unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    @classmethod
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
@@ -59,6 +63,33 @@ class SamHQProcessorTest(unittest.TestCase):
         mask_inputs = [np.random.randint(255, size=(30, 400), dtype=np.uint8)]
         mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
+
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_chat_template_save_loading(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_unstructured_kwargs(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_unstructured_kwargs_batched(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_doubly_passed_kwargs(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_structured_kwargs_nested(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
+
+    def test_structured_kwargs_nested_from_dict(self):
+        self.skipTest("SamHQProcessor does not have a tokenizer")
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamHQProcessor(image_processor=self.get_image_processor())
