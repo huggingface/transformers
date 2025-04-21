@@ -901,7 +901,7 @@ class GgufModelTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello,\n\nI'm looking for a small,"
+        EXPECTED_TEXT = "Hello with a new approach to the problem of\nfinding"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     @require_read_token
