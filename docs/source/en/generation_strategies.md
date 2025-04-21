@@ -31,7 +31,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("I look forward to", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
 # explicitly set to default length because Llama2 generation length is 4096
