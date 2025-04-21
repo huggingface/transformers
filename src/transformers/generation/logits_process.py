@@ -304,7 +304,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        input_ids_seq_length (`int`, *optional*, defaults to 0):
+        prompt_ignore_length (`int`, *optional*, defaults to `None`):
             The original input ids sequence length, which if provided, will not be used in the penalty calculation.
 
     Examples:
@@ -329,17 +329,17 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float, input_ids_seq_length: Optional[int] = None):
+    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = penalty
-        self.input_ids_seq_length = input_ids_seq_length
+        self.prompt_ignore_length = prompt_ignore_length
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.input_ids_seq_length:
-            input_ids = input_ids[:, self.input_ids_seq_length :]
+        if self.prompt_ignore_length:
+            input_ids = input_ids[:, self.prompt_ignore_length :]
 
         score = torch.gather(scores, 1, input_ids)
 
