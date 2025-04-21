@@ -310,7 +310,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     Examples:
 
     ```py
-    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, RepetitionPenaltyLogitsProcessor
 
     >>> # Initializing the model and tokenizer for it
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
@@ -326,6 +326,16 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     >>> penalized_ids = model.generate(**inputs, repetition_penalty=1.1)
     >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
     I'm not going to be able to do that. I'll just have to go out and play
+
+    >>> # We can also exclude the input prompt by creating an instance of this class
+    >>> # with a `prompt_ignore_length` and passing it as a custom logit processor
+    >>> rep_pen_processor = RepetitionPenaltyLogitsProcessor(
+    ...     penalty=1.1,
+    ...     prompt_ignore_length=inputs["input_ids"].shape[-1]
+    ... )
+    >>> penalized_ids = model.generate(**inputs, logits_processor=[rep_pen_processor])
+    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'm going to have to go through a lot of things, and
     ```
     """
 
