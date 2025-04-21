@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import torch
 from packaging import version
 
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6, is_torch_greater_or_equal_than_2_7
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
@@ -1743,10 +1743,10 @@ class HybridCache(Cache):
         return k_out, v_out
 
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        # k_out[:, :, cache_position] = key_states
-        # v_out[:, :, cache_position] = value_states
-        k_out.index_copy_(2, cache_position, key_states)
-        v_out.index_copy_(2, cache_position, value_states)
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+        # k_out.index_copy_(2, cache_position, key_states)
+        # v_out.index_copy_(2, cache_position, value_states)
 
         self.key_cache[layer_idx] = k_out
         self.value_cache[layer_idx] = v_out
@@ -1813,6 +1813,19 @@ class HybridCache(Cache):
             self.value_cache[layer_idx].zero_()
 
 
+def _get_flat_dict_for_hybrid_cache(hybrid_cache: HybridCache):
+    return {
+        "config": getattr(hybrid_cache, "config"),
+        "device": str(getattr(hybrid_cache, "device")) if getattr(hybrid_cache, "device", None) != None else None,
+        "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
+        "key_cache": getattr(hybrid_cache, "key_cache"),
+        "value_cache": getattr(hybrid_cache, "value_cache"),
+        "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
+        "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
+        "_dtype": str(getattr(hybrid_cache, "_dtype")) if getattr(hybrid_cache, "_dtype", None) != None else None,
+    }
+
+
 def _flatten_hybrid_cache(
     hybrid_cache: HybridCache,
 ):
@@ -1825,33 +1838,11 @@ def _flatten_hybrid_cache(
             "HybridCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
         )
 
-    dictionary = {
-        "config": getattr(hybrid_cache, "config"),
-        "device": getattr(hybrid_cache, "device"),
-        "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
-        "key_cache": getattr(hybrid_cache, "key_cache"),
-        "value_cache": getattr(hybrid_cache, "value_cache"),
-        "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
-        "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
-        "_dtype": getattr(hybrid_cache, "_dtype"),
-
-    }
-    return torch.utils._pytree._dict_flatten(dictionary)
+    return torch.utils._pytree._dict_flatten(_get_flat_dict_for_hybrid_cache(hybrid_cache))
 
 
 def _flatten_with_keys_hybrid_cache(hybrid_cache: HybridCache):
-    dictionary = {
-        "config": getattr(hybrid_cache, "config"),
-        "device": getattr(hybrid_cache, "device"),
-        "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
-        "key_cache": getattr(hybrid_cache, "key_cache"),
-        "value_cache": getattr(hybrid_cache, "value_cache"),
-        "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
-        "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
-        "_dtype": getattr(hybrid_cache, "_dtype"),
-
-    }
-    return torch.utils._pytree._dict_flatten_with_keys(dictionary)
+    return torch.utils._pytree._dict_flatten_with_keys(_get_flat_dict_for_hybrid_cache(hybrid_cache))
 
 
 def _unflatten_hybrid_cache(
@@ -1863,8 +1854,8 @@ def _unflatten_hybrid_cache(
         dictionary["config"], 
         dictionary["max_batch_size"], 
         dictionary["max_cache_len"], 
-        dictionary["device"],
-        dictionary["_dtype"],
+        torch.device(dictionary["device"]) if dictionary["device"] != None else None,
+        getattr(torch, dictionary["_dtype"][len("torch."):]) if dictionary["_dtype"] != None else None,
         dictionary["layer_device_map"],
     )
 
@@ -1874,17 +1865,7 @@ def _unflatten_hybrid_cache(
 
 
 def _flatten_hybrid_cache_for_fx(hybrid_cache, spec):
-    dictionary = {
-        "config": getattr(hybrid_cache, "config"),
-        "device": getattr(hybrid_cache, "device"),
-        "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
-        "key_cache": getattr(hybrid_cache, "key_cache"),
-        "value_cache": getattr(hybrid_cache, "value_cache"),
-        "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
-        "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
-        "_dtype": getattr(hybrid_cache, "_dtype"),
-    }
-    return torch.utils._pytree.tree_flatten(dictionary)[0]
+    return torch.utils._pytree.tree_flatten(_get_flat_dict_for_hybrid_cache(hybrid_cache))[0]
 
 
 if is_torch_greater_or_equal("2.3"):

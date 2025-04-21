@@ -21,6 +21,7 @@
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
 import torch
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_7
 
 
 class Gemma2Config(PretrainedConfig):
@@ -172,25 +173,8 @@ class Gemma2Config(PretrainedConfig):
     def __hash__(self):
         return hash(tuple(sorted(self.__dict__.items())))
 
-
-def _flatten_gemma2_config(config):
-    return torch.utils._pytree._dict_flatten(config.__dict__)
-
-def _flatten_with_keys_gemma2_config(config):
-    return torch.utils._pytree._dict_flatten_with_keys(config.__dict__)
-
-def _unflatten_gemma2_config(values, context):
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
-
-    return Gemma2Config(**dictionary)
-
-torch.utils._pytree.register_pytree_node(
-    Gemma2Config,
-    _flatten_gemma2_config,
-    _unflatten_gemma2_config,
-    serialized_type_name=f"{Gemma2Config.__module__}.{Gemma2Config.__name__}",
-    flatten_with_keys_fn=_flatten_with_keys_gemma2_config,
-)
+if is_torch_greater_or_equal_than_2_7:
+    torch.utils._pytree.register_constant(Gemma2Config)
 
 
 __all__ = ["Gemma2Config"]
