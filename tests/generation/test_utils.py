@@ -2091,8 +2091,7 @@ class GenerationTesterMixin:
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
-            # TODO (joao, raushan): do we need a custom `generate` in these models? can we call `super().generate`, as
-            # opposed to the inner model's `generate`? If yes, we would get a more standardized codebase
+            # (Note for the future: if BLIP starts causing problems, let's stop testing it)
             if "blip" in model.__class__.__name__.lower():
                 model_to_be_compiled = model.language_model
             else:
