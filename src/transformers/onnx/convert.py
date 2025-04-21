@@ -16,7 +16,7 @@ import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse
@@ -85,7 +85,7 @@ def export_pytorch(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
@@ -118,7 +118,7 @@ def export_pytorch(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     if issubclass(type(model), PreTrainedModel):
@@ -188,7 +188,7 @@ def export_tensorflow(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -221,7 +221,7 @@ def export_tensorflow(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     model.config.return_dict = True
@@ -254,7 +254,7 @@ def export(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
@@ -296,7 +296,7 @@ def export(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     if is_torch_available():
@@ -321,7 +321,7 @@ def validate_model_outputs(
     onnx_model: Path,
     onnx_named_outputs: List[str],
     atol: float,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -335,7 +335,7 @@ def validate_model_outputs(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     # generate inputs with a different batch_size and seq_len that was used for conversion to properly test

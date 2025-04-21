@@ -17,12 +17,7 @@ rendered properly in your Markdown viewer.
 # ProphetNet
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=prophetnet">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-prophetnet-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/prophetnet-large-uncased">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview

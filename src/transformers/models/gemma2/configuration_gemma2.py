@@ -20,6 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
+import torch
 
 
 class Gemma2Config(PretrainedConfig):
@@ -167,6 +168,29 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+    
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__.items())))
+
+
+def _flatten_gemma2_config(config):
+    return torch.utils._pytree._dict_flatten(config.__dict__)
+
+def _flatten_with_keys_gemma2_config(config):
+    return torch.utils._pytree._dict_flatten_with_keys(config.__dict__)
+
+def _unflatten_gemma2_config(values, context):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+
+    return Gemma2Config(**dictionary)
+
+torch.utils._pytree.register_pytree_node(
+    Gemma2Config,
+    _flatten_gemma2_config,
+    _unflatten_gemma2_config,
+    serialized_type_name=f"{Gemma2Config.__module__}.{Gemma2Config.__name__}",
+    flatten_with_keys_fn=_flatten_with_keys_gemma2_config,
+)
 
 
 __all__ = ["Gemma2Config"]

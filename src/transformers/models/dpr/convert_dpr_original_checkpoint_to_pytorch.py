@@ -29,7 +29,9 @@ CheckpointState = collections.namedtuple(
 
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
     print(f"Reading saved model from {model_file}")
-    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
+    state_dict = torch.load(
+        model_file, map_location=lambda s, l: default_restore_location(s, "cpu"), weights_only=True
+    )
     return CheckpointState(**state_dict)
 
 
@@ -137,7 +139,7 @@ if __name__ == "__main__":
     dest_dir = f"converted-{src_file.name}" if args.dest is None else args.dest
     dest_dir = Path(dest_dir)
     assert src_file.exists()
-    assert (
-        args.type is not None
-    ), "Please specify the component type of the DPR model to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
+    assert args.type is not None, (
+        "Please specify the component type of the DPR model to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
+    )
     convert(args.type, src_file, dest_dir)

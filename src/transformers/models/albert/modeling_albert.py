@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -580,6 +579,8 @@ class AlbertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, AlbertMLMHead):
+            module.bias.data.zero_()
 
 
 @dataclass
@@ -610,8 +611,8 @@ class AlbertForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    sop_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    sop_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -984,7 +985,7 @@ class AlbertSOPHead(nn.Module):
     "Albert Model with a `language modeling` head on top.",
     ALBERT_START_DOCSTRING,
 )
-class AlbertForMaskedLM(AlbertPreTrainedModel, GenerationMixin):
+class AlbertForMaskedLM(AlbertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
     def __init__(self, config):

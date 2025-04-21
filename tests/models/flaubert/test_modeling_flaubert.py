@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -377,6 +376,8 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
+    # Doesn't run generation tests. Outdated custom `prepare_inputs_for_generation` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FlaubertModel,

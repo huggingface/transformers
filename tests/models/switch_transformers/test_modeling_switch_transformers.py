@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +42,7 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersSparseMLP,
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
@@ -694,7 +694,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -744,7 +744,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -867,13 +867,13 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -1134,3 +1134,16 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
         for i in range(0, BATCH_SIZE, 2):
             self.assertEqual(batch_output[i], batch_output[i + 1])
+
+
+@require_torch
+class SwitchTransformersSparseMLPTests(unittest.TestCase):
+    def test_token_dropping(self):
+        r"""
+        This test checks if the token dropping actually drops tokens.
+        """
+        config = SwitchTransformersConfig(expert_capacity=0)  # we drop everything
+        moe = SwitchTransformersSparseMLP(config)
+        dropped_token_results = moe(torch.randn(2, 3, 768))[0]
+
+        assert (dropped_token_results == 0).all(), f"Some tokens not dropped: {dropped_token_results}."

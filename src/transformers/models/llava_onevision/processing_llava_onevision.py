@@ -100,6 +100,16 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
@@ -114,7 +124,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -161,7 +171,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
-            text = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
+            text, num_image_tokens = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -178,8 +188,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs}, tensor_type=return_tensors)
 
     def _expand_image_tokens(
         self,
@@ -191,6 +204,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         num_frames: int = 1,
     ):
         prompt_strings = []
+        max_num_vision_tokens = 0
         for sample in text:
             while special_token in sample:
                 image_size_list = next(image_sizes)
@@ -200,12 +214,13 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                     original_size = original_size.tolist()
                 orig_height, orig_width = original_size
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 sample = sample.replace(special_token, "<placeholder>" * num_image_tokens * num_frames, 1)
             prompt_strings.append(sample)
         text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
-        return text
+        return text, max_num_vision_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
@@ -288,13 +303,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.video_processor.save_pretrained(video_processor_path)
 
         video_processor_present = "video_processor" in self.attributes
-        if video_processor_present:
-            self.attributes.remove("video_processor")
+        try:
+            if video_processor_present:
+                self.attributes.remove("video_processor")
 
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if video_processor_present:
-            self.attributes += ["video_processor"]
+            outputs = super().save_pretrained(save_directory, **kwargs)
+        finally:
+            if video_processor_present:
+                self.attributes += ["video_processor"]
         return outputs
 
     # override to load video-config from a separate config file

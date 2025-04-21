@@ -62,7 +62,7 @@ def convert_dalle_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
 
     encoder = Encoder()
     if os.path.exists(checkpoint_path):
-        ckpt = torch.load(checkpoint_path)
+        ckpt = torch.load(checkpoint_path, weights_only=True)
     else:
         ckpt = torch.hub.load_state_dict_from_url(checkpoint_path)
 

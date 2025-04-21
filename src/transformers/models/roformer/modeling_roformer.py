@@ -16,7 +16,7 @@
 
 import math
 import os
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
@@ -59,24 +59,21 @@ class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
 
-    @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+    def _init_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
         """
-        n_pos, dim = out.shape
+        n_pos, dim = self.weight.shape
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        out = torch.empty(n_pos, dim, dtype=self.weight.dtype, requires_grad=False)
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
+        self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
@@ -623,6 +620,106 @@ class RoFormerEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->RoFormer
+class RoFormerSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`RoFormerConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
+    """
+
+    def __init__(self, config: RoFormerConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
+
+
 class RoFormerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -694,7 +791,7 @@ class RoFormerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, RoFormerSinusoidalPositionalEmbedding):
-            pass
+            module._init_weight()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
@@ -702,6 +799,8 @@ class RoFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, RoFormerLMPredictionHead):
+            module.bias.data.zero_()
 
 
 ROFORMER_START_DOCSTRING = r"""
@@ -1293,7 +1392,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         super().__init__(config)
 
         self.roformer = RoFormerModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = RoFormerSequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing

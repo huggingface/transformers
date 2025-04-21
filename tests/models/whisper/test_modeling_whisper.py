@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -546,13 +545,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -3353,7 +3352,7 @@ class WhisperEncoderModelTester:
 
 
 @require_torch
-class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = False
@@ -3683,10 +3682,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
-
-    @unittest.skip(reason="The model doesn't support fast init from base")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(
         "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
