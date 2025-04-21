@@ -161,7 +161,7 @@ The downside is that if you aren't used to them, it may take some time to get us
 Run the command below to start and complete the questionnaire with some basic information about the new model. This command jumpstarts the process by automatically generating some model code that you'll need to adapt.
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 ## Create a pull request

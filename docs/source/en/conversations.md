@@ -25,7 +25,7 @@ Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_
 
 This guide shows you how to quickly start chatting with Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
-## transformers-cli
+## transformers
 
 Chat with a model directly from the command line as shown below. It launches an interactive session with a model. Enter `clear` to reset the conversation, `exit` to terminate the session, and `help` to display all the command options.
 
