@@ -106,9 +106,9 @@ class InternVLProcessor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.fake_image_token = fake_image_token
         self.fake_video_token = fake_video_token
-        self.start_image_token = tokenizer.start_image_token
-        self.end_image_token = tokenizer.end_image_token
-        self.context_image_token = tokenizer.context_image_token
+        self.start_image_token = "<img>" if not hasattr(tokenizer, "start_image_token") else tokenizer.start_image_token
+        self.end_image_token = "</img>" if not hasattr(tokenizer, "end_image_token") else tokenizer.end_image_token
+        self.context_image_token = "<IMG_CONTEXT>" if not hasattr(tokenizer, "context_image_token") else tokenizer.context_image_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
