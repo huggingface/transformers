@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput, GenerationConfig, GenerationMixin
 from ...generation.logits_process import LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList, MaxLengthCriteria
+from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
 from ...generation.utils import GenerateNonBeamOutput
 from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -46,12 +46,13 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_flex_attn_available,
     logging,
-    can_return_tuple,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ..auto import AutoModel
 from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
 
 
@@ -136,7 +137,8 @@ class CsmPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # does not because of Mimi codec model
+    # _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -563,9 +565,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = CsmEmbeddings(
-            config.num_codebooks, config.vocab_size, config.backbone_hidden_size, self.padding_idx
-        )
+        self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.backbone_hidden_size)
         self.layers = nn.ModuleList(
             [CsmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -582,23 +582,6 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def prepare_inputs_embeds(self, input_ids, backbone_last_hidden_state):
-        # input_ids shape (batch_size, seq_length)
-        # backbone_last_hidden_state shape (batch_size, hidden_size)
-        # output shape (batch_size, seq_length + 1, hidden_ssize)
-        batch_size, seq_length = input_ids.shape
-        inputs_embeds = torch.cat(
-            [
-                backbone_last_hidden_state.unsqueeze(1),
-                self.embed_tokens(
-                    input_ids,
-                    torch.arange(seq_length, device=input_ids.device).expand(batch_size, -1),
-                ),
-            ],
-            dim=1,
-        )
-        return inputs_embeds
 
     @add_start_docstrings_to_model_forward(CSM_DEPTH_DECODER_INPUTS_DOCSTRING)
     def forward(
@@ -639,19 +622,21 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             inputs_seq_length = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
             device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
-
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        
+
         if not torch.all(position_ids == position_ids[0:1]):
-            raise ValueError("When doing batch inference with CSM depth decoder, position_ids should be the same across the batch.")
+            raise ValueError(
+                "When doing batch inference with CSM depth decoder, position_ids should be the same across the batch."
+            )
 
         if inputs_embeds is None:
             input_ids_are_first_codebook = position_ids[0, 0] == 0
             codebook_idxs = nn.functional.relu(position_ids - 1)
-            inputs_embeds = self.embed_tokens(input_ids, codebook_idxs)
+            offset = codebook_idxs * self.vocab_size
+            inputs_embeds = self.embed_tokens(input_ids + offset)
 
             if input_ids_are_first_codebook and backbone_last_hidden_state is None:
                 logger.warning(
@@ -661,7 +646,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
                 inputs_embeds[:, 0] = backbone_last_hidden_state
 
         inputs_embeds = self.inputs_embeds_projector(inputs_embeds)
-        
+
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -851,6 +836,23 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
 
         return causal_mask
 
+    def prepare_inputs_embeds(self, input_ids, backbone_last_hidden_state):
+        # input_ids shape (batch_size, seq_length)
+        # backbone_last_hidden_state shape (batch_size, hidden_size)
+        # output shape (batch_size, seq_length + 1, hidden_ssize)
+        batch_size, seq_length = input_ids.shape
+        inputs_embeds = torch.cat(
+            [
+                backbone_last_hidden_state.unsqueeze(1),
+                self.embed_tokens(
+                    input_ids,
+                    torch.arange(seq_length, device=input_ids.device).expand(batch_size, -1),
+                ),
+            ],
+            dim=1,
+        )
+        return inputs_embeds
+
 
 class CsmCodebooksHead(nn.Module):
     def __init__(self, hidden_size, num_codebooks, vocab_size):
@@ -867,8 +869,10 @@ class CsmCodebooksHead(nn.Module):
             seq_length = hidden_states.shape[1]
             codebook_weight = self.weight[torch.arange(seq_length)]
         else:
-            position_ids = position_ids[0].clone() # we've ensured before that position_ids are the same across the batch
-            position_ids -= 1 # position 0 is the last backbone hidden state
+            position_ids = position_ids[
+                0
+            ].clone()  # we've ensured before that position_ids are the same across the batch
+            position_ids -= 1  # position 0 is the last backbone hidden state
             codebook_idxs = position_ids[position_ids >= 0]
             codebook_weight = self.weight[codebook_idxs]
 
@@ -1022,9 +1026,12 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             **kwargs,
         )
-        
+
         is_first_generation_step = cache_position[0] == 0
         if is_first_generation_step:
+            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
+            model_inputs["input_ids"] = nn.functional.pad(model_inputs["input_ids"], (1, 0), value=0)
+
             cache_position = model_inputs["cache_position"]
             position_ids = model_inputs.get("position_ids", None)
             attention_mask = model_inputs.get("attention_mask", None)
@@ -1038,7 +1045,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
                 model_inputs["attention_mask"] = nn.functional.pad(attention_mask, (1, 0), value=1)
 
         return model_inputs
-    
+
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
         is_first_generation_step = model_kwargs["cache_position"][0] == 0
         if is_first_generation_step:
@@ -1046,49 +1053,22 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
             model_kwargs["cache_position"] = nn.functional.pad(cache_position, (0, 1), value=cache_position[-1] + 1)
             model_kwargs["attention_mask"] = nn.functional.pad(model_kwargs["attention_mask"], (1, 0), value=1)
 
-        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder)
+        return super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder
+        )
 
 
-class CsmBackboneEmbeddings(nn.Module):
-    def __init__(
-        self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, text_padding_idx, codebook_padding_idx
-    ):
+class CsmBackboneModelEmbeddings(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        # we do not set them as padding idx for the embeddings
-        # indeed, embed_audio_tokens is tied to the depth decoder that might use them
-        # nevertheless for the backbone model, they are used to zeros out the padding tokens
-        self.text_padding_idx = text_padding_idx
-        self.codebook_padding_idx = codebook_padding_idx
-        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size)
-        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), hidden_size)
-        self.audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
+        self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
+        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
 
     def forward(self, input_ids):
-        """
-        Args:
-            input_ids (`torch.Tensor` of shape (batch_size, seq_length, num_codebooks + 1)):
-                On last dimension, first values are codebook tokens, and last value is a text token.
-        Returns:
-            `torch.Tensor` of shape (batch_size, seq_length, hidden_size):
-                Embedded tokens, summed over the last dimension according to input_ids_mask.
-        """
-        text_tokens = input_ids[:, :, -1:]
-        text_tokens_mask = text_tokens != self.text_padding_idx
-
-        audio_tokens = input_ids[:, :, :-1]
-        audio_tokens_mask = audio_tokens != self.codebook_padding_idx
-        audio_tokens = audio_tokens + self.audio_tokens_offsets.to(audio_tokens.device)
-
-        text_embeds = self.embed_text_tokens(text_tokens)
-        text_embeds *= text_tokens_mask.unsqueeze(-1)
-
-        audio_embeds = self.embed_audio_tokens(audio_tokens)
-        audio_embeds *= audio_tokens_mask.unsqueeze(-1)
-
-        inputs_embeds = torch.cat([audio_embeds, text_embeds], dim=-2)
-        inputs_embeds = inputs_embeds.sum(dim=-2)
-
-        return inputs_embeds
+        audio_tokens_offsets = self.audio_tokens_offsets.to(input_ids.device)
+        input_embeds = self.embed_tokens(input_ids + audio_tokens_offsets)
+        input_embeds = input_embeds.sum(dim=2)
+        return input_embeds
 
 
 CSM_BACKBONE_START_DOCSTRING = START_DOCSTRING_BASE.format(config_class="CsmBackboneConfig")
@@ -1128,20 +1108,14 @@ class CsmBackboneModel(CsmPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = CsmBackboneEmbeddings(
-            config.hidden_size,
-            config.vocab_size,
-            config.num_codebooks,
-            config.codebook_vocab_size,
-            self.padding_idx,
-            config.codebook_pad_token_id,
-        )
+        self.embed_tokens = CsmBackboneModelEmbeddings(config)
         self.layers = nn.ModuleList(
             [CsmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = CsmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = CsmRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1400,8 +1374,8 @@ CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=BACKBONE
 )
 class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
-        "backbone_model.embed_tokens.embed_audio_tokens.weight",
-        "depth_decoder.model.embed_tokens.embed_audio_tokens.weight",
+        "backbone_model.embed_tokens.weight",
+        "depth_decoder.model.embed_tokens.weight",
     ]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -1410,8 +1384,10 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.embed_text_tokens = nn.Embedding(config.text_vocab_size, config.hidden_size)
+        self.backbone_model = CsmBackboneModel._from_config(config)
         self.depth_decoder = CsmDepthDecoderForCausalLM._from_config(config.depth_decoder_config)
-        self.backbone_model = CsmBackboneModel._from_config(config.backbone_config)
+        self.codec_model = AutoModel.from_config(config.codec_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1428,13 +1404,6 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens.embed_audio_tokens,
-            )
-
     @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(CSM_INPUTS_DOCSTRING)
@@ -1442,8 +1411,9 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        input_ids_mask: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        input_values_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1487,9 +1457,14 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if input_ids is not None and input_ids.ndim == 2:
+            merged_inputs = self._merge_input_ids_with_input_values(input_ids, input_values, input_values_mask, labels)
+            inputs_embeds = merged_inputs["inputs_embeds"]
+            labels = merged_inputs["labels"]
+            input_ids = None
+
         backbone_outputs = self.backbone_model(
             input_ids=input_ids,
-            input_ids_mask=input_ids_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1520,36 +1495,27 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
             # for the depth decoder, we need to select the frames to train on
             # those are frames where the label is not uniformly `ignore_index` along the codebook dimension
-            depth_decoder_labels = labels[:, :, : self.config.num_codebooks]
+            depth_decoder_labels = labels
             mask_idxs = (depth_decoder_labels[:, :, 1:] == -100).all(dim=-1)
-            train_idxs = (~mask_idxs).nonzero()
+            train_idxs = (~mask_idxs).nonzero(as_tuple=True)
 
-            depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], : self.config.num_codebooks - 1]
-            backbone_last_hidden_states = backbone_hidden_states[train_idxs[:, 0], train_idxs[:, 1] - 1, :]
-            depth_decoder_labels = depth_decoder_labels[train_idxs[:, 0], train_idxs[:, 1], :]
+            depth_decoder_input_ids = labels[train_idxs[0], train_idxs[1], : self.config.num_codebooks - 1]
+            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
+            depth_decoder_input_ids = nn.functional.pad(depth_decoder_input_ids, (1, 0), value=0)
 
-            codebook_idxs = torch.arange(
-                self.config.num_codebooks - 1, device=depth_decoder_input_ids.device, dtype=torch.long
-            )
-            codebook_idxs = codebook_idxs.expand(depth_decoder_input_ids.shape[0], -1)
-            inputs_embeds = torch.cat(
-                [
-                    backbone_last_hidden_states.unsqueeze(1),
-                    self.depth_decoder.get_input_embeddings()(depth_decoder_input_ids, codebook_idxs),
-                ],
-                dim=1,
-            )
+            backbone_last_hidden_states = backbone_hidden_states[train_idxs[0], train_idxs[1] - 1, :]
+            depth_decoder_labels = depth_decoder_labels[train_idxs[0], train_idxs[1], :]
 
             depth_decoder_outputs = self.depth_decoder(
-                inputs_embeds=inputs_embeds,
+                input_ids=depth_decoder_input_ids,
+                backbone_last_hidden_state=backbone_last_hidden_states,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
-                cache_position=cache_position,
                 labels=depth_decoder_labels,
             )
-  
+
             depth_decoder_loss = depth_decoder_outputs.loss
             loss = backbone_loss + depth_decoder_loss
 
@@ -1570,6 +1536,13 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             else None,
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
+
+    def _tie_weights(self):
+        if self.config.tie_codebooks_embeddings:
+            self._tie_or_clone_weights(
+                self.backbone_model.embed_tokens,
+                self.depth_decoder.model.embed_tokens,
+            )
 
     def _sample(
         self,
@@ -1629,11 +1602,9 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # *************** Csm specific ***************
-        # expand input_ids to (batch_size, seq_length, num_codebooks)
-        # input_ids = input_ids.reshape(batch_size, 0, self.config.num_codebooks + 1)
         depth_decoder_generate_kwargs = model_kwargs.pop("depth_decoder_generate_kwargs", {})
         # ============================================
 
@@ -1723,25 +1694,23 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             )
             # codebook_ids = torch.cat([first_codebook_ids, depth_decoder_outputs], dim=-1)
             codebook_ids = depth_decoder_outputs if isinstance(depth_decoder_outputs, torch.Tensor) else codebook_ids
-            next_tokens = torch.cat(
-                [
-                    codebook_ids,
-                    torch.ones((codebook_ids.shape[0], 1), dtype=torch.long, device=codebook_ids.device)
-                    * self.backbone_model.padding_idx,
-                ],
-                dim=-1,
-            )
+            next_tokens = codebook_ids
             # ============================================
 
             # *************** Csm specific ***************
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences.unsqueeze(-1) + pad_token_id * (1 - unfinished_sequences.unsqueeze(-1))
+                next_tokens = next_tokens * unfinished_sequences.unsqueeze(-1) + pad_token_id * (
+                    1 - unfinished_sequences.unsqueeze(-1)
+                )
             # ============================================
 
             # *************** Csm specific ***************
             # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None, :]], dim=1)
+            if input_ids.ndim == 2:
+                input_ids = next_tokens[:, None, :]
+            else:
+                input_ids = torch.cat([input_ids, next_tokens[:, None, :]], dim=1)
             # ============================================
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
@@ -1749,7 +1718,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             # *************** Csm specific ***************
             # for the eos stopping criteria, is it expected that the eos token is the same for each codebook !!!!
             unfinished_sequences = unfinished_sequences & ~(
-                input_ids[:, -1, :-1] == self.config.backbone_config.codebook_eos_token_id
+                input_ids[:, -1, :-1] == self.config.codebook_eos_token_id
             ).all(-1)
             # ============================================
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -1790,15 +1759,6 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
                 )
         else:
             return input_ids
-    
-    def _get_initial_cache_position(self, input_ids, model_kwargs):
-        """
-        This method overrides [~generation.utils.GenerationMixin._get_initial_cache_position].
-        """
-        return super()._get_initial_cache_position(
-            torch.empty(input_ids.shape[:2], dtype=torch.long, device=input_ids.device),
-            model_kwargs
-        )
 
     def _validate_model_kwargs(self, model_kwargs):
         """
@@ -1819,46 +1779,111 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         depth_decoder_generate_kwargs["max_new_tokens"] = max_new_tokens
         depth_decoder_generate_kwargs["return_dict_in_generate"] = False
 
-    def _maybe_initialize_input_ids_for_generation(
+    def _get_stopping_criteria(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> torch.LongTensor:
-        """Overrides [~generation.utils.GenerationMixin._maybe_initialize_input_ids_for_generation] to match the specifics of the Csm model (third dimension on input_ids)."""
-        if inputs is not None:
-            return inputs
-
-        # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
-        # soft-prompting or in multimodal implementations built on top of decoder-only language models.
-        batch_size = 1
-        for value in model_kwargs.values():
-            if isinstance(value, torch.Tensor):
-                batch_size = value.shape[0]
-                break
-
-        if "inputs_embeds" in model_kwargs:
-            return torch.ones((batch_size, 0, self.config.backbone_config.num_codebooks + 1), dtype=torch.long, device=self.device)
-
-        if bos_token_id is None:
-            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-
-        return torch.ones((batch_size, 1, self.config.backbone_config.num_codebooks + 1), dtype=torch.long, device=self.device) * bos_token_id
-
-    def _get_stopping_criteria(self, *args, **kwargs,) -> StoppingCriteriaList:
+        *args,
+        **kwargs,
+    ) -> StoppingCriteriaList:
         criteria = super()._get_stopping_criteria(*args, **kwargs)
-        
+
         kept_criteria = StoppingCriteriaList()
         for criterion in criteria:
             if not isinstance(criterion, MaxLengthCriteria):
-                logger.warning(f"Csm does not support {criterion.__class__.__name__} stopping criteria, it will be ignored.")
+                logger.warning(
+                    f"Csm does not support {criterion.__class__.__name__} stopping criteria, it will be ignored."
+                )
             else:
                 kept_criteria.append(criterion)
         return kept_criteria
-    
+
+    def _merge_input_ids_with_input_values(
+        self, input_ids=None, input_values=None, input_values_mask=None, labels=None
+    ):
+        if input_ids is None and input_values is None:
+            return None
+
+        inputs_embeds = self.embed_text_tokens(input_ids)
+
+        if input_values is not None:
+            # =======================================
+            # TODO: @eustlb, this should be batched !!!
+            # bu requires making sure batched inference of the codec model works as intended
+            audio_batch_list = [
+                input_values_batch[:, : input_values_mask_batch.sum(-1)]
+                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
+            ]
+            audio_tokens_list = []
+            for audio_batch in audio_batch_list:
+                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                audio_tokens_list.append(codebook_ids[0])
+
+            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
+            batched_audio_token_ids = torch.stack(
+                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
+            )
+            # =======================================
+
+            offsets = self.backbone_model.audio_tokens_offsets.to(batched_audio_token_ids.device)
+            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids + offsets)
+            audio_embeds = audio_embeds.sum(dim=2)
+
+            # TODO: rewrite comment this is outdated
+            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
+            # We need to:
+            # 1. Select only the valid frames for each audio (excluding padding frames)
+            # 2. Place these audio tokens at the correct positions in input_ids where audio tokens are located
+            audio_token_id = self.config.audio_token_id
+            audio_token_mask = input_ids == audio_token_id
+
+            # retreive the number of audio tokens for each audio from the input_ids
+            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
+            num_audio_tokens = change_idxs.diff()
+            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(len(num_audio_tokens)) if i % 2 == 0])
+
+            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
+                len(num_audio_tokens), -1
+            ) < num_audio_tokens.unsqueeze(-1)
+            frames_mask = frames_mask.flatten()
+
+            audio_token_idxs = audio_token_mask.nonzero(as_tuple=True)
+            inputs_embeds[audio_token_idxs[0], audio_token_idxs[1]] = audio_embeds.view(-1, audio_embeds.shape[-1])[
+                frames_mask
+            ]
+
+            # same for the audio eos token
+            audio_eos_frame_ids = (
+                torch.ones((input_ids.shape[0], self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
+                * self.config.codebook_eos_token_id
+            )
+            audio_eos_frame_ids += self.backbone_model.audio_tokens_offsets.to(audio_eos_frame_ids.device)
+            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids)
+            audio_eos_embeds = audio_eos_embeds.sum(dim=1)
+
+            audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
+            audio_eos_token_idxs = audio_eos_token_mask.nonzero(as_tuple=True)
+            inputs_embeds[audio_eos_token_idxs[0], audio_eos_token_idxs[1]] = audio_eos_embeds.repeat(
+                audio_eos_token_idxs[0].shape[0], 1
+            )
+
+            # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
+            if labels is not None:
+                labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
+                labels_expanded[audio_token_idxs[0], audio_token_idxs[1]] = batched_audio_token_ids.view(
+                    -1, self.config.num_codebooks
+                )[frames_mask]
+                # mask depth decoder
+                depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
+                labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
+                labels = labels_expanded
+
+        return {"inputs_embeds": inputs_embeds, "labels": labels}
+
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
+        input_values_mask: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -1883,7 +1908,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         </Tip>
 
         Parameters:
-            inputs_ids (`torch.Tensor` of shape (batch_size, seq_length, num_codebooks + 1), *optional*):
+            inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
                 The sequence used as a prompt for the backbone model.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
@@ -1926,10 +1951,14 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         self._validate_depth_decoder_generate_kwargs(depth_decoder_generate_kwargs)
 
         if kwargs.pop("output_hidden_states", True) is False:
-            logger.warning("Csm does not support `output_hidden_states=False`, this will be ignored in favor of `True`.")
+            logger.warning(
+                "Csm does not support `output_hidden_states=False`, this will be ignored in favor of `True`."
+            )
 
         return super().generate(
             input_ids=input_ids,
+            input_values=input_values,
+            input_values_mask=input_values_mask,
             depth_decoder_generate_kwargs=depth_decoder_generate_kwargs,
             generation_config=generation_config,
             logits_processor=logits_processor,
