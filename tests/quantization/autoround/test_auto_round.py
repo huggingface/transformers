@@ -40,7 +40,7 @@ class AutoRoundTest(unittest.TestCase):
     model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
     input_text = "There is a girl who likes adventure,"
     EXPECTED_OUTPUTS = set()
-    ## different backends will have a little variation of  output
+    ## Different backends may produce slight variations in output
     EXPECTED_OUTPUTS.add(
         "There is a girl who likes adventure, and she has been exploring the world "
         "for many years. She travels to different countries and cultures, trying new "
@@ -166,6 +166,7 @@ class AutoRoundTest(unittest.TestCase):
         text = "There is a girl who likes adventure,"
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
         tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
+
     @require_intel_extension_for_pytorch
     def test_convert_from_awq_cpu(self):
         """
