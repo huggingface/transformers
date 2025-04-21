@@ -1498,7 +1498,7 @@ class GenerationTesterMixin:
                 position_ids.masked_fill_(attention_mask == 0, 1)
                 model_kwargs["position_ids"] = position_ids
             if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                cache_position = torch.arange(input_ids.shape[1], device=torch_device)
                 model_kwargs["cache_position"] = cache_position
             return model_kwargs
 
@@ -1524,10 +1524,10 @@ class GenerationTesterMixin:
             pad_token_id = (
                 config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
             )
-            pad_size = (input_ids.shape[0], 32)
+            pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1)
             model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
@@ -1612,7 +1612,7 @@ class GenerationTesterMixin:
                 # tests in imagegpt such that `prepare_config_and_inputs_for_common` returns the later (and the other
                 # tests use it)
                 key = "input_ids" if "input_ids" in inputs else "pixel_values"
-                batch_size, seq_length = inputs[key].shape
+                batch_size, seq_length = inputs[key].shape[:2]
                 for i in range(num_hidden_layers):
                     self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                     self.assertEqual(
