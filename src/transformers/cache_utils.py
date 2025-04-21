@@ -1659,9 +1659,7 @@ class HybridCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1863,8 +1861,6 @@ class HybridChunkedCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
     is_compileable = True
 
     def __init__(

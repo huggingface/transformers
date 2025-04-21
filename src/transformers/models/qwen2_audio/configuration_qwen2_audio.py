@@ -157,6 +157,9 @@ class Qwen2AudioConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_audio"
+    attribute_map = {
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     def __init__(
