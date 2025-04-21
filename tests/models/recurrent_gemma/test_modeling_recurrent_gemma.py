@@ -355,7 +355,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
         ).to(torch_device)
-        model.config.attention_window_size = 256 # Make the attention window size shorter than the current prompt
+        model.config.attention_window_size = 256  # Make the attention window size shorter than the current prompt
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
