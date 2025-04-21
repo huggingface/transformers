@@ -543,5 +543,4 @@ class Emu3IntegrationTest(unittest.TestCase):
             repo_type="dataset",
         )
         original_pixels = np.load(filepath)
-
         self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))
