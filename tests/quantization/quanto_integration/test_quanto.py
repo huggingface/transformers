@@ -30,7 +30,7 @@ from transformers.utils import is_accelerate_available, is_optimum_quanto_availa
 if is_torch_available():
     import torch
 
-    from transformers import LlamaForCausalLM, LlamaTokenizer
+    from transformers import LlamaForCausalLM
 
 if is_accelerate_available():
     from accelerate import init_empty_weights

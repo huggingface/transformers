@@ -355,7 +355,9 @@ class AwqFusedTest(unittest.TestCase):
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
-    @unittest.skip(reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners")
+    @unittest.skip(
+        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    )
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -379,7 +381,9 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
-    @unittest.skip(reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners")
+    @unittest.skip(
+        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    )
     def test_generation_fused_batched(self):
         """
         Test generation quality for fused models - multi batch case
@@ -428,7 +432,9 @@ class AwqFusedTest(unittest.TestCase):
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
-    @unittest.skip(reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners")
+    @unittest.skip(
+        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    )
     def test_generation_custom_model(self):
         """
         Test generation quality for fused models using custom fused map.
