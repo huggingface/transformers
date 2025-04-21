@@ -96,3 +96,6 @@ def xnli_compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     else:
         raise KeyError(task_name)
+
+
+__all__ = ["glue_compute_metrics", "xnli_compute_metrics"]

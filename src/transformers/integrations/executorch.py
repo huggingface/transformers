@@ -16,7 +16,7 @@ import torch
 
 from transformers.generation.configuration_utils import GenerationConfig
 
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, requires
 
 
 if is_torch_available():
@@ -216,6 +216,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
 
+@requires(backends=("torch",))
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -458,6 +459,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         return outputs.logits
 
 
+@requires(backends=("torch",))
 def convert_and_export_with_cache(
     model: PreTrainedModel,
     example_input_ids: Optional[torch.Tensor] = None,
@@ -686,3 +688,6 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     break
 
             return generated_ids
+
+
+__all__ = ["TorchExportableModuleWithStaticCache", "convert_and_export_with_cache"]

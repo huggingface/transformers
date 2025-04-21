@@ -441,3 +441,6 @@ class HfArgumentParser(ArgumentParser):
         """
         outputs = self.parse_dict(yaml.safe_load(Path(yaml_file).read_text()), allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
+
+
+__all__ = ["HfArgumentParser"]

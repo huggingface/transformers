@@ -764,3 +764,6 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     for i in range(len(items)):
         result += items[i].tolist()
     return result
+
+
+__all__ = ["AutomaticSpeechRecognitionPipeline"]

@@ -25,6 +25,7 @@ from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -34,6 +35,7 @@ def _get_constant_lambda(_=None):
     return 1
 
 
+@requires(backends=("torch",))
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     """
     Create a schedule with a constant learning rate, using the learning rate set in optimizer.
@@ -75,6 +77,7 @@ def _get_constant_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmu
     return 1.0
 
 
+@requires(backends=("torch",))
 def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: int, last_epoch: int = -1):
     """
     Create a schedule with a constant learning rate preceded by a warmup period during which the learning rate
@@ -102,6 +105,7 @@ def _get_linear_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_
     return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
 
 
+@requires(backends=("torch",))
 def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
     """
     Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
@@ -138,6 +142,7 @@ def _get_cosine_schedule_with_warmup_lr_lambda(
     return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
 
 
+@requires(backends=("torch",))
 def get_cosine_schedule_with_warmup(
     optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: float = 0.5, last_epoch: int = -1
 ):
@@ -183,6 +188,7 @@ def _get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda(
     return max(0.0, 0.5 * (1.0 + math.cos(math.pi * ((float(num_cycles) * progress) % 1.0))))
 
 
+@requires(backends=("torch",))
 def get_cosine_with_hard_restarts_schedule_with_warmup(
     optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
 ):
@@ -237,6 +243,7 @@ def _get_polynomial_decay_schedule_with_warmup_lr_lambda(
         return decay / lr_init  # as LambdaLR multiplies by lr_init
 
 
+@requires(backends=("torch",))
 def get_polynomial_decay_schedule_with_warmup(
     optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0, last_epoch=-1
 ):
@@ -291,6 +298,7 @@ def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps:
     return decay
 
 
+@requires(backends=("torch",))
 def get_inverse_sqrt_schedule(
     optimizer: Optimizer, num_warmup_steps: int, timescale: Optional[int] = None, last_epoch: int = -1
 ):
@@ -422,6 +430,7 @@ def _get_wsd_scheduler_lambda(
     return min_lr_ratio
 
 
+@requires(backends=("torch",))
 def get_wsd_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
@@ -509,6 +518,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
 }
 
 
+@requires(backends=("torch",))
 def get_scheduler(
     name: Union[str, SchedulerType],
     optimizer: Optimizer,
@@ -602,6 +612,7 @@ def get_scheduler(
     )
 
 
+@requires(backends=("torch",))
 class Adafactor(Optimizer):
     """
     AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
@@ -888,3 +899,17 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
 
     """
     return AdafactorSchedule(optimizer, initial_lr)
+
+
+__all__ = [
+    "Adafactor",
+    "get_constant_schedule",
+    "get_constant_schedule_with_warmup",
+    "get_cosine_schedule_with_warmup",
+    "get_cosine_with_hard_restarts_schedule_with_warmup",
+    "get_inverse_sqrt_schedule",
+    "get_linear_schedule_with_warmup",
+    "get_polynomial_decay_schedule_with_warmup",
+    "get_scheduler",
+    "get_wsd_schedule",
+]

@@ -9,7 +9,7 @@ import tensorflow as tf
 from huggingface_hub import Repository, create_repo
 from packaging.version import parse
 
-from . import IntervalStrategy, PreTrainedTokenizerBase
+from . import IntervalStrategy, PreTrainedTokenizerBase, requires
 from .modelcard import TrainingSummary
 from .modeling_tf_utils import keras
 
@@ -17,6 +17,7 @@ from .modeling_tf_utils import keras
 logger = logging.getLogger(__name__)
 
 
+@requires(backends=("tf",))
 class KerasMetricCallback(keras.callbacks.Callback):
     """
     Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
@@ -265,6 +266,7 @@ class KerasMetricCallback(keras.callbacks.Callback):
         logs.update(metric_output)
 
 
+@requires(backends=("tf",))
 class PushToHubCallback(keras.callbacks.Callback):
     """
     Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
@@ -411,3 +413,6 @@ class PushToHubCallback(keras.callbacks.Callback):
             with (self.output_dir / "README.md").open("w") as f:
                 f.write(model_card)
             self.repo.push_to_hub(commit_message="End of training", blocking=True)
+
+
+__all__ = ["KerasMetricCallback", "PushToHubCallback"]

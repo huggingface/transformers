@@ -219,3 +219,6 @@ class TextToAudioPipeline(Pipeline):
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict
+
+
+__all__ = ["TextToAudioPipeline"]

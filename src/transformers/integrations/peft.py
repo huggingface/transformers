@@ -591,3 +591,6 @@ class PeftAdapterMixin:
         if len(self.peft_config) == 0:
             del self.peft_config
             self._hf_peft_config_loaded = False
+
+
+__all__ = ["PeftAdapterMixin"]

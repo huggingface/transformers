@@ -4260,3 +4260,5 @@ if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
     PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
         object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
     )
+
+__all__ = ["AddedToken", "BatchEncoding", "CharSpan", "PreTrainedTokenizerBase", "SpecialTokensMixin", "TokenSpan"]

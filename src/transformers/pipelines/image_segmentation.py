@@ -218,3 +218,6 @@ class ImageSegmentationPipeline(Pipeline):
         else:
             raise ValueError(f"Subtask {subtask} is not supported for model {type(self.model)}")
         return annotation
+
+
+__all__ = ["ImageSegmentationPipeline"]

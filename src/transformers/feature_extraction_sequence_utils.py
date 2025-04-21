@@ -369,3 +369,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+
+__all__ = ["SequenceFeatureExtractor"]

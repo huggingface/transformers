@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
@@ -25,6 +24,7 @@ from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
 from ..utils import ModelOutput, is_torch_available, logging
+from ..utils.import_utils import requires
 from .configuration_utils import PretrainedConfig, WatermarkingConfig
 
 
@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@requires(backends=("torch",))
 class WatermarkDetectorOutput:
     """
     Outputs of a watermark detector.
@@ -70,6 +71,7 @@ class WatermarkDetectorOutput:
     confidence: Optional[np.array] = None
 
 
+@requires(backends=("torch",))
 class WatermarkDetector:
     r"""
     Detector for detection of watermark generated text. The detector needs to be given the exact same settings that were
@@ -242,6 +244,7 @@ class WatermarkDetector:
         return prediction
 
 
+@requires(backends=("torch",))
 class BayesianDetectorConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
@@ -349,6 +352,7 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         return 0.5 * ((g_values + 0.5) * p_two_unique_tokens + p_one_unique_token)
 
 
+@requires(backends=("torch",))
 class BayesianDetectorModel(PreTrainedModel):
     r"""
     Bayesian classifier for watermark detection.
@@ -479,6 +483,7 @@ class BayesianDetectorModel(PreTrainedModel):
         return BayesianWatermarkDetectorModelOutput(loss=loss, posterior_probabilities=out)
 
 
+@requires(backends=("torch",))
 class SynthIDTextWatermarkDetector:
     r"""
     SynthID text watermark detector class.
@@ -547,3 +552,12 @@ class SynthIDTextWatermarkDetector:
         )
         # g values shape [batch_size, output_len - (ngram_len - 1), depth]
         return self.detector_module(g_values, combined_mask)
+
+
+__all__ = [
+    "WatermarkDetector",
+    "WatermarkDetectorOutput",
+    "BayesianDetectorModel",
+    "BayesianDetectorConfig",
+    "SynthIDTextWatermarkDetector",
+]

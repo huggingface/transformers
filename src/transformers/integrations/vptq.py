@@ -17,7 +17,10 @@ import torch.nn as nn
 from accelerate import init_empty_weights
 from vptq import VQuantLinear
 
+from ..utils.import_utils import requires
 
+
+@requires(backends=("vptq",))
 def replace_with_vptq_linear(
     model,
     quantization_config=None,
@@ -99,3 +102,6 @@ def replace_with_vptq_linear(
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
+
+
+__all__ = ["replace_with_vptq_linear"]

@@ -69,6 +69,7 @@ from .utils import (
     working_or_temp_dir,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
+from .utils.import_utils import requires
 
 
 if is_safetensors_available():
@@ -1106,6 +1107,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     return mask, current_weights
 
 
+@requires(backends=("tf",))
 class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushToHubMixin):
     r"""
     Base class for all TF models.
@@ -3293,6 +3295,7 @@ class TFConv1D(keras.layers.Layer):
         return x
 
 
+@requires(backends=("tf",))
 class TFSharedEmbeddings(keras.layers.Layer):
     r"""
     Construct shared token embeddings.
@@ -3397,6 +3400,7 @@ class TFSharedEmbeddings(keras.layers.Layer):
         return tf.reshape(logits, first_dims + [self.vocab_size])
 
 
+@requires(backends=("tf",))
 class TFSequenceSummary(keras.layers.Layer):
     """
     Compute a single vector summary of a sequence hidden states.
@@ -3533,3 +3537,6 @@ def get_initializer(initializer_range: float = 0.02) -> keras.initializers.Trunc
         `keras.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+__all__ = ["TFPreTrainedModel", "TFSequenceSummary", "TFSharedEmbeddings", "shape_list"]

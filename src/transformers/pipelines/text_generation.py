@@ -494,3 +494,6 @@ class TextGenerationPipeline(Pipeline):
             records.append(record)
 
         return records
+
+
+__all__ = ["TextGenerationPipeline"]

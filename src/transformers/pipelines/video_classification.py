@@ -182,3 +182,6 @@ def read_video_pyav(container, indices):
         if i >= start_index and i in indices:
             frames.append(frame)
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
+__all__ = ["VideoClassificationPipeline"]

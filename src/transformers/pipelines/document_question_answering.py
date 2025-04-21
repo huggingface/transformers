@@ -519,3 +519,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
 
         return answers
+
+
+__all__ = [
+    "DocumentQuestionAnsweringPipeline",
+]

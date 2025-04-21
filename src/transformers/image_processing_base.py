@@ -38,6 +38,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import requires
 
 
 if is_vision_available():
@@ -68,6 +69,7 @@ class BatchFeature(BaseBatchFeature):
 
 
 # TODO: (Amy) - factor out the common parts of this and the feature extractor
+@requires(backends=("vision",))
 class ImageProcessingMixin(PushToHubMixin):
     """
     This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
@@ -556,3 +558,5 @@ if ImageProcessingMixin.push_to_hub.__doc__ is not None:
     ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
         object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
     )
+
+__all__ = ["ImageProcessingMixin"]

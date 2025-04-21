@@ -671,3 +671,14 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
         return pt_model, loading_info
 
     return pt_model
+
+
+__all__ = [
+    "convert_tf_weight_name_to_pt_weight_name",
+    "load_pytorch_checkpoint_in_tf2_model",
+    "load_pytorch_model_in_tf2_model",
+    "load_pytorch_weights_in_tf2_model",
+    "load_tf2_checkpoint_in_pytorch_model",
+    "load_tf2_model_in_pytorch_model",
+    "load_tf2_weights_in_pytorch_model",
+]

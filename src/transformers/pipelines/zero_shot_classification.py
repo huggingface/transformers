@@ -266,3 +266,6 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             "labels": [candidate_labels[i] for i in top_inds],
             "scores": scores[0, top_inds].tolist(),
         }
+
+
+__all__ = ["ZeroShotClassificationPipeline"]

@@ -347,3 +347,6 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             return dataset
         else:
             raise ValueError("return_tensors should be one of 'tf' or 'pt'")
+
+
+__all__ = ["DataProcessor", "InputExample", "InputFeatures", "SingleSentenceClassificationProcessor"]

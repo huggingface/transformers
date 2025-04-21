@@ -22,6 +22,7 @@ from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
 from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
+from .utils.import_utils import requires
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -91,6 +92,7 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
     return new_layer
 
 
+@requires(backends=("torch",))
 class Conv1D(nn.Module):
     """
     1D-convolutional layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2).
@@ -153,6 +155,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     return new_layer
 
 
+@requires(backends=("torch",))
 def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
@@ -175,6 +178,7 @@ def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | N
         raise ValueError(f"Can't prune layer of class {layer.__class__}")
 
 
+@requires(backends=("torch",))
 def apply_chunking_to_forward(
     forward_fn: Callable[..., torch.Tensor],
     chunk_size: int,
@@ -358,3 +362,6 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
+
+
+__all__ = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]

@@ -12,6 +12,7 @@ from torch.nn import functional as F
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
+from ..utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -43,6 +44,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("torch",))
 class StoppingCriteria(ABC):
     """Abstract base class for all stopping criteria that can be applied during generation.
 
@@ -55,6 +57,7 @@ class StoppingCriteria(ABC):
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
+@requires(backends=("torch",))
 class MaxLengthCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the full generated number of tokens exceeds `max_length`. Keep
@@ -84,6 +87,7 @@ class MaxLengthCriteria(StoppingCriteria):
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
+@requires(backends=("torch",))
 class MaxTimeCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the full generation exceeds some amount of time. By default, the
@@ -107,6 +111,7 @@ class MaxTimeCriteria(StoppingCriteria):
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
+@requires(backends=("torch",))
 class StopStringCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever specific string sequences are generated. It preprocesses
@@ -448,6 +453,7 @@ class StopStringCriteria(StoppingCriteria):
         return torch.any(string_matches, dim=-1)
 
 
+@requires(backends=("torch",))
 class EosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token is generated.
@@ -472,6 +478,7 @@ class EosTokenCriteria(StoppingCriteria):
         return is_done
 
 
+@requires(backends=("torch",))
 class ConfidenceCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever assistant model's confidence in its prediction for the current token is lower than the threshold
@@ -493,6 +500,7 @@ class ConfidenceCriteria(StoppingCriteria):
         return False
 
 
+@requires(backends=("torch",))
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
@@ -509,6 +517,7 @@ class StoppingCriteriaList(list):
         return None
 
 
+@requires(backends=("torch",))
 def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int) -> StoppingCriteriaList:
     stopping_max_length = stopping_criteria.max_length
     new_stopping_criteria = deepcopy(stopping_criteria)
@@ -517,3 +526,15 @@ def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_leng
     elif stopping_max_length is None:
         new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
     return new_stopping_criteria
+
+
+__all__ = [
+    "MaxLengthCriteria",
+    "MaxTimeCriteria",
+    "ConfidenceCriteria",
+    "EosTokenCriteria",
+    "StoppingCriteria",
+    "StoppingCriteriaList",
+    "validate_stopping_criteria",
+    "StopStringCriteria",
+]

@@ -1439,18 +1439,15 @@ class NeptuneCallback(TrainerCallback):
             You can find and copy the name in Neptune from the project settings -> Properties. If None (default), the
             value of the `NEPTUNE_PROJECT` environment variable is used.
         name (`str`, *optional*): Custom name for the run.
-        base_namespace (`str`, *optional*, defaults to "finetuning"): In the Neptune run, the root namespace
+        base_namespace (`str`, *optional*, defaults to `"finetuning"`): In the Neptune run, the root namespace
             that will contain all of the metadata logged by the callback.
+        run (`Run`, *optional*): Pass a Neptune run object if you want to continue logging to an existing run.
+            Read more about resuming runs in the [docs](https://docs.neptune.ai/logging/to_existing_object).
         log_parameters (`bool`, *optional*, defaults to `True`):
             If True, logs all Trainer arguments and model parameters provided by the Trainer.
         log_checkpoints (`str`, *optional*): If "same", uploads checkpoints whenever they are saved by the Trainer.
             If "last", uploads only the most recently saved checkpoint. If "best", uploads the best checkpoint (among
             the ones saved by the Trainer). If `None`, does not upload checkpoints.
-        run (`Run`, *optional*): Pass a Neptune run object if you want to continue logging to an existing run.
-            Read more about resuming runs in the [docs](https://docs.neptune.ai/logging/to_existing_object).
-        **neptune_run_kwargs (*optional*):
-            Additional keyword arguments to be passed directly to the
-            [`neptune.init_run()`](https://docs.neptune.ai/api/neptune#init_run) function when a new run is created.
 
     For instructions and examples, see the [Transformers integration
     guide](https://docs.neptune.ai/integrations/transformers) in the Neptune documentation.
@@ -2058,9 +2055,9 @@ class DVCLiveCallback(TrainerCallback):
     those environment variables, see [here](https://dvc.org/doc/dvclive/ml-frameworks/huggingface).
 
     Args:
-        live (`dvclive.Live`, *optional*, defaults to `None`):
+        live (`dvclive.Live`, *optional*):
             Optional Live instance. If None, a new instance will be created using **kwargs.
-        log_model (Union[Literal["all"], bool], *optional*, defaults to `None`):
+        log_model (Union[Literal["all"], bool], *optional*):
             Whether to use `dvclive.Live.log_artifact()` to log checkpoints created by [`Trainer`]. If set to `True`,
             the final checkpoint is logged at the end of training. If set to `"all"`, the entire
             [`TrainingArguments`]'s `output_dir` is logged at each checkpoint.
@@ -2346,3 +2343,46 @@ def get_reporting_integration_callbacks(report_to):
             )
 
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]
+
+
+__all__ = [
+    "INTEGRATION_TO_CALLBACK",
+    "AzureMLCallback",
+    "ClearMLCallback",
+    "CodeCarbonCallback",
+    "CometCallback",
+    "DagsHubCallback",
+    "DVCLiveCallback",
+    "FlyteCallback",
+    "MLflowCallback",
+    "NeptuneCallback",
+    "NeptuneMissingConfiguration",
+    "SwanLabCallback",
+    "TensorBoardCallback",
+    "WandbCallback",
+    "get_available_reporting_integrations",
+    "get_reporting_integration_callbacks",
+    "hp_params",
+    "is_azureml_available",
+    "is_clearml_available",
+    "is_codecarbon_available",
+    "is_comet_available",
+    "is_dagshub_available",
+    "is_dvclive_available",
+    "is_flyte_deck_standard_available",
+    "is_flytekit_available",
+    "is_mlflow_available",
+    "is_neptune_available",
+    "is_optuna_available",
+    "is_ray_available",
+    "is_ray_tune_available",
+    "is_sigopt_available",
+    "is_swanlab_available",
+    "is_tensorboard_available",
+    "is_wandb_available",
+    "rewrite_logs",
+    "run_hp_search_optuna",
+    "run_hp_search_ray",
+    "run_hp_search_sigopt",
+    "run_hp_search_wandb",
+]

@@ -19,19 +19,23 @@ import importlib.machinery
 import importlib.metadata
 import importlib.util
 import json
+import operator
 import os
+import re
 import shutil
 import subprocess
 import sys
 import warnings
 from collections import OrderedDict
+from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 from packaging import version
 
+from .. import __version__
 from . import logging
 
 
@@ -1766,6 +1770,15 @@ RICH_IMPORT_ERROR = """
 rich`. Please note that you may need to restart your runtime after installation.
 """
 
+
+def default_import_error(library_name: str) -> str:
+    import_error = """
+{0} requires the triton library but it was not found in your environment. Please install it and restart your
+runtime.
+    """
+    return import_error.format(library_name)
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
@@ -1814,6 +1827,8 @@ BACKENDS_MAPPING = OrderedDict(
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
         ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
+        ("triton", (is_triton_available, default_import_error("triton"))),
+        ("vptq", (is_vptq_available, default_import_error("triton"))),
     ]
 )
 
@@ -1832,8 +1847,16 @@ def requires_backends(obj, backends):
     if "tf" in backends and "torch" not in backends and is_torch_available() and not is_tf_available():
         raise ImportError(TF_IMPORT_ERROR_WITH_PYTORCH.format(name))
 
-    checks = (BACKENDS_MAPPING[backend] for backend in backends)
-    failed = [msg.format(name) for available, msg in checks if not available()]
+    failed = []
+    for backend in backends:
+        if isinstance(backend, Backend):
+            available, msg = backend.is_satisfied, backend.error_message
+        else:
+            available, msg = BACKENDS_MAPPING[backend]
+
+        if not available():
+            failed.append(msg.format(name))
+
     if failed:
         raise ImportError("".join(failed))
 
@@ -1878,10 +1901,13 @@ class _LazyModule(ModuleType):
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
         extra_objects: Optional[Dict[str, object]] = None,
+        explicit_import_shortcut: Dict[str, List[str]] = None,
     ):
         super().__init__(name)
 
         self._object_missing_backend = {}
+        self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
+
         if any(isinstance(key, frozenset) for key in import_structure.keys()):
             self._modules = set()
             self._class_to_module = {}
@@ -1910,14 +1936,25 @@ class _LazyModule(ModuleType):
                 module_keys = set(
                     chain(*[[k.rsplit(".", i)[0] for i in range(k.count(".") + 1)] for k in list(module.keys())])
                 )
+
                 for backend in backends:
-                    if backend not in BACKENDS_MAPPING:
-                        raise ValueError(
-                            f"Error: the following backend: '{backend}' was specified around object {module} but isn't specified in the backends mapping."
-                        )
-                    callable, error = BACKENDS_MAPPING[backend]
-                    if not callable():
+                    if backend in BACKENDS_MAPPING:
+                        callable, _ = BACKENDS_MAPPING[backend]
+                    else:
+                        if any(key in backend for key in ["=", "<", ">"]):
+                            backend = Backend(backend)
+                            callable = backend.is_satisfied
+                        else:
+                            raise ValueError(
+                                f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}"
+                            )
+
+                    try:
+                        if not callable():
+                            missing_backends.append(backend)
+                    except (importlib.metadata.PackageNotFoundError, ModuleNotFoundError, RuntimeError):
                         missing_backends.append(backend)
+
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
@@ -1931,6 +1968,7 @@ class _LazyModule(ModuleType):
                     _import_structure.setdefault(key, []).extend(values)
 
                 # Needed for autocompletion in an IDE
+                # new_module = {k: v for k, v in module.items()}  # if 'models.' in k}
                 self.__all__.extend(module_keys | set(chain(*module.values())))
 
             self.__file__ = module_file
@@ -1994,12 +2032,29 @@ class _LazyModule(ModuleType):
 
             value = Placeholder
         elif name in self._class_to_module.keys():
-            module = self._get_module(self._class_to_module[name])
-            value = getattr(module, name)
+            try:
+                module = self._get_module(self._class_to_module[name])
+                value = getattr(module, name)
+            except (ModuleNotFoundError, RuntimeError) as e:
+                raise ModuleNotFoundError(
+                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                ) from e
+
         elif name in self._modules:
-            value = self._get_module(name)
+            try:
+                value = self._get_module(name)
+            except (ModuleNotFoundError, RuntimeError) as e:
+                raise ModuleNotFoundError(
+                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                ) from e
         else:
-            raise AttributeError(f"module {self.__name__} has no attribute {name}")
+            value = None
+            for key, values in self._explicit_import_shortcut.items():
+                if name in values:
+                    value = self._get_module(key)
+
+            if value is None:
+                raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
         setattr(self, name, value)
         return value
@@ -2040,6 +2095,64 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
+class VersionComparison(Enum):
+    EQUAL = operator.eq
+    NOT_EQUAL = operator.ne
+    GREATER_THAN = operator.gt
+    LESS_THAN = operator.lt
+    GREATER_THAN_OR_EQUAL = operator.ge
+    LESS_THAN_OR_EQUAL = operator.le
+
+    @staticmethod
+    def from_string(version_string: str) -> "VersionComparison":
+        string_to_operator = {
+            "=": VersionComparison.EQUAL.value,
+            "==": VersionComparison.EQUAL.value,
+            "!=": VersionComparison.NOT_EQUAL.value,
+            ">": VersionComparison.GREATER_THAN.value,
+            "<": VersionComparison.LESS_THAN.value,
+            ">=": VersionComparison.GREATER_THAN_OR_EQUAL.value,
+            "<=": VersionComparison.LESS_THAN_OR_EQUAL.value,
+        }
+
+        return string_to_operator[version_string]
+
+
+@lru_cache()
+def split_package_version(package_version_str) -> Tuple[str, str, str]:
+    pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
+    match = re.match(pattern, package_version_str)
+    if match:
+        return (match.group(1), match.group(2), match.group(3))
+    else:
+        raise ValueError(f"Invalid package version string: {package_version_str}")
+
+
+class Backend:
+    def __init__(self, backend_requirement: str):
+        self.package_name, self.version_comparison, self.version = split_package_version(backend_requirement)
+
+        if self.package_name not in BACKENDS_MAPPING:
+            raise ValueError(
+                f"Backends should be defined in the BACKENDS_MAPPING. Offending backend: {self.package_name}"
+            )
+
+    def is_satisfied(self) -> bool:
+        return VersionComparison.from_string(self.version_comparison)(
+            version.parse(importlib.metadata.version(self.package_name)), version.parse(self.version)
+        )
+
+    def __repr__(self) -> str:
+        return f'Backend("{self.package_name}", {VersionComparison[self.version_comparison]}, "{self.version}")'
+
+    @property
+    def error_message(self):
+        return (
+            f"{{0}} requires the {self.package_name} library version {self.version_comparison}{self.version}. That"
+            f" library was not found with this version in your environment."
+        )
+
+
 def requires(*, backends=()):
     """
     This decorator enables two things:
@@ -2047,15 +2160,22 @@ def requires(*, backends=()):
       to execute correctly without instantiating it
     - The '@requires' string is used to dynamically import objects
     """
-    for backend in backends:
-        if backend not in BACKENDS_MAPPING:
-            raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     if not isinstance(backends, tuple):
         raise ValueError("Backends should be a tuple.")
 
+    applied_backends = []
+    for backend in backends:
+        if backend in BACKENDS_MAPPING:
+            applied_backends.append(backend)
+        else:
+            if any(key in backend for key in ["=", "<", ">"]):
+                applied_backends.append(Backend(backend))
+            else:
+                raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
+
     def inner_fn(fun):
-        fun.__backends = backends
+        fun.__backends = applied_backends
         return fun
 
     return inner_fn
@@ -2363,23 +2483,44 @@ def spread_import_structure(nested_import_structure):
     """
 
     def propagate_frozenset(unordered_import_structure):
-        tuple_first_import_structure = {}
+        frozenset_first_import_structure = {}
         for _key, _value in unordered_import_structure.items():
+            # If the value is not a dict but a string, no need for custom manipulation
             if not isinstance(_value, dict):
-                tuple_first_import_structure[_key] = _value
+                frozenset_first_import_structure[_key] = _value
 
             elif any(isinstance(v, frozenset) for v in _value.keys()):
-                # Here we want to switch around key and v
                 for k, v in _value.items():
                     if isinstance(k, frozenset):
-                        if k not in tuple_first_import_structure:
-                            tuple_first_import_structure[k] = {}
-                        tuple_first_import_structure[k][_key] = v
+                        # Here we want to switch around _key and k to propagate k upstream if it is a frozenset
+                        if k not in frozenset_first_import_structure:
+                            frozenset_first_import_structure[k] = {}
+                        if _key not in frozenset_first_import_structure[k]:
+                            frozenset_first_import_structure[k][_key] = {}
+
+                        frozenset_first_import_structure[k][_key].update(v)
+
+                    else:
+                        # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
+                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # dictionary.
+                        #
+                        # We recursively propagate the frozenset for this specific dictionary so that the frozensets
+                        # are at the top-level when we handle them.
+                        propagated_frozenset = propagate_frozenset({k: v})
+                        for r_k, r_v in propagated_frozenset.items():
+                            if r_k not in frozenset_first_import_structure:
+                                frozenset_first_import_structure[r_k] = {}
+                            if _key not in frozenset_first_import_structure[r_k]:
+                                frozenset_first_import_structure[r_k][_key] = {}
+
+                            # We switch around the r_k and _key
+                            frozenset_first_import_structure[r_k][_key].update(r_v)
 
             else:
-                tuple_first_import_structure[_key] = propagate_frozenset(_value)
+                frozenset_first_import_structure[_key] = propagate_frozenset(_value)
 
-        return tuple_first_import_structure
+        return frozenset_first_import_structure
 
     def flatten_dict(_dict, previous_key=None):
         items = []
@@ -2468,3 +2609,206 @@ def clear_import_cache():
         if isinstance(main_module, _LazyModule):
             main_module._objects = {}  # Clear cached objects
         importlib.reload(main_module)
+
+
+@lru_cache
+def get_available_devices() -> frozenset[str]:
+    """
+    Returns a frozenset of devices available for the current PyTorch installation.
+    """
+    devices = {"cpu"}  # `cpu` is always supported as a device in PyTorch
+
+    if is_torch_cuda_available():
+        devices.add("cuda")
+
+    if is_torch_mps_available():
+        devices.add("mps")
+
+    if is_torch_xpu_available():
+        devices.add("xpu")
+
+    if is_torch_npu_available():
+        devices.add("npu")
+
+    if is_torch_hpu_available():
+        devices.add("hpu")
+
+    if is_torch_mlu_available():
+        devices.add("mlu")
+
+    if is_torch_musa_available():
+        devices.add("musa")
+
+    return frozenset(devices)
+
+
+def check_min_version(min_version):
+    if version.parse(__version__) < version.parse(min_version):
+        if "dev" in min_version:
+            error_message = (
+                "This example requires a source install from HuggingFace Transformers (see "
+                "`https://huggingface.co/docs/transformers/installation#install-from-source`),"
+            )
+        else:
+            error_message = f"This example requires a minimum version of {min_version},"
+        error_message += f" but the version found is {__version__}.\n"
+        raise ImportError(
+            error_message
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
+            "versions of HuggingFace Transformers."
+        )
+
+
+__all__ = [
+    "ACCELERATE_MIN_VERSION",
+    "ENV_VARS_TRUE_AND_AUTO_VALUES",
+    "ENV_VARS_TRUE_VALUES",
+    "GGUF_MIN_VERSION",
+    "TORCH_FX_REQUIRED_VERSION",
+    "USE_JAX",
+    "USE_TF",
+    "USE_TORCH",
+    "XLA_FSDPV2_MIN_VERSION",
+    "DummyObject",
+    "OptionalDependencyNotAvailable",
+    "_LazyModule",
+    "ccl_version",
+    "direct_transformers_import",
+    "get_torch_version",
+    "is_accelerate_available",
+    "is_apex_available",
+    "is_apollo_torch_available",
+    "is_aqlm_available",
+    "is_auto_awq_available",
+    "is_auto_gptq_available",
+    "is_auto_round_available",
+    "is_av_available",
+    "is_bitsandbytes_available",
+    "is_bitsandbytes_multi_backend_available",
+    "is_bs4_available",
+    "is_coloredlogs_available",
+    "is_compressed_tensors_available",
+    "is_cv2_available",
+    "is_cython_available",
+    "is_datasets_available",
+    "is_decord_available",
+    "is_detectron2_available",
+    "is_eetq_available",
+    "is_essentia_available",
+    "is_faiss_available",
+    "is_fbgemm_gpu_available",
+    "is_flash_attn_2_available",
+    "is_flash_attn_greater_or_equal",
+    "is_flash_attn_greater_or_equal_2_10",
+    "is_flax_available",
+    "is_flute_available",
+    "is_fsdp_available",
+    "is_ftfy_available",
+    "is_g2p_en_available",
+    "is_galore_torch_available",
+    "is_gguf_available",
+    "is_gptqmodel_available",
+    "is_grokadamw_available",
+    "is_habana_gaudi1",
+    "is_hadamard_available",
+    "is_hqq_available",
+    "is_in_notebook",
+    "is_ipex_available",
+    "is_jieba_available",
+    "is_jinja_available",
+    "is_jumanpp_available",
+    "is_kenlm_available",
+    "is_keras_nlp_available",
+    "is_kernels_available",
+    "is_levenshtein_available",
+    "is_librosa_available",
+    "is_liger_kernel_available",
+    "is_lomo_available",
+    "is_mlx_available",
+    "is_natten_available",
+    "is_ninja_available",
+    "is_nltk_available",
+    "is_num2words_available",
+    "is_onnx_available",
+    "is_openai_available",
+    "is_optimum_available",
+    "is_optimum_quanto_available",
+    "is_pandas_available",
+    "is_peft_available",
+    "is_phonemizer_available",
+    "is_pretty_midi_available",
+    "is_protobuf_available",
+    "is_psutil_available",
+    "is_py3nvml_available",
+    "is_pyctcdecode_available",
+    "is_pytesseract_available",
+    "is_pytest_available",
+    "is_pytorch_quantization_available",
+    "is_quark_available",
+    "is_rich_available",
+    "is_rjieba_available",
+    "is_sacremoses_available",
+    "is_safetensors_available",
+    "is_sagemaker_dp_enabled",
+    "is_sagemaker_mp_enabled",
+    "is_schedulefree_available",
+    "is_scipy_available",
+    "is_sentencepiece_available",
+    "is_seqio_available",
+    "is_sklearn_available",
+    "is_soundfile_available",
+    "is_spacy_available",
+    "is_speech_available",
+    "is_spqr_available",
+    "is_sudachi_available",
+    "is_sudachi_projection_available",
+    "is_tensorflow_probability_available",
+    "is_tensorflow_text_available",
+    "is_tf2onnx_available",
+    "is_tf_available",
+    "is_tiktoken_available",
+    "is_timm_available",
+    "is_tokenizers_available",
+    "is_torch_available",
+    "is_torch_bf16_available",
+    "is_torch_bf16_available_on_device",
+    "is_torch_bf16_cpu_available",
+    "is_torch_bf16_gpu_available",
+    "is_torch_compile_available",
+    "is_torch_cuda_available",
+    "is_torch_deterministic",
+    "is_torch_flex_attn_available",
+    "is_torch_fp16_available_on_device",
+    "is_torch_fx_available",
+    "is_torch_fx_proxy",
+    "is_torch_greater_or_equal",
+    "is_torch_hpu_available",
+    "is_torch_mlu_available",
+    "is_torch_mps_available",
+    "is_torch_musa_available",
+    "is_torch_neuroncore_available",
+    "is_torch_npu_available",
+    "is_torch_sdpa_available",
+    "is_torch_tensorrt_fx_available",
+    "is_torch_tf32_available",
+    "is_torch_xla_available",
+    "is_torch_xpu_available",
+    "is_torchao_available",
+    "is_torchaudio_available",
+    "is_torchdistx_available",
+    "is_torchdynamo_available",
+    "is_torchdynamo_compiling",
+    "is_torchdynamo_exporting",
+    "is_torchvision_available",
+    "is_torchvision_v2_available",
+    "is_training_run_on_sagemaker",
+    "is_uroman_available",
+    "is_vision_available",
+    "is_vptq_available",
+    "is_yt_dlp_available",
+    "requires_backends",
+    "torch_only_method",
+    "requires",
+    "get_available_devices",
+    "check_min_version",
+]

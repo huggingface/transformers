@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
 from typing import List, Tuple
 
@@ -21,6 +20,7 @@ import tensorflow as tf
 
 from ..tf_utils import stable_softmax
 from ..utils import add_start_docstrings
+from ..utils.import_utils import requires
 from ..utils.logging import get_logger
 
 
@@ -50,6 +50,7 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("tf",))
 class TFLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
@@ -61,6 +62,7 @@ class TFLogitsProcessor:
         )
 
 
+@requires(backends=("tf",))
 class TFLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
@@ -72,6 +74,7 @@ class TFLogitsWarper:
         )
 
 
+@requires(backends=("tf",))
 class TFLogitsProcessorList(list):
     """
     This class can be used to create a list of [`TFLogitsProcessor`] to subsequently process a `scores` input tensor.
@@ -95,6 +98,7 @@ class TFLogitsProcessorList(list):
         return scores
 
 
+@requires(backends=("tf",))
 class TFTemperatureLogitsWarper(TFLogitsWarper):
     r"""
     [`TFLogitsWarper`] for temperature (exponential scaling output probability distribution).
@@ -115,6 +119,7 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
         return scores
 
 
+@requires(backends=("tf",))
 class TFTopKLogitsWarper(TFLogitsWarper):
     r"""
     [`TFLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
@@ -143,6 +148,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         return next_scores
 
 
+@requires(backends=("tf",))
 class TFTopPLogitsWarper(TFLogitsWarper):
     """
     [`TFLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to <= prob_cut_off.
@@ -199,6 +205,7 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         return next_scores
 
 
+@requires(backends=("tf",))
 class TFMinLengthLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
@@ -235,6 +242,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] enforcing an exponential penalty on repeated sequences.
@@ -285,6 +293,7 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     """
     [`TFLogitsProcessor`] that enforces that specified sequences will never be sampled.
@@ -385,6 +394,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] that enforces no repetition of n-grams. See
@@ -445,6 +455,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] that enforces the specified token as the first generated token.
@@ -475,6 +486,7 @@ class TFForcedBOSTokenLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
@@ -508,6 +520,7 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFSuppressTokensAtBeginLogitsProcessor`] suppresses a list of tokens as soon as the `generate` function starts
@@ -538,6 +551,7 @@ class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
     r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
     are not sampled."""
@@ -560,6 +574,7 @@ class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
+@requires(backends=("tf",))
 class TFForceTokensLogitsProcessor(TFLogitsProcessor):
     r"""This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
     indices that will be forced before sampling. The processor will set their log probs to `0` and all other tokens to
@@ -601,3 +616,22 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
             ),
         )
         return scores
+
+
+__all__ = [
+    "TFForcedBOSTokenLogitsProcessor",
+    "TFForcedEOSTokenLogitsProcessor",
+    "TFForceTokensLogitsProcessor",
+    "TFLogitsProcessor",
+    "TFLogitsProcessorList",
+    "TFLogitsWarper",
+    "TFMinLengthLogitsProcessor",
+    "TFNoBadWordsLogitsProcessor",
+    "TFNoRepeatNGramLogitsProcessor",
+    "TFRepetitionPenaltyLogitsProcessor",
+    "TFSuppressTokensAtBeginLogitsProcessor",
+    "TFSuppressTokensLogitsProcessor",
+    "TFTemperatureLogitsWarper",
+    "TFTopKLogitsWarper",
+    "TFTopPLogitsWarper",
+]

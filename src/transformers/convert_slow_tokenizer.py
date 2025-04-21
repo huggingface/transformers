@@ -26,7 +26,7 @@ from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
-from .utils.import_utils import PROTOBUF_IMPORT_ERROR
+from .utils.import_utils import PROTOBUF_IMPORT_ERROR, requires
 
 
 logger = logging.get_logger(__name__)
@@ -1705,6 +1705,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
+@requires(backends=("tokenizers", "sentencepiece"))
 def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
@@ -1739,3 +1740,6 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
                 f"with a SentencePiece tokenizer.model file."
                 f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )
+
+
+__all__ = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]

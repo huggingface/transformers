@@ -6038,3 +6038,5 @@ class AttentionInterface(MutableMapping):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
+
+__all__ = ["PreTrainedModel", "AttentionInterface"]

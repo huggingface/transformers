@@ -12,7 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .glue import glue_convert_examples_to_features, glue_output_modes, glue_processors, glue_tasks_num_labels
-from .squad import SquadExample, SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
-from .utils import DataProcessor, InputExample, InputFeatures, SingleSentenceClassificationProcessor
-from .xnli import xnli_output_modes, xnli_processors, xnli_tasks_num_labels
+from typing import TYPE_CHECKING
+
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
+
+
+if TYPE_CHECKING:
+    from .glue import *
+    from .squad import *
+    from .utils import *
+    from .xnli import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

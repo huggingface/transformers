@@ -131,3 +131,6 @@ class DepthEstimationPipeline(Pipeline):
             formatted_outputs.append({"predicted_depth": output["predicted_depth"], "depth": depth})
 
         return formatted_outputs[0] if len(outputs) == 1 else formatted_outputs
+
+
+__all__ = ["DepthEstimationPipeline"]

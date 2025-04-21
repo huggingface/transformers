@@ -233,3 +233,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
             "ymax": ymax,
         }
         return bbox
+
+
+__all__ = ["ZeroShotObjectDetectionPipeline"]

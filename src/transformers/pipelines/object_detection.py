@@ -189,3 +189,6 @@ class ObjectDetectionPipeline(Pipeline):
             "ymax": ymax,
         }
         return bbox
+
+
+__all__ = ["ObjectDetectionPipeline"]

@@ -194,3 +194,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
         ]
         return result
+
+
+__all__ = ["ZeroShotImageClassificationPipeline"]

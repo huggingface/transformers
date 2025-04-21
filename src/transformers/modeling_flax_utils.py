@@ -55,7 +55,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from .utils.import_utils import is_safetensors_available
+from .utils.import_utils import is_safetensors_available, requires
 
 
 if is_safetensors_available():
@@ -147,6 +147,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     return shards, index
 
 
+@requires(backends=("flax",))
 class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
@@ -1271,3 +1272,6 @@ def append_replace_return_docstrings(model_class, output_type, config_class):
         output_type=output_type,
         config_class=config_class,
     )(model_class.__call__)
+
+
+__all__ = ["FlaxPreTrainedModel"]

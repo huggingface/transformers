@@ -653,3 +653,6 @@ def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] 
         logger.warning(
             f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
         )
+
+
+__all__ = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]

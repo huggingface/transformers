@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 
+from ... import requires
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -33,6 +34,7 @@ if is_speech_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch", "torchaudio"))
 class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Speech2Text feature extractor.

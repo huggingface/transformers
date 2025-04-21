@@ -574,3 +574,6 @@ class TokenClassificationPipeline(ChunkPipeline):
 
 
 NerPipeline = TokenClassificationPipeline
+
+
+__all__ = ["NerPipeline", "TokenClassificationPipeline"]

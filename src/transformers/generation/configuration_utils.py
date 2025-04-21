@@ -35,6 +35,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from ..utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -82,6 +83,7 @@ if is_torch_available():
     )
 
 
+@requires()
 class GenerationMode(ExplicitEnum):
     """
     Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
@@ -100,6 +102,7 @@ class GenerationMode(ExplicitEnum):
     GROUP_BEAM_SEARCH = "group_beam_search"
 
 
+@requires()
 class GenerationConfig(PushToHubMixin):
     # no-format
     """
@@ -1338,6 +1341,7 @@ class GenerationConfig(PushToHubMixin):
 
 
 @dataclass
+@requires()
 class BaseWatermarkingConfig(ABC):
     """Generic watermarking config"""
 
@@ -1421,6 +1425,7 @@ class BaseWatermarkingConfig(ABC):
 
 
 @dataclass
+@requires()
 class WatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
@@ -1499,6 +1504,7 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
 
 @dataclass
+@requires()
 class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
@@ -1589,6 +1595,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
 
 
 @dataclass
+@requires()
 class CompileConfig:
     """
     Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
@@ -1636,3 +1643,13 @@ class CompileConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
+
+
+__all__ = [
+    "BaseWatermarkingConfig",
+    "CompileConfig",
+    "GenerationConfig",
+    "GenerationMode",
+    "SynthIDTextWatermarkingConfig",
+    "WatermarkingConfig",
+]

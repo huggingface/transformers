@@ -2061,3 +2061,18 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
 
         return batch
+
+
+__all__ = [
+    "DataCollatorForLanguageModeling",
+    "DataCollatorForMultipleChoice",
+    "DataCollatorForPermutationLanguageModeling",
+    "DataCollatorForSeq2Seq",
+    "DataCollatorForSOP",
+    "DataCollatorForTokenClassification",
+    "DataCollatorForWholeWordMask",
+    "DataCollatorWithFlattening",
+    "DataCollatorWithPadding",
+    "DefaultDataCollator",
+    "default_data_collator",
+]

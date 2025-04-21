@@ -19,6 +19,8 @@ from typing import Callable, Optional, Union
 
 import tensorflow as tf
 
+from .utils.import_utils import requires
+
 
 try:
     from tf_keras.optimizers.legacy import Adam
@@ -35,6 +37,7 @@ else:
     schedules = keras.optimizers.schedules
 
 
+@requires(backends=("tf",))
 class WarmUp(schedules.LearningRateSchedule):
     """
     Applies a warmup schedule on a given learning rate decay schedule.
@@ -93,6 +96,7 @@ class WarmUp(schedules.LearningRateSchedule):
         }
 
 
+@requires(backends=("tf",))
 def create_optimizer(
     init_lr: float,
     num_train_steps: int,
@@ -177,6 +181,7 @@ def create_optimizer(
     return optimizer, lr_schedule
 
 
+@requires(backends=("tf",))
 class AdamWeightDecay(Adam):
     """
     Adam enables L2 weight decay and clip_by_global_norm on gradients. Just adding the square of the weights to the
@@ -307,6 +312,7 @@ class AdamWeightDecay(Adam):
 
 
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
+@requires(backends=("tf",))
 class GradientAccumulator:
     """
     Gradient accumulation utility. When used with a distribution strategy, the accumulator should be called in a
@@ -377,3 +383,6 @@ class GradientAccumulator:
         for gradient in self._gradients:
             if gradient is not None:
                 gradient.assign(tf.zeros_like(gradient))
+
+
+__all__ = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]

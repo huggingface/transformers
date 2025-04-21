@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from .. import requires
 from ..activations import ACT2FN
 from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
 
@@ -29,6 +29,7 @@ if is_fbgemm_gpu_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class FbgemmFp8Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
         super().__init__(in_features, out_features, bias)
@@ -68,6 +69,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         return output
 
 
+@requires(backends=("torch",))
 class FbgemmFp8Llama4TextExperts(nn.Module):
     def __init__(self, config, dtype=torch.float32):
         super().__init__()
@@ -231,6 +233,7 @@ def _replace_with_fbgemm_fp8_linear(
     return model, has_been_replaced
 
 
+@requires(backends=("torch",))
 def replace_with_fbgemm_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -282,3 +285,6 @@ def replace_with_fbgemm_fp8_linear(
         )
 
     return model
+
+
+__all__ = ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"]

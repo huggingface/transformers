@@ -15,6 +15,7 @@
 
 from math import sqrt
 
+from .. import requires
 from ..utils import (
     is_flute_available,
     is_hadamard_available,
@@ -438,6 +439,7 @@ def get_higgs_grid(p: int, n: int):
         raise NotImplementedError(f"Unsupported p={p}, n={n}")
 
 
+@requires(backends=("torch",))
 def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256, hadamard_size: int = 1024):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
 
@@ -489,6 +491,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
     }
 
 
+@requires(backends=("torch",))
 class HiggsLinear(torch.nn.Module):
     def __init__(
         self,
@@ -549,6 +552,7 @@ class HiggsLinear(torch.nn.Module):
         )
 
 
+@requires(backends=("torch",))
 def replace_with_higgs_linear(
     model,
     quantization_config=None,
@@ -613,6 +617,7 @@ def replace_with_higgs_linear(
     return model, has_been_replaced
 
 
+@requires(backends=("torch",))
 def dequantize_higgs(model, current_key_name=None):
     """
     Dequantizes the HiggsLinear layers in the given model by replacing them with standard torch.nn.Linear layers.
@@ -653,3 +658,6 @@ def dequantize_higgs(model, current_key_name=None):
             # Remove the last key for recursion
             current_key_name.pop(-1)
         return model
+
+
+__all__ = ["HiggsLinear", "dequantize_higgs", "quantize_with_higgs", "replace_with_higgs_linear"]

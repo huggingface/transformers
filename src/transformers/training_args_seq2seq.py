@@ -88,3 +88,6 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             if isinstance(v, GenerationConfig):
                 d[k] = v.to_dict()
         return d
+
+
+__all__ = ["Seq2SeqTrainingArguments"]

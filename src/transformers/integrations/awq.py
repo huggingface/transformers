@@ -17,6 +17,7 @@ import importlib
 
 from packaging import version
 
+from .. import requires
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
 from ..utils import is_auto_awq_available, is_ipex_available, is_torch_available, logging
@@ -74,6 +75,7 @@ AWQ_SCALES_MAPPINGS = {
 }
 
 
+@requires(backends=("torch",))
 def replace_quantization_scales(model, model_type):
     from awq.modules.act import ScaledActivation
 
@@ -91,6 +93,7 @@ def replace_quantization_scales(model, model_type):
     return model
 
 
+@requires(backends=("torch",))
 def replace_with_awq_linear(
     model,
     modules_to_not_convert=None,
@@ -237,6 +240,7 @@ def get_modules_to_fuse(model, quantization_config):
     return current_fused_mapping
 
 
+@requires(backends=("torch",))
 def fuse_awq_modules(model, quantization_config):
     """
     Optionally fuse some modules in the model to speedup inference.
@@ -460,6 +464,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
     return module_has_been_fused
 
 
+@requires(backends=("torch",))
 def post_init_awq_exllama_modules(model, exllama_config):
     """
     Runs post init for Exllama layers which performs:
@@ -485,6 +490,7 @@ def post_init_awq_exllama_modules(model, exllama_config):
     return model
 
 
+@requires(backends=("torch",))
 def post_init_awq_ipex_modules(model):
     """
     Runs post init for IPEX layers which performs:
@@ -496,3 +502,12 @@ def post_init_awq_ipex_modules(model):
     model = ipex_post_init(model)
 
     return model
+
+
+__all__ = [
+    "fuse_awq_modules",
+    "post_init_awq_exllama_modules",
+    "post_init_awq_ipex_modules",
+    "replace_quantization_scales",
+    "replace_with_awq_linear",
+]
