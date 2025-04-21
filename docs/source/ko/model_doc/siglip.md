@@ -28,7 +28,7 @@ SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer�
 
 논문의 초록은 다음과 같습니다:
 
-*우리는 언어-이미지 사전 학습(Language-Image Pre-training, SigLIP)을 위한 간단한 쌍별 시그모이드 손실을 제안합니다. 소프트맥스 정규화를 사용하는 표준 대조 학습과 달리, 시그모이드 손실은 이미지-텍스트 쌍에만 작용하며 정규화를 위해 쌍별 유사성의 전역적 관점을 필요로 하지 않습니다. 시그모이드 손실은 배치 크기를 더욱 확장할 수 있게 하는 동시에 작은 배치 크기에서도 더 나은 성능을 보입니다. Locked-image Tuning과 결합하여, 단 4개의 TPUv4 칩만으로 이틀 만에 84.5%의 ImageNet 제로샷 정확도를 달성하는 SigLiT 모델을 학습했습니다. 손실 함수에서 배치 크기를 분리함으로써 예제 대 쌍의 영향과 부정 대 긍정 비율을 연구할 수 있게 되었습니다. 마지막으로, 우리는 배치 크기를 100만 개까지 극단적으로 늘려보았고, 배치 크기 증가의 이점이 빠르게 감소하며 32k의 더 합리적인 배치 크기로도 충분하다는 것을 발견했습니다.*
+*우리는 언어-이미지 사전 학습(Language-Image Pre-training, SigLIP)을 위한 간단한 쌍별 시그모이드 손실을 제안합니다. 소프트맥스 정규화를 사용하는 표준 대조 학습과 달리, 시그모이드 손실은 이미지-텍스트 쌍에만 작용하며 정규화를 위해 쌍별 유사성의 전역적 관점을 필요로 하지 않습니다. 시그모이드 손실은 배치 크기를 더욱 확장할 수 있게 하는 동시에 작은 배치 크기에서도 더 나은 성능을 보입니다. Locked-image Tuning과 결합하여, 단 4개의 TPUv4 칩만으로 이틀 만에 84.5%의 ImageNet 제로샷 정확도를 달성하는 SigLiT 모델을 학습했습니다. 손실 함수에서 배치 크기를 분리함으로써 예제 대 쌍의 영향과 Negative 대 Positive 비율을 연구할 수 있게 되었습니다. 마지막으로, 우리는 배치 크기를 100만 개까지 극단적으로 늘려보았고, 배치 크기 증가의 이점이 빠르게 감소하며 32k의 더 합리적인 배치 크기로도 충분하다는 것을 발견했습니다.*
 
 ## 사용 팁[[usage-tips]]
 
@@ -163,7 +163,7 @@ Flash Attention 2를 사용하여 모델을 로드하고 실행하려면 아래 
 
 ## Scaled Dot Product Attention(SDPA) 사용하기[using-scaled-dot-product-attention(SDPA)]]
 
-PyTorch는 `torch.nn.functional`의 일부로 네이티브 스케일드 닷-프로덕트 어텐션(SDPA) 연산자를 포함합니다. 이 함수는 
+PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA) 연산자를 포함합니다. 이 함수는 
 입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 자세한 내용은 
 [공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
 또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 
