@@ -35,7 +35,7 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-The example below demonstrates how to translate text with [`Pipeline`], [`AutoModel`].
+The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -108,10 +108,6 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 
     article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
     tokenizer.src_lang = "ar_AR"
-
-    encoded_ar = tokenizer(article_ar, return_tensors="pt")
-    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
-    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     ```
 
 ## Documentation resources
