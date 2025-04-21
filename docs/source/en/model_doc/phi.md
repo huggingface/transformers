@@ -97,7 +97,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [~AutoModel.from_pretrained]. Otherwise, make sure you update Transformers to the latest stable version.
+- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [`~AutoModel.from_pretrained`]. Otherwise, make sure you update Transformers to the latest stable version.
 
     ```py
     import torch
