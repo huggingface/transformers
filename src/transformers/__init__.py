@@ -5561,10 +5561,6 @@ if TYPE_CHECKING:
         ConvBertConfig,
         ConvBertTokenizer,
     )
-    from .models.csm import (
-        CsmConfig,
-        CsmDepthDecoderConfig,
-    )
     from .models.convnext import ConvNextConfig
     from .models.convnextv2 import (
         ConvNextV2Config,
@@ -5572,6 +5568,11 @@ if TYPE_CHECKING:
     from .models.cpmant import (
         CpmAntConfig,
         CpmAntTokenizer,
+    )
+    from .models.csm import (
+        CsmConfig,
+        CsmDepthDecoderConfig,
+        CsmProcessor,
     )
     from .models.ctrl import (
         CTRLConfig,
@@ -6235,11 +6236,6 @@ if TYPE_CHECKING:
         XCLIPProcessor,
         XCLIPTextConfig,
         XCLIPVisionConfig,
-    )
-    from .models.csm import (
-        CsmConfig,
-        CsmAudioTokenizer,
-        CsmProcessor,
     )
     from .models.xglm import XGLMConfig
     from .models.xlm import XLMConfig, XLMTokenizer
@@ -7152,14 +7148,6 @@ if TYPE_CHECKING:
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
         )
-        from .models.csm import (
-            CsmForCausalLM,
-            CsmDepthDecoderForCausalLM,
-            CsmDepthDecoder,
-            CsmBackbone,
-            CsmAudioTokenizer,
-            CsmProcessor,
-        )
         from .models.convnext import (
             ConvNextBackbone,
             ConvNextForImageClassification,
@@ -7176,6 +7164,14 @@ if TYPE_CHECKING:
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,
+        )
+        from .models.csm import (
+            CsmAudioTokenizer,
+            CsmBackbone,
+            CsmDepthDecoder,
+            CsmDepthDecoderForCausalLM,
+            CsmForCausalLM,
+            CsmProcessor,
         )
         from .models.ctrl import (
             CTRLForSequenceClassification,
