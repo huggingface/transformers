@@ -1400,7 +1400,7 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2VisionModelWithProjection.from_pretrained(model_name)
@@ -1551,7 +1551,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2ForImageTextRetrieval.from_pretrained(model_name)
