@@ -32,6 +32,7 @@ def main_cli():
     )
     main()
 
+
 def main():
     parser = HfArgumentParser(prog="Transformers CLI tool", usage="transformers <command> [<args>]")
     commands_parser = parser.add_subparsers(help="transformers command helpers")
