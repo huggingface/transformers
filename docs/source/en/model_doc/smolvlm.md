@@ -201,3 +201,7 @@ print(generated_texts[0])
 ## SmolVLMProcessor
 [[autodoc]] SmolVLMProcessor
     - __call__
+
+## SmolVLMVideoProcessor
+
+[[autodoc]] SmolVLMVideoProcessor

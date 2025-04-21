@@ -124,8 +124,10 @@ class SmolVLMProcessor(ProcessorMixin):
     Args:
         image_processor (`SmolVLMImageProcessor`):
             An instance of [`SmolVLMImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
+        tokenizer (`PreTrainedTokenizerBase`):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+        video_processor (`SmolVLMImageProcessor`):
+            n instance of [`SmolVLMImageProcessor`]. The video processor is a required input.
         image_seq_len (`int`, *optional*, defaults to 169):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
