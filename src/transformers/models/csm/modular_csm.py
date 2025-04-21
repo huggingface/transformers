@@ -87,26 +87,6 @@ class CsmOutputWithPast(ModelOutput):
     backbone_loss: Optional[torch.FloatTensor] = None
 
 
-class CsmEmbeddings(nn.Module):
-    def __init__(self, num_codebooks, codebook_vocab_size, backbone_hidden_size, codebook_padding_idx):
-        super().__init__()
-        self.codebook_vocab_size = codebook_vocab_size
-        self.embed_audio_tokens = nn.Embedding(
-            (num_codebooks * codebook_vocab_size), backbone_hidden_size, codebook_padding_idx
-        )
-
-    def forward(self, input_ids, codebook_idxs):
-        """
-        Args:
-            input_ids (`torch.Tensor`):
-                Codebooks ids of shape (batch_size, seq_length)
-            codebook_idxs (`torch.Tensor`):
-                Corresponding codebook indices of shape (batch_size, seq_length)
-        """
-        offset = codebook_idxs * self.codebook_vocab_size
-        return self.embed_audio_tokens(input_ids + offset)
-
-
 START_DOCSTRING_BASE = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -650,12 +630,12 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
 class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
+        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
         self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
 
     def forward(self, input_ids):
         audio_tokens_offsets = self.audio_tokens_offsets.to(input_ids.device)
-        input_embeds = self.embed_tokens(input_ids + audio_tokens_offsets)
+        input_embeds = self.embed_audio_tokens(input_ids + audio_tokens_offsets)
         input_embeds = input_embeds.sum(dim=2)
         return input_embeds
 
@@ -695,8 +675,7 @@ CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(
 )
 class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = [
-        "backbone_model.embed_tokens.weight",
-        "depth_decoder.model.embed_tokens.weight",
+       "depth_decoder.model.embed_tokens.weight",
     ]
 
     def __init__(self, config):
@@ -722,7 +701,7 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
             self._tie_or_clone_weights(
-                self.backbone_model.embed_tokens,
+                self.backbone_model.embed_tokens.embed_audio_tokens,
                 self.depth_decoder.model.embed_tokens,
             )
 

@@ -16,12 +16,14 @@
 import argparse
 import os
 import re
+import gc
 
 import torch
 
 from transformers import (
     CsmConfig,
     CsmForCausalLM,
+    MimiModel,
 )
 from transformers.utils.hub import cached_file
 
@@ -37,7 +39,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"w2":                                                    r"down_proj",
     r"w3":                                                      r"up_proj",
 
-    r"text_embeddings":   r"backbone_model.embed_tokens.embed_text_tokens",
+    r"text_embeddings":   r"embed_text_tokens",
     r"audio_embeddings": r"backbone_model.embed_tokens.embed_audio_tokens",
 
     r"codebook0_head":                                          r"lm_head",
@@ -72,20 +74,26 @@ def convert_key(key, mapping):
 def write_model(
     input_path_or_repo,
     model_name,
+    codec_model_path_or_repo,
     output_dir,
     safe_serialization=True,
 ):
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
 
-    config = CsmConfig()
+    codec_model = MimiModel.from_pretrained(codec_model_path_or_repo) 
+
+    config = CsmConfig(
+        codec_config=codec_model.config,
+    )
+
     params = {
         "backbone": {
-            "num_attention_heads": config.backbone_config.num_attention_heads,
-            "num_key_value_heads": config.backbone_config.num_key_value_heads,
-            "dim_per_head": config.backbone_config.head_dim,
-            "key_value_dim": config.backbone_config.head_dim * config.backbone_config.num_key_value_heads,
-            "dim": config.backbone_config.hidden_size,
+            "num_attention_heads": config.num_attention_heads,
+            "num_key_value_heads": config.num_key_value_heads,
+            "dim_per_head": config.head_dim,
+            "key_value_dim": config.head_dim * config.num_key_value_heads,
+            "dim": config.hidden_size,
         },
         "depth_decoder": {
             "num_attention_heads": config.depth_decoder_config.num_attention_heads,
@@ -109,6 +117,10 @@ def write_model(
     # -----------------------
     # convert parameter names
     # -----------------------
+
+    # Add codec_model. prefix to every key in the codec model state dict
+    codec_state_dict = {f"codec_model.{k}": v for k, v in codec_model.state_dict().items()}
+    state_dict.update(codec_state_dict)
 
     for key, value in loaded.items():
         new_key = convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)
@@ -134,20 +146,32 @@ def write_model(
         state_dict[new_key] = current_parameter
 
     # add the depth decoder embed audio tokens weights, latter tied to the backbone embed audio tokens weights
-    state_dict["depth_decoder.model.embed_tokens.embed_audio_tokens.weight"] = state_dict[
+    state_dict["depth_decoder.model.embed_tokens.weight"] = state_dict[
         "backbone_model.embed_tokens.embed_audio_tokens.weight"
-    ]
+    ].clone()
+    del loaded
+    gc.collect()
 
     # -------------------------
     # load the weights and save
     # -------------------------
 
-    model = CsmForCausalLM(config)
-    model.load_state_dict(state_dict)
+    print("Loading the checkpoint in a Csm model.")
+    with torch.device("meta"):
+        model = CsmForCausalLM(config)
+    model.load_state_dict(state_dict, strict=True, assign=True)
+    print("Checkpoint loaded successfully.")
+    del model.config._name_or_path
 
-    print("Saving the model...")
+    print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
-    print(f"Model saved at {output_dir}!")
+    del state_dict, model
+
+    # Safety check: reload the converted model
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    CsmForCausalLM.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
 
 
 def main():
@@ -185,6 +209,7 @@ if __name__ == "__main__":
     write_model(
         "sesame/csm-1b",
         "ckpt.pt",
-        output_dir="../eustlb/csm-1b",
+        "kyutai/mimi",
+        output_dir="/home/eustache_lebihan/add-sesame/transformers/tmp",
         safe_serialization=True,
     )
