@@ -197,6 +197,4 @@ class GetFromCacheTests(unittest.TestCase):
         ):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
-                from transformers.utils.hub import cached_files
-
-                cached_files("Qwen/Qwen2.5-Coder-7B-Instruct", ["config.json"])
+                cached_file(RANDOM_BERT, "nonexistent.json")
