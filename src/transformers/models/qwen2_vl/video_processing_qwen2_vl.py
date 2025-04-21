@@ -41,7 +41,7 @@ from ...utils import (
     is_vision_available,
 )
 from ...utils.import_utils import requires
-from ...video_processing_utils_fast import (
+from ...video_processing_utils import (
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     BaseVideoProcessor,
 )

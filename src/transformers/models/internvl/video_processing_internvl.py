@@ -12,15 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Video processor class for LLaVa-NeXT-Video."""
+"""Fast Video processor class for InternVL."""
 
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
+    PILImageResampling,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import is_vision_available
-from ...utils.import_utils import requires
+from ...utils import (
+    is_vision_available,
+)
 from ...video_processing_utils import (
     BaseVideoProcessor,
 )
@@ -30,27 +32,23 @@ if is_vision_available():
     from ...image_utils import PILImageResampling
 
 
-class LlavaNextVideoFastVideoProcessorInitKwargs(VideosKwargs): ...
+class InternVLVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backends=("torchvision",))
-class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
+class InternVLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
-    size = {"shortest_edge": 224}
-    default_to_square = False
-    crop_size = {"height": 224, "width": 224}
+    size = {"height": 384, "width": 384}
     do_resize = True
-    do_center_crop = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = LlavaNextVideoFastVideoProcessorInitKwargs
+    valid_kwargs = InternVLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[LlavaNextVideoFastVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[InternVLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
 
-__all__ = ["LlavaNextVideoVideoProcessor"]
+__all__ = ["InternVLVideoProcessor"]

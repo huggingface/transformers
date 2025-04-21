@@ -34,7 +34,7 @@ from ...utils import (
     is_vision_available,
 )
 from ...utils.import_utils import requires
-from ...video_processing_utils_fast import BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
 

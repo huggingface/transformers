@@ -32,7 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import requires
-from ...video_processing_utils_fast import BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,

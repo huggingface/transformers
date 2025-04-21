@@ -51,5 +51,5 @@ processed_video = processor(video, return_tensors="pt")
 
 ## BaseVideoProcessor
 
-[[autodoc]] video_processing_utils_fast.BaseVideoProcessor
+[[autodoc]] video_processing_utils.BaseVideoProcessor
 

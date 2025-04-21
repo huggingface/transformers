@@ -907,14 +907,14 @@ class ProcessorTesterMixin:
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
-    @require_av
+    @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extracttor", MODALITY_INPUT_DATA["audio"]
         )
 
-    @require_librosa
+    @require_av
     @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor suports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(

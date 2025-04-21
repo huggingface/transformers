@@ -35,7 +35,7 @@ from ...utils import (
     cached_file,
     logging,
 )
-from ...video_processing_utils_fast import BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,

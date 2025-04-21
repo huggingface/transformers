@@ -134,13 +134,20 @@ class SmolVLMProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "SmolVLMImageProcessor"
+    video_processor_class = "SmolVLMImageProcessor" #TODO: raushan should be VideoProcessor when LANCZOS resizing is settled
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
-        self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
+        self,
+        image_processor,
+        tokenizer,
+        video_processor,
+        image_seq_len: int = 169,
+        chat_template: Optional[str] = None,
+        **kwargs,
     ):
         self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
         self.image_token = getattr(tokenizer, "image_token", "<image>")
@@ -149,14 +156,14 @@ class SmolVLMProcessor(ProcessorMixin):
         self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
         self.image_seq_len = image_seq_len
 
-        self.video_size = image_processor.video_sampling["video_size"]
+        self.video_size = video_processor.video_sampling["video_size"]
         self.image_size = image_processor.size
 
         self.do_image_splitting = image_processor.do_image_splitting
-        self.do_video_splitting = image_processor.video_sampling.get("do_image_splitting", False)
+        self.do_video_splitting = video_processor.video_sampling.get("do_image_splitting", False)
 
-        self.default_max_frames = image_processor.video_sampling["max_frames"]
-        self.default_fps = image_processor.video_sampling["fps"]
+        self.default_max_frames = video_processor.video_sampling["max_frames"]
+        self.default_fps = video_processor.video_sampling["fps"]
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
         # self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
 
@@ -165,7 +172,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 "Package `num2words` is required to run SmolVLM processor. Install it with `pip install num2words`."
             )
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
     def process_vision(self, text, images, output_kwargs, do_image_splitting=False, image_processor_size=None):
         if text is not None:
@@ -261,6 +268,9 @@ class SmolVLMProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
+            videos (`List[PIL.Image.Image]`, `np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                The video or batch of videos to be prepared. Each video can be a list of PIL frames, NumPy array or PyTorch
+                tensor. If is of type `List[VideoInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
