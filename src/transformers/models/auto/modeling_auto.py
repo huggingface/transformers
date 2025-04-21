@@ -153,7 +153,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ijepa", "IJepaModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
+        ("internvl_vision", "InternVLVisionModel"),
         ("jamba", "JambaModel"),
+        ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),
         ("jukebox", "JukeboxModel"),
         ("kosmos-2", "Kosmos2Model"),
@@ -185,6 +187,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mimi", "MimiModel"),
         ("mistral", "MistralModel"),
         ("mixtral", "MixtralModel"),
+        ("mlcd", "MLCDVisionModel"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -234,9 +237,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertModel"),
         ("qwen2", "Qwen2Model"),
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
+        ("qwen2_5_vl_text", "Qwen2_5_VLModel"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoeModel"),
         ("qwen2_vl", "Qwen2VLModel"),
+        ("qwen2_vl_text", "Qwen2VLModel"),
         ("qwen3", "Qwen3Model"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
@@ -282,6 +287,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("textnet", "TextNetModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
+        ("timesfm", "TimesFmModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
@@ -359,6 +365,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("idefics3", "Idefics3ForConditionalGeneration"),
+        ("janus", "JanusForConditionalGeneration"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("llava", "LlavaForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
@@ -642,6 +649,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTModel"),
         ("levit", "LevitModel"),
         ("llama4", "Llama4VisionModel"),
+        ("mlcd", "MLCDVisionModel"),
         ("mllama", "MllamaVisionModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -858,6 +866,8 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("idefics3", "Idefics3ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
+        ("internvl", "InternVLForConditionalGeneration"),
+        ("janus", "JanusForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llama4", "Llama4ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
@@ -1545,6 +1555,12 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("timesfm", "TimesFmModelForPrediction"),
+    ]
+)
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         ("swin2sr", "Swin2SRForImageSuperResolution"),
@@ -1651,6 +1667,10 @@ MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 
 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES
+)
+
+MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
@@ -1820,6 +1840,15 @@ class AutoModelForSemanticSegmentation(_BaseAutoModelClass):
 
 AutoModelForSemanticSegmentation = auto_class_update(
     AutoModelForSemanticSegmentation, head_doc="semantic segmentation"
+)
+
+
+class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING
+
+
+AutoModelForTimeSeriesPrediction = auto_class_update(
+    AutoModelForTimeSeriesPrediction, head_doc="time-series prediction"
 )
 
 
@@ -1997,6 +2026,7 @@ __all__ = [
     "MODEL_FOR_TEXT_ENCODING_MAPPING",
     "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
     "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
+    "MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING",
     "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
     "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
     "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
