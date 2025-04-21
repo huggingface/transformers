@@ -1103,9 +1103,7 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
             )
             # =======================================
 
-            offsets = self.backbone_model.audio_tokens_offsets.to(batched_audio_token_ids.device)
-            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids + offsets)
-            audio_embeds = audio_embeds.sum(dim=2)
+            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
 
             # TODO: rewrite comment this is outdated
             # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
@@ -1127,11 +1125,12 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
             inputs_embeds[audio_token_idxs[0], audio_token_idxs[1]] = audio_embeds.view(-1, audio_embeds.shape[-1])[frames_mask]
 
             # same for the audio eos token
-            audio_eos_frame_ids = torch.ones((input_ids.shape[0], self.config.num_codebooks), device=input_ids.device, dtype=torch.long) * self.config.codebook_eos_token_id
-            audio_eos_frame_ids += self.backbone_model.audio_tokens_offsets.to(audio_eos_frame_ids.device)
-            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids)
-            audio_eos_embeds = audio_eos_embeds.sum(dim=1) 
-
+            audio_eos_frame_ids = (
+                torch.ones((input_ids.shape[0], 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
+                * self.config.codebook_eos_token_id
+            )
+            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
+            
             audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
             audio_eos_token_idxs = audio_eos_token_mask.nonzero(as_tuple=True)
             inputs_embeds[audio_eos_token_idxs[0], audio_eos_token_idxs[1]] = audio_eos_embeds.repeat(audio_eos_token_idxs[0].shape[0], 1)
