@@ -19,8 +19,14 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...processing_utils import Unpack
 from ...utils import is_torchdynamo_compiling, logging
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaPreTrainedModel
+from ..llava.modeling_llava import (
+    KwargsForCausalLM,
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaPreTrainedModel,
+)
 from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
@@ -166,7 +172,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Mistral3CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -255,7 +261,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

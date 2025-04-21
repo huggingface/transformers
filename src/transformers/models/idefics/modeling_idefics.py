@@ -32,10 +32,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_flex_attn_available,
@@ -500,6 +503,7 @@ class IdeficsMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -510,13 +514,13 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -1047,6 +1051,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
 """
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
@@ -1148,7 +1155,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1611,7 +1618,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

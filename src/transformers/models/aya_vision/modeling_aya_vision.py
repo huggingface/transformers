@@ -27,9 +27,12 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
@@ -180,6 +183,9 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 AYA_VISION_INPUTS_DOCSTRING = """
@@ -363,7 +369,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -467,7 +473,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

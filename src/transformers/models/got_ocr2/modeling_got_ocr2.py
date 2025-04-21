@@ -32,9 +32,12 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -610,6 +613,9 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
                 module.pos_embed.data.zero_()
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 GOT_OCR2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -750,7 +756,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> GotOcr2CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

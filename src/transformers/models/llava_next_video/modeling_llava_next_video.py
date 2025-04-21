@@ -30,9 +30,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
@@ -165,6 +168,9 @@ LLAVA_NEXT_VIDEO_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -586,7 +592,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
             pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
@@ -748,7 +754,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

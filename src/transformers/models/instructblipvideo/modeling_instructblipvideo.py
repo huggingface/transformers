@@ -29,6 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -36,8 +37,10 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    LossKwargs,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -140,13 +143,13 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -878,6 +881,9 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         return embeddings
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 INSTRUCTBLIPVIDEO_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1404,7 +1410,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

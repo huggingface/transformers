@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
-from ...modeling_flash_attention_utils import is_flash_attn_available
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -35,7 +35,9 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -98,6 +100,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(position_ids + self.offset)
 
 
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -108,13 +111,13 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -246,6 +249,7 @@ class OPTDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -280,6 +284,7 @@ class OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -630,6 +635,7 @@ class OPTDecoder(OPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         Args:
@@ -796,6 +802,7 @@ class OPTDecoder(OPTPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -870,6 +877,7 @@ class OPTModel(OPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -891,6 +899,7 @@ class OPTModel(OPTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         if not return_dict:
@@ -902,6 +911,9 @@ class OPTModel(OPTPreTrainedModel):
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
         )
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
@@ -950,7 +962,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1054,6 +1066,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         logits = self.lm_head(outputs[0]).contiguous()

@@ -28,9 +28,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
@@ -213,6 +216,9 @@ class Mistral3PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 MISTRAL3_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -383,7 +389,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Mistral3CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -472,7 +478,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

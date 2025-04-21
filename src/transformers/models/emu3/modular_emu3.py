@@ -29,6 +29,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -41,6 +42,7 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderConvDownsample,
 )
 from ..llama.modeling_llama import (
+    KwargsForCausalLM,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
@@ -1196,7 +1198,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

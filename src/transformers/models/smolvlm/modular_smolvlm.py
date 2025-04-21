@@ -20,6 +20,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import DynamicCache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
@@ -210,7 +212,7 @@ class SmolVLMModel(Idefics3Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

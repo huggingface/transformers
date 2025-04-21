@@ -26,9 +26,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
@@ -340,6 +343,9 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
 """
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_START_DOCSTRING,
@@ -545,7 +551,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, LlavaNextCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -647,7 +653,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

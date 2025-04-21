@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.llava_next.modeling_llava_next import (
+    KwargsForCausalLM,
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextMultiModalProjector,
@@ -30,6 +31,7 @@ from transformers.models.llava_next.modeling_llava_next import (
 )
 
 from ...configuration_utils import PretrainedConfig
+from ...processing_utils import Unpack
 from ...utils import (
     is_torchdynamo_compiling,
     logging,
@@ -371,7 +373,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
             pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
@@ -533,7 +535,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
 
         logits = outputs[0]

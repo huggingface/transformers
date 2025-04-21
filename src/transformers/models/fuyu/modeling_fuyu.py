@@ -21,10 +21,18 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...processing_utils import Unpack
+from ...utils import (
+    LossKwargs,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fuyu import FuyuConfig
 
 
@@ -143,6 +151,9 @@ FUYU_INPUTS_DOCSTRING = r"""
 """
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
@@ -242,7 +253,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llava.modeling_llava import (
+    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaPreTrainedModel,
@@ -29,6 +30,7 @@ from transformers.models.llava.modeling_llava import (
 from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
 
 from ...configuration_utils import PretrainedConfig
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -413,7 +415,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> GotOcr2CausalLMOutputWithPast:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

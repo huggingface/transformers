@@ -21,9 +21,11 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -132,6 +134,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -142,13 +145,13 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -279,6 +282,7 @@ class PixtralAttentionLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -298,6 +302,7 @@ class PixtralAttentionLayer(nn.Module):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -330,6 +335,7 @@ class PixtralTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
@@ -378,6 +384,7 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings=position_embeddings,
                     output_attentions=output_attentions,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -500,7 +507,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         *args,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
         """
         Returns:
@@ -535,6 +542,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return out

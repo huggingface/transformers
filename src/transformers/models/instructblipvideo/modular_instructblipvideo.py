@@ -30,10 +30,12 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipPreTrainedModel,
     InstructBlipQFormerModel,
     InstructBlipVisionModel,
+    KwargsForCausalLM,
 )
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from ...processing_utils import Unpack
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -204,7 +206,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         ```python
