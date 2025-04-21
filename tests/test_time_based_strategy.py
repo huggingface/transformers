@@ -32,7 +32,8 @@ class TestTimeBasedStrategy(unittest.TestCase):
             save_strategy=IntervalStrategy.NO,
             logging_strategy=IntervalStrategy.NO,
             per_device_train_batch_size=8,
-            num_train_epochs=200,
+            num_train_epochs=5,
+            # NOTE if total running time is less than 1 minute, try increasing the number of epochs
         )
         
         trainer = Trainer(
@@ -43,6 +44,11 @@ class TestTimeBasedStrategy(unittest.TestCase):
         )
         
         trainer.train()
+        
+        self.assertTrue(
+            any("eval_loss" in log for log in trainer.state.log_history),
+            "Expected evaluation metrics in log history"
+        )
             
     def test_save_time_based(self):
         print('testing time-based save strategy')
@@ -53,7 +59,8 @@ class TestTimeBasedStrategy(unittest.TestCase):
             save_minutes=1,
             logging_strategy=IntervalStrategy.NO,
             per_device_train_batch_size=8,
-            num_train_epochs=200,
+            num_train_epochs=5,
+            # NOTE if total running time is less than 1 minute, try increasing the number of epochs
         )
         
         trainer = Trainer(
@@ -63,6 +70,12 @@ class TestTimeBasedStrategy(unittest.TestCase):
         )
         
         trainer.train()
+        
+        checkpoints = [
+            d for d in os.listdir(training_args.output_dir)
+            if d.startswith("checkpoint-")
+        ]
+        self.assertTrue(len(checkpoints) > 0)
 
     def test_logging_time_based(self):
         print('testing time-based logging strategy')
@@ -73,7 +86,8 @@ class TestTimeBasedStrategy(unittest.TestCase):
             logging_strategy=IntervalStrategy.TIME,
             logging_minutes=1,
             per_device_train_batch_size=8,
-            num_train_epochs=200,
+            num_train_epochs=5,
+            # NOTE if total running time is less than 1 minute, try increasing the number of epochs
         )
         
         trainer = Trainer(
@@ -83,6 +97,10 @@ class TestTimeBasedStrategy(unittest.TestCase):
         )
         
         trainer.train()
+        
+        log_dir = os.path.join(training_args.output_dir, "runs")
+        self.assertTrue(os.path.exists(log_dir))
+        self.assertTrue(any(os.listdir(log_dir)))
 
 if __name__ == "__main__":
     unittest.main() 
