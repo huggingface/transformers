@@ -16,6 +16,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -168,7 +169,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
     ):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -234,7 +235,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         rope_config_validation(self)
 
 
-class CsmBackboneConfig(PretrainedConfig):
+class CsmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmBackboneModel`]. It is used to instantiate an CsmBackboneModel
     model according to the specified arguments, defining the model architecture.
@@ -346,15 +347,19 @@ class CsmBackboneConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "csm_backbone_model"
-    base_config_key = "backbone_config"
+    model_type = "csm"
+    base_config_key = "csm_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {
+        "codec_config": AutoConfig,
+        "depth_decoder_config": CsmDepthDecoderConfig,
+    }
 
     def __init__(
         self,
         num_codebooks=32,
-        codebook_vocab_size=2051,
-        vocab_size=128256,
+        vocab_size=2051,
+        text_vocab_size=128256,
         hidden_size=2048,
         intermediate_size=8192,
         num_hidden_layers=16,
@@ -370,6 +375,8 @@ class CsmBackboneConfig(PretrainedConfig):
         codebook_eos_token_id=0,
         bos_token_id=128000,
         eos_token_id=128001,
+        audio_token_id=128002,
+        audio_eos_token_id=128003,
         rope_theta=500000,
         rope_scaling={
             "factor": 32.0,
@@ -382,11 +389,14 @@ class CsmBackboneConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        tie_codebooks_embeddings=True,
+        depth_decoder_config=None,
+        codec_config=None,
         **kwargs,
     ):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmBackboneConfig")
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -395,8 +405,8 @@ class CsmBackboneConfig(PretrainedConfig):
             **kwargs,
         )
         self.num_codebooks = num_codebooks
-        self.codebook_vocab_size = codebook_vocab_size
         self.vocab_size = vocab_size
+        self.text_vocab_size = text_vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -453,64 +463,7 @@ class CsmBackboneConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-
-class CsmConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`CsmForCausalLM`]. It is used to instantiate an
-    Csm model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[AutoConfig, dict]`, *optional*, defaults to `CsmBackboneConfig`):
-            The config object or dictionary of the vision backbone.
-        depth_decoder_config (`Union[AutoConfig, dict]`, *optional*, defaults to `CsmDepthDecoderConfig`):
-            The config object or dictionary of the text backbone.
-        tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie the codebooks embeddings from the backbone model and the depth decoder model.
-
-    Example:
-
-    ```python
-    >>> from transformers import CsmForCausalLM, CsmConfig, CsmBackboneConfig, CsmDepthDecoderConfig
-
-    >>> # Initializing the backbone config
-    >>> backbone_config = CsmBackboneConfig()
-
-    >>> # Initializing the depth decoder config
-    >>> depth_decoder_config = CsmDepthDecoderConfig()
-
-    >>> # Initializing the Csm configuration
-    >>> configuration = CsmConfig(backbone_config, depth_decoder_config)
-
-    >>> # Initializing a causal model from this model configuration
-    >>> model = CsmForCausalLM(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-    
-    model_type = "csm"
-    sub_configs = {
-        "backbone_config": CsmBackboneConfig,
-        "depth_decoder_config": CsmDepthDecoderConfig,
-    }
-
-    def __init__(
-        self,
-        backbone_config=None,
-        depth_decoder_config=None,
-        tie_codebooks_embeddings=True,
-        **kwargs,
-    ):
-        if backbone_config is None:
-            self.backbone_config = CsmBackboneConfig()
-            logger.info("backbone_config is None, using default backbone config.")
-        elif isinstance(backbone_config, dict):
-            self.backbone_config = CsmBackboneConfig(**backbone_config)
-        elif isinstance(backbone_config, CsmBackboneConfig):
-            self.backbone_config = backbone_config
+        self.tie_codebooks_embeddings = tie_codebooks_embeddings
 
         if depth_decoder_config is None:
             self.depth_decoder_config = CsmDepthDecoderConfig()
@@ -519,33 +472,20 @@ class CsmConfig(PretrainedConfig):
             self.depth_decoder_config = CsmDepthDecoderConfig(**depth_decoder_config)
         elif isinstance(depth_decoder_config, CsmDepthDecoderConfig):
             self.depth_decoder_config = depth_decoder_config
+        
+        if codec_config is None:
+            self.codec_config = AutoConfig.for_model("mimi")
+            logger.info("codec_config is None, using default audio encoder config.")
+        elif isinstance(codec_config, dict):
+            self.codec_config = AutoConfig.for_model(**codec_config)
+        elif isinstance(codec_config, PretrainedConfig):
+            self.codec_config = codec_config
 
-        self.vocab_size = self.backbone_config.codebook_vocab_size
-        self.hidden_size = self.backbone_config.hidden_size
-        self.num_codebooks = self.backbone_config.num_codebooks
-        self.initializer_range = self.backbone_config.initializer_range
-        self.max_position_embeddings = self.backbone_config.max_position_embeddings
-        self.num_attention_heads = self.backbone_config.num_attention_heads
-        self.num_key_value_heads = self.backbone_config.num_key_value_heads
-        self.num_hidden_layers = self.backbone_config.num_hidden_layers
-
-        self.tie_codebooks_embeddings = tie_codebooks_embeddings
-
-        if kwargs.pop("tie_word_embeddings", False):
-            raise ValueError("`tie_word_embeddings=True` is not supported for CsmConfig")
-
-        # TODO: ensure parameters that need to shared are the same across sub-configs
-
-        super().__init__( 
-            pad_token_id=kwargs.pop("pad_token_id", self.backbone_config.codebook_pad_token_id),
-            eos_token_id=kwargs.pop("eos_token_id", self.backbone_config.codebook_eos_token_id),
-            tie_word_embeddings=False,
-            **kwargs
-        )
+        self.audio_token_id = audio_token_id
+        self.audio_eos_token_id = audio_eos_token_id
 
 
 __all__ = [
     "CsmDepthDecoderConfig",
-    "CsmBackboneConfig",
     "CsmConfig",
 ]
