@@ -972,9 +972,7 @@ class TrainingArguments:
     )
     logging_minutes: Optional[int] = field(
         default=None,
-        metadata={
-            "help": "Log every X minutes if logging_strategy is 'time'."
-        },
+        metadata={"help": "Log every X minutes if logging_strategy is 'time'."},
     )
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: Union[SaveStrategy, str] = field(
@@ -992,9 +990,7 @@ class TrainingArguments:
     )
     save_minutes: Optional[int] = field(
         default=None,
-        metadata={
-            "help": "Save checkpoint every X minutes if eval_strategy is 'time'."
-        },
+        metadata={"help": "Save checkpoint every X minutes if eval_strategy is 'time'."},
     )
     save_total_limit: Optional[int] = field(
         default=None,
@@ -1010,7 +1006,7 @@ class TrainingArguments:
             )
         },
     )
-    
+
     save_safetensors: Optional[bool] = field(
         default=True,
         metadata={
@@ -1169,9 +1165,7 @@ class TrainingArguments:
     )
     eval_minutes: Optional[int] = field(
         default=None,
-        metadata={
-            "help": "Run an evaluation every X minutes if eval_strategy is 'time'."
-        },
+        metadata={"help": "Run an evaluation every X minutes if eval_strategy is 'time'."},
     )
     dataloader_num_workers: int = field(
         default=0,
@@ -1621,14 +1615,16 @@ class TrainingArguments:
         if self.eval_strategy == IntervalStrategy.TIME:
             if self.eval_minutes is None or self.eval_minutes <= 0:
                 raise ValueError("eval_minutes must be a positive integer when using time-based evaluation strategy")
-        
+
         if self.save_strategy == SaveStrategy.TIME:
             if self.save_minutes is None or self.save_minutes <= 0:
                 raise ValueError("save_minutes must be a positive integer when using time-based save strategy")
-            
+
         if self.logging_strategy == IntervalStrategy.TIME:
             if self.logging_minutes is None or self.logging_minutes <= 0:
-                raise ValueError("logging_minutes must be a positive integer when using time-based evaluation strategy")
+                raise ValueError(
+                    "logging_minutes must be a positive integer when using time-based evaluation strategy"
+                )
 
         if self.torch_empty_cache_steps is not None:
             if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
