@@ -304,7 +304,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        prompt_ignore_length (`int`, *optional*, defaults to `None`):
+        prompt_ignore_length (`int`, *optional*):
             The original input ids sequence length, which if provided, will not be used in the penalty calculation.
 
     Examples:
@@ -342,6 +342,11 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+        if prompt_ignore_length is not None and (
+            not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
+        ):
+            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
