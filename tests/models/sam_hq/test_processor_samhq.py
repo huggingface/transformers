@@ -92,12 +92,13 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skipTest("SamHQProcessor does not have a tokenizer")
 
     def test_save_load_pretrained_additional_features(self):
-        processor = SamHQProcessor(image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = SamHQProcessor(image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            image_processor_add_kwargs = self.get_image_processor(tmpdir, do_normalize=False, padding_value=1.0)
 
-        processor = SamHQProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
+            processor = SamHQProcessor.from_pretrained(do_normalize=False, padding_value=1.0)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, SamImageProcessor)
