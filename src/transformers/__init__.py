@@ -538,6 +538,7 @@ else:
             "FlaxSuppressTokensLogitsProcessor",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
+            "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
     _import_structure["modeling_flax_outputs"] = []
