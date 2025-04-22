@@ -268,6 +268,9 @@ class AutoRoundConfig(QuantizationConfigMixin):
                 "Failed to convert awq format to auto_round format. Only supports awq format with gemm version"
             )
 
+        if "auto-round" not in quant_method:
+            config_dict["packing_format"] = f"auto_round:{quant_method}"
+
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
 
