@@ -660,7 +660,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: HybridCache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         # Flash Attention currently doesn't support static cache but Cohere2 work only with static cache.
         # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
