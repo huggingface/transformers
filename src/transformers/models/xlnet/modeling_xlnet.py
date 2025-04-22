@@ -164,15 +164,15 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert (
-                len(pointer) == array.shape[0]
-            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
+            assert len(pointer) == array.shape[0], (
+                f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
+            )
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
                 try:
-                    assert (
-                        p_i.shape == arr_i.shape
-                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
+                    assert p_i.shape == arr_i.shape, (
+                        f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
+                    )
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
@@ -180,9 +180,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                assert pointer.shape == array.shape, (
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -615,9 +615,9 @@ class XLNetPoolerEndLogits(nn.Module):
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
         """
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -684,9 +684,9 @@ class XLNetPoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)

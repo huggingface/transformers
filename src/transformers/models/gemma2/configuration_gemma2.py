@@ -168,5 +168,8 @@ class Gemma2Config(PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
 
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__)))
+
 
 __all__ = ["Gemma2Config"]
