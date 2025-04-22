@@ -469,6 +469,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
+    additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

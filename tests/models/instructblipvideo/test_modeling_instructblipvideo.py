@@ -487,6 +487,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
     all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
+    additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

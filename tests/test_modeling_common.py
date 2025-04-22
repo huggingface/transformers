@@ -3772,6 +3772,10 @@ class ModelTesterMixin:
                     key = "decoder_hidden_states"
                 elif "logits" in outputs_eager and "Classification" in model_class.__name__:
                     key = "logits"
+                elif "language_model_outputs" in outputs_eager and "blip" in model_class.__name__.lower():
+                    outputs_eager = outputs_eager["language_model_outputs"]
+                    outputs_sdpa = outputs_sdpa["language_model_outputs"]
+                    key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
                 else:
                     key = "hidden_states"
 
