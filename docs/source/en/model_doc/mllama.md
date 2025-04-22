@@ -85,10 +85,17 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Notes
 
-- MLlama has special handling for image tokens using `<|image|>` as a placeholder in the text
-- The model's input and output embeddings are not tied, requiring special handling for the `lm_head` layer
-- When training, mask out the `<|image|>` tokens in labels
-- For CUDA index errors during generation, expand the `lm_head`:
+- Use [`MllamaForConditionalGeneration`] for image-text and text inputs.
+- Use [`MllamaForCausalLM`] for generation with text only inputs to avoid unnecessarily loading the vision components.
+- Samples can contain multiple images and each sample can have different number of images. In these cases, the processor pads the inputs to the maximum number of images across samples and to a maximum number of tiles within each image.
+- Use the `<|image|>` token to indicate where an image should be inserted.
+
+   ```py
+   prompt = "<|image|> What does the image show?"
+   \```
+
+- MLlama's input and output embeddings are not tied which means the `lm_head` layer has one less token (the `<|image|>` placeholder token) and fails if you want to calculate loss on image tokens or apply logit processors. For training, make sure to mask the `<|image|>` token in `labels` because the model should not be trained on predicting them.
+- For CUDA index errors during generation, expand the `lm_head` by one token.
 
 ```python
 old_embeddings = model.get_output_embeddings()
