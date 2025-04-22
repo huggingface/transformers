@@ -79,6 +79,8 @@ class MolmoVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 16):
+            Number of key-value heads for each attention layer in the Transformer encoder.
         image_size (`int`, *optional*, defaults to 576):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 14):
