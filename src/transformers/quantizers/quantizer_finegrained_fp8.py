@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ..modeling_utils import _load_parameter_into_model
 from ..utils import is_accelerate_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -91,11 +92,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         """
         Quantizes weights to FP8 format using Block-wise quantization
         """
-        from accelerate.utils import set_module_tensor_to_device
-
-        set_module_tensor_to_device(model, param_name, target_device, param_value)
-
-        module, tensor_name = get_module_from_name(model, param_name)
+        param_value = param_value.to(target_device)
 
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
@@ -131,8 +128,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Reshape scale to match the number of blocks
         scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
 
-        module._buffers[tensor_name] = quantized_param.to(target_device)
-        module._buffers["weight_scale_inv"] = scale.to(target_device)
+        _load_parameter_into_model(model, param_name, quantized_param)
+        _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
     def check_quantized_param(
         self,
