@@ -26,15 +26,17 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import is_num2words_available, logging
+from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput, load_video, make_batched_videos
-from .video_processing_smolvlm import (
-    DEFAULT_MEDIA_OUTTRO,
-    DEFAULT_VIDEO_INTRO,
-    FRAME_TIMESTAMP_MESSAGE,
-    smolvlm_sample_indices_fn,
-)
 
+
+if is_vision_available():
+    from .video_processing_smolvlm import (
+        DEFAULT_MEDIA_OUTTRO,
+        DEFAULT_VIDEO_INTRO,
+        FRAME_TIMESTAMP_MESSAGE,
+        smolvlm_sample_indices_fn,
+    )
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
