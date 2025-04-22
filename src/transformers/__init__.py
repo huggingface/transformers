@@ -438,6 +438,7 @@ else:
     ]
 
     _import_structure["modeling_flash_attention_utils"] = []
+    _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
@@ -909,6 +910,97 @@ if TYPE_CHECKING:
         )
         from .model_debugging_utils import (
             model_addition_debugger_context,
+        )
+        from .modeling_layers import GradientCheckpointingLayer
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+        from .modeling_utils import AttentionInterface, PreTrainedModel
+
+        # Optimization
+        from .optimization import (
+            Adafactor,
+            get_constant_schedule,
+            get_constant_schedule_with_warmup,
+            get_cosine_schedule_with_warmup,
+            get_cosine_with_hard_restarts_schedule_with_warmup,
+            get_inverse_sqrt_schedule,
+            get_linear_schedule_with_warmup,
+            get_polynomial_decay_schedule_with_warmup,
+            get_scheduler,
+            get_wsd_schedule,
+        )
+        from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
+
+        # Trainer
+        from .trainer import Trainer
+        from .trainer_pt_utils import torch_distributed_zero_first
+        from .trainer_seq2seq import Seq2SeqTrainer
+
+    # TensorFlow
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        # Import the same objects as dummies to get them in the namespace.
+        # They will raise an import error if the user tries to instantiate / use them.
+        from .utils.dummy_tf_objects import *
+    else:
+        from .generation import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
+            TFForceTokensLogitsProcessor,
+            TFGenerationMixin,
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFLogitsWarper,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+            TFSuppressTokensAtBeginLogitsProcessor,
+            TFSuppressTokensLogitsProcessor,
+            TFTemperatureLogitsWarper,
+            TFTopKLogitsWarper,
+            TFTopPLogitsWarper,
+        )
+        from .keras_callbacks import KerasMetricCallback, PushToHubCallback
+        from .modeling_tf_utils import (
+            TFPreTrainedModel,
+            TFSequenceSummary,
+            TFSharedEmbeddings,
+            shape_list,
+        )
+
+        # Optimization
+        from .optimization_tf import (
+            AdamWeightDecay,
+            GradientAccumulator,
+            WarmUp,
+            create_optimizer,
+        )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        # Import the same objects as dummies to get them in the namespace.
+        # They will raise an import error if the user tries to instantiate / use them.
+        from .utils.dummy_flax_objects import *
+    else:
+        from .generation import (
+            FlaxForcedBOSTokenLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor,
+            FlaxForceTokensLogitsProcessor,
+            FlaxGenerationMixin,
+            FlaxLogitsProcessor,
+            FlaxLogitsProcessorList,
+            FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor,
+            FlaxSuppressTokensAtBeginLogitsProcessor,
+            FlaxSuppressTokensLogitsProcessor,
+            FlaxTemperatureLogitsWarper,
+            FlaxTopKLogitsWarper,
+            FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 
