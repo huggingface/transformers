@@ -29,55 +29,87 @@ You can find all the original MLlama checkpoints under the [Llama 3.2](https://h
 > [!TIP]
 > Click on the MLlama models in the right sidebar for more examples of how to apply MLlama to different vision-language tasks like image captioning, visual question answering, and reasoning.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
+The example below demonstrates how to use the model with a real image:
 
 ```python
+import torch
 from transformers import pipeline
 
-pipe = pipeline("image-to-text", model="meta-llama/Llama-3.2-11B-Vision")
-result = pipe("path/to/your/image.jpg")
-print(result[0]["generated_text"])
-```
-
-</hfoption>
-<hfoption id="AutoModel">
-
-```python
-import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
-from PIL import Image
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-11B-Vision", device_map="auto", torch_dtype=torch.bfloat16)
-processor = AutoProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
-
-image = Image.open("path/to/your/image.jpg")
-inputs = processor(text="Describe this image", images=image, return_tensors="pt").to(model.device)
-output = model.generate(**inputs, max_new_tokens=100)
-print(processor.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-</hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bit precision.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM
-
-model_id = "meta-llama/Llama-3.2-11B-Vision"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    device_map="auto",
-    load_in_4bit=True,
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="meta-llama/Llama-3.2-11B-Vision-Instruct",
+    device=0,
     torch_dtype=torch.bfloat16
 )
+messages = [
+    [
+        {
+            "role": "user", 
+            "content": [
+                {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+                {"type": "text", "text": "What does the image show?"}
+            ]
+        }
+    ],
+]
+pipeline(text=messages, return_full_text=False)
 ```
+
+For quantized inference, use `BitsAndBytesConfig`:
+
+```python
+import torch
+from transformers import BitsAndBytesConfig, MllamaForConditionalGeneration, AutoProcessor
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16
+)
+model = MllamaForConditionalGeneration.from_pretrained(
+    "meta-llama/Llama-3.2-11B-Vision-Instruct",
+    device_map="auto", 
+    torch_dtype=torch.bfloat16,
+    attn_implementation="sdpa",
+    quantization_config=bnb_config
+)
+processor = AutoProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision-Instruct")
+
+messages = [
+    [
+        {
+            "role": "user", 
+            "content": [
+                {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+                {"type": "text", "text": "What does the image show?"}
+            ]
+        }
+    ],
+]
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to("cuda")
+output = model.generate(**inputs, max_new_tokens=25)
+print(processor.decode(output[0]))
+```
+
+## Notes
+
+- MLlama has special handling for image tokens using `<|image|>` as a placeholder in the text
+- When training, mask out the `<|image|>` tokens in labels
+- For CUDA index errors during generation, expand the `lm_head`:
+    ```python
+    old_embeddings = model.get_output_embeddings()
+    num_tokens = model.vocab_size + 1
+    resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=num_tokens, mean_resizing=True)
+    resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
+    model.set_output_embeddings(resized_embeddings)
+    ```
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mllama_architecture.png"/>
@@ -131,5 +163,6 @@ model.set_output_embeddings(resized_embeddings)
 
 [[autodoc]] MllamaTextModel
     - forward
+
 
 
