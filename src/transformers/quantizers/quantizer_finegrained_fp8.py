@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ..modeling_utils import _load_parameter_into_model
 from ..utils import is_accelerate_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -8,6 +7,8 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+
+    from ..modeling_utils import _load_parameter_into_model
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
