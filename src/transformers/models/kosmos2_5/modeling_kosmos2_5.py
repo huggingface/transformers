@@ -1503,7 +1503,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Kosmos2_5ModelOutput]:
         r"""
@@ -1543,7 +1542,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
         projection_attentions = None
@@ -1553,10 +1551,9 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
                     flattened_patches=flattened_patches,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
                 )
                 # normalized features
-                image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
+                image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
                 image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         outputs = self.text_model(
@@ -1570,13 +1567,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
-
-        if not return_dict:
-            outputs = outputs + (width, height, image_embeds, projection_attentions, vision_model_output)
-            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2_5ModelOutput(
             last_hidden_state=outputs.last_hidden_state,
