@@ -200,3 +200,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return False
+
+    def get_cuda_warm_up_factor(self):
+        # Pre-processing is done cleanly, so we can allocate everything here
+        return 2
