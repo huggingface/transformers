@@ -59,7 +59,7 @@ body:
         
         Devices/Backends:
         
-          - ROCm: @ivarflakstad
+          - AMD ROCm: @ivarflakstad
           - Intel XPU: @IlyasMoutawwakil
           - Ascend NPU: @ivarflakstad 
 
