@@ -1234,7 +1234,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Ariaccausal language model (or autoregressive) outputs.
+    Base class for Aria causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

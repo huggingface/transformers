@@ -131,7 +131,7 @@ class Mistral3MultiModalProjector(nn.Module):
 @dataclass
 class Mistral3CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Mistral3ccausal language model (or autoregressive) outputs.
+    Base class for Mistral3 causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

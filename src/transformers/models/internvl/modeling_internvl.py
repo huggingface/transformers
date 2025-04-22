@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -654,15 +654,13 @@ class InternVLMultiModalProjector(nn.Module):
 
 
 @dataclass
-class InternVLCausalLMOutputWithPast(ModelOutput):
+class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     """
-    Base class for InternVLccausal language model (or autoregressive) outputs.
+    Base class for InternVL outputs, with hidden states and attentions.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
@@ -685,11 +683,6 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -768,6 +761,248 @@ INTERNVL_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
+
+
+@add_start_docstrings(
+    """The InternVL model which consists of a vision backbone and a language model, without a language modeling head.""",
+    INTERNVL_START_DOCSTRING,
+)
+class InternVLModel(InternVLPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
+    def __init__(self, config: InternVLConfig):
+        super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+
+        self.multi_modal_projector = InternVLMultiModalProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Union[int, List[int]],
+        vision_feature_select_strategy: str,
+        **kwargs,
+    ):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+            vision_feature_layer (`int` or `List[int]`):
+                Layer index or list of layer indices to extract features from.
+        Returns:
+            vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
+        """
+        downsample_ratio = self.config.downsample_ratio
+        if vision_feature_layer == -1:
+            vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
+        else:
+            vision_features = self.vision_model(pixel_values=pixel_values).hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
+            vision_features = vision_features[:, 1:, :]
+
+        # Calculate dimensions based on vision features
+        channels = vision_features.shape[1]
+        feature_size = int(channels**0.5)
+        batch_size = vision_features.shape[0]
+
+        # Reshape tensor to spatial dimensions
+        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
+
+        # Apply downsampling using pixel shuffle
+        vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
+
+        # Reshape tensor to prepare for projection
+        vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
+
+        # Project features through multi-modal projector
+        vision_features = self.multi_modal_projector(vision_features)
+
+        return vision_features
+
+    @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        image_sizes: torch.Tensor = None,
+        **lm_kwargs,
+    ) -> Union[Tuple, InternVLModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+                image_sizes=image_sizes,
+            )
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                )
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+            else:
+                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **lm_kwargs,
+        )
+
+        output = InternVLModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+        return output if return_dict else output.to_tuple()
+
+    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
+        """Perform pixel shuffle downsampling on vision features.
+
+        Args:
+            vision_features (`torch.Tensor`):
+                Input tensor of shape (batch_size, width, height, channels).
+            scale_factor (`float`, *optional*, defaults to `0.5`):
+                Factor by which to downsample. Default is 0.5, which halves the dimensions.
+
+        Returns:
+            vision_features (`torch.Tensor`):
+                Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
+        """
+        batch_size, width, height, channels = vision_features.size()
+
+        if height % scale_factor != 0 or width % scale_factor != 0:
+            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+
+        # Reshape to allow downsampling
+        vision_features = vision_features.view(
+            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
+        )
+        # Permute dimensions to align downsampled axis correctly
+        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+        # Reshape to achieve final downsampled dimensions
+        vision_features = vision_features.view(
+            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
+        )
+
+        # Swap height and width back for proper orientation
+        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+        return vision_features
+
+
+@dataclass
+class InternVLCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for InternVL causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -1087,5 +1322,6 @@ __all__ = [
     "InternVLVisionPreTrainedModel",
     "InternVLVisionModel",
     "InternVLPreTrainedModel",
+    "InternVLModel",
     "InternVLForConditionalGeneration",
 ]

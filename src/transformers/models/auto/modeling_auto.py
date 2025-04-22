@@ -157,6 +157,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerModel"),
         ("instructblip", "InstructBlipModel"),
         ("internvl_vision", "InternVLVisionModel"),
+        ("internvl", "InternVLModel"),
         ("jamba", "JambaModel"),
         ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),

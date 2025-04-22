@@ -514,7 +514,7 @@ GEMMA3_START_DOCSTRING = r"""
 )
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -888,7 +888,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = Gemma3TextConfig
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -1108,6 +1108,7 @@ class Gemma3MultiModalProjector(nn.Module):
 )
 class Gemma3Model(Gemma3PreTrainedModel):
     _key_mapping = {"language_model.model": "language_model"}
+    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)

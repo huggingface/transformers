@@ -520,7 +520,7 @@ class GotOcr2MultiModalProjector(nn.Module):
 @dataclass
 class GotOcr2CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for GotOcr2ccausal language model (or autoregressive) outputs.
+    Base class for GotOcr2 causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

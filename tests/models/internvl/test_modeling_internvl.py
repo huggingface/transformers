@@ -46,7 +46,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        InternVLForConditionalGeneration,
+        InternVLForConditionalGeneration, InternVLModel
     )
 
 
@@ -189,7 +189,7 @@ class InternVLVisionText2TextModelTester:
 
 @require_torch
 class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (InternVLForConditionalGeneration, InternVLModel) if is_torch_available() else ()
     all_generative_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

@@ -144,7 +144,7 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
 @dataclass
 class AyaVisionCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for AyaVisionccausal language model (or autoregressive) outputs.
+    Base class for AyaVision causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
