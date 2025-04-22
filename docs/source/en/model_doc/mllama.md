@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="Vision" src="https://img.shields.io/badge/Vision-FFB000?style=flat">
-        <img alt="Multi-Modal" src="https://img.shields.io/badge/Multi--Modal-6B46C1?style=flat">
     </div>
 </div>
 
