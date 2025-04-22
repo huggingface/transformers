@@ -640,7 +640,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             use_cache = False
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
