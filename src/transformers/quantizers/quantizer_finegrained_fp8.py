@@ -129,6 +129,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Reshape scale to match the number of blocks
         scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
 
+        # Load into the model
         _load_parameter_into_model(model, param_name, quantized_param)
         _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
