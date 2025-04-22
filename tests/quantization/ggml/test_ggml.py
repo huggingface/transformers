@@ -298,6 +298,7 @@ class GgufModelTests(unittest.TestCase):
     gemma2_model_id = "bartowski/gemma-2-2b-it-GGUF"
     original_gemma3_text_model_id = "google/gemma-3-1b-it"
     original_gemma3_vision_model_id = "google/gemma-3-4b-it"
+    gemma3_qat_model_id = "google/gemma-3-1b-it-qat-q4_0-gguf"
     gemma3_text_model_id = "unsloth/gemma-3-1b-it-GGUF"
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
 
@@ -329,7 +330,7 @@ class GgufModelTests(unittest.TestCase):
     q3_k_gemma2_model_id = "gemma-2-2b-it-Q3_K_L.gguf"
     q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
     fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
-    q2_k_gemma3_text_model_id = "gemma-3-1b-it-Q2_K.gguf"
+    q4_0_gemma3_qat_model_id = "gemma-3-1b-it-q4_0.gguf"
     bf16_gemma3_text_model_id = "gemma-3-1b-it-BF16.gguf"
     bf16_gemma3_vision_model_id = "gemma-3-4b-it-BF16.gguf"
 
@@ -889,19 +890,20 @@ class GgufModelTests(unittest.TestCase):
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
+    @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
-    def test_gemma3_text_q2_k(self):
+    def test_gemma3_qat_q4_0(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.gemma3_text_model_id,
-            gguf_file=self.q2_k_gemma3_text_model_id,
+            self.gemma3_qat_model_id,
+            gguf_file=self.q4_0_gemma3_qat_model_id,
             torch_dtype=torch.float16,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma3_text_model_id, gguf_file=self.q2_k_gemma3_text_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma3_qat_model_id, gguf_file=self.q4_0_gemma3_qat_model_id)
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello,\n\nI'm looking for a small,"
+        EXPECTED_TEXT = 'Hello with the prompt, "What is the best way'
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     @require_read_token
