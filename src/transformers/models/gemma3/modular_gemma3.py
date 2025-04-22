@@ -521,7 +521,7 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -688,7 +688,7 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config_class = Gemma3TextConfig
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -732,6 +732,8 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3Model(PaliGemmaModel):
+    base_model_prefix = "model"
+
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.

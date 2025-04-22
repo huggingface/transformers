@@ -1496,7 +1496,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.language_model = Qwen2_5_VLTextModel(config)
+        self.language_model = Qwen2_5_VLTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1855,7 +1855,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
 
         text_config = config.get_text_config()
-        self.model = Qwen2_5_VLModel._from_config(text_config)
+        self.model = Qwen2_5_VLTextModel._from_config(text_config)
         self.vocab_size = text_config.vocab_size
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
