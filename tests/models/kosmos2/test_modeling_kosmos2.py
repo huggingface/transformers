@@ -467,7 +467,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
-    @unittest.skip("KOSMOS-2 has higher diff than tolerance, FIXME @raushan if needed")
+    @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
