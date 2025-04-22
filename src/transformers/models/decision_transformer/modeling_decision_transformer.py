@@ -458,6 +458,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
+    _supports_cache_class = True
+    _supports_static_cache = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
