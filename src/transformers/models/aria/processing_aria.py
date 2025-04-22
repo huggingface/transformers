@@ -72,6 +72,8 @@ class AriaProcessor(ProcessorMixin):
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
 
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token
 
@@ -112,10 +114,12 @@ class AriaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
         if images is not None:
             image_inputs = self.image_processor(
                 images,
@@ -133,12 +137,11 @@ class AriaProcessor(ProcessorMixin):
             image_inputs = {}
             prompt_strings = text
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            **output_kwargs["text_kwargs"],
-        )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

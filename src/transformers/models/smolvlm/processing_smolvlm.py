@@ -149,6 +149,7 @@ class SmolVLMProcessor(ProcessorMixin):
     ):
         self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
         self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.end_of_utterance_token = getattr(tokenizer, "end_of_utterance_token", "<end_of_utterance>")
         self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
         self.image_seq_len = image_seq_len
@@ -290,7 +291,7 @@ class SmolVLMProcessor(ProcessorMixin):
             if n_images_in_text > 0 and (images is None and videos is None):
                 raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
 
-        inputs = BatchFeature()
+        inputs = {}
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
             images = make_nested_list_of_images(images)
@@ -313,11 +314,14 @@ class SmolVLMProcessor(ProcessorMixin):
             )
             inputs.update(vision_inputs)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+
         if text is not None:
-            text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
             inputs.update(text_inputs)
 
-        return inputs
+        return BatchFeature(inputs, tensor_type=return_tensors)
 
     def _process_messages_for_chat_template(
         self,
@@ -436,6 +440,7 @@ class SmolVLMProcessor(ProcessorMixin):
         fps: Optional[int] = None,
         backend: str = "opencv",
         skip_secs: int = 0.0,
+        **kwargs,
     ) -> np.array:
         """
         Loads `video` to a numpy array.
