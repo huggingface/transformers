@@ -738,7 +738,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             return None, None
 
         sequence_length = input_tensor.shape[1]
-        cache_position = cache_position.to(self.device)
         attention_chunk_size = self.config.attention_chunk_size
 
         first_cache_position = cache_position[0]
