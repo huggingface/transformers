@@ -1486,6 +1486,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1504,7 +1505,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, Kosmos2_5ModelOutput]:
+    ) -> Kosmos2_5ModelOutput:
         r"""
         Returns:
 
@@ -1631,7 +1632,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
