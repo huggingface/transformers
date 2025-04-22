@@ -349,6 +349,7 @@ tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
 
 </hfoption>
+</hfoptions>
 
 
 ## Loading quantized models
