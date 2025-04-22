@@ -23,9 +23,10 @@ from parameterized import parameterized
 
 from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_torch,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -416,7 +417,7 @@ class Emu3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generation_batched(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
@@ -434,17 +435,27 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = [
-            "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
-            'USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a'
-        ]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and its head is lowered, suggesting a state of alertness or readiness. The animal's",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a gently sloping hill with a reddish-brown hue,",
+                ],
+                ("cuda", 7): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generation_multi_image(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
@@ -456,14 +467,20 @@ class Emu3IntegrationTest(unittest.TestCase):
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+                {
+                    ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
+                    ("cuda", 7): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
+                }
+            )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generate_images(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
