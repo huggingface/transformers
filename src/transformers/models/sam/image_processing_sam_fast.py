@@ -19,7 +19,6 @@ from itertools import product
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as TF  # Renamed to avoid namespace collision
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -27,11 +26,12 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
-    ChannelDimension,
     PILImageResampling,
 )
 from ...utils import (
@@ -40,7 +40,6 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
-    requires_backends,
 )
 
 
@@ -128,8 +127,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Initialize the SamImageProcessorFast with optional configuration parameters.
         """
         super().__init__(**kwargs)
-        # Initialize device string instead of device object for JSON serialization
-        self.device_str = "cuda" if torch.cuda.is_available() else "cpu"
 
     def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int) -> Tuple[int, int]:
         """
@@ -148,39 +145,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         newh = int(newh + 0.5)
         neww = int(neww + 0.5)
         return (newh, neww)
-
-    def _rescale_and_normalize(
-        self,
-        image: torch.Tensor,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
-    ) -> torch.Tensor:
-        """
-        Apply rescaling and normalization to images.
-
-        Args:
-            image: Input image tensor
-            do_rescale: Whether to apply rescaling
-            rescale_factor: Factor to use for rescaling
-            do_normalize: Whether to apply normalization
-            image_mean: Mean values for normalization
-            image_std: Standard deviation values for normalization
-
-        Returns:
-            Processed image tensor
-        """
-        if do_rescale:
-            image = image * rescale_factor
-
-        if do_normalize:
-            mean = torch.tensor(image_mean, device=image.device).view(-1, 1, 1)
-            std = torch.tensor(image_std, device=image.device).view(-1, 1, 1)
-            image = (image - mean) / std
-
-        return image
 
     def _preprocess(
         self,
@@ -205,174 +169,124 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images for the SAM model.
-
-        Args:
-            images (List[torch.Tensor]):
-                List of images to process.
-            do_resize (bool):
-                Whether to resize the input.
-            size (SizeDict):
-                Size dictionary for image resizing.
-            interpolation (Optional[F.InterpolationMode]):
-                Interpolation mode for resizing.
-            do_center_crop (Optional[bool], defaults to None):
-                Whether to center crop the input.
-            crop_size (Optional[SizeDict], defaults to None):
-                Size dictionary for center cropping.
-            do_rescale (Optional[bool], defaults to None):
-                Whether to rescale the input.
-            rescale_factor (Optional[float], defaults to None):
-                Factor to use for rescaling.
-            do_normalize (Optional[bool], defaults to None):
-                Whether to normalize the input.
-            image_mean (Optional[Union[float, List[float]]], defaults to None):
-                Mean values for normalization.
-            image_std (Optional[Union[float, List[float]]], defaults to None):
-                Standard deviation values for normalization.
-            return_tensors (Optional[Union[str, TensorType]], defaults to None):
-                Output tensor type.
-            mask_size (Optional[Dict[str, int]], defaults to None):
-                Size dictionary for mask resizing.
-            mask_pad_size (Optional[Dict[str, int]], defaults to None):
-                Size dictionary for mask padding.
-            do_pad (Optional[bool], defaults to None):
-                Whether to pad the input.
-            pad_size (Optional[Dict[str, int]], defaults to None):
-                Size dictionary for input padding.
-            segmentation_maps (Optional[List[torch.Tensor]], defaults to None):
-                Optional list of segmentation maps to process.
-
-        Returns:
-            BatchFeature:
-                A BatchFeature object containing the processed inputs with the following fields:
-                - pixel_values (torch.Tensor): Processed image tensors
-                - original_sizes (List[Tuple]): Original image sizes
-                - reshaped_input_sizes (List[Tuple]): Resized input sizes
-                - labels (torch.Tensor, optional): Processed segmentation maps if provided
         """
-
         original_sizes = []
         reshaped_input_sizes = []
-        processed_images = []
 
+        # Store original sizes before any processing
         for image in images:
             original_sizes.append(image.shape[-2:])
 
+        # Group images by shape for batch processing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+
+        # Process each group of same-shaped images
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                target_size = self._get_preprocess_shape(image.shape[-2:], size["longest_edge"])
-
-                resize_interpolation = interpolation
-                if resize_interpolation is None:
-                    if is_torchvision_v2_available():
-                        resize_interpolation = F.InterpolationMode.BILINEAR
-                    else:
-                        resize_interpolation = F.InterpolationMode.BILINEAR
-                resized_image = F.resize(image, target_size, interpolation=resize_interpolation)
-                reshaped_input_sizes.append(resized_image.shape[-2:])
+                # Calculate target size for this shape
+                target_size = self._get_preprocess_shape(shape[-2:], size["longest_edge"])
+                resize_interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+                resized_images = F.resize(stacked_images, target_size, interpolation=resize_interpolation)
             else:
-                resized_image = image
-                reshaped_input_sizes.append(image.shape[-2:])
+                resized_images = stacked_images
 
-            processed_image = self._rescale_and_normalize(
-                resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            resized_images_grouped[shape] = resized_images
+
+        # Restore original order
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Store reshaped sizes
+        for img in resized_images:
+            reshaped_input_sizes.append(img.shape[-2:])
+
+        # Group resized images for further processing
+        grouped_resized, grouped_resized_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+
+        # Apply rescale, normalize, and padding to each group
+        for shape, stacked_images in grouped_resized.items():
+            # Apply rescale and normalization
+            processed_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
+            # Apply padding if required
             if do_pad:
                 padded_height, padded_width = pad_size["height"], pad_size["width"]
-                input_height, input_width = processed_image.shape[-2:]
+                input_height, input_width = shape[-2:]
                 pad_bottom = max(0, padded_height - input_height)
                 pad_right = max(0, padded_width - input_width)
                 padding = (0, 0, pad_right, pad_bottom)
-                processed_image = F.pad(processed_image, padding, fill=0)
+                processed_images = F.pad(processed_images, padding, fill=0)
 
-            processed_images.append(processed_image)
+            processed_images_grouped[shape] = processed_images
 
+        # Restore original order
+        processed_images = reorder_images(processed_images_grouped, grouped_resized_index)
+
+        # Process segmentation maps if provided
         processed_masks = None
         if segmentation_maps is not None:
-            processed_masks = []
-
             if len(segmentation_maps) != len(images):
                 raise ValueError(
                     f"Number of segmentation maps ({len(segmentation_maps)}) does not match "
                     f"number of images ({len(images)})"
                 )
 
+            # Validate mask sizes
             for i, mask in enumerate(segmentation_maps):
                 if mask.dim() == 2:
-                    mask = mask.unsqueeze(0)
+                    segmentation_maps[i] = mask.unsqueeze(0)
 
-                mask_h, mask_w = mask.shape[-2:]
+                mask_h, mask_w = segmentation_maps[i].shape[-2:]
                 img_h, img_w = original_sizes[i]
                 if mask_h != img_h or mask_w != img_w:
                     raise ValueError(
                         f"Segmentation map size ({mask_h}, {mask_w}) does not match image size ({img_h}, {img_w})"
                     )
 
-                if do_resize and mask_size is not None:
-                    mask_target_size = self._get_preprocess_shape(mask.shape[-2:], mask_size["longest_edge"])
+            # Group masks by shape for batch processing
+            grouped_masks, grouped_masks_index = group_images_by_shape(segmentation_maps)
+            processed_masks_grouped = {}
 
-                    mask_interpolation = F.InterpolationMode.NEAREST
-                    resized_mask = F.resize(mask.float(), mask_target_size, interpolation=mask_interpolation)
+            # Process each group of masks
+            for shape, stacked_masks in grouped_masks.items():
+                if do_resize and mask_size is not None:
+                    mask_target_size = self._get_preprocess_shape(shape[-2:], mask_size["longest_edge"])
+                    resized_masks = F.resize(
+                        stacked_masks.float(), mask_target_size, interpolation=F.InterpolationMode.NEAREST
+                    )
                 else:
-                    resized_mask = mask
+                    resized_masks = stacked_masks
 
                 if do_pad and mask_pad_size is not None:
                     mask_pad_h, mask_pad_w = mask_pad_size["height"], mask_pad_size["width"]
-                    mask_h, mask_w = resized_mask.shape[-2:]
+                    mask_h, mask_w = resized_masks.shape[-2:]
                     pad_bottom = max(0, mask_pad_h - mask_h)
                     pad_right = max(0, mask_pad_w - mask_w)
                     padding = (0, 0, pad_right, pad_bottom)
-                    resized_mask = F.pad(resized_mask, padding, fill=0)
+                    resized_masks = F.pad(resized_masks, padding, fill=0)
 
-                processed_masks.append(resized_mask.long())
+                processed_masks_grouped[shape] = resized_masks.long()
 
+            # Restore original mask order
+            processed_masks = reorder_images(processed_masks_grouped, grouped_masks_index)
+
+        # Stack tensors if required
         if return_tensors:
             processed_images = torch.stack(processed_images, dim=0)
             if processed_masks is not None:
                 processed_masks = torch.stack(processed_masks, dim=0)
 
-        output = {
-            "pixel_values": processed_images,
-            "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
-        }
-
-        if processed_masks is not None:
-            output["labels"] = processed_masks
-
-        return BatchFeature(output)
-
-    def pad_image(
-        self,
-        image: torch.Tensor,
-        pad_size: Dict[str, int],
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Pad an image to `(pad_size["height"], pad_size["width"])` with zeros to the right and bottom.
-
-        Args:
-            image: Input image tensor
-            pad_size: Dictionary with height and width keys specifying the target size
-            input_data_format: Format of the input image channels
-
-        Returns:
-            Padded image tensor
-        """
-        output_height, output_width = pad_size["height"], pad_size["width"]
-
-        if input_data_format == ChannelDimension.FIRST or (hasattr(image, "shape") and image.shape[0] <= 3):
-            input_height, input_width = image.shape[-2], image.shape[-1]
-        else:
-            input_height, input_width = image.shape[0], image.shape[1]
-
-        pad_bottom = max(0, output_height - input_height)
-        pad_right = max(0, output_width - input_width)
-        padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(image, padding, value=0)
-
-        return padded_image
+        return BatchFeature(
+            {
+                "pixel_values": processed_images,
+                "original_sizes": original_sizes,
+                "reshaped_input_sizes": reshaped_input_sizes,
+                **({"labels": processed_masks} if processed_masks is not None else {}),
+            }
+        )
 
     def post_process_masks(
         self,
@@ -399,8 +313,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Returns:
             List of processed masks matching original image sizes
         """
-        requires_backends(self, ["torch"])
-
         if return_tensors != "pt":
             raise ValueError("Only returning PyTorch tensors is currently supported.")
 
@@ -421,13 +333,15 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             else:
                 mask_batch = masks[i].unsqueeze(0).unsqueeze(0)
 
-            interpolated_mask = TF.interpolate(
-                mask_batch.float(), target_image_size, mode="bilinear", align_corners=False
+            interpolated_mask = F.resize(
+                mask_batch.float(), target_image_size, interpolation=F.InterpolationMode.BILINEAR, antialias=False
             )
 
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
 
-            interpolated_mask = TF.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.resize(
+                interpolated_mask, original_size, interpolation=F.InterpolationMode.BILINEAR, antialias=False
+            )
 
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
@@ -472,9 +386,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             `Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor], torch.Tensor]`:
                 Tuple containing crop boxes, points per crop, cropped images, and input labels
         """
-        requires_backends(self, ["torch"])
         if device is None:
-            device = torch.device(self.device_str)
+            device = image.device  # Get device from input image
 
         image_height, image_width = image.shape[-2:]
 
@@ -589,7 +502,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Returns:
             Tuple of filtered mask encodings, scores, and boxes
         """
-        requires_backends(self, ["torch"])
         if return_tensors != "pt":
             raise ValueError("Only returning PyTorch tensors is currently supported.")
 
@@ -775,17 +687,21 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
         return out
 
-    def _rle_to_mask(self, rle: Dict[str, Any]) -> torch.Tensor:
+    def _rle_to_mask(self, rle: Dict[str, Any], device: Optional[torch.device] = None) -> torch.Tensor:
         """
         Compute a binary mask from an uncompressed RLE.
 
         Args:
             rle: RLE encoding of a mask
+            device: Optional device for the output mask
 
         Returns:
             Binary mask tensor
         """
-        device = torch.device(self.device_str)  # Get device from string
+        # Use provided device or default to CPU
+        if device is None:
+            device = torch.device("cpu")
+
         height, width = rle["size"]
         mask = torch.zeros(height * width, dtype=torch.bool, device=device)
         idx = 0
@@ -795,8 +711,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             idx += count
             parity = not parity
         mask = mask.reshape(width, height)
-        # Use transpose(1, 0) to match numpy's transpose() behavior
-        return mask.transpose(1, 0)  # Reshape to original shape
+        return mask.transpose(1, 0)
 
     def post_process_for_mask_generation(
         self,
@@ -804,6 +719,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         all_scores: torch.Tensor,
         all_boxes: torch.Tensor,
         crops_nms_thresh: float,
+        device: Optional[torch.device] = None,
         return_tensors: str = "pt",
     ) -> Tuple[List[torch.Tensor], torch.Tensor, List[Dict[str, Any]], torch.Tensor]:
         """
@@ -814,12 +730,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             all_scores: IoU scores tensor
             all_boxes: Bounding boxes tensor
             crops_nms_thresh: NMS threshold
+            device: Optional device for the output masks
             return_tensors: Output format, only "pt" is supported
 
         Returns:
             Tuple of filtered masks, scores, RLE encodings, and boxes
         """
-        requires_backends(self, ["torch", "torchvision"])
+        if device is None and len(all_scores) > 0:
+            device = all_scores.device
 
         keep_by_nms = batched_nms(
             boxes=all_boxes.float(),
@@ -832,8 +750,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         rle_masks = [all_masks[i] for i in keep_by_nms]
         mask_boxes = all_boxes[keep_by_nms]
 
-        # Convert RLE back to binary masks
-        masks = [self._rle_to_mask(rle) for rle in rle_masks]
+        # Pass device when converting RLE to masks
+        masks = [self._rle_to_mask(rle, device=device) for rle in rle_masks]
 
         return masks, iou_scores, rle_masks, mask_boxes
 

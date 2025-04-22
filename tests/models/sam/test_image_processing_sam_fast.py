@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_vision_available
+from transformers.utils import is_vision_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
@@ -35,49 +35,11 @@ if is_vision_available():
 
     from transformers import AutoProcessor, SamImageProcessor, SamProcessor
 
-    # Import SamImageProcessorFast if available
-    try:
+    # Import SamImageProcessorFast if torchvision is available
+    if is_torchvision_available():
         from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
-
-        # Create a wrapper class that inherits from SamImageProcessor to satisfy type checking
-        class SamImageProcessorFastWrapper(SamImageProcessor):
-            """
-            Wrapper class for SamImageProcessorFast that inherits from SamImageProcessor
-            to satisfy type checking in SamProcessor
-            """
-
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                self.fast_processor = SamImageProcessorFast(**kwargs)
-
-                # Copy attributes from fast processor to wrapper
-                for attr_name in dir(self.fast_processor):
-                    if not attr_name.startswith("_") and not hasattr(self, attr_name):
-                        setattr(self, attr_name, getattr(self.fast_processor, attr_name))
-
-            def __call__(self, *args, **kwargs):
-                return self.fast_processor(*args, **kwargs)
-
-            def post_process_masks(self, *args, **kwargs):
-                return self.fast_processor.post_process_masks(*args, **kwargs)
-
-            def generate_crop_boxes(self, *args, **kwargs):
-                return self.fast_processor.generate_crop_boxes(*args, **kwargs)
-
-            def filter_masks(self, *args, **kwargs):
-                return self.fast_processor.filter_masks(*args, **kwargs)
-
-            def post_process_for_mask_generation(self, *args, **kwargs):
-                return self.fast_processor.post_process_for_mask_generation(*args, **kwargs)
-
-            def to_dict(self):
-                return self.fast_processor.to_dict()
-
-            def _preprocess(self, *args, **kwargs):
-                return self.fast_processor._preprocess(*args, **kwargs)
-    except ImportError:
+    else:
         SamImageProcessorFast = None
-        SamImageProcessorFastWrapper = None
 
 
 @require_vision
@@ -499,12 +461,12 @@ class SamProcessorFastTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamProcessor
 
     def setUp(self):
-        if SamImageProcessorFastWrapper is None:
+        if SamImageProcessorFast is None:
             self.skipTest("SamImageProcessorFast not found, skipping tests")
 
         self.tmpdirname = tempfile.mkdtemp()
-        # Use the wrapper class that inherits from SamImageProcessor
-        image_processor = SamImageProcessorFastWrapper()
+        # Use SamImageProcessor for the SamProcessor to test
+        image_processor = SamImageProcessor()
         processor = SamProcessor(image_processor)
         processor.save_pretrained(self.tmpdirname)
 
@@ -563,7 +525,7 @@ class SamProcessorFastTest(ProcessorTesterMixin, unittest.TestCase):
         processor = SamProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, SamImageProcessor)  # Should pass because of the wrapper
+        self.assertIsInstance(processor.image_processor, SamImageProcessor)
 
     def test_image_processor_no_masks(self):
         image_processor = self.get_image_processor()
