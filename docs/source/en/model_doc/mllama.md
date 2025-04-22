@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 [MLlama](https://huggingface.co/papers/2407.21783), or Llama 3.2 Vision, is a multimodal version of [Llama 3](./llama3), available in 11B and 90B parameters, and as an instruction-tuned and base variant. This model integrates a separately trained vision adapter (image encoder, image adapter, and video adapter) to handle visual tasks like image reasoning, captioning, and answering. The instruction-tuned variants are post-trained with supervised fine-tuning (SFT) and reinforcement learning with human feedback (RLHF) to align with human helpfulness and safety values.
 
-You can find all the original MLlama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) collection.
+You can find all the original MLlama checkpoints under the [Llama 3.2](https://huggingface.co/collections/meta-llama/llama-32-66f448ffc8c32f949b04c8cf) collection.
 
 > [!TIP]
 > Click on the MLlama models in the right sidebar for more examples of how to apply MLlama to different vision-language tasks like image captioning, visual question answering, and reasoning.
