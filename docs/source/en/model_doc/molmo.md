@@ -35,7 +35,7 @@ alt="drawing" width="600"/>
 
 Tips:
 
-- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+- We recommend calling `processor.tokenizer.padding_side = "left"` for batched generation because it leads to more accurate results.
 
 
 This model was contributed by [Molbap](https://huggingface.co/Molbap).
