@@ -47,8 +47,8 @@ bitsandbytes is currently only supported on CUDA GPUs for CUDA versions 11.0 - 1
 
 | Feature | Minimum Hardware Requirement |
 |---------|-------------------------------|
+| 8-bit optimizers | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
 | LLM.int8() | NVIDIA Turing (RTX 20 series, T4) or newer GPUs |
-| 8-bit optimizers/quantization | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
 | NF4/FP4 quantization | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
 
 ### Multi-backend
