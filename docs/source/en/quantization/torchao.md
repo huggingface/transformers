@@ -60,12 +60,16 @@ Install torchao from PyPi or the PyTorch index with the following commands.
 # Stable release from Pypi which will default to CUDA 12.6
 pip install --upgrade torchao transformers
 ```
+
 </hfoption>
 <hfoption id="PyTorch Index">
+
 Stable Release from the PyTorch index
+
 ```bash
 pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -142,6 +146,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -212,6 +217,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -277,6 +283,7 @@ input_ids = tokenizer(input_text, return_tensors="pt")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -323,13 +330,16 @@ To avoid arbitrary user code execution, torchao sets `weights_only=True` in [tor
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
+
 ```py
 # don't serialize model with Safetensors
 output_dir = "llama3-8b-int4wo-128"
 quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
 ```
+
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
+
 ```py
 # don't serialize model with Safetensors
 USER_ID = "your_huggingface_user_id"
@@ -337,12 +347,14 @@ REPO_ID = "llama3-8b-int4wo-128"
 quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128", safe_serialization=False)
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
+
 </hfoption>
 
 
 ## Loading quantized models
 
 Loading a quantized model depends on the quantization scheme. For quantization schemes, like int8 and float8, you can quantize the model on any device and also load it on any device. The example below demonstrates quantizing a model on the CPU and then loading it on CUDA.
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -374,8 +386,8 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
+
 For int4, the model can only be loaded on the same device it was quantized on because the layout is specific to the device. The example below demonstrates quantizing and loading a model on the CPU.
 
 ```py
@@ -410,7 +422,6 @@ input_ids = tokenizer(input_text, return_tensors="pt")
 
 output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
 
 ## ⚠️ Deprecation Notice
