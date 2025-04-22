@@ -977,10 +977,10 @@
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
-      - local: model_doc/mistral3
-        title: Mistral3
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mistral3
+        title: Mistral3
       - local: model_doc/mllama
         title: mllama
       - local: model_doc/nougat
