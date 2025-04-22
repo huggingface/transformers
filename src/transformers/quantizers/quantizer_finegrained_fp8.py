@@ -8,8 +8,6 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-    from ..modeling_utils import _load_parameter_into_model
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
@@ -93,6 +91,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         """
         Quantizes weights to FP8 format using Block-wise quantization
         """
+        from ..modeling_utils import _load_parameter_into_model
+
         param_value = param_value.to(target_device)
 
         # Get FP8 min/max values
