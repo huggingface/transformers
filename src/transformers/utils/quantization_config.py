@@ -1821,7 +1821,10 @@ class QuarkConfig(QuantizationConfigMixin):
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import Config
-
+        else:
+            raise ImportError(
+                "Quark is not installed. Please refer to https://quark.docs.amd.com/latest/install.html."
+            )
         # This might be e.g. `"fp8"` or `"awq"`.
         self.custom_mode = kwargs["quant_method"]
         self.legacy = "export" not in kwargs

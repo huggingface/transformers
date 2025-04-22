@@ -327,7 +327,7 @@ def _warning_fast_image_processor_available(fast_class):
     )
 
 
-@requires(backends=("vision", "torchvision"))
+@requires(backends=("vision",))
 class AutoImageProcessor:
     r"""
     This is a generic image processor class that will be instantiated as one of the image processor classes of the
