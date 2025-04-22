@@ -46,11 +46,16 @@ alt="drawing" width="600"/>
 ## Kosmos2_5ImageProcessor
 
 [[autodoc]] Kosmos2_5ImageProcessor
+    - preprocess
+
+## Kosmos2_5ImageProcessorFast
+
+[[autodoc]] Kosmos2_5ImageProcessorFast
+    - preprocess
 
 ## Kosmos2_5Processor
 
 [[autodoc]] Kosmos2_5Processor
-    - __call__
 
 ## Kosmos2_5Model
 
