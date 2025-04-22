@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 # MLlama
 
-[MLlama](https://huggingface.co/meta-llama) is like giving your Llama 3.1 model a pair of eyes! It's a multimodal version that can not only understand text but also see and talk about images. Think of it as a chatbot that can both look at pictures and have meaningful conversations about them. Available in two sizes (11B and 90B parameters), it's particularly good at describing what it sees, reasoning about visual content, and even writing creative captions.
+[MLlama](https://huggingface.co/papers/2407.21783), or Llama 3.2 Vision, is a multimodal version of [Llama 3](./llama3), available in 11B and 90B parameters, and as an instruction-tuned and base variant. This model integrates a separately trained vision adapter (image encoder, image adapter, and video adapter) to handle visual tasks like image reasoning, captioning, and answering. The instruction-tuned variants are post-trained with supervised fine-tuning (SFT) and reinforcement learning with human feedback (RLHF) to align with human helpfulness and safety values.
 
 You can find all the original MLlama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) collection.
 
