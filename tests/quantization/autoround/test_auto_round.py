@@ -159,7 +159,7 @@ class AutoRoundTest(unittest.TestCase):
         quantization_config = AutoRoundConfig()
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="auto", quantization_config=quantization_config, torch_dtype="auto"
+            model_name, device_map="cuda", quantization_config=quantization_config, torch_dtype="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
