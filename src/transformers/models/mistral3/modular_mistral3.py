@@ -28,7 +28,6 @@ from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
-    LlavaPreTrainedModel,
 )
 from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config

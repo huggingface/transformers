@@ -40,8 +40,8 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     is_torch_flex_attn_available,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1064,7 +1064,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     "The bare Qwen2VL Model outputting raw hidden-states without any specific head on top.",
     QWEN2VL_START_DOCSTRING,
 )
-class Qwen2VLModel(Qwen2VLPreTrainedModel):
+class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2VLTextConfig
 
     def __init__(self, config: Qwen2VLTextConfig):

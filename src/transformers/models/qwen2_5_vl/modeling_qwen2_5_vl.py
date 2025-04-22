@@ -1112,7 +1112,7 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
     "The bare Qwen2_5_VL Model outputting raw hidden-states without any specific head on top.",
     Qwen2_5_VL_START_DOCSTRING,
 )
-class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
+class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
     config_class = Qwen2_5_VLTextConfig
 
     def __init__(self, config: Qwen2_5_VLTextConfig):

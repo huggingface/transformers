@@ -32,14 +32,20 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils.deprecation import deprecate_kwarg
 from ...utils import (
     add_start_docstrings,
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_onevision import LlavaOnevisionConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+_CONFIG_FOR_DOC = "LlavaOnevisionConfig"
 
 
 @dataclass
@@ -127,60 +133,38 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-LLAVA_ONEVISION_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
+class LlavaOnevisionPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+        mode = config.spatial_pool_mode
+        stride = config.spatial_pool_stride
+        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
+        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
 
-    Parameters:
-        config ([`LlavaOnevisionConfig`] or [`LlavaOnevisionVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+        if mode == "average":
+            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
+        elif mode == "max":
+            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
+        elif mode == "conv":
+            self.pool = nn.Conv2d(
+                in_channels=config.vision_config.hidden_size,
+                out_channels=out_channels,
+                kernel_size=stride,
+                stride=stride,
+            )
+        else:
+            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
 
+    def forward(self, image_features):
+        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
+        ori_height = int(ori_width * self.image_size // self.image_size)
 
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAVA_ONEVISION_START_DOCSTRING,
-)
-class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config_class = LlavaOnevisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+        batch_size, _, dim = image_features.shape
+        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
+        image_features_spatial_pool = self.pool(image_features_spatial)
 
-    def _init_weights(self, module):
-        # important: this ported version of LlavaOnevision isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava_onevision should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):
@@ -203,6 +187,23 @@ class LlavaOnevisionMultiModalProjector(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+LLAVA_ONEVISION_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`LlavaOnevisionConfig`] or [`LlavaOnevisionVisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -390,6 +391,34 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
+
+
+@add_start_docstrings(
+    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    LLAVA_ONEVISION_START_DOCSTRING,
+)
+class LlavaOnevisionPreTrainedModel(PreTrainedModel):
+    config_class = LlavaOnevisionConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, LlavaOnevisionForConditionalGeneration):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 @add_start_docstrings(
@@ -1022,10 +1051,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 vision_aspect_ratio=vision_aspect_ratio,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -1046,10 +1075,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
 
-            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
+            special_video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
             special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
+                n_video_tokens = (input_ids == self.config.video_token_index).sum()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"

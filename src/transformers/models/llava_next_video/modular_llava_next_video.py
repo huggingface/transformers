@@ -27,7 +27,6 @@ from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
-    LlavaNextPreTrainedModel,
     image_size_to_num_patches,
 )
 
@@ -924,5 +923,5 @@ __all__ = [
     "LlavaNextVideoConfig",
     "LlavaNextVideoForConditionalGeneration",
     "LlavaNextVideoModel",
-    "LlavaNextVideoPreTrainedModel", # noqa: F822
+    "LlavaNextVideoPreTrainedModel",  # noqa: F822
 ]

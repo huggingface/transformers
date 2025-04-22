@@ -608,14 +608,14 @@ INTERNVL_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare InternVL Model outputting raw hidden-states without any specific head on top.",
     INTERNVL_START_DOCSTRING,
 )
 class InternVLPreTrainedModel(PreTrainedModel):
     config_class = InternVLConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["InternVLVisionAttention"]
+    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -656,7 +656,7 @@ class InternVLMultiModalProjector(nn.Module):
 @dataclass
 class InternVLCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for InternVL causal language model (or autoregressive) outputs.
+    Base class for InternVLccausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -681,7 +681,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
