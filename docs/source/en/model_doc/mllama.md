@@ -64,7 +64,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bit precision:
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bit precision.
 
 ```python
 import torch
