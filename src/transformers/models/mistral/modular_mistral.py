@@ -10,7 +10,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import is_torch_flex_attn_available, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -20,10 +20,17 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from .configuration_mistral import MistralConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -42,6 +49,7 @@ class MistralMLP(LlamaMLP):
 class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -105,6 +113,10 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         self.mlp = MistralMLP(config)
 
 
+class MistralPreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
 class MistralModel(LlamaModel):
     def __init__(self, config: MistralConfig):
         super().__init__(config)
@@ -114,7 +126,7 @@ class MistralModel(LlamaModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -132,6 +144,10 @@ class MistralModel(LlamaModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -185,7 +201,7 @@ class MistralModel(LlamaModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -240,12 +256,12 @@ class MistralModel(LlamaModel):
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
             )
             diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -294,7 +310,7 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -343,3 +359,13 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MistralForCausalLM",
+    "MistralForQuestionAnswering",
+    "MistralModel",
+    "MistralPreTrainedModel",
+    "MistralForSequenceClassification",
+    "MistralForTokenClassification",
+]

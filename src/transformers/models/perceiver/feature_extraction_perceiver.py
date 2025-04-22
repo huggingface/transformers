@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_perceiver import PerceiverImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class PerceiverFeatureExtractor(PerceiverImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(

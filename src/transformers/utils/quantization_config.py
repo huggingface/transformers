@@ -20,7 +20,7 @@ import dataclasses
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from inspect import Parameter, signature
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -1263,7 +1263,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
-            self.quantization_config = QuantizationConfig.parse_obj(
+            self.quantization_config = QuantizationConfig.model_validate(
                 {
                     "config_groups": config_groups,
                     "quant_method": quant_method,
@@ -1282,7 +1282,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 sparsity_config.get("format"), **sparsity_config
             )
 
-        super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
+        self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
+
+    def post_init(self):
+        if self.run_compressed:
+            if self.is_sparsification_compressed:
+                logger.warn(
+                    "`run_compressed` is only supported for quantized_compressed models"
+                    " and not for sparsified models. Setting `run_compressed=False`"
+                )
+                self.run_compressed = False
+            elif not self.is_quantization_compressed:
+                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                self.run_compressed = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1355,6 +1367,28 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         return {"run_compressed": self.run_compressed}
+
+    @property
+    def is_quantized(self):
+        return bool(self.quantization_config) and bool(self.quantization_config.config_groups)
+
+    @property
+    def is_quantization_compressed(self):
+        from compressed_tensors.quantization import QuantizationStatus
+
+        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+
+    @property
+    def is_sparsification_compressed(self):
+        from compressed_tensors.config import (
+            CompressionFormat,
+            SparsityCompressionConfig,
+        )
+
+        return (
+            isinstance(self.sparsity_config, SparsityCompressionConfig)
+            and self.sparsity_config.format != CompressionFormat.dense.value
+        )
 
 
 @dataclass
@@ -1593,6 +1627,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 and is_torchao_available()
                 and self.quant_type == "int4_weight_only"
                 and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+                and quant_type_kwargs.get("layout", None) is None
             ):
                 from torchao.dtypes import Int4CPULayout
 
@@ -1609,7 +1644,17 @@ class TorchAoConfig(QuantizationConfigMixin):
         if isinstance(self.quant_type, str):
             # Handle layout serialization if present
             if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
-                d["quant_type_kwargs"]["layout"] = dataclasses.asdict(d["quant_type_kwargs"]["layout"])
+                if is_dataclass(d["quant_type_kwargs"]["layout"]):
+                    d["quant_type_kwargs"]["layout"] = [
+                        d["quant_type_kwargs"]["layout"].__class__.__name__,
+                        dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
+                    ]
+                if isinstance(d["quant_type_kwargs"]["layout"], list):
+                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
+                    assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
+                    assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
+                else:
+                    raise ValueError("layout must be a list")
         else:
             # Handle AOBaseConfig serialization
             from torchao.core.config import config_to_dict
@@ -1627,6 +1672,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
+
+        if isinstance(quant_type, str):
+            return cls(quant_type=quant_type, **config_dict)
         # Check if we only have one key which is "default"
         # In the future we may update this
         assert len(quant_type) == 1 and "default" in quant_type, (
@@ -1773,7 +1821,10 @@ class QuarkConfig(QuantizationConfigMixin):
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import Config
-
+        else:
+            raise ImportError(
+                "Quark is not installed. Please refer to https://quark.docs.amd.com/latest/install.html."
+            )
         # This might be e.g. `"fp8"` or `"awq"`.
         self.custom_mode = kwargs["quant_method"]
         self.legacy = "export" not in kwargs

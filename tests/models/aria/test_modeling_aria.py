@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -280,26 +279,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip(reason="Vision backbone doesn't support FLEX yet!")
-    def test_flex_attention_with_grads(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_disk_offload_safetensors(self):
         pass
 
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -429,7 +428,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @pytest.mark.generate
-    # overridden because mllama has special cache for self and cross attentions
+    # overridden because mllama is not an encoder-decoder model, but has encoder-decoder-like cache
     def test_past_key_values_format(self):
         # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
         # standard KV cache format is important for a consistent API (and for advanced generation methods).

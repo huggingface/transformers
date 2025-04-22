@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -318,6 +317,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
+    def test_past_key_values_format(self):
         pass
 
 

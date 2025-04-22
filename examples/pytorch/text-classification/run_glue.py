@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.51.0.dev0")
+check_min_version("4.52.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -509,8 +508,12 @@ def main():
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+        labels = p.label_ids
+        if not training_args.eval_do_concat_batches:
+            preds = np.concatenate(preds, axis=0)
+            labels = np.concatenate(p.label_ids, axis=0)
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
-        result = metric.compute(predictions=preds, references=p.label_ids)
+        result = metric.compute(predictions=preds, references=labels)
         if len(result) > 1:
             result["combined_score"] = np.mean(list(result.values())).item()
         return result

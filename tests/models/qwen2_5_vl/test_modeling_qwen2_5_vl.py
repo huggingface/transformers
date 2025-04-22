@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -317,12 +316,8 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
 
-    @unittest.skip("Qwen strcuture is weird, needs refactoring without breaking. TODO: raushan")
+    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
     def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip("VLMs need to have input ids to merge image embeddings")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
 

@@ -21,6 +21,7 @@ from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -36,6 +37,7 @@ class DecodeType(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
+@requires(backends=("sentencepiece",))
 class MgpstrProcessor(ProcessorMixin):
     r"""
     Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single

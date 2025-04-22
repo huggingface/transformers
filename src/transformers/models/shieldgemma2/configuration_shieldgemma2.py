@@ -72,6 +72,11 @@ class ShieldGemma2Config(PretrainedConfig):
     ```"""
 
     model_type = "shieldgemma2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
