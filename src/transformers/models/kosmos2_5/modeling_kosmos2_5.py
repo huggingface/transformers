@@ -1638,7 +1638,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
@@ -1650,8 +1649,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -1668,9 +1665,8 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0])
+        lm_logits = self.lm_head(outputs.last_hidden_state)
 
         lm_loss = None
         if labels is not None:
@@ -1682,10 +1678,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return (lm_loss,) + output if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
