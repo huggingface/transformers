@@ -60,7 +60,7 @@ Install torchao from PyPi or the PyTorch index with the following commands.
 # Stable release from Pypi which will default to CUDA 12.6
 pip install --upgrade torchao transformers
 ```
-</hfoption> 
+</hfoption>
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
 ```bash
@@ -86,6 +86,7 @@ We'll show examples for recommended quantization methods based on hardwares, e.g
 ### H100 GPU
 <hfoptions id="examples-H100-GPU">
 <hfoption id="float8-dynamic-and-weight-only">
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -112,7 +113,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
-</hfoption>
 
 </hfoption>
 <hfoption id="int4-weight-only">
@@ -146,8 +146,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### A100 GPU
+
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -174,6 +176,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 
 <hfoption id="int4-weight-only">
@@ -213,8 +216,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### CPU
+
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -240,6 +245,7 @@ input_ids = tokenizer(input_text, return_tensors="pt")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="int4-weight-only">
 
@@ -358,8 +364,8 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
-    output_dir, 
-    device_map="auto", 
+    output_dir,
+    device_map="auto",
     torch_dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
@@ -394,8 +400,8 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
-    output_dir, 
-    device_map="cpu", 
+    output_dir,
+    device_map="cpu",
     torch_dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
