@@ -159,10 +159,16 @@ model.set_output_embeddings(resized_embeddings)
 [[autodoc]] MllamaForCausalLM
     - forward
 
+## MllamaVisionModel
+
+[[autodoc]] MllamaVisionModel
+    - forward
+
 ## MllamaTextModel
 
 [[autodoc]] MllamaTextModel
     - forward
+
 
 
 
