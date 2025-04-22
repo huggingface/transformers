@@ -941,12 +941,6 @@ class GPT2Model(GPT2PreTrainedModel):
         if use_cache:
             if past_key_values is None:
                 return_legacy_cache = True
-                logger.warning_once(
-                    "Passing `use_cache=True` and `past_key_values=None` will is produce cache output in legacy format.  "
-                    "This behavior is deprecated and will be changed in Transformers v4.53.0. "
-                    "To obtain output past_key_values as `Cache` instance you should pass an instance of `Cache` instead, e.g. "
-                    "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-                )
                 past_key_values = DynamicCache()
             elif not isinstance(past_key_values, Cache):
                 return_legacy_cache = True
