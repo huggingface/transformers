@@ -61,7 +61,8 @@ bitsandbytes is currently only supported on CUDA GPUs for CUDA versions 11.0 - 1
 | Intel GPU | v2.4.0+ (ipex) | 3.10+ | Intel GPU | Experimental |
 | Ascend NPU | 2.1.0+ (torch_npu) | 3.10+ | Ascend NPU | Experimental |
 
-For information on the status of each backend, see the [bitsandbytes README](https://github.com/bitsandbytes-foundation/bitsandbytes).
+> **Note:** Bitsandbytes is moving away from the multi-backend approach towards using [Pytorch Custom Operators](https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html), as the main mechanism for supporting new hardware, and dispatching to the correct backend.
+
 ## Quantization Examples
 
 Quantize a model by passing a [`BitsAndBytesConfig`] to [`~PreTrainedModel.from_pretrained`]. This works for any model in any modality, as long as it supports [Accelerate](https://huggingface.co/docs/accelerate/index) and contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
