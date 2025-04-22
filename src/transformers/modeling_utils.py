@@ -3422,6 +3422,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # for offloaded modules
         module_map = {}
 
+        def _get_state_dict(model):
+            # FSDP2 has a method called `_get_fsdp_state`, so we check for that one (no need for extra imports and version checks)
+            if hasattr(model, "_get_fsdp_state"):
+                from torch.distributed.checkpoint.state_dict import (
+                    StateDictOptions,
+                    get_model_state_dict,
+                )
+
+                # use the `full_state_dict` option to get the full state dict wihout needing custom logic
+                options = StateDictOptions(full_state_dict=True)
+                return get_model_state_dict(model, options=options)
+            else:
+                return model.state_dict()
+
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded, make module map
@@ -3436,11 +3450,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
-                    module_state_dict = module.state_dict()
+                    module_state_dict = _get_state_dict(module)
 
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
-            state_dict = model_to_save.state_dict()
+            # For FSDP2, `model.state_dict()` is a sharded state dict, so we get the full one with this wrapper
+            state_dict = _get_state_dict(model_to_save)
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
