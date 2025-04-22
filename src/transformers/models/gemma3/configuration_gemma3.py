@@ -285,6 +285,11 @@ class Gemma3Config(PretrainedConfig):
     ```"""
 
     model_type = "gemma3"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {
         "text_config": Gemma3TextConfig,
         "vision_config": SiglipVisionConfig,

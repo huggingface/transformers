@@ -143,7 +143,9 @@ if TYPE_CHECKING:
     from .informer import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internvl import *
     from .jamba import *
+    from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
     from .layoutlm import *
@@ -179,6 +181,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
+    from .mlcd import *
     from .mllama import *
     from .mluke import *
     from .mobilebert import *
@@ -278,6 +281,7 @@ if TYPE_CHECKING:
     from .tapas import *
     from .textnet import *
     from .time_series_transformer import *
+    from .timesfm import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
