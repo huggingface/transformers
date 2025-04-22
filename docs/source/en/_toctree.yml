@@ -167,6 +167,8 @@
     title: Quantization concepts
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/auto_round
+    title: AutoRound
   - local: quantization/awq
     title: AWQ
   - local: quantization/bitnet
