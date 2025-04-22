@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     IS_XPU_SYSTEM,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -42,6 +43,7 @@ from transformers.utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
