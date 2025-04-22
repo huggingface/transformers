@@ -1350,9 +1350,8 @@ class ProcessorMixin(PushToHubMixin):
             batch_audios = []
             batch_video_metadata = []
             for conversation in conversations:
-                images, videos, audio = [], [], []
+                images, videos = [], []
                 video_metadata = []
-                # TODO: very likely an audio_metadat ??
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                     audio_fnames = [
@@ -1380,7 +1379,7 @@ class ProcessorMixin(PushToHubMixin):
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not mm_load_kwargs["load_audio_from_video"]:
                         for fname in audio_fnames:
-                            audio.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
                     else:
                         for fname in video_fnames:
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
@@ -1412,9 +1411,7 @@ class ProcessorMixin(PushToHubMixin):
                     batch_images.append(images)
                 if videos:
                     batch_videos.append(videos)
-                    batch_video_metadata.append(video_metadata)
-                if audio:
-                    batch_audios.append(audio)
+                    batch_video_metadata.append(video_metadata) 
 
             # Process conversation with video/image information if needed. Then convert into a prompt using Jinja template
             conversations = self._process_messages_for_chat_template(
