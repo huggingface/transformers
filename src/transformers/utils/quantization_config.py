@@ -1703,6 +1703,12 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             The type of linear class to use. Can be either `bitlinear` or `autobitlinear`.
         quantization_mode (`str`, *optional*, defaults to `"offline"`):
             The quantization mode to use. Can be either `online` or `offline`.
+            In `online` mode, the weight quantization parameters are calculated dynamically
+            during each forward pass (e.g., based on the current weight values). This can
+            adapt to weight changes during training (Quantization-Aware Training - QAT).
+            In `offline` mode, quantization parameters are pre-calculated *before* inference. 
+            These parameters are then fixed and loaded into the quantized model. This
+            generally results in lower runtime overhead compared to online quantization.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
