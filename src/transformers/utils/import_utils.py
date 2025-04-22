@@ -350,8 +350,8 @@ def is_torch_accelerator_available():
         import torch
 
         return hasattr(torch, "accelerator")
-    else:
-        return False
+
+    return False
 
 
 def is_torch_deterministic():
@@ -365,8 +365,8 @@ def is_torch_deterministic():
             return False
         else:
             return True
-    else:
-        return False
+
+    return False
 
 
 def is_hadamard_available():
