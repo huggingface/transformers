@@ -70,7 +70,7 @@ class Kosmos2_5Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Kosmos2_5ImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
