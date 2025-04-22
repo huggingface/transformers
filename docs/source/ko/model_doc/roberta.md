@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RoBERTa[[RoBERTa]]
+# RoBERTa[[roberta]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -24,19 +24,19 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## 개요[[Overview]]
+## 개요[[overview]]
 
 RoBERTa 모델은 Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov가 제안한 논문 [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692)에서 소개되었습니다. 이 모델은 2018년에 구글에서 발표한 BERT 모델을 기반으로 합니다.
 
-RoBERTa는 BERT를 기반으로 하며, 주요 하이퍼파라미터를 수정하고, 다음 문장 예측(Next Sentence Prediction) 사전 학습 목표를 제거했으며, 훨씬 더 큰 미니 배치 크기와 학습률을 사용하여 학습을 진행했습니다.
+RoBERTa는 BERT를 기반으로 하며, 주요 하이퍼파라미터를 수정하고, 사전 학습 단계에서 다음 문장 예측(Next Sentence Prediction)을 제거했으며, 훨씬 더 큰 미니 배치 크기와 학습률을 사용하여 학습을 진행했습니다.
 
 해당 논문의 초록입니다:
 
-*언어 모델 사전 학습은 성능을 크게 향상시켰지만, 서로 다른 접근 방식 간의 신중한 비교는 어렵습니다. 학습은 계산 비용이 많이 들고, 종종 크기가 서로 다른 비공개 데이터셋에서 수행되며, 본 논문에서 보여주듯이 하이퍼파라미터 선택이 최종 성능에 큰 영향을 미칩니다. 우리는 BERT 사전 학습(Devlin et al., 2019)에 대한 복제 연구를 수행하여, 여러 핵심 하이퍼파라미터와 학습 데이터 크기의 영향을 면밀히 측정하였습니다. 그 결과, BERT는 충분히 학습되지 않았으며, 이후 발표된 모든 모델의 성능을 맞추거나 능가할 수 있음을 발견했습니다. 우리가 제안한 최상의 모델은 GLUE, RACE, SQuAD에서 최신 성능(state-of-the-art)을 달성했습니다. 이 결과는 지금까지 간과되어 온 설계 선택의 중요성을 강조하며, 최근 보고된 성능 향상의 근원이 무엇인지에 대한 의문을 제기합니다. 우리는 본 연구에서 사용한 모델과 코드를 공개합니다.*
+*언어 모델 사전 학습은 성능을 크게 향상시켰지만, 서로 다른 접근 방식을 면밀히 비교하는 것은 어렵습니다. 학습은 계산 비용이 많이 들고, 종종 크기가 서로 다른 비공개 데이터셋에서 수행되며, 본 논문에서 보여주듯이 하이퍼파라미터 선택이 최종 성능에 큰 영향을 미칩니다. 우리는 BERT 사전 학습(Devlin et al., 2019)에 대한 재현 연구를 수행하여, 여러 핵심 하이퍼파라미터와 학습 데이터 크기의 영향을 면밀히 측정하였습니다. 그 결과, BERT는 충분히 학습되지 않았으며, 이후 발표된 모든 모델의 성능을 맞추거나 능가할 수 있음을 발견했습니다. 우리가 제안한 최상의 모델은 GLUE, RACE, SQuAD에서 최고 성능(state-of-the-art)을 달성했습니다. 이 결과는 지금까지 간과되어 온 설계 선택의 중요성을 강조하며, 최근 보고된 성능 향상의 근원이 무엇인지에 대한 의문을 제기합니다. 우리는 본 연구에서 사용한 모델과 코드를 공개합니다.*
 
 이 모델은 [julien-c](https://huggingface.co/julien-c)가 기여하였습니다. 원본 코드는 [여기](https://github.com/pytorch/fairseq/tree/master/examples/roberta)에서 확인할 수 있습니다.
 
-## 사용 팁[[Usage tips]]
+## 사용 팁[[usage-tips]]
 
 - 이 구현은 [`BertModel`]과 동일하지만, 임베딩 부분에 약간의 수정이 있으며 RoBERTa 사전학습 모델에 맞게 설정되어 있습니다.
 - RoBERTa는 BERT와 동일한 아키텍처를 가지고 있지만, 토크나이저로 바이트 수준 BPE(Byte-Pair Encoding, GPT-2와 동일)를 사용하고, 사전학습 방식이 다릅니다.
@@ -50,9 +50,9 @@ RoBERTa는 BERT를 기반으로 하며, 주요 하이퍼파라미터를 수정�
 
 - [CamemBERT](camembert)은 RoBERTa를 기반으로 한 래퍼 모델입니다. 사용 예제는 해당 모델 페이지를 참고하세요.
 
-## 자료[[Resources]]
+## 자료[[resources]]
 
-RoBERTa를 시작하는 데 도움이 되는 Hugging Face 공식 자료와 커뮤니티 자료(🌎 아이콘으로 표시됨) 목록입니다. 이 목록에 자료를 추가하고 싶다면 언제든지 Pull Request를 보내주세요! 저희가 검토 후 반영하겠습니다. 추가하려는 자료는 기존 자료를 단순히 복제하는 것이 아닌, 새롭거나 유의미한 내용을 포함하고 있는 것이 이상적입니다.
+RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커뮤니티 자료(🌎 아이콘으로 표시됨) 목록입니다. 이 목록에 자료를 추가하고 싶다면 언제든지 Pull Request를 보내주세요! 저희가 검토 후 반영하겠습니다. 추가하려는 자료는 기존 자료를 단순히 복제하는 것이 아닌, 새롭거나 유의미한 내용을 포함하고 있는 것이 좋습니다.
 
 <PipelineTag pipeline="text-classification"/>
 
@@ -90,7 +90,6 @@ RoBERTa를 시작하는 데 도움이 되는 Hugging Face 공식 자료와 커�
 - 🤗 Hugging Face 코스의 [질의응답 챕터](https://huggingface.co/course/chapter7/7?fw=pt)
 - [질의응답 작업 가이드](../tasks/question_answering)
 
-**Multiple choice**
 **다중 선택**
 - [`RobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
 - [`TFRobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.

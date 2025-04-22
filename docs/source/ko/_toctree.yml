@@ -480,7 +480,7 @@
         title: (번역중) RemBERT
       - local: in_translation
         title: (번역중) RetriBERT
-      - local: model_doc/RoBERTa
+      - local: model_doc/roberta
         title: RoBERTa
       - local: in_translation
         title: (번역중) RoBERTa-PreLayerNorm
