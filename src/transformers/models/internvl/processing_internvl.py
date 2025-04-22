@@ -74,20 +74,12 @@ class InternVLProcessor(ProcessorMixin):
             image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        fake_image_token (`str`, *optional*, defaults to `"<image>"`):
-            The token to use for the image placeholder in the text. This token will be replaced by the
-            appropriate image tokens when processing the text with images.
-        fake_video_token (`str`, *optional*, defaults to `"<video>"`):
-            The token to use for the video placeholder in the text. This token will be replaced by the
-            appropriate image tokens when processing the text with videos.
     """
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = [
         "chat_template",
         "image_seq_length",
-        "fake_image_token",
-        "fake_video_token",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -98,16 +90,13 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer=None,
         image_seq_length: int = 256,
         chat_template=None,
-        fake_image_token="<image>",
-        fake_video_token="<video>",
         **kwargs,
     ):
         self.image_seq_length = image_seq_length
-        self.fake_image_token = fake_image_token
-        self.fake_video_token = fake_video_token
         self.start_image_token = tokenizer.start_image_token
         self.end_image_token = tokenizer.end_image_token
         self.image_token = tokenizer.context_image_token
+        self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
@@ -131,24 +120,24 @@ class InternVLProcessor(ProcessorMixin):
         video_index = 0
         processed_text = []
         image_video_patches = []
+        replace_strings = []
         # Support interleaved image and video in prompts:
         # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
         for prompt in text:
             new_prompt = prompt
-            while self.fake_image_token in new_prompt or self.fake_video_token in new_prompt:
-                if self.fake_image_token in new_prompt and (
-                    self.fake_video_token not in new_prompt
-                    or new_prompt.index(self.fake_image_token) < new_prompt.index(self.fake_video_token)
+            while self.image_token in new_prompt or self.video_token in new_prompt:
+                if self.image_token in new_prompt and (
+                    self.video_token not in new_prompt
+                    or new_prompt.index(self.image_token) < new_prompt.index(self.video_token)
                 ):
                     # Get the slice of patches corresponding to the current image
                     start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
                     end_index = image_num_patches_indices[image_index]
                     image_video_patches.append(image_pixel_values[start_index:end_index])
                     # Replace the corresponding image placeholder with the correct number of image tokens
-                    new_prompt = new_prompt.replace(
-                        self.fake_image_token,
-                        f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}",
-                        1,
+                    new_prompt = new_prompt.replace(self.image_token, "<placeholder>", 1)
+                    replace_strings.append(
+                        f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
                     )
                     image_index += 1
                 else:
@@ -166,8 +155,12 @@ class InternVLProcessor(ProcessorMixin):
                         f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length * num_patches[i]}{self.end_image_token}"
                         for i in range(len(num_patches))
                     )
-                    new_prompt = new_prompt.replace(self.fake_video_token, video_prompt, 1)
+                    replace_strings.append(video_prompt)
+                    new_prompt = new_prompt.replace(self.video_token, "<placeholder>", 1)
                     video_index += 1
+            while "<placeholder>" in new_prompt:
+                replace_str = replace_strings.pop(0)
+                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
             processed_text.append(new_prompt)
 
         return processed_text, image_video_patches, image_index, video_index
