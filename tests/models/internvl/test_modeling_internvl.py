@@ -45,9 +45,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        InternVLForConditionalGeneration, InternVLModel
-    )
+    from transformers import InternVLForConditionalGeneration, InternVLModel
 
 
 if is_vision_available():

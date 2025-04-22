@@ -39,7 +39,12 @@ from ...utils import (
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaPreTrainedModel, LlavaModel
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaPreTrainedModel,
+)
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
@@ -653,7 +658,6 @@ class InternVLModel(LlavaModel):
         vision_features = self.multi_modal_projector(vision_features)
 
         return vision_features
-
 
 
 class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
