@@ -56,6 +56,12 @@ body:
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+        
+        Specific backends:
+        
+          - ROCm: @IvarFlakstad
+          - Intel XPU: @IlyasMoutawwakil
+          - Ascend NPU: @IvarFlakstad 
 
         Documentation: @stevhliu
 
