@@ -751,8 +751,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
         return causal_mask
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs):
-    ...
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
