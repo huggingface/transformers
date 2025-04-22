@@ -35,7 +35,7 @@ from transformers.testing_utils import (
 
 from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
-
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     import torch
@@ -48,7 +48,7 @@ if is_torch_available():
     )
 
 
-class Gemma2ModelTester(GemmaModelTester):
+class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma2Config
         model_class = Gemma2Model
@@ -58,7 +58,7 @@ class Gemma2ModelTester(GemmaModelTester):
 
 
 @require_torch
-class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
+class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
         if is_torch_available()

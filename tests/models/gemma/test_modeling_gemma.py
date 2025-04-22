@@ -67,17 +67,6 @@ class GemmaModelTester(CausalLMModelTester):
 @require_torch
 class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GemmaModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GemmaModel,
-            "text-classification": GemmaForSequenceClassification,
-            "token-classification": GemmaForTokenClassification,
-            "text-generation": GemmaForCausalLM,
-            "zero-shot": GemmaForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None

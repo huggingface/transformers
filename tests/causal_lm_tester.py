@@ -200,6 +200,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
+        if self.pipeline_model_mapping is None:
+            self.pipeline_model_mapping = self.model_tester.pipeline_model_mapping
 
     def test_config(self):
         self.config_tester.run_common_tests()
