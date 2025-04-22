@@ -365,6 +365,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
+    # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
     def test_generate_compile_model_forward(self):
         pass

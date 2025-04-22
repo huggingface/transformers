@@ -113,8 +113,6 @@ output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implemen
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
-
-</hfoption>
 <hfoption id="int4-weight-only">
 
 ```py
@@ -332,6 +330,7 @@ quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128", safe_serializatio
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
 </hfoption>
+</hfoptions>
 
 
 ## Loading quantized models
