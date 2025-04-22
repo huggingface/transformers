@@ -119,7 +119,7 @@ model.push_to_hub("bloom-560m-8bit")
 </div>
 </hfoption>
 <hfoption id="4-bit">
-<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0>
+<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
 
 Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
