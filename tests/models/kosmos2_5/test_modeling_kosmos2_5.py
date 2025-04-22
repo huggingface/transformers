@@ -366,6 +366,12 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_assisted_decoding_sample(self):
         pass
 
+    @unittest.skip(
+        "Kosmos-2.5 doesn't support assisted generation due to the need to extend `image_embeds_position_mask` length."
+    )
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
     # overwrite from common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
