@@ -251,7 +251,7 @@ class HfQuantizer(ABC):
         model.is_quantized = False
 
         return model
-    
+
     def get_cuda_warm_up_factor(self):
         """
         The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
