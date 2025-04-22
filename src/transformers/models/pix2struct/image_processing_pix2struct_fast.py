@@ -159,6 +159,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         font_path: Optional[str]
     ) -> BatchFeature:
 
+        vqa_images = []
         if is_vqa:
             if header_text is None:
                 raise ValueError("A header text must be provided for VQA models.")
@@ -169,7 +170,18 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
             else:
                 text_images = [render_text(text=t, font_bytes=font_bytes, font_path=font_path) for t in header_text]
                 text_images = self._prepare_input_images(text_images)
-        
+
+            for image, text_image in zip(images, text_images):
+                new_width = max(image.shape[2], text_image.shape[2])
+                new_text_height = int(text_image.shape[1] * new_width // text_image.shape[2])
+                new_height = int(image.shape[1] * new_width // image.shape[2])
+                resized_text_image = self.resize(text_image, {"width": new_width, "height": new_text_height}, interpolation=interpolation)
+                resized_image = self.resize(image, {"width": new_width, "height": new_height}, interpolation=interpolation)
+                vqa_image = torch.cat([resized_text_image, resized_image], dim=1)
+                vqa_images.append(vqa_image)
+        else:
+            vqa_images = images 
+                
         grouped_images, grouped_images_index = group_images_by_shape(images)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
