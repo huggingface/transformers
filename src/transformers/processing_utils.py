@@ -1432,13 +1432,35 @@ class ProcessorMixin(PushToHubMixin):
             "template_kwargs": {},
         }
 
+        # Get the kwargs type annotation from __call__, if any
+        typing_processor_kwargs_class = self.__call__.__annotations__.get("kwargs")
+        processor_defaults_kwargs = {}
+
+        # Retrieve processor default kwargs
+        if typing_processor_kwargs_class:
+            processor_kwargs_class = typing_processor_kwargs_class.__args__[0]
+            processor_defaults = getattr(processor_kwargs_class, "_defaults", {})
+
+            # This combines all default values from different categories (like text_kwargs, images_kwargs, etc.)
+            processor_defaults_kwargs = {k: v for values in processor_defaults.values() for k, v in values.items()}
+
         for kwarg_type in processed_kwargs:
             for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
+                default_value = processor_defaults_kwargs.get(key, getattr(kwarg_type_defaults, key, None))
                 value = kwargs.pop(key, default_value)
+
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
+
+                    # If the key is in the processor defaults, we need to pass it to the processor
+                    if key in processor_defaults_kwargs:
+                        kwargs[key] = value
+
+                    # handle the two naming conventions for fps: video_fps is load kwargs and fps is processor kwargs
+                    if key == "video_fps":
+                        key = "fps"
+                        kwargs[key] = value
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1504,12 +1526,16 @@ class ProcessorMixin(PushToHubMixin):
                             )
                         else:
                             # TODO: raushan, should be `self.video_processor.load_video_for_model` when API is added
-                            video, metadata = self._load_video_for_model(
-                                fname,
+                            load_video_kwargs = kwargs.copy()
+                            load_video_kwargs.update(
                                 num_frames=mm_load_kwargs.get("num_frames", None),
                                 fps=mm_load_kwargs.get("video_fps", None),
                                 backend=mm_load_kwargs["video_load_backend"],
-                                **kwargs,
+                            )
+
+                            video, metadata = self._load_video_for_model(
+                                fname,
+                                **load_video_kwargs,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
