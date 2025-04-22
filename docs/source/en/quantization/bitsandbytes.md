@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# bitsandbytes
+# Bitsandbytes
 
 The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around CUDA functions. It enables working with large models using limited computational resources by reducing their memory footprint.
 
@@ -120,7 +120,6 @@ model.push_to_hub("bloom-560m-8bit")
 </hfoption>
 <hfoption id="4-bit">
 <div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
-
 Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
 ```py
