@@ -1225,7 +1225,7 @@ class MolmoVisionAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.num_key_value_groups = config.num_key_value_groups
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
     def forward(
         self,

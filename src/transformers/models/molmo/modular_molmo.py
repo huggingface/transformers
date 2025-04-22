@@ -941,7 +941,7 @@ class MolmoVisionEmbeddings(nn.Module):
 class MolmoVisionAttention(CLIPAttention):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
-        self.num_key_value_groups = config.num_key_value_groups
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
 
 class MolmoVisionEncoderLayer(CLIPEncoderLayer):
