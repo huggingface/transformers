@@ -287,7 +287,7 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, LlavaNextForConditionalGeneration):
+        elif isinstance(module, (LlavaNextForConditionalGeneration, LlavaNextModel)):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
