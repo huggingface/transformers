@@ -446,10 +446,9 @@ class Emu3IntegrationTest(unittest.TestCase):
                     "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a",
                 ],
             }
-        )
+        )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
 
-        # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
