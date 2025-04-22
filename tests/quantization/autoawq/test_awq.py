@@ -355,8 +355,9 @@ class AwqFusedTest(unittest.TestCase):
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
-    @unittest.skip(
-        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_fused(self):
         """
@@ -381,8 +382,9 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
-    @unittest.skip(
-        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_fused_batched(self):
         """
@@ -432,8 +434,9 @@ class AwqFusedTest(unittest.TestCase):
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
-    @unittest.skip(
-        reason="RuntimeError: FlashAttention only supports Ampere GPUs or newer, not supported on CI runners"
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_custom_model(self):
         """
