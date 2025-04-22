@@ -1393,7 +1393,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+        special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         if self.config.use_decoder_only_language_model:
