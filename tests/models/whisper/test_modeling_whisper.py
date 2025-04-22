@@ -1431,7 +1431,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
-    # TODO (joao, eustache): fix me :)
+    # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
     def test_generate_compile_model_forward(self):
         pass
