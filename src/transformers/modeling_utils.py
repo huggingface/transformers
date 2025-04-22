@@ -5898,6 +5898,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     }
     if not len(accelerator_device_map):
         return
+    
+    model._tp_plan = {} if model._tp_plan is None else model._tp_plan
 
     tp_plan_regex = (
         re.compile("|".join([re.escape(plan) for plan in model._tp_plan]))
