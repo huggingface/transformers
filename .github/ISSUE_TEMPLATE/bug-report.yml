@@ -57,7 +57,7 @@ body:
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
         
-        Specific backends:
+        Devices/Backends:
         
           - ROCm: @ivarflakstad
           - Intel XPU: @IlyasMoutawwakil
