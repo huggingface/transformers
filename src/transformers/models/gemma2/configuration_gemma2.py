@@ -20,8 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
-import torch
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_7
 
 
 class Gemma2Config(PretrainedConfig):
@@ -169,12 +167,6 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
-    
-    def __hash__(self):
-        return hash(tuple(sorted(self.__dict__.items())))
-
-if is_torch_greater_or_equal_than_2_7:
-    torch.utils._pytree.register_constant(Gemma2Config)
 
 
 __all__ = ["Gemma2Config"]

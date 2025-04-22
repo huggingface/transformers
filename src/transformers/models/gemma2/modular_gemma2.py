@@ -20,6 +20,8 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_7
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
@@ -201,6 +203,13 @@ class Gemma2Config(PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
 
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__)))
+
+
+if is_torch_greater_or_equal_than_2_7:
+    torch.utils._pytree.register_constant(Gemma2Config)
+
 
 class Gemma2RMSNorm(GemmaRMSNorm):
     pass
@@ -364,7 +373,7 @@ class Gemma2DecoderLayer(nn.Module):
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
+                offset = torch.clamp(offset, min=0)
                 # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
                 # but without data-dependent slicing (i.e. torch.compile friendly)
                 mask_indexes = torch.arange(

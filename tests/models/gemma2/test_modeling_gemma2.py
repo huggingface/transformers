@@ -14,13 +14,13 @@
 """Testing suite for the PyTorch Gemma2 model."""
 
 import unittest
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
-from unittest.mock import patch
-from contextlib import contextmanager
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
@@ -355,7 +355,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model(**inputs, max_new_tokens=20, do_sample=False)
-        
+
         @contextmanager
         def _detect_attribute_assignment_hacked_up(mod: torch.nn.Module):
             # Do not allow assignment of tensor attributes during export unless
@@ -418,16 +418,12 @@ class Gemma2IntegrationTest(unittest.TestCase):
                     if _v is not v:
                         attr, *rest = kp
                         if isinstance(v, torch.Tensor):
-                            assigned_tensor_attributes.append(
-                                f"self.{attr.key}{pytree.keystr(rest)}"
-                            )
+                            assigned_tensor_attributes.append(f"self.{attr.key}{pytree.keystr(rest)}")
                         # TODO(avik): Assigning all other types are allowed right now.
                         # Maybe in the future we want to limit this to primitive types?
                     return v
 
-                pytree.tree_map_with_path(
-                    _collect_assigned_tensor_attributes, snapshot, _get_attributes(mod)
-                )
+                pytree.tree_map_with_path(_collect_assigned_tensor_attributes, snapshot, _get_attributes(mod))
                 # restore state of all attributes (including, e.g., of primitive types)
                 mod.__dict__.update(snapshot)
 
@@ -441,12 +437,15 @@ class Gemma2IntegrationTest(unittest.TestCase):
                         "Such attributes must be registered as buffers using the `register_buffer` API "
                         "(https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_buffer)."
                     )
-        
-        # FIXME this should be gone in torch 2.7/2.8 
-        with patch("torch._functorch.aot_autograd._detect_attribute_assignment", _detect_attribute_assignment_hacked_up):
-            from torch.export import export_for_training 
+
+        # FIXME this should be gone in torch 2.7/2.8
+        with patch(
+            "torch._functorch.aot_autograd._detect_attribute_assignment", _detect_attribute_assignment_hacked_up
+        ):
+            from torch.export import export_for_training
+
             with torch.no_grad():
-                ep = export_for_training(model, (), {**inputs, "max_new_tokens":20, "do_sample":False}, strict=False)
+                ep = export_for_training(model, (), {**inputs, "max_new_tokens": 20, "do_sample": False}, strict=False)
                 ep_out = ep.module()(**inputs, max_new_tokens=20, do_sample=False)
         self.assertTrue(torch.allclose(output.logits, ep_out.logits))
 

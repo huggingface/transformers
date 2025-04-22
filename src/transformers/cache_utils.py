@@ -1673,7 +1673,7 @@ class HybridCache(Cache):
                 "config and it's not set to None."
             )
         self.config = config
-        self.device = device 
+        self.device = device
         self.layer_device_map = layer_device_map
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
@@ -1816,13 +1816,13 @@ class HybridCache(Cache):
 def _get_flat_dict_for_hybrid_cache(hybrid_cache: HybridCache):
     return {
         "config": getattr(hybrid_cache, "config"),
-        "device": str(getattr(hybrid_cache, "device")) if getattr(hybrid_cache, "device", None) != None else None,
+        "device": str(getattr(hybrid_cache, "device")) if getattr(hybrid_cache, "device", None) is not None else None,
         "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
         "key_cache": getattr(hybrid_cache, "key_cache"),
         "value_cache": getattr(hybrid_cache, "value_cache"),
         "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
         "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
-        "_dtype": str(getattr(hybrid_cache, "_dtype")) if getattr(hybrid_cache, "_dtype", None) != None else None,
+        "_dtype": str(getattr(hybrid_cache, "_dtype")) if getattr(hybrid_cache, "_dtype", None) is not None else None,
     }
 
 
@@ -1833,9 +1833,9 @@ def _flatten_hybrid_cache(
     if not isinstance(hybrid_cache, HybridCache):
         raise RuntimeError("This pytree flattening function should only be applied to HybridCache")
 
-    if not is_torch_greater_or_equal_than_2_6:
+    if not is_torch_greater_or_equal_than_2_7:
         logger.warning_once(
-            "HybridCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
+            "HybridCache + torch.export is tested on torch 2.7.0+ and may not work on earlier versions."
         )
 
     return torch.utils._pytree._dict_flatten(_get_flat_dict_for_hybrid_cache(hybrid_cache))
@@ -1851,11 +1851,11 @@ def _unflatten_hybrid_cache(
 ):
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
     hybrid_cache = HybridCache(
-        dictionary["config"], 
-        dictionary["max_batch_size"], 
-        dictionary["max_cache_len"], 
-        torch.device(dictionary["device"]) if dictionary["device"] != None else None,
-        getattr(torch, dictionary["_dtype"][len("torch."):]) if dictionary["_dtype"] != None else None,
+        dictionary["config"],
+        dictionary["max_batch_size"],
+        dictionary["max_cache_len"],
+        torch.device(dictionary["device"]) if dictionary["device"] is not None else None,
+        getattr(torch, dictionary["_dtype"][len("torch.") :]) if dictionary["_dtype"] is not None else None,
         dictionary["layer_device_map"],
     )
 

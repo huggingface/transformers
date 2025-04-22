@@ -1677,9 +1677,9 @@ class TorchAoConfig(QuantizationConfigMixin):
             return cls(quant_type=quant_type, **config_dict)
         # Check if we only have one key which is "default"
         # In the future we may update this
-        assert len(quant_type) == 1 and "default" in quant_type, (
-            "Expected only one key 'default' in quant_type dictionary"
-        )
+        assert (
+            len(quant_type) == 1 and "default" in quant_type
+        ), "Expected only one key 'default' in quant_type dictionary"
         quant_type = quant_type["default"]
 
         # Deserialize quant_type if needed
