@@ -1325,6 +1325,12 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
+            module.weight.data.fill_(1.0)
+            if getattr(module, "bias", None) is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, Kosmos2_5ImageToTextProjection):
+            module.latent_query.data.normal_(mean=0.0, std=1.0)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
