@@ -345,12 +345,12 @@ class Gemma2IntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.7.0"):
             self.skipTest(reason="This test requires torch >= 2.7 to run.")
 
-        model_id = "google/gemma-2-9b"
+        model_id = "google/gemma-2-2b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
         ).to(torch_device)
-        assert model.config._attn_implementation == "sdpa"
+        self.assertEqual(model.config._attn_implementation, "sdpa")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 

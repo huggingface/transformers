@@ -1745,8 +1745,6 @@ class HybridCache(Cache):
     def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
-        # k_out.index_copy_(2, cache_position, key_states)
-        # v_out.index_copy_(2, cache_position, value_states)
 
         self.key_cache[layer_idx] = k_out
         self.value_cache[layer_idx] = v_out
