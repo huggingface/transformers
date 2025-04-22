@@ -117,6 +117,7 @@ class MolmoVisionConfig(PretrainedConfig):
         intermediate_size=4096,
         num_hidden_layers=23,
         num_attention_heads=16,
+        num_key_value_heads=16,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
@@ -138,6 +139,7 @@ class MolmoVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.num_image_positions = num_image_positions
+        self.num_key_value_heads = num_key_value_heads
 
 
 class MolmoPoolingConfig(PretrainedConfig):
