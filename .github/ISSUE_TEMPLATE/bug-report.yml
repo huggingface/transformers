@@ -59,9 +59,9 @@ body:
         
         Specific backends:
         
-          - ROCm: @IvarFlakstad
+          - ROCm: @ivarflakstad
           - Intel XPU: @IlyasMoutawwakil
-          - Ascend NPU: @IvarFlakstad 
+          - Ascend NPU: @ivarflakstad 
 
         Documentation: @stevhliu
 
