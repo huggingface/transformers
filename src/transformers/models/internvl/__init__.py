@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
 
-# these scripts need to be run before any changes to FSMT-related code - it should cover all bases
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-CUDA_VISIBLE_DEVICES="" RUN_SLOW=1 pytest --disable-warnings tests/test_tokenization_fsmt.py tests/test_configuration_auto.py tests/test_modeling_fsmt.py examples/seq2seq/test_fsmt_bleu_score.py
-RUN_SLOW=1 pytest --disable-warnings tests/test_tokenization_fsmt.py tests/test_configuration_auto.py tests/test_modeling_fsmt.py examples/seq2seq/test_fsmt_bleu_score.py
+
+if TYPE_CHECKING:
+    from .configuration_internvl import *
+    from .modeling_internvl import *
+    from .processing_internvl import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
