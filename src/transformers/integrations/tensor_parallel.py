@@ -307,7 +307,8 @@ class ColwiseParallel(TensorParallelLayer):
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
-        return nn.Parameter(parameter)
+        requires_grad = True if parameter.is_floating_point() else False
+        return nn.Parameter(parameter, requires_grad=requires_grad)
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
@@ -329,7 +330,8 @@ class PackedColwiseParallel(ColwiseParallel):
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
-        return nn.Parameter(parameter)
+        requires_grad = True if parameter.is_floating_point() else False
+        return nn.Parameter(parameter, requires_grad=requires_grad)
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -381,7 +383,8 @@ class RowwiseParallel(TensorParallelLayer):
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
-        return nn.Parameter(parameter)
+        requires_grad = True if parameter.is_floating_point() else False
+        return nn.Parameter(parameter, requires_grad=requires_grad)
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -443,7 +446,8 @@ class PackedRowwiseParallel(RowwiseParallel):
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
-        return nn.Parameter(parameter)
+        requires_grad = True if parameter.is_floating_point() else False
+        return nn.Parameter(parameter, requires_grad=requires_grad)
 
 
 class SequenceParallel(TensorParallelLayer):
@@ -521,13 +525,14 @@ class SequenceParallel(TensorParallelLayer):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = param[:]
+        parameter = param[...]
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
-        return nn.Parameter(parameter)
+        requires_grad = True if parameter.is_floating_point() else False
+        return nn.Parameter(parameter, requires_grad=requires_grad)
 
 
 SUPPORTED_TP_STYLES = {
