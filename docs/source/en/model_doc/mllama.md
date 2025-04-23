@@ -63,13 +63,20 @@ pipeline(text=messages, return_full_text=False)
 
 ```python
 import torch
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+from transformers import BitsAndBytesConfig, MllamaForConditionalGeneration, AutoProcessor
 
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16
+)
 model = MllamaForConditionalGeneration.from_pretrained(
     "meta-llama/Llama-3.2-11B-Vision-Instruct",
     device_map="auto", 
     torch_dtype=torch.bfloat16,
-    attn_implementation="sdpa"
+    attn_implementation="sdpa",
+    quantization_config=bnb_config
 )
 processor = AutoProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision-Instruct")
 
@@ -150,6 +157,10 @@ model.set_output_embeddings(resized_embeddings)
 
 [[autodoc]] MllamaTextModel
     - forward
+
+
+
+
 
 
 
