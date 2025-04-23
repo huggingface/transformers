@@ -29,7 +29,7 @@ You can find all the original MLlama checkpoints under the [Llama 3.2](https://h
 > [!TIP]
 > Click on the MLlama models in the right sidebar for more examples of how to apply MLlama to different vision-language tasks like image captioning, visual question answering, and reasoning.
 
-The example below demonstrates how to use the model with a real image:
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 ```python
 import torch
