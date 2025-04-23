@@ -29,8 +29,11 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     can_return_tuple,
     logging,
+    replace_return_docstrings,
 )
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
@@ -344,7 +347,7 @@ class AIMv2VisionEmbeddings(nn.Module):
     @staticmethod
     def build_2d_sincos_position_embedding(
         height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
+    ) -> torch.Tensor:
         grid_w = torch.arange(int(width), dtype=dtype, device=device)
         grid_h = torch.arange(int(height), dtype=dtype, device=device)
         grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
@@ -525,6 +528,37 @@ class AIMv2AttentionPoolingHead(nn.Module):
         return output
 
 
+AIMV2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+AIMV2_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
+"""
+
+
 class AIMv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -558,6 +592,10 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
+@add_start_docstrings(
+    """The vision model from AIMv2 without any head or projection on top.""",
+    AIMV2_START_DOCSTRING,
+)
 class AIMv2VisionModel(AIMv2PreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -579,6 +617,8 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         return self.embeddings.patch_embed
 
     @can_return_tuple
+    @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AIMv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -586,6 +626,28 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = AIMv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
+        >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-native")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -697,7 +759,6 @@ class AIMv2Model(CLIPModel, nn.Module):
 
         self.post_init()
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     can_return_tuple,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_aimv2 import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
 
@@ -144,7 +145,7 @@ class AIMv2VisionEmbeddings(nn.Module):
     @staticmethod
     def build_2d_sincos_position_embedding(
         height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
+    ) -> torch.Tensor:
         grid_w = torch.arange(int(width), dtype=dtype, device=device)
         grid_h = torch.arange(int(height), dtype=dtype, device=device)
         grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
@@ -508,6 +509,41 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
+AIMV2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+AIMV2_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from AIMv2 without any head or projection on top.""",
+    AIMV2_START_DOCSTRING,
+)
 class AIMv2VisionModel(AIMv2PreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -529,6 +565,8 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         return self.embeddings.patch_embed
 
     @can_return_tuple
+    @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AIMv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -536,6 +574,28 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = AIMv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
+        >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-native")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -639,21 +699,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     return normed_tensor
 
 
-AIMV2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
 AIMV2_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -686,11 +731,33 @@ AIMV2_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-AIMV2_VISION_INPUTS_DOCSTRING = r"""
+AIMV2_INPUTS_DOCSTRING = r"""
     Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -820,6 +887,8 @@ class AIMv2Model(AIMv2PreTrainedModel):
         return image_features
 
     @can_return_tuple
+    @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=AIMv2Output, config_class=AIMv2Config)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
