@@ -587,11 +587,11 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 class DogeModel(DogePreTrainedModel, LlamaModel):
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         # We have to provide attention_mask for dynamic mask computation
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
