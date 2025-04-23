@@ -25,40 +25,35 @@ from huggingface_hub import snapshot_download
 
 from transformers import EoMTConfig, EoMTForUniversalSegmentation
 
-
-# Mappings
-
 # fmt: off
 MAPPINGS = {
     # Embeddings
-    r"network.encoder.backbone.cls_token":r"model.embeddings.cls_token",
-    r"network.encoder.backbone.reg_token":r"model.embeddings.register_tokens",
-    r"network.encoder.backbone.pos_embed":r"model.embeddings.position_embeddings.weight",
-    r"network.encoder.backbone.patch_embed.proj":r"model.embeddings.patch_embeddings.projection",
+    r"network.encoder.backbone.cls_token"                : r"model.embeddings.cls_token",
+    r"network.encoder.backbone.reg_token"                : r"model.embeddings.register_tokens",
+    r"network.encoder.backbone.pos_embed"                : r"model.embeddings.position_embeddings.weight",
+    r"network.encoder.backbone.patch_embed.proj"         : r"model.embeddings.patch_embeddings.projection",
 
     # Encoder Block
-    r"network.encoder.backbone.blocks.(\d+).norm1": r"model.encoder.layers.\1.norm1",
-    r"network.encoder.backbone.blocks.(\d+).attn.proj": r"model.encoder.layers.\1.attention.proj_out",
-    r"network.encoder.backbone.blocks.(\d+).ls1.gamma": r"model.encoder.layers.\1.layer_scale1.lambda1",
-    r"network.encoder.backbone.blocks.(\d+).norm2": r"model.encoder.layers.\1.norm2",
-    r"network.encoder.backbone.blocks.(\d+).mlp": r"model.encoder.layers.\1.mlp",
-    r"network.encoder.backbone.blocks.(\d+).ls2.gamma": r"model.encoder.layers.\1.layer_scale2.lambda1",
-    r"network.encoder.backbone.blocks.(\d+).attn": r"model.encoder.layers.\1.attention",
+    r"network.encoder.backbone.blocks.(\d+).norm1"       : r"model.encoder.layers.\1.norm1",
+    r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"model.encoder.layers.\1.attention.proj_out",
+    r"network.encoder.backbone.blocks.(\d+).ls1.gamma"   : r"model.encoder.layers.\1.layer_scale1.lambda1",
+    r"network.encoder.backbone.blocks.(\d+).norm2"       : r"model.encoder.layers.\1.norm2",
+    r"network.encoder.backbone.blocks.(\d+).mlp"         : r"model.encoder.layers.\1.mlp",
+    r"network.encoder.backbone.blocks.(\d+).ls2.gamma"   : r"model.encoder.layers.\1.layer_scale2.lambda1",
+    r"network.encoder.backbone.blocks.(\d+).attn"        : r"model.encoder.layers.\1.attention",
 
     # Others
-    r"network.q.weight": r"model.encoder.query.weight",
-    r"network.class_head": r"class_predictor",
-    r"network.upscale.(\d+).conv1": r"model.upscale_block.block.\1.conv1",
-    r"network.upscale.(\d+).conv2": r"model.upscale_block.block.\1.conv2",
-    r"network.upscale.(\d+).norm":  r"model.upscale_block.block.\1.layernorm2d",
-    r"network.mask_head.0": r"model.mask_head.fc1",
-    r"network.mask_head.2": r"model.mask_head.fc2",
-    r"network.mask_head.4": r"model.mask_head.fc3",
-    r"network.encoder.backbone.norm": r"model.layernorm",
- }
-
+    r"network.q.weight"                                  : r"model.encoder.query.weight",
+    r"network.class_head"                                : r"class_predictor",
+    r"network.upscale.(\d+).conv1"                       : r"model.upscale_block.block.\1.conv1",
+    r"network.upscale.(\d+).conv2"                       : r"model.upscale_block.block.\1.conv2",
+    r"network.upscale.(\d+).norm"                        : r"model.upscale_block.block.\1.layernorm2d",
+    r"network.mask_head.0"                               : r"model.mask_head.fc1",
+    r"network.mask_head.2"                               : r"model.mask_head.fc2",
+    r"network.mask_head.4"                               : r"model.mask_head.fc3",
+    r"network.encoder.backbone.norm"                     : r"model.layernorm",
+}
 # fmt: on
-
 
 def convert_old_keys_to_new_keys(state_dict):
     keys_as_text = "\n".join(state_dict.keys())
@@ -208,7 +203,7 @@ def convert_model(
     with open(os.path.join(input_path, "config.json"), "r") as f:
         config_data = json.load(f)
 
-    config = EoMTConfig()  # Not using num_blocks param as of now
+    config = EoMTConfig()
     config.image_size = config_data["image_size"]
     config.patch_size = config_data["patch_size"]
     config.num_queries = config_data["num_queries"]
@@ -249,7 +244,6 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
         EoMTForUniversalSegmentation.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 
