@@ -15,7 +15,7 @@
 """Tokenization classes for RetriBERT."""
 
 import json
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from tokenizers import normalizers
 

@@ -15,7 +15,7 @@
 """Tokenization classes for RoFormer."""
 
 import json
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from tokenizers import normalizers
 from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer

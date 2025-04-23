@@ -15,7 +15,7 @@
 """Fast Tokenization classes for Bert."""
 
 import json
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from tokenizers import normalizers
 
