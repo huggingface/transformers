@@ -15,6 +15,7 @@
 """PyTorch BARK model."""
 
 import math
+import warnings
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -1599,19 +1600,35 @@ class BarkModel(BarkPreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-    def enable_cpu_offload(self, accelerator_id: Optional[int] = 0):
+    def enable_cpu_offload(
+        self,
+        gpu_id: Optional[int] = 0,
+        **kwargs,
+    ):
         r"""
         Offloads all sub-models to CPU using accelerate, reducing memory usage with a low impact on performance. This
         method moves one whole sub-model at a time to the accelerator when it is used, and the sub-model remains in accelerator until the next sub-model runs.
 
         Args:
-            accelerator_id (`int`, *optional*, defaults to 0):
-                accelerator id on which the sub-models will be loaded and offloaded.
+            gpu_id (`int`, *optional*, defaults to 0):
+                accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
+            kwargs (`dict`, *optional*):
+                additional keyword arguments:
+                    `accelerator_id`: accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
+
+        accelerator_id = kwargs.get("accelerator_id", 0)
+
+        if gpu_id != 0:
+            warnings.warn(
+                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers, you can use `accelerator_id` through kwargs instead.",
+                FutureWarning,
+            )
+            accelerator_id = gpu_id
 
         device_type = "cuda"
         if is_torch_accelerator_available():
