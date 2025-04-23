@@ -27,6 +27,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import (
     can_return_tuple,
     logging,
@@ -459,7 +460,7 @@ class AIMv2Attention(nn.Module):
         return output
 
 
-class AIMv2EncoderLayer(nn.Module):
+class AIMv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.attention = AIMv2Attention(config)
