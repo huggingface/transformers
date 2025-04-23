@@ -63,7 +63,7 @@ pipeline(text=messages, return_full_text=False)
 
 ```python
 import torch
-from transformers import BitsAndBytesConfig, MllamaForConditionalGeneration, AutoProcessor
+from transformers import MllamaForConditionalGeneration, AutoProcessor
 
 model = MllamaForConditionalGeneration.from_pretrained(
     "meta-llama/Llama-3.2-11B-Vision-Instruct",
