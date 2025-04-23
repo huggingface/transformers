@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 # Gemma
 
-[Gemma](https://goo.gle/GemmaReport) is a family of lightweight language models with pretrained and instruction-tuned variants, available in 2B and 7B parameters. The architecture is based on a transformer decoder-only design. It features attention layers with rotary positional embeddings (RoPE), SwiGLU activation functions, and RMSNorm layer normalization.
+[Gemma](https://huggingface.co/papers/2403.08295) is a family of lightweight language models with pretrained and instruction-tuned variants, available in 2B and 7B parameters. The architecture is based on a transformer decoder-only design. It features Multi-Query Attention, rotary positional embeddings (RoPE), GeGLU activation functions, and RMSNorm layer normalization.
 
 The instruction-tuned variant was fine-tuned with supervised learning on instruction-following data, followed by reinforcement learning from human feedback (RLHF) to align the model outputs with human preferences.
 
@@ -36,9 +36,9 @@ You can find all the original Gemma checkpoints under the [Gemma](https://huggin
 
 
 > [!TIP]
-> Click on the Gemma models in the right sidebar for more examples of how to apply Gemma to different vision and language tasks.
+> Click on the Gemma models in the right sidebar for more examples of how to apply Gemma to different language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -75,7 +75,7 @@ model = AutoModelForCausalLM.from_pretrained(
 input_text = "LLMs generate text through a process known as"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-outputs = model.generate(**input_ids, max_new_tokens=50)
+outputs = model.generate(**input_ids, max_new_tokens=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
@@ -83,7 +83,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 <hfoption id="transformers-cli">
 
 ```bash
-!echo -e "LLMs generate text through a process known as" | transformers-cli run --task text-generation --model google/gemma-2b --device 0
+echo -e "LLMs generate text through a process known as" | transformers-cli run --task text-generation --model google/gemma-2b --device 0
 ```
 
 </hfoption>
@@ -116,6 +116,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 outputs = model.generate(
     **input_ids, 
     max_new_tokens=50, 
+    cache_implementation="static"
 )
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
@@ -134,7 +135,26 @@ visualizer("LLMs generate text through a process known as")
 </div>
 
 ## Notes
-The original Gemma models support standard kv-caching used in many transformer-based language models. You can use a [DynamicCache](https://github.com/huggingface/transformers/blob/main/src/transformers/cache_utils.py) instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
+
+- The original Gemma models support standard kv-caching used in many transformer-based language models. You can use use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
+
+   ```py
+   import torch
+   from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+   tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+   model = AutoModelForCausalLM.from_pretrained(
+       "google/gemma-2b",
+       torch_dtype=torch.bfloat16,
+       device_map="auto",
+       attn_implementation="sdpa"
+   )
+   input_text = "LLMs generate text through a process known as"
+   input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+   past_key_values = DynamicCache()
+   outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
+   print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+   /```
 
 ## GemmaConfig
 
