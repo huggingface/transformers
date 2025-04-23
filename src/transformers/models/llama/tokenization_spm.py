@@ -237,9 +237,6 @@ class SPMTokenizer(PreTrainedTokenizer):
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
         """
-
-        # if hasattr(self, "do_lower_case") and self.do_lower_case:
-        #     text = text.lower()
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
