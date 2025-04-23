@@ -862,8 +862,8 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 )
 class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = None
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _tp_plan = None
+    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -1374,10 +1374,11 @@ CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_ID
 )
 class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
+        "backbone_model.embed_tokens.embed_audio_tokens.weight",
         "depth_decoder.model.embed_tokens.weight",
     ]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _tp_plan = None
+    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -1967,18 +1968,14 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if not output_audio:
-            return CsmGenerateOutput(**generate_output)
-        else:
-            generate_returned_dict = not isinstance(generate_output, torch.Tensor)
-            if generate_returned_dict:
-                generated_audio_codes = generate_output.sequences
-            else:
-                generated_audio_codes = generate_output
+        generate_returned_dict = not isinstance(generate_output, torch.Tensor)
+        audio = None
+        if output_audio:
+            generated_audio_codes = generate_output.sequences if generate_returned_dict else generate_output
 
             # infer the codec model
+            audio = []
             with torch.no_grad():
-                audio_values = []
                 # =======================================
                 # TODO: @eustlb, this should be batched !!!
                 # but requires making sure batched inference of the codec model works as intended
@@ -1991,13 +1988,15 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
                     audio_codes_batch = audio_codes_batch[:cutoff_idx]
                     codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
-                    audio_values.append(codec_decode_output.audio_values[0, 0])
+                    audio.append(codec_decode_output.audio_values[0, 0])
                 # =======================================
 
-            if generate_returned_dict:
-                return CsmGenerateOutput(audio=audio_values, **generate_output)
-            else:
-                return (generated_audio_codes, audio_values)
+        if generate_returned_dict:
+            return CsmGenerateOutput(audio=audio, **generate_output)
+        elif output_audio:
+            return audio
+        else:
+            return generate_output
 
 
 __all__ = ["CsmDepthDecoderModel", "CsmDepthDecoderForCausalLM", "CsmBackboneModel", "CsmForCausalLM"]

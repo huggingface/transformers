@@ -457,6 +457,8 @@ class CsmCodebooksHead(nn.Module):
 )
 class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = None
+    _tp_plan = None
+    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -694,8 +696,11 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
 )
 class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = [
-       "depth_decoder.model.embed_tokens.weight",
+        "backbone_model.embed_tokens.embed_audio_tokens.weight",
+        "depth_decoder.model.embed_tokens.weight",
     ]
+    _tp_plan = None
+    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -1259,18 +1264,14 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
             **kwargs,
         )
 
-        if not output_audio:
-            return CsmGenerateOutput(**generate_output)
-        else:
-            generate_returned_dict = not isinstance(generate_output, torch.Tensor)
-            if generate_returned_dict:
-                generated_audio_codes = generate_output.sequences
-            else:
-                generated_audio_codes = generate_output
+        generate_returned_dict = not isinstance(generate_output, torch.Tensor)
+        audio = None
+        if output_audio:
+            generated_audio_codes = generate_output.sequences if generate_returned_dict else generate_output
 
             # infer the codec model
+            audio = []
             with torch.no_grad():
-                audio_values = []
                 # =======================================
                 # TODO: @eustlb, this should be batched !!!
                 # but requires making sure batched inference of the codec model works as intended
@@ -1280,16 +1281,18 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
                         cutoff_idx = eos_idxs.min()
                     else:
                         cutoff_idx = audio_codes_batch.shape[1]
-                    
+
                     audio_codes_batch = audio_codes_batch[:cutoff_idx]
                     codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
-                    audio_values.append(codec_decode_output.audio_values[0,0])
+                    audio.append(codec_decode_output.audio_values[0, 0])
                 # =======================================
 
-            if generate_returned_dict:
-                return CsmGenerateOutput(audio=audio_values, **generate_output)  
-            else:
-                return (generated_audio_codes, audio_values)
+        if generate_returned_dict:
+            return CsmGenerateOutput(audio=audio, **generate_output)
+        elif output_audio:
+            return audio
+        else:
+            return generate_output
 
 
 __all__ = [
