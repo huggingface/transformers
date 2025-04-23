@@ -18,10 +18,9 @@ import queue
 import statistics
 import threading
 import time
-import uuid
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, DefaultDict, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 import torch
 
@@ -29,15 +28,14 @@ import torch
 if False:
     from flash_attn import flash_attn_varlen_func
 
-from transformers.cache_utils import Cache
-from transformers.utils import (
+from ..cache_utils import Cache
+from ..utils import (
     is_accelerate_available,
     logging,
 )
-from transformers.generation.utils import GenerationMixin
-from transformers.generation.configuration_utils import GenerationConfig
-from transformers.configuration_utils import PretrainedConfig
-
+from ..generation.utils import GenerationMixin
+from ..generation.configuration_utils import GenerationConfig
+from ..configuration_utils import PretrainedConfig
 
 
 if TYPE_CHECKING:
@@ -103,7 +101,9 @@ class PagedAttentionCache(Cache):
         if num_blocks is None or block_size is None:
             # We determine the best size, provide initial shapes if available
             logger.info("Calculating optimal block size and number...")
-            num_blocks, block_size = compute_optimal_blocks(device, config, initial_prompt_shapes or [], dtype)
+            num_blocks, block_size = compute_optimal_blocks(
+                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=50
+            )
             logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
 
         self.block_size = block_size
@@ -361,17 +361,20 @@ def paged_attention_forward(
     return attn_output
 
 
+# FIXME: overshoots widely
 def compute_optimal_blocks(
     device: torch.device,
-    generation_config: PretrainedConfig,
+    config: PretrainedConfig,
+    generation_config: GenerationConfig,
     inputs: List[List[int]],
     dtype: torch.dtype = torch.bfloat16,
     safety_margin: float = 0.9,  # Safety margin for memory usage
+    median_prefill_length: Optional[int] = None,
 ):
-    head_dim = generation_config.head_dim
-    num_kv_heads = generation_config.num_key_value_heads
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+    num_hidden_layers = getattr(config, "num_hidden_layers", 40)
 
-    # block size needs to be a multiple of 256
     # Get device memory properties
     if device.type == "cuda":
         device_properties = torch.cuda.get_device_properties(device)
@@ -379,29 +382,105 @@ def compute_optimal_blocks(
         allocated_memory = torch.cuda.memory_allocated(device)
         reserved_memory = torch.cuda.memory_reserved(device)
         available_memory = total_memory - max(allocated_memory, reserved_memory)
+    elif device.type == "mps":
+        # Placeholder for MPS device, might need adjustments
+        available_memory = torch.mps.current_allocated_memory()  # This might not reflect total available
+        logger.warning("MPS memory estimation is approximate. Optimal blocks calculation might be inaccurate.")
+        # Defaulting block size for MPS might be safer until better estimation is available
+        return 32, 256  # Example default
     else:
-        return 32, 256
-        raise ValueError("This function currently supports CUDA devices only.")
-
-    tokens_to_generate = generation_config.max_new_tokens
-    median_prefill_length = statistics.median(len(elem) for elem in inputs)  # we don't need too many blocks
+        logger.warning(f"Unsupported device type {device.type} for optimal block calculation. Using defaults.")
+        # Default values if device type is unknown
+        return 32, 256  # Default num_blocks, block_size
 
     # Apply safety margin
     available_memory *= safety_margin
-    # Memory per tensor element
+    if available_memory <= 0:
+        raise MemoryError("Not enough available memory after applying safety margin to calculate optimal blocks.")
+
+    # Memory per tensor element (for K and V caches)
     dtype_size = torch.tensor([], dtype=dtype).element_size()
+    memory_per_token_slot = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # Factor of 2 for K and V
 
-    # Estimate memory usage per block
-    input_memory = median_prefill_length * head_dim * num_kv_heads * dtype_size
-    output_memory = (median_prefill_length + tokens_to_generate) * head_dim * num_kv_heads * dtype_size
-    per_block_memory = input_memory + output_memory
+    if memory_per_token_slot == 0:
+        logger.warning("Calculated memory_per_token_slot is zero. Using default block size.")
+        return 32, 256  # Default values
 
-    # Compute the optimal number of blocks and block size
-    max_blocks = available_memory // per_block_memory
-    block_size = available_memory // (per_block_memory * head_dim * num_kv_heads * dtype_size)
-    next_block_size = pow(2, math.ceil(math.log(block_size) / math.log(2)))  # Round to next power of 2
+    tokens_to_generate = getattr(generation_config, "max_new_tokens", 20)  # Default if not set
+    if median_prefill_length is None:
+        # Use median prompt length as estimate if not provided
+        if inputs:
+            # Filter out empty inputs before calculating median
+            non_empty_inputs = [len(elem) for elem in inputs if elem]
+            if non_empty_inputs:
+                median_prefill_length = int(statistics.median(non_empty_inputs))
+            else:
+                median_prefill_length = 0  # No valid inputs to calculate median
+        else:
+            median_prefill_length = 0  # Default if no inputs
 
-    return int(max_blocks), int(next_block_size)
+    # Estimate memory usage PER SEQUENCE (for its entire lifetime in cache)
+    # Based on median prompt length and max generation length
+    # Add 1 to tokens_to_generate for potential off-by-one in allocation? Consider sequence length.
+    estimated_sequence_len = median_prefill_length + tokens_to_generate
+    per_sequence_memory_estimate = (
+        estimated_sequence_len * memory_per_token_slot
+    )  # For the layers of the model as the cache is per layer
+
+    # --- Block Size Calculation ---
+    MIN_BLOCK_SIZE = 16  # Minimum allowed block size (power of 2)
+
+    if per_sequence_memory_estimate <= 0:
+        # If sequences take no memory (e.g., generate 0 tokens), allocate max blocks with min size
+        logger.warning("per_sequence_memory_estimate is zero or negative. Using minimum block size.")
+        total_token_slots = available_memory // memory_per_token_slot
+        final_block_size = MIN_BLOCK_SIZE
+        final_num_blocks = total_token_slots // final_block_size
+
+    else:
+        # Estimate number of concurrent sequences that can fit
+        num_concurrent_sequences_estimate = int(available_memory // per_sequence_memory_estimate)
+        if num_concurrent_sequences_estimate <= 0:
+            num_concurrent_sequences_estimate = 1  # Assume at least one sequence can run
+
+        # Calculate total token slots available in memory
+        total_token_slots = int(available_memory // memory_per_token_slot)
+
+        # Calculate initial block size by distributing slots among estimated sequences
+        # Ensure num_concurrent_sequences_estimate is at least 1
+        # Cast intermediate results to int to ensure block_size_initial is int
+        block_size_initial = total_token_slots // max(1, num_concurrent_sequences_estimate)
+
+        # Round block_size up to the nearest power of 2
+        if block_size_initial <= 0:
+            block_size_rounded = MIN_BLOCK_SIZE
+        else:
+            # Efficient power-of-2 ceiling: 1 << (x - 1).bit_length() for x > 0
+            block_size_rounded = 1 << (block_size_initial - 1).bit_length()
+
+        # Ensure minimum block size
+        final_block_size = max(block_size_rounded, MIN_BLOCK_SIZE)
+
+        # Recalculate the number of blocks based on the final block size
+        final_num_blocks = total_token_slots // final_block_size
+
+    # Ensure at least one block is allocated if possible
+    if final_num_blocks <= 0:
+        logger.warning(f"Calculated final_num_blocks is {final_num_blocks}. Setting to 1.")
+        final_num_blocks = 1
+        # Check if even one block of minimum size fits
+        if MIN_BLOCK_SIZE * memory_per_token_slot > available_memory:
+            raise MemoryError(
+                f"Cannot fit even one block of size {MIN_BLOCK_SIZE} in available memory ({available_memory} bytes)."
+            )
+
+    logger.info(
+        f"Optimal blocks calculated: num_blocks={int(final_num_blocks)}, block_size={int(final_block_size)} "
+        f"(available_memory={available_memory / (1024**3):.2f} GB, "
+        f"mem_per_token={memory_per_token_slot} bytes, "
+        f"est_seq_len={estimated_sequence_len})"
+    )
+    return int(final_num_blocks), int(final_block_size)
 
 
 # Continuous Batch Processor (Internal Logic)
@@ -1162,7 +1241,6 @@ class ContinuousMixin:
                 request_ids[req_id] = i  # Store original index
 
             # Collect results until all requests are done
-            finished_count = 0
             for result in manager:
                 try:
                     result = manager.get_result(timeout=1.0)  # Use timeout to avoid potential deadlocks
@@ -1177,7 +1255,6 @@ class ContinuousMixin:
                             else:  # Failed request
                                 logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
                                 results[original_index] = []  # Indicate failure with empty list
-                            finished_count += 1
                         else:
                             logger.warning(f"Received result for unknown request ID: {req_id}")
 
@@ -1189,7 +1266,6 @@ class ContinuousMixin:
                         for req_id, index in request_ids.items():
                             if index not in results:
                                 results[index] = []
-                                finished_count += 1
                         break  # Exit loop
                     continue  # Continue waiting
 

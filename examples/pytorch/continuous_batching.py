@@ -9,16 +9,10 @@ from transformers.generation import GenerationConfig
 
 
 # --- Common Setup ---
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16)
 
-# Ensure model has a device and dtype attribute if not automatically set
-if not hasattr(model, 'device'):
-    model.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-if not hasattr(model, 'dtype'):
-    model.dtype = torch.float16 # Or match model loading dtype
-
-model.to(model.device) # Ensure model is on the correct device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Set pad token if missing (common for Llama models)
 if tokenizer.pad_token is None:
@@ -36,8 +30,8 @@ generation_config = GenerationConfig(
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
     batch_size=8, # Internal micro-batch size for the processor
-    # num_blocks=..., # Optional: let the system calculate
-    # block_size=..., # Optional: let the system calculate
+    num_blocks=16,
+    block_size=1024
 )
 
 # Prepare data (using a smaller subset for demonstration)
