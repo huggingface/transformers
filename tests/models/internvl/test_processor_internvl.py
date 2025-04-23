@@ -64,7 +64,8 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **processor_kwargs,
         )
         processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.fake_image_token
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     @staticmethod
     def prepare_processor_dict():
