@@ -2107,15 +2107,20 @@ class GenerationMixin:
 
         # Base logic
         valid_hardware = self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-        has_cpu_offload = any(weight_location == "cpu" for weight_location in self.hf_device_map.values())
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
-        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache and not has_cpu_offload
+        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
             can_compile &= self.hf_quantizer.is_compileable
+
+        # Exception 2: Never compile if the model is using CPU offload (as of April 2025, this results in a crash)
+        if hasattr(self, "hf_device_map"):
+            all_model_devices = set(self.hf_device_map.values())
+            has_cpu_offload = "cpu" in all_model_devices and len(all_model_devices) > 1
+            can_compile &= not has_cpu_offload
 
         return can_compile
 
