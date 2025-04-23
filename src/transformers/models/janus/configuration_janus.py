@@ -230,6 +230,8 @@ class JanusConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         vq_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVQVAEConfig`):
             The config object or dictionary of the VQVAE backbone.
+        image_token_id (`int`, *optional*, defaults to 100581):
+            Token index of a placeholder image token.
 
     Example:
 
@@ -262,7 +264,14 @@ class JanusConfig(PretrainedConfig):
         "vq_config": JanusVQVAEConfig,
     }
 
-    def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        vq_config=None,
+        image_token_id=100581,
+        **kwargs,
+    ):
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -307,7 +316,7 @@ class JanusConfig(PretrainedConfig):
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
         # The default is only the index for the 1B model, 7B uses a different one
-        self.image_token_index = kwargs.get("image_token_index", 100581)
+        self.image_token_id = image_token_id
         super().__init__(**kwargs)
 
 
