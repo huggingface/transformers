@@ -230,6 +230,7 @@ class GenerationTesterMixin:
             for key in [
                 "image_token_id",
                 "video_token_id",
+                "audio_token_id",
                 "vision_start_token_id",
                 "audio_start_token_id",
                 "audio_end_token_id",
