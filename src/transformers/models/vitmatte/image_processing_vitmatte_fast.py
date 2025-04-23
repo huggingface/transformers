@@ -176,33 +176,28 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
 
     def _pad_image(
         self,
-        image: "torch.tensor",
+        images: "torch.tensor",
         size_divisibility: int = 32,
     ) -> "torch.tensor":
         """
-        Pads an image constantly so that width and height are divisible by size_divisibility
+        Pads an image or batched images constantly so that width and height are divisible by size_divisibility
 
         Args:
             image (`torch,tensor`):
                 Image to pad.
             size_divisibility (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
-
-        Returns:
-            'torch.tensor':
-                padded tensor
         """
-
-        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
 
         pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
         pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)
-            image = F.pad(image, padding)
+            images = F.pad(images, padding)
 
-        return image
+        return images
 
     @filter_out_non_signature_kwargs()
     def _preprocess(
@@ -218,8 +213,6 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         size_divisibility: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(images)
         grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps)
         processed_images_grouped = {}
@@ -234,11 +227,9 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
                 stacked_trimaps, do_rescale, rescale_factor, False, image_mean, image_std
             )
             stacked_images = torch.cat([stacked_images, stacked_trimaps], dim=1)
-            # do padding by batch....
-            stacked_padded_images = (
-                self._pad_image(stacked_images, self.size_divisibility) if do_pad else stacked_images
-            )
-            processed_images_grouped[shape] = stacked_padded_images
+            if do_pad:
+                stacked_images = self._pad_image(stacked_images, self.size_divisibility)
+            processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
