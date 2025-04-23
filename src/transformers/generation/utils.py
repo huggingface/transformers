@@ -2106,7 +2106,7 @@ class GenerationMixin:
             return False
 
         # Base logic
-        valid_hardware = self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
+        valid_hardware = self.device.type == "cuda" or bool(generation_config.compile_config._compile_all_devices)
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
