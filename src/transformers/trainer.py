@@ -939,7 +939,7 @@ class Trainer:
         columns = [k for k in signature_columns if k in dataset.column_names]
         if len(columns) == 0:
             raise ValueError(
-                "No columns in the dataset match the model's forward method signature. "
+                "No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
                 f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
                 "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
             )
@@ -1247,7 +1247,7 @@ class Trainer:
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
-            if optimizer_cls.__name__ == "Adam8bit":
+            if "bitsandbytes" in str(optimizer_cls) and optimizer_kwargs.get("optim_bits", None) == 8:
                 import bitsandbytes
 
                 manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
