@@ -2099,7 +2099,7 @@ class GenerationMixin:
 
     def _valid_auto_compile_criteria(self, model_kwargs: Dict, generation_config: GenerationConfig) -> bool:
         """
-        Determines whether to trigger auto-compilation of the forward method of the model.
+        Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
         # Override: honor `disable_compile` flag
         if generation_config.disable_compile:
