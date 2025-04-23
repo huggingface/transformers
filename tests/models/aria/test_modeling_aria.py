@@ -426,7 +426,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "rhymes-ai/Aria", load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]
         )
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
-        processor.tokenizer.pad_token_id = model.config.pad_token_id
 
         prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
