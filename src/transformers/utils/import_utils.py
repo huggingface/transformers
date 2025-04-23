@@ -346,16 +346,28 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+def is_torch_accelerator_available():
+    if is_torch_available():
+        import torch
+
+        return hasattr(torch, "accelerator")
+
+    return False
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
     """
-    import torch
+    if is_torch_available():
+        import torch
 
-    if torch.get_deterministic_debug_mode() == 0:
-        return False
-    else:
-        return True
+        if torch.get_deterministic_debug_mode() == 0:
+            return False
+        else:
+            return True
+
+    return False
 
 
 def is_hadamard_available():
