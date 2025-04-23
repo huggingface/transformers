@@ -248,7 +248,7 @@ if __name__ == "__main__":
         "--precision",
         type=str,
         default="fp16",
-        const="fp16",
+        # const="fp16",
         required=True,
         choices=("fp32", "fp16", "bf16"),
         help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
