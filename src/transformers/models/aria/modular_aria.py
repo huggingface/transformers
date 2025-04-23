@@ -266,6 +266,9 @@ class AriaConfig(PretrainedConfig):
     """
 
     model_type = "aria"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(
@@ -946,6 +949,8 @@ class AriaProcessor(ProcessorMixin):
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
 
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token
 
@@ -986,10 +991,12 @@ class AriaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
         if images is not None:
             image_inputs = self.image_processor(
                 images,
@@ -1007,12 +1014,11 @@ class AriaProcessor(ProcessorMixin):
             image_inputs = {}
             prompt_strings = text
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            **output_kwargs["text_kwargs"],
-        )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -1543,11 +1549,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
             else:
-                image_embeds = input_ids == self.config.image_token_index
+                image_embeds = input_ids == self.config.image_token_id
                 special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
                 n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
             image_features = self.get_image_features(

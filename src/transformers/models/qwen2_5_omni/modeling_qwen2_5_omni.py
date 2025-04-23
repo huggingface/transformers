@@ -244,7 +244,8 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
+                                token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
             remove_index (`int`) An index id to subtract from `token_indices` before chunking
 
@@ -257,12 +258,12 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
             while i < len(token_indices):  # skip eos token
-                if token_indices[0][i] - remove_index >= current_chunk * tokens_per_chunk:
+                if token_indices[i] - remove_index >= current_chunk * tokens_per_chunk:
                     yield (start_idx, i)
                     start_idx = i
                     current_chunk += 1
                 i += 1
-            yield (start_idx, token_indices.shape[1])
+            yield (start_idx, len(token_indices))
 
         return list(_iter())
 
@@ -334,9 +335,9 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.spatial_merge_size
-        image_token_id = self.config.image_token_index
-        video_token_id = self.config.video_token_index
-        audio_token_id = self.config.audio_token_index
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        audio_token_id = self.config.audio_token_id
         vision_start_token_id = self.config.vision_start_token_id
         audio_start_token_id = self.config.audio_start_token_id
         position_id_per_seconds = self.config.position_id_per_seconds
@@ -499,8 +500,8 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                         )
 
                         t_ntoken_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
-                        video_chunk_indexes = self.get_chunked_index(video_llm_pos_ids, t_ntoken_per_chunk, st_idx)
-                        audio_chunk_indexes = self.get_chunked_index(audio_llm_pos_ids, t_ntoken_per_chunk, st_idx)
+                        video_chunk_indexes = self.get_chunked_index(video_llm_pos_ids[0], t_ntoken_per_chunk, st_idx)
+                        audio_chunk_indexes = self.get_chunked_index(audio_llm_pos_ids[0], t_ntoken_per_chunk, st_idx)
                         sub_len = 0
                         for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
                             video_chunk_index = video_chunk_indexes[j] if j < len(video_chunk_indexes) else None
@@ -1792,7 +1793,7 @@ QWEN2_5_OMNI_ATTENTION_CLASSES = {
 
 
 class Qwen2_5OmniDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int):
+    def __init__(self, config: Qwen2_5OmniTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -2450,7 +2451,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
                     raise ValueError("length of audio_features should match audio_output_lengths")
                 audio_mask = (
-                    (input_ids == self.config.audio_token_index)
+                    (input_ids == self.config.audio_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2462,7 +2463,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
-                    (input_ids == self.config.image_token_index)
+                    (input_ids == self.config.image_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2474,7 +2475,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 video_mask = (
-                    (input_ids == self.config.video_token_index)
+                    (input_ids == self.config.video_token_id)
                     .unsqueeze(-1)
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
@@ -2502,7 +2503,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+            )
 
         if not return_dict:
             output = (logits,) + outputs
@@ -4383,6 +4386,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         self.speaker_map = {}
         if config.enable_audio_output:
             self.enable_talker()
+        self.post_init()
 
     def enable_talker(self):
         self.talker = Qwen2_5OmniTalkerForConditionalGeneration(self.config.talker_config)

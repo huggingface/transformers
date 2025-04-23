@@ -515,7 +515,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             # Get the base embeddings; set all audio tokens to 0 index
             # to avoid out of vocabulary issues with the LLM embedding.
             # Audio features will be masked into is_audio_idx indices later.
-            is_audio_idx = input_ids == self.config.audio_token_index
+            is_audio_idx = input_ids == self.config.audio_token_id
             llm_input_ids = input_ids.clone()
             llm_input_ids[is_audio_idx] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
@@ -624,7 +624,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             input_features_mask (`torch.Tensor`, *optional*, defaults to `None`)
                 Mask to be applied to audio features prior to scattering into the language embeddings.
         """
-        is_audio_index = input_ids == self.config.audio_token_index
+        is_audio_index = input_ids == self.config.audio_token_id
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
         inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
 

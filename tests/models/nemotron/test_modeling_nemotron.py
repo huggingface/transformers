@@ -21,6 +21,7 @@ import pytest
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_read_token,
@@ -168,7 +169,7 @@ class NemotronModelTest(GemmaModelTest):
                 assert torch.allclose(logits_fa, logits, atol=1e-2)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -202,9 +203,17 @@ class NemotronIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_nemotron_8b_generation_eager(self):
         text = ["What is the largest planet in solar system?"]
-        EXPECTED_TEXT = [
-            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
+                ],
+                ("cuda", 7): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
