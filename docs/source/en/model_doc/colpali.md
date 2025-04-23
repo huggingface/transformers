@@ -46,7 +46,7 @@ model = ColPaliForRetrieval.from_pretrained(
     model_name,
     torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
-).eval()
+)
 
 processor = ColPaliProcessor.from_pretrained(model_name)
 
