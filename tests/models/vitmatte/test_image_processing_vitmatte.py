@@ -97,7 +97,7 @@ class VitMatteImageProcessingTester:
 @require_vision
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VitMatteImageProcessor if is_vision_available() else None
-    fast_image_processing_class = VitMatteImageProcessorFast if is_torch_available else None
+    fast_image_processing_class = VitMatteImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
