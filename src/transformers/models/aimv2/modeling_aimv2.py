@@ -537,6 +537,8 @@ AIMV2_VISION_INPUTS_DOCSTRING = r"""
             more detail.
         interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
             Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
