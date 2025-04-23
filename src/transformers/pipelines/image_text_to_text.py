@@ -71,11 +71,11 @@ def retrieve_images_in_messages(
     Retrieve and combine images from the chat and the images passed as input.
     """
     if images is None:
-        images = []
+        retrieved_images = None
     elif not isinstance(images, Iterable):
         images = [images]
+        retrieved_images = []
     idx_images = 0
-    retrieved_images = []
     for message in messages:
         for content in message["content"]:
             if isinstance(content, dict):
@@ -106,7 +106,7 @@ def retrieve_images_in_messages(
                         )
 
     # The number of images passed should be consistent with the number of images in the chat without an image key
-    if idx_images != len(images):
+    if images is not None and idx_images != len(images):
         raise ValueError(
             "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
         )
@@ -356,7 +356,8 @@ class ImageTextToTextPipeline(Pipeline):
                 inputs_text = inputs["text"]
                 images = inputs["images"]
 
-            images = load_images(images, timeout=timeout)
+            if images is not None:
+                images = load_images(images, timeout=timeout)
 
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
