@@ -2435,6 +2435,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         # 2. Merge text , audios , image and video
         if input_ids is not None and input_ids.shape[1] != 1:  # Prefill stage
+            embeds_to_talker = inputs_embeds.clone()
             if input_features is not None:
                 audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
                     audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
@@ -2458,6 +2459,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
+                embeds_to_talker.masked_scatter_(audio_mask, torch.zeros_like(audio_features))
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
@@ -2470,6 +2472,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                embeds_to_talker.masked_scatter_(image_mask, torch.zeros_like(image_embeds))
 
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
@@ -2482,6 +2485,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+                embeds_to_talker.masked_scatter_(video_mask, torch.zeros_like(video_embeds))
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
@@ -2497,6 +2501,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             return_dict=return_dict,
             cache_position=cache_position,
         )
+
+        if input_ids is not None and input_ids.shape[1] != 1:  # Prefill stage
+            outputs.hidden_states = (embeds_to_talker,) + outputs.hidden_states[1:]
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
