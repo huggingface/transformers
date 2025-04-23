@@ -141,7 +141,7 @@ class Mamba2Config(PretrainedConfig):
         **kwargs,
     ):
         if (hidden_size * expand) != (num_heads * head_dim):
-            raise AttributeError(
+            raise ValueError(
                 "Inconsistent configuration: hidden_size * expand "
                 f"({hidden_size * expand}) must equal num_heads * head_dim "
                 f"({num_heads * head_dim})."
