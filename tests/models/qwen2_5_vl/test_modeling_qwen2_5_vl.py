@@ -17,6 +17,8 @@ import gc
 import unittest
 
 import requests
+import tempfile
+import cv2
 
 from transformers import (
     AutoProcessor,
@@ -530,6 +532,54 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
         ]
 
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_with_video(self):
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
+
+        video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        messages2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                    },
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
+            f.write(requests.get(video_url).content)
+            f.flush()
+            cap = cv2.VideoCapture(f.name)
+
+            frames = []
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
+
+            cap.release()
+
+        inputs = self.processor(text=[text], videos=[frames], return_tensors="pt").to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on one side, preparing to serve the ball. The individual is dressed in athletic attire, including',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
