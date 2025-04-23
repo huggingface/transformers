@@ -68,6 +68,9 @@ class Mistral3Config(PretrainedConfig):
     ```"""
 
     model_type = "mistral3"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     is_composition = True
 

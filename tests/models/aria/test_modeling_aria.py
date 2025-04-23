@@ -280,10 +280,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_compile_model_forward(self):
-        pass
-
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):

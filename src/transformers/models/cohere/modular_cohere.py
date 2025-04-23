@@ -30,6 +30,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -41,6 +42,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
@@ -208,7 +210,7 @@ class CohereAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class CohereDecoderLayer(nn.Module):
+class CohereDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -275,6 +277,21 @@ class CohereDecoderLayer(nn.Module):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class CoherePreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, CohereLayerNorm):
+            module.weight.data.fill_(1.0)
 
 
 class CohereModel(LlamaModel):

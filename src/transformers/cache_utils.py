@@ -938,6 +938,8 @@ class HQQQuantizedCache(QuantizedCache):
         )
         meta["compute_dtype"] = self.compute_dtype
         self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        meta["scale"] = meta["scale"].to(qtensor.device)
+        meta["zero"] = meta["zero"].to(qtensor.device)
         return qtensor, meta
 
     def _dequantize(self, qtensor):
@@ -1652,9 +1654,7 @@ class HybridCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1856,8 +1856,6 @@ class HybridChunkedCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
     is_compileable = True
 
     def __init__(

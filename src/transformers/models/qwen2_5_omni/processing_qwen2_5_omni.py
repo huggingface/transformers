@@ -61,6 +61,8 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
+            "min_pixels": 128 * 28 * 28,
+            "max_pixels": 768 * 28 * 28,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -147,7 +149,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].pop("fps", None)
+        fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -174,8 +176,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if videos is not None:
             videos = make_batched_videos(videos)
             videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
-            if fps is None:
-                fps = [2.0] * len(videos)
+            fps = [fps] * len(videos)
             videos_inputs["video_second_per_grid"] = [
                 self.image_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]
@@ -244,11 +245,13 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         curr_video_grid_thw = next(video_grid_thw)
                         height = curr_video_grid_thw[1] // self.image_processor.merge_size
                         width = curr_video_grid_thw[2] // self.image_processor.merge_size
-                        video_token_indices = np.arange(curr_video_grid_thw[0]).view(-1, 1, 1)
-                        video_token_indices = video_token_indices.expand(-1, height, width).flatten()
+                        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
+                        video_token_indices = np.broadcast_to(
+                            video_token_indices, (video_token_indices.shape[0], height, width)
+                        ).reshape(-1)
                         video_token_indices = (
                             video_token_indices * next(video_second_per_grid) * position_id_per_seconds
-                        ).long()
+                        )
 
                         tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
                         video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
@@ -287,7 +290,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
 
         Returns:

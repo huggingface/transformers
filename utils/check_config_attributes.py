@@ -327,17 +327,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 is not None
             ):
                 attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
             if attribute_used:
                 break
         if attribute_used:
@@ -345,16 +334,18 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
         "unk_index",
         "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",
