@@ -26,7 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..cohere.modeling_cohere import (
     CohereAttention,
@@ -450,8 +450,8 @@ class Cohere2Model(Gemma2Model):
         self.rotary_emb = Cohere2RotaryEmbedding(config=config)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(COHERE2_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

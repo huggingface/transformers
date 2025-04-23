@@ -444,16 +444,6 @@ class ClassDocstring:
     The {model_name} Model with a distribution head on top for time-series forecasting.
     """
 
-    Config = r"""
-    This is the configuration class to store the configuration of a [`{model_name}Model`] or a [`TF{model_name}Model`]. It is
-    used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the {model_name}
-    [{}](https://huggingface.co/{model_checkpoint}) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """
-
 
 class ClassAttrs:
     # fmt: off
@@ -725,10 +715,14 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
     if model_name_lowercase is None:
         config_class = None
     else:
-        config_class = getattr(
-            getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
-            PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
-        )[model_name_lowercase]
+        try:
+            config_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            config_class = "ModelConfig"
+            print(f"🚨 Config not found for {model_name_lowercase}, will use `ModelConfig` in the docs")
     func_documentation = func.__doc__
 
     # Add intro to the docstring before args description if needed
@@ -822,7 +816,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 if "typing" in param_type:
                     param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
                 else:
-                    param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '').replace()}.{param_name}"
+                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
                 if "ForwardRef" in param_type:
                     param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
                 # Check if the parameter has a default value (considered optional)
@@ -866,11 +860,13 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
         model_task = re.search(task, class_name)
         CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
-        checkpoint_example = (
-            get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
-            if checkpoint is None
-            else checkpoint
-        )
+        if (checkpoint_example := checkpoint) is None:
+            try:
+                checkpoint_example = get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
+            except KeyError:
+                # skip example if no checkpoint found
+                checkpoint_example = None
+
         if model_task is not None:
             if checkpoint_example is not None:
                 example_annotation = ""
@@ -945,15 +941,7 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
         elif model_name_title is None:
             pre_block = ""
         else:
-            CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
-            checkpoint_example = (
-                get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
-                if checkpoint is None
-                else checkpoint
-            )
-            pre_block = getattr(ClassDocstring, name).format(
-                model_name=model_name_title, model_checkpoint=checkpoint_example
-            )
+            pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title)
         # Start building the docstring
         docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):

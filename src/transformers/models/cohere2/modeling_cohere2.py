@@ -33,14 +33,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_start_docstrings_to_model_forward,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_cohere2 import Cohere2Config
 
@@ -416,9 +409,6 @@ class Cohere2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-COHERE2_INPUTS_DOCSTRING = None  # Will be picked up by modular
-
-
 @auto_docstring
 class Cohere2Model(Cohere2PreTrainedModel):
     def __init__(self, config: Cohere2Config):
@@ -444,8 +434,8 @@ class Cohere2Model(Cohere2PreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(COHERE2_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

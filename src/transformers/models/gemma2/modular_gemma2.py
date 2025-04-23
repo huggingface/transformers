@@ -27,7 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
@@ -413,9 +413,8 @@ class Gemma2Model(GemmaModel):
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(GEMMA2_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -36,14 +36,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
     torch_int,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
@@ -51,12 +47,6 @@ from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "OpenGVLab/InternVL3-1B-hf"
-
-
-_CONFIG_FOR_DOC = "InternVLConfig"
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -188,6 +178,7 @@ class InternVLVisionAttention(nn.Module):
         return outputs
 
 
+@auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -495,42 +486,7 @@ class InternVLVisionEncoder(nn.Module):
         )
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
-
-
-INTERNVL_VISION_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`InternVLVisionConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-INTERNVL_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`InternVLVisionImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
-    INTERNVL_VISION_START_DOCSTRING,
-)
+@auto_docstring
 class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__(config)
@@ -550,14 +506,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=InternVLVisionModelOutputWithPooling,
-        config_class=_CONFIG_VISION_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -674,9 +623,6 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-INTERNVL_INPUTS_DOCSTRING = None
-
-
 @auto_docstring
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
     def __init__(self, config: InternVLConfig):
@@ -757,8 +703,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         return vision_features
 
-    @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -793,8 +738,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-
-        Returns:
 
         Example:
         ```python

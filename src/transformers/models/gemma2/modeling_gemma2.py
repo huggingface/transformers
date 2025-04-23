@@ -38,13 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_gemma2 import Gemma2Config
 
@@ -416,9 +410,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-GEMMA2_INPUTS_DOCSTRING = None  # Will be picked up by modular
-
-
 @auto_docstring
 class Gemma2Model(Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
@@ -443,9 +434,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(GEMMA2_INPUTS_DOCSTRING)
     @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
