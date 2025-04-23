@@ -1306,7 +1306,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             # standard generation
             output_with_no_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
-            torch_accelerator_module = getattr(torch, torch_device) if hasattr(torch, torch_device) else torch.cuda
+            torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
 
             torch_accelerator_module.empty_cache()
 
