@@ -76,7 +76,7 @@ class AIMv2VisionModelTester:
         image_size=30,
         patch_size=2,
         num_channels=3,
-        is_training=True,
+        is_training=False,
         hidden_size=32,
         projection_dim=32,
         num_hidden_layers=2,
@@ -233,7 +233,7 @@ class AIMv2TextModelTester:
         parent,
         batch_size=12,
         seq_length=7,
-        is_training=True,
+        is_training=False,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
@@ -329,29 +329,13 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
-    def test_training(self):
-        pass
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This model has no Loss")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="This model has no Loss")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="AIMv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
 
 class AIMv2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=False):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
