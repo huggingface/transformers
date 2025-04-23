@@ -38,7 +38,6 @@ from transformers import (
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
     OPTForCausalLM,
-    TransfoXLTokenizer,
     XLMTokenizer,
     XLMWithLMHeadModel,
     XLNetLMHeadModel,
