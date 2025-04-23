@@ -4906,11 +4906,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
+    @require_torch_gpu
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         tokenized_inputs = tokenizer(["Hello world"], return_tensors="pt")
-        generate_kwargs = {"max_new_tokens": 5, "cache_implementation": "static"}
+        generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
 
         # Sanity check: if we don't specify a device map, the model will get compiled
         model_gpu = AutoModelForCausalLM.from_pretrained(

@@ -2116,11 +2116,15 @@ class GenerationMixin:
         if getattr(self, "hf_quantizer", None) is not None:
             can_compile &= self.hf_quantizer.is_compileable
 
-        # Exception 2: Never compile if the model is using CPU offload (as of April 2025, this results in a crash)
         if hasattr(self, "hf_device_map"):
             all_model_devices = set(self.hf_device_map.values())
+            # Exception 2: Don't compile if the model is using CPU offload (as of April 2025, this results in a crash)
             has_cpu_offload = "cpu" in all_model_devices and len(all_model_devices) > 1
             can_compile &= not has_cpu_offload
+
+            # Exception 3: Disk offload is not supported for compilation
+            has_disk_offload = "disk" in all_model_devices
+            can_compile &= not has_disk_offload
 
         return can_compile
 
