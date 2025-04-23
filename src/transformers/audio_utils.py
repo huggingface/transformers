@@ -78,15 +78,15 @@ def is_valid_audio(audio):
     return is_numpy_array(audio) or is_torch_tensor(audio)
 
 
-def is_valid_list_of_audios(audio):
+def is_valid_list_of_audio(audio):
     return audio and all(is_valid_audio(audio_i) for audio_i in audio)
 
 
-def make_nested_list_of_audios(
+def make_list_of_audio(
     audio: Union[list[AudioInput], AudioInput],
 ) -> AudioInput:
     """
-    Ensure that the output is a nested list of audios.
+    Ensure that the output is a list of audios.
     Args:
         audio (`Union[List[AudioInput], AudioInput]`):
             The input audio.
@@ -96,18 +96,17 @@ def make_nested_list_of_audios(
     # If it's a list of batches, it's already in the right format
     if (
         isinstance(audio, (list, tuple))
-        and all(isinstance(audio_i, (list, tuple)) for audio_i in audio)
-        and all(is_valid_list_of_audios(audio_i) for audio_i in audio)
+        and is_valid_list_of_audio(audio)
     ):
         return audio
 
     # If it's a list of audios, it's a single batch, so convert it to a list of lists
-    if isinstance(audio, (list, tuple)) and is_valid_list_of_audios(audio):
-        return [audio]
+    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
+        return audio
 
     # If it's a single audio, convert it to a list of lists
     if is_valid_audio(audio):
-        return [[audio]]
+        return [audio]
 
     raise ValueError("Invalid input type. Must be a single audio, a list of audios, or a list of batches of audios.")
 
