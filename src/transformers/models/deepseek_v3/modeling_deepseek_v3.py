@@ -54,7 +54,7 @@ class DeepseekV3RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -85,7 +85,7 @@ class DeepseekV3RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor):
+    def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
@@ -100,7 +100,9 @@ class DeepseekV3RotaryEmbedding(nn.Module):
 
 
 class DeepseekV3MLP(nn.Module):
-    def __init__(self, config: DeepseekV3Config, hidden_size=None, intermediate_size=None):
+    def __init__(
+        self, config: DeepseekV3Config, hidden_size: Optional[int] = None, intermediate_size: Optional[int] = None
+    ):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
@@ -201,14 +203,14 @@ class DeepseekV3MoE(nn.Module):
         # 1) Stack all expert projection weights once (no bias since bias=False).
         #    Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
         Wg = torch.stack([e.gate_proj.weight for e in self.experts], dim=0)
-        Wu = torch.stack([e.up_proj.weight   for e in self.experts], dim=0)
+        Wu = torch.stack([e.up_proj.weight for e in self.experts], dim=0)
         Wd = torch.stack([e.down_proj.weight for e in self.experts], dim=0)
 
         # 2) For each token and its K experts, gather the appropriate weight slices:
         #    Shapes become (N, K, I, H) for the first two, (N, K, H, I) for the third.
-        Wg_k = Wg[topk_indices]   # → (N, K, I, H)
-        Wu_k = Wu[topk_indices]   # → (N, K, I, H)
-        Wd_k = Wd[topk_indices]   # → (N, K, H, I)
+        Wg_k = Wg[topk_indices]  # → (N, K, I, H)
+        Wu_k = Wu[topk_indices]  # → (N, K, I, H)
+        Wd_k = Wd[topk_indices]  # → (N, K, H, I)
 
         # 3) Expand the inputs so we can batch the K experts per token:
         #    x_k: (N, K, H)
@@ -217,18 +219,18 @@ class DeepseekV3MoE(nn.Module):
         # 4) Compute the two inner projections via batched einsums:
         #    gate_raw = Wg_k @ x_kᵀ → (N, K, I)
         #     up_raw = Wu_k @ x_kᵀ → (N, K, I)
-        gate_raw = torch.einsum('nkij,nkj->nki', Wg_k, x_k)
-        up_raw   = torch.einsum('nkij,nkj->nki', Wu_k, x_k)
+        gate_raw = torch.einsum("nkij,nkj->nki", Wg_k, x_k)
+        up_raw = torch.einsum("nkij,nkj->nki", Wu_k, x_k)
 
         # 5) FiLM-style fusion + activation:
         fused = self.act_fn(gate_raw) * up_raw  # (N, K, I)
 
         # 6) Final down-projection: Wd_k @ fusedᵀ → (N, K, H)
-        expert_out = torch.einsum('nkih,nki->nkh', Wd_k, fused)
+        expert_out = torch.einsum("nkih,nki->nkh", Wd_k, fused)
 
         # 7) Weight by the gate values and sum over the K experts → (N, H)
         weighted = expert_out * topk_weights.unsqueeze(-1)
-        final  = weighted.sum(dim=1)
+        final = weighted.sum(dim=1)
 
         return final.type(hidden_states.dtype)
 
@@ -242,18 +244,14 @@ class DeepseekV3MoE(nn.Module):
         return hidden_states
 
 
-def rotate_half(x: torch.Tensor):
+def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor,
-                         cos: torch.Tensor, sin: torch.Tensor,
-                         position_ids: Optional[torch.Tensor]=None,
-                         unsqueeze_dim: Optional[int]=1
-                         )->Tuple[torch.Tensor,...]:
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -318,11 +316,14 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb_interleave(q: torch.Tensor, k: torch.Tensor,
-                         cos: torch.Tensor, sin: torch.Tensor,
-                         position_ids: Optional[torch.Tensor]=None,
-                         unsqueeze_dim: Optional[int]=1
-                         )->Tuple[torch.Tensor,...]:
+def apply_rotary_pos_emb_interleave(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    position_ids: Optional[torch.Tensor] = None,
+    unsqueeze_dim: Optional[int] = 1,
+) -> Tuple[torch.Tensor, ...]:
     r"""
     TODO let's just use the original freqcis computation to not have the view
     transpose + reshape! This is not optimized!
