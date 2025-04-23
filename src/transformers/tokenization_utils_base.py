@@ -3407,7 +3407,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if token_ids_1 is None:
             return [0] * (cls_len + len(token_ids_0) + sep_0_len)
 
-        sep_1_len = 1 if hasattr(self, "sep_token_id") and self.sep_token_id not in token_ids_1 else 0
+        sep_1_len = int(getattr(self, "sep_token_id", None) not in (None, *token_ids_1))
         return [0] * (cls_len + len(token_ids_0) + sep_0_len) + [1] * (len(token_ids_1) + sep_1_len)
 
     def build_inputs_with_special_tokens(
