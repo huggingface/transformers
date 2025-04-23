@@ -887,7 +887,6 @@ class PhimoeDecoderLayer(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig
     base_model_prefix = "model"
