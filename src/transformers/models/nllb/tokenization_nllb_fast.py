@@ -167,10 +167,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
-    @property
     def src_lang(self) -> str:
         return self._src_lang
 
@@ -309,7 +305,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."

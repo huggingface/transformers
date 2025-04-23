@@ -168,10 +168,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
@@ -328,7 +324,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."

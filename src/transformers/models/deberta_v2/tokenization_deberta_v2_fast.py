@@ -119,10 +119,6 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -201,7 +197,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."

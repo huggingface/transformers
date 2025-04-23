@@ -152,10 +152,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
     @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
-    @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self) -> str:
         return self._src_lang
@@ -322,7 +318,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."

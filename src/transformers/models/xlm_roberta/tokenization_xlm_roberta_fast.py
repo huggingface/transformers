@@ -120,10 +120,6 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -176,7 +172,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."
