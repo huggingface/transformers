@@ -116,6 +116,8 @@ class CsmProcessor(ProcessorMixin):
         self,
         text,
         audio=None,
+        output_labels=False,
+        depth_decoder_labels_ratio=1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(
@@ -188,6 +190,21 @@ class CsmProcessor(ProcessorMixin):
             audio_inputs = self.feature_extractor(audio, **audio_kwargs)
             audio_inputs["input_values_mask"] = audio_inputs.pop("padding_mask")
             data.update(audio_inputs)
+
+        if output_labels:
+            audio_frame_idxs = (data["input_ids"] == self.audio_token_id).nonzero()
+            n_audio_frames = audio_frame_idxs.shape[0]
+
+            if depth_decoder_labels_ratio <= 1.0:
+                rand_idxs = torch.randperm(n_audio_frames)[: int(n_audio_frames * (1 - depth_decoder_labels_ratio))]
+                skip_frames_idxs = audio_frame_idxs[rand_idxs]
+            else:
+                skip_frames_idxs = audio_frame_idxs
+
+            labels = torch.where(data["input_ids"] == self.audio_token_id, data["input_ids"], -100)
+            labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
+
+            data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
