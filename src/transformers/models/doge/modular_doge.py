@@ -21,7 +21,6 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.llama.modeling_llama import (
@@ -43,7 +42,7 @@ from ...generation import GenerationMixin
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import AttentionInterface
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     is_torch_flex_attn_available,
@@ -319,10 +318,11 @@ def flex_attention_forward(
     return attn_output, attention_weights
 
 
-class DogeAttention(nn.Module):
-    DOGE_ATTENTION_FUNCTIONS = dict(ALL_ATTENTION_FUNCTIONS)
-    DOGE_ATTENTION_FUNCTIONS.update({"flex_attention": flex_attention_forward})
+ALL_ATTENTION_FUNCTIONS = AttentionInterface()
+ALL_ATTENTION_FUNCTIONS["flex_attention"] = flex_attention_forward
 
+
+class DogeAttention(nn.Module):
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -397,7 +397,7 @@ class DogeAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = self.DOGE_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -470,7 +470,7 @@ class DogeCDMoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_keys = int(math.sqrt(self.num_experts))
 
-        # cross domain
+        # shared expert
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
@@ -478,7 +478,7 @@ class DogeCDMoE(nn.Module):
         # router gate for retrieval experts
         self.router_gate = nn.Linear(self.hidden_size, self.num_keys * 2, bias=False)
 
-        # experts
+        # routed experts
         self.down_embed = nn.Embedding(self.num_experts, self.hidden_size)
         self.up_embed = nn.Embedding(self.num_experts, self.hidden_size)
 

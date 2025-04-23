@@ -33,27 +33,21 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
-    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_doge import DogeConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
 
 
 logger = logging.get_logger(__name__)
@@ -188,59 +182,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def flex_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Union[torch.Tensor, "BlockMask"],
-    scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    block_mask = None
-    causal_mask = None
-    if isinstance(attention_mask, BlockMask):
-        block_mask = attention_mask
-    else:
-        causal_mask = attention_mask
-
-    if causal_mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
-
-    def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
-        if softcap is not None:
-            score = softcap * torch.tanh(score / softcap)
-        if causal_mask is not None:
-            score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
-        return score
-
-    attn_output, attention_weights = compile_friendly_flex_attention(
-        query,
-        key,
-        value,
-        score_mod=score_mod,
-        block_mask=block_mask,
-        enable_gqa=True,
-        scale=scaling,
-        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
-        # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=True,
-    )
-    # lse is returned in float32
-    attention_weights = attention_weights.to(value.dtype)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attention_weights
+ALL_ATTENTION_FUNCTIONS = AttentionInterface()
 
 
 class DogeAttention(nn.Module):
-    DOGE_ATTENTION_FUNCTIONS = dict(ALL_ATTENTION_FUNCTIONS)
-    DOGE_ATTENTION_FUNCTIONS.update({"flex_attention": flex_attention_forward})
-
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -315,7 +260,7 @@ class DogeAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = self.DOGE_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -396,7 +341,7 @@ class DogeCDMoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_keys = int(math.sqrt(self.num_experts))
 
-        # cross domain
+        # shared expert
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
@@ -404,7 +349,7 @@ class DogeCDMoE(nn.Module):
         # router gate for retrieval experts
         self.router_gate = nn.Linear(self.hidden_size, self.num_keys * 2, bias=False)
 
-        # experts
+        # routed experts
         self.down_embed = nn.Embedding(self.num_experts, self.hidden_size)
         self.up_embed = nn.Embedding(self.num_experts, self.hidden_size)
 
