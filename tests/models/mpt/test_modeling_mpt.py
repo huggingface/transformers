@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
+    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
@@ -483,6 +484,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @require_deterministic_for_xpu
     def test_generation_batched(self):
         model_id = "mosaicml/mpt-7b"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -498,15 +500,21 @@ class MptIntegrationTests(unittest.TestCase):
 
         inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
 
-        expected_output = [
-            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
-            "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
-        ]
+        expected_output = {
+            "cuda": [
+                "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
+                "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
+            ],
+            "xpu": [
+                "Hello my name is Tiffany. I am a mother of two beautiful children. I have been a nanny for over",
+                "Today I am going at the gym and then I am going to go to the mall with my mom. I am going to go to the",
+            ],
+        }
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         for i, predicted_output in enumerate(decoded_outputs):
-            self.assertEqual(predicted_output, expected_output[i])
+            self.assertEqual(predicted_output, expected_output[model.device.type][i])
 
     def test_model_logits(self):
         model_id = "mosaicml/mpt-7b"
