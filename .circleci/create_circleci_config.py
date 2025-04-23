@@ -200,7 +200,7 @@ class CircleCIJob:
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv venv && uv pip install . && uv pip install --no-cache-dir --upgrade networkx==3.2.1 && uv pip install --no-cache-dir --upgrade 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu && uv pip install --no-cache-dir --upgrade networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install . && uv pip install --no-cache-dir --upgrade networkx==3.4 && uv pip install --no-cache-dir --upgrade 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu && uv pip install --no-cache-dir --upgrade networkx==3.2.1"],
     marker="not generate",
     parallelism=6,
 )
