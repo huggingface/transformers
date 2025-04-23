@@ -19,28 +19,25 @@ import statistics
 import threading
 import time
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, DefaultDict
-import torch
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, DefaultDict, Dict, List, Optional, Union
+
+import torch
+
 
 if False:
     from flash_attn import flash_attn_varlen_func
 
-from ..utils import (
+from transformers.cache_utils import Cache
+from transformers.utils import (
     is_accelerate_available,
     logging,
 )
-from .configuration_utils import (
-    GenerationConfig,
-    PretrainedConfig,
-)
-from .logits_process import (
-    LogitsProcessorList,
-)
-from .stopping_criteria import (
-    StoppingCriteriaList,
-)
+from transformers.generation.utils import GenerationMixin
+from transformers.generation.configuration_utils import GenerationConfig
+from transformers.configuration_utils import PretrainedConfig
+
 
 
 if TYPE_CHECKING:
@@ -52,7 +49,7 @@ if is_accelerate_available():
     pass
 
 
-from .. import GenerationMixin
+from transformers import GenerationMixin
 
 
 # Request State Tracking
@@ -81,6 +78,230 @@ class RequestState:
         return len(self.output_ids)
 
 
+class PagedAttentionCache(Cache):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        generation_config: GenerationConfig,  # Pass the whole config
+        device: torch.device,
+        dtype: torch.dtype = torch.float16,
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        initial_prompt_shapes: Optional[List[List[int]]] = None,  # Optional shapes for initial optimal calculation
+    ) -> None:
+        self.num_key_value_heads = (
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
+        )
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+        self.num_hidden_layers = config.num_hidden_layers
+
+        num_blocks = getattr(generation_config, "num_blocks", None)
+        block_size = getattr(generation_config, "block_size", None)
+        if num_blocks is None or block_size is None:
+            # We determine the best size, provide initial shapes if available
+            logger.info("Calculating optimal block size and number...")
+            num_blocks, block_size = compute_optimal_blocks(device, config, initial_prompt_shapes or [], dtype)
+            logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+
+        self.block_size = block_size
+        self.num_blocks = num_blocks
+        cache_shape = (num_blocks, self.num_key_value_heads, self.block_size, self.head_dim)  # block_num first
+
+        self.dtype = dtype
+        self.device = device  # Store main device
+
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
+        for idx in range(config.num_hidden_layers):
+            if layer_device_map is not None:
+                layer_device = layer_device_map[idx]
+            else:
+                layer_device = device
+            self.key_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
+            self.value_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
+
+        self._lock = threading.Lock()
+        self._free_blocks = deque(range(num_blocks))
+        # Maps request_id to list of block numbers used by that request
+        self._block_tables: Dict[str, List[int]] = {}
+
+    def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
+        """Allocates n_blocks for a given request_id. Returns the list of allocated block numbers."""
+        if len(self._free_blocks) < n_blocks:
+            logger.warning(f"Not enough free blocks. Requested: {n_blocks}, Available: {len(self._free_blocks)}")
+            # Decide on behavior: raise error, return partial, return empty? Returning empty for now.
+            return []
+        allocated = []
+        for _ in range(n_blocks):
+            allocated.append(self._free_blocks.popleft())
+        if request_id not in self._block_tables:
+            self._block_tables[request_id] = []
+        self._block_tables[request_id].extend(allocated)
+        return allocated
+
+    def free_blocks(self, request_id: str) -> None:
+        """Frees all blocks associated with a request_id."""
+        with self._lock:
+            if request_id in self._block_tables:
+                blocks_to_free = self._block_tables.pop(request_id)
+                self._free_blocks.extend(blocks_to_free)  # Add back to the deque
+            else:
+                logger.warning(f"Attempted to free blocks for non-existent request_id: {request_id}")
+
+    def get_num_free_blocks(self) -> int:
+        with self._lock:
+            return len(self._free_blocks)
+
+    def get_block_table(self, request_id: str) -> List[int]:
+        with self._lock:
+            return self._block_tables.get(request_id, [])
+
+    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
+        """Maps logical sequence indices to physical cache indices using the block table."""
+        with self._lock:
+            block_table = self._block_tables.get(request_id)
+            if not block_table:
+                raise ValueError(f"No block table found for request {request_id}")
+
+        physical_indices = []
+        for idx in logical_indices:
+            block_idx = idx // self.block_size
+            block_offset = idx % self.block_size
+            if block_idx >= len(block_table):
+                raise IndexError(
+                    f"Logical index {idx} maps to block index {block_idx}, but only {len(block_table)} blocks allocated for request {request_id}"
+                )
+            physical_block_num = block_table[block_idx]
+            physical_idx = physical_block_num * self.block_size + block_offset
+            physical_indices.append(physical_idx)
+        return physical_indices
+
+    def _reshape_cache_for_update(self, layer_idx: int):
+        """Reshapes K/V cache for easier indexing during updates."""
+        # Shape: (num_blocks * block_size, num_heads, head_dim)
+        total_slots = self.num_blocks * self.block_size
+        k_cache = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+        v_cache = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+        return k_cache, v_cache
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        fill_index: torch.Tensor,
+        **kwargs,
+    ) -> (torch.Tensor, torch.Tensor):
+        """
+        Updates the key and value states in the cache at the specified indices.
+
+        Args:
+            key_states (`torch.Tensor`): New key states to be added to the cache. Shape: (num_tokens_to_write, num_heads, head_dim).
+            value_states (`torch.Tensor`): New value states to be added to the cache. Shape: (num_tokens_to_write, num_heads, head_dim).
+            layer_idx (`int`): The index of the layer to update.
+            fill_index (`torch.Tensor`): Tensor containing the physical indices in the flat cache where the new states should be written. Shape: (num_tokens_to_write,).
+            kwargs: Additional arguments (not used here but kept for compatibility).
+
+        Returns:
+            Tuple[`torch.Tensor`, `torch.Tensor`]: A tuple containing the *entire* key and value cache tensors for the specified layer, possibly after reshaping for attention calculation.
+                                                  Note: The reshaping might depend on the specific attention implementation. Returning the full cache for now.
+        """
+        if fill_index.numel() == 0:
+            # Nothing to write, return the current cache state
+            return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+        if key_states.shape[0] != fill_index.numel() or value_states.shape[0] != fill_index.numel():
+            raise ValueError(
+                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of fill indices ({fill_index.numel()})"
+            )
+
+        # Reshape cache for easier indexing
+        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
+
+        # Ensure indices are on the same device as the cache
+        indices_device = fill_index.to(k_cache_flat.device)
+
+        try:
+            k_cache_flat[indices_device] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
+            v_cache_flat[indices_device] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
+        except IndexError as e:
+            logger.error(
+                f"IndexError during cache update. Fill indices shape: {indices_device.shape}, "
+                f"Max index: {indices_device.max() if indices_device.numel() > 0 else 'N/A'}, "
+                f"Cache shape: {k_cache_flat.shape}"
+            )
+            raise e
+
+        # The attention mechanism might need the cache in its original 4D shape or the flat 3D shape.
+        # Returning the original 4D tensors for now, as the attention function might reshape it internally
+        # based on block tables or other mechanisms.
+        # If the attention function *always* expects the flat cache, we could return k_cache_flat, v_cache_flat.
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def write_to_cache(
+        self, request_id: str, key_states: torch.Tensor, value_states: torch.Tensor, logical_indices: List[int]
+    ):
+        """Writes key/value states to the cache at specified logical indices for a request."""
+        if not logical_indices:
+            return  # Nothing to write
+
+        physical_indices = self._get_physical_indices(request_id, logical_indices)
+        physical_indices_tensor = torch.tensor(physical_indices, device=self.device, dtype=torch.long)
+
+        # key_states/value_states shape: (num_tokens_to_write, num_heads, head_dim)
+        # Ensure num_tokens_to_write matches len(logical_indices)
+        if key_states.shape[0] != len(logical_indices) or value_states.shape[0] != len(logical_indices):
+            raise ValueError(
+                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of indices ({len(logical_indices)})"
+            )
+
+        for layer_idx in range(self.num_hidden_layers):
+            # TODO: Handle layer device mapping if needed
+            k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
+
+            # Use index_copy_ or index_put_ for potentially better performance?
+            # index_select might be slow if physical_indices_tensor is large.
+            # Ensure shapes match:
+            # k_cache_flat[physical_indices_tensor] shape: (num_tokens, num_heads, head_dim)
+            # key_states shape: (num_tokens, num_heads, head_dim) - should match
+            try:
+                k_cache_flat[physical_indices_tensor] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
+                v_cache_flat[physical_indices_tensor] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
+            except IndexError as e:
+                logger.error(
+                    f"IndexError during cache write for request {request_id}. Physical indices: {physical_indices_tensor.tolist()}, Max index: {k_cache_flat.shape[0] - 1}"
+                )
+                raise e
+
+    def get_kv_for_attention(self, layer_idx: int, request_id: str, sequence_len: int) -> (torch.Tensor, torch.Tensor):
+        """Retrieves the K/V cache for a given request up to sequence_len."""
+        # This needs to return K/V tensors compatible with the attention function (e.g., flash_attn_varlen_func)
+        # It likely requires knowing the block table for the *entire batch* if using varlen func.
+        # This part is complex and depends heavily on the attention implementation details.
+
+        # Simplification: Assume attention expects K/V for the *single* sequence.
+        # This won't work directly with flash_attn_varlen_func which expects concatenated K/V for the batch.
+        # We might need to gather K/V based on the batch's block tables *outside* the cache object.
+
+        # Placeholder: Return slices corresponding to the logical indices 0..sequence_len-1
+        logical_indices = list(range(sequence_len))
+        physical_indices = self._get_physical_indices(request_id, logical_indices)
+        physical_indices_tensor = torch.tensor(physical_indices, device=self.device, dtype=torch.long)
+
+        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
+
+        # Gather K/V states using the physical indices
+        # Shape: (sequence_len, num_heads, head_dim)
+        k_states = k_cache_flat[physical_indices_tensor]
+        v_states = v_cache_flat[physical_indices_tensor]
+
+        return k_states, v_states
+
+
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -91,7 +312,7 @@ def paged_attention_forward(
     max_seqlen_q=None,
     max_seqlen_k=None,
     block_table: Optional[torch.Tensor] = None,
-    cache=None,
+    cache: Optional[PagedAttentionCache] = None,
     **kwargs,
 ) -> torch.Tensor:
     r"""
@@ -181,177 +402,6 @@ def compute_optimal_blocks(
     next_block_size = pow(2, math.ceil(math.log(block_size) / math.log(2)))  # Round to next power of 2
 
     return int(max_blocks), int(next_block_size)
-
-
-class PagedAttentionCache:
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        generation_config: GenerationConfig,  # Pass the whole config
-        device: torch.device,
-        dtype: torch.dtype = torch.float16,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
-        initial_prompt_shapes: Optional[List[List[int]]] = None,  # Optional shapes for initial optimal calculation
-    ) -> None:
-        self.num_key_value_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
-        self.num_hidden_layers = config.num_hidden_layers
-
-        num_blocks = getattr(generation_config, "num_blocks", None)
-        block_size = getattr(generation_config, "block_size", None)
-        if num_blocks is None or block_size is None:
-            # We determine the best size, provide initial shapes if available
-            logger.info("Calculating optimal block size and number...")
-            num_blocks, block_size = compute_optimal_blocks(device, config, initial_prompt_shapes or [], dtype)
-            logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
-
-        self.block_size = block_size
-        self.num_blocks = num_blocks
-        cache_shape = (num_blocks, self.num_key_value_heads, self.block_size, self.head_dim)  # block_num first
-
-        self.dtype = dtype
-        self.device = device  # Store main device
-
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
-        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        for idx in range(config.num_hidden_layers):
-            if layer_device_map is not None:
-                layer_device = layer_device_map[idx]
-            else:
-                layer_device = device
-            self.key_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
-            self.value_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
-
-        self._lock = threading.Lock()
-        self._free_blocks = deque(range(num_blocks))
-        # Maps request_id to list of block numbers used by that request
-        self._block_tables: Dict[str, List[int]] = {}
-
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
-        """Allocates n_blocks for a given request_id. Returns the list of allocated block numbers."""
-        with self._lock:
-            if len(self._free_blocks) < n_blocks:
-                logger.warning(f"Not enough free blocks. Requested: {n_blocks}, Available: {len(self._free_blocks)}")
-                # Decide on behavior: raise error, return partial, return empty? Returning empty for now.
-                return []
-            allocated = []
-            for _ in range(n_blocks):
-                allocated.append(self._free_blocks.popleft())
-            if request_id not in self._block_tables:
-                self._block_tables[request_id] = []
-            self._block_tables[request_id].extend(allocated)
-            return allocated
-
-    def free_blocks(self, request_id: str) -> None:
-        """Frees all blocks associated with a request_id."""
-        with self._lock:
-            if request_id in self._block_tables:
-                blocks_to_free = self._block_tables.pop(request_id)
-                self._free_blocks.extend(blocks_to_free)  # Add back to the deque
-            else:
-                logger.warning(f"Attempted to free blocks for non-existent request_id: {request_id}")
-
-    def get_num_free_blocks(self) -> int:
-        with self._lock:
-            return len(self._free_blocks)
-
-    def get_block_table(self, request_id: str) -> List[int]:
-        with self._lock:
-            return self._block_tables.get(request_id, [])
-
-    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
-        """Maps logical sequence indices to physical cache indices using the block table."""
-        with self._lock:
-            block_table = self._block_tables.get(request_id)
-            if not block_table:
-                raise ValueError(f"No block table found for request {request_id}")
-
-        physical_indices = []
-        for idx in logical_indices:
-            block_idx = idx // self.block_size
-            block_offset = idx % self.block_size
-            if block_idx >= len(block_table):
-                raise IndexError(
-                    f"Logical index {idx} maps to block index {block_idx}, but only {len(block_table)} blocks allocated for request {request_id}"
-                )
-            physical_block_num = block_table[block_idx]
-            physical_idx = physical_block_num * self.block_size + block_offset
-            physical_indices.append(physical_idx)
-        return physical_indices
-
-    def _reshape_cache_for_update(self, layer_idx: int):
-        """Reshapes K/V cache for easier indexing during updates."""
-        # Shape: (num_blocks * block_size, num_heads, head_dim)
-        total_slots = self.num_blocks * self.block_size
-        k_cache = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
-        v_cache = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
-        return k_cache, v_cache
-
-    def write_to_cache(
-        self, request_id: str, key_states: torch.Tensor, value_states: torch.Tensor, logical_indices: List[int]
-    ):
-        """Writes key/value states to the cache at specified logical indices for a request."""
-        if not logical_indices:
-            return  # Nothing to write
-
-        physical_indices = self._get_physical_indices(request_id, logical_indices)
-        physical_indices_tensor = torch.tensor(physical_indices, device=self.device, dtype=torch.long)
-
-        # key_states/value_states shape: (num_tokens_to_write, num_heads, head_dim)
-        # Ensure num_tokens_to_write matches len(logical_indices)
-        if key_states.shape[0] != len(logical_indices) or value_states.shape[0] != len(logical_indices):
-            raise ValueError(
-                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of indices ({len(logical_indices)})"
-            )
-
-        for layer_idx in range(self.num_hidden_layers):
-            # TODO: Handle layer device mapping if needed
-            k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-
-            # Use index_copy_ or index_put_ for potentially better performance?
-            # index_select might be slow if physical_indices_tensor is large.
-            # Ensure shapes match:
-            # k_cache_flat[physical_indices_tensor] shape: (num_tokens, num_heads, head_dim)
-            # key_states shape: (num_tokens, num_heads, head_dim) - should match
-            try:
-                k_cache_flat[physical_indices_tensor] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
-                v_cache_flat[physical_indices_tensor] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
-            except IndexError as e:
-                logger.error(
-                    f"IndexError during cache write for request {request_id}. Physical indices: {physical_indices_tensor.tolist()}, Max index: {k_cache_flat.shape[0] - 1}"
-                )
-                raise e
-
-    def get_kv_for_attention(self, layer_idx: int, request_id: str, sequence_len: int) -> (torch.Tensor, torch.Tensor):
-        """Retrieves the K/V cache for a given request up to sequence_len."""
-        # This needs to return K/V tensors compatible with the attention function (e.g., flash_attn_varlen_func)
-        # It likely requires knowing the block table for the *entire batch* if using varlen func.
-        # This part is complex and depends heavily on the attention implementation details.
-
-        # Simplification: Assume attention expects K/V for the *single* sequence.
-        # This won't work directly with flash_attn_varlen_func which expects concatenated K/V for the batch.
-        # We might need to gather K/V based on the batch's block tables *outside* the cache object.
-
-        # Placeholder: Return slices corresponding to the logical indices 0..sequence_len-1
-        logical_indices = list(range(sequence_len))
-        physical_indices = self._get_physical_indices(request_id, logical_indices)
-        physical_indices_tensor = torch.tensor(physical_indices, device=self.device, dtype=torch.long)
-
-        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-
-        # Gather K/V states using the physical indices
-        # Shape: (sequence_len, num_heads, head_dim)
-        k_states = k_cache_flat[physical_indices_tensor]
-        v_states = v_cache_flat[physical_indices_tensor]
-
-        return k_states, v_states
 
 
 # Continuous Batch Processor (Internal Logic)
@@ -705,15 +755,15 @@ class ContinuousBatchProcessor:
             "max_seqlen_q": max_seqlen_q,
             "max_seqlen_k": max_seqlen_k,  # Needs to be max *total* K length in batch?
             # "cache_index": torch.tensor(batch_cache_indices, dtype=torch.long, device=self.model_device), # Indices to READ from KV cache
-            "fill_index": torch.tensor(
-                batch_fill_indices, dtype=torch.long, device=self.model_device
-            ),  # Indices to WRITE to KV cache
+            # "fill_index": torch.tensor(
+            #     batch_fill_indices, dtype=torch.long, device=self.model_device
+            # ),  # Indices to WRITE to KV cache
             "logits_indices": logits_indices,  # Indices used *after* forward pass to get next token logits
             "block_tables": {
                 req_id: self.cache.get_block_table(req_id) for req_id in self.requests_to_process_next
             },  # Pass block tables if needed by attention mechanism
             # Pass the cache object itself
-            "past_key_values": self.cache,  # Or just "cache": self.cache if the model expects that name
+            "cache": self.cache,  # Or just "cache": self.cache if the model expects that name
         }
         # Recalculate max_seqlen_k to be the maximum *total* sequence length in the batch
         max_total_len_k = 0
@@ -891,30 +941,32 @@ class ContinuousBatchingManager:
         req_data = {"request_id": request_id, "input_ids": input_ids, **kwargs}
 
         # Use block=True with timeout to handle backpressure if queue is full
-        self.input_queue.put(req_data, block=True, timeout=10) # Adjust timeout as needed
+        self.input_queue.put(req_data, block=True, timeout=10)  # Adjust timeout as needed
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
     def get_result(self, timeout=None) -> Optional[Dict]:
         """Retrieves one finished result from the output queue."""
         if self._generation_thread is None and self.output_queue.empty():
-             # Avoid blocking indefinitely if manager never started or already stopped and emptied
+            # Avoid blocking indefinitely if manager never started or already stopped and emptied
             return None
 
         result = self.output_queue.get(block=True, timeout=timeout)
         logger.debug(f"Retrieved result for request {result.get('request_id')}")
-        return result # Expected format: {"request_id": ..., "output_ids": ..., "status": ...}
+        return result  # Expected format: {"request_id": ..., "output_ids": ..., "status": ...}
 
     def __iter__(self):
         """Allows iterating over results as they become available."""
-        while self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty():
-             try:
-                 yield self.get_result(timeout=0.1) # Short timeout to allow checking thread status
-             except queue.Empty:
-                 if self._generation_thread is None or not self._generation_thread.is_alive():
-                     # Thread stopped and queue is empty, break the iterator
-                     break
-                 continue # Continue waiting if thread is alive
+        while (
+            self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
+        ):
+            try:
+                yield self.get_result(timeout=0.1)  # Short timeout to allow checking thread status
+            except queue.Empty:
+                if self._generation_thread is None or not self._generation_thread.is_alive():
+                    # Thread stopped and queue is empty, break the iterator
+                    break
+                continue  # Continue waiting if thread is alive
 
     def _run_generation_loop(self):
         """The main loop running in the background thread."""
@@ -964,8 +1016,8 @@ class ContinuousBatchingManager:
                         outputs = self.model.forward(
                             input_ids=input_ids,
                             position_ids=position_ids,
-                            past_key_values=model_kwargs["past_key_values"],  # Pass the cache object
-                            use_cache=True,  # Important for HF models
+                            # past_key_values=model_kwargs["past_key_values"],  # Pass the cache object
+                            # use_cache=True,  # Important for HF models
                             # Pass other relevant kwargs prepared by the processor
                             **{
                                 k: v for k, v in model_kwargs.items() if k not in ["past_key_values", "logits_indices"]
@@ -1112,7 +1164,6 @@ class ContinuousMixin:
             # Collect results until all requests are done
             finished_count = 0
             for result in manager:
-            while finished_count < num_requests:
                 try:
                     result = manager.get_result(timeout=1.0)  # Use timeout to avoid potential deadlocks
                     if result:
