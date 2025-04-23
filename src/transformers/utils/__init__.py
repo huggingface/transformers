@@ -211,6 +211,7 @@ from .import_utils import (
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
+    is_torch_accelerator_available,
     is_torch_available,
     is_torch_bf16_available,
     is_torch_bf16_available_on_device,
