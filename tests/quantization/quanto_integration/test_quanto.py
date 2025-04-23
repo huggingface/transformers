@@ -30,7 +30,7 @@ from transformers.utils import is_accelerate_available, is_optimum_quanto_availa
 if is_torch_available():
     import torch
 
-    from transformers import LlamaForCausalLM, LlamaTokenizer
+    from transformers import LlamaForCausalLM
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -455,7 +455,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             "unsloth/Llama-3.2-1B-Instruct", pad_token="</s>", padding_side="left"
         )
         model = LlamaForCausalLM.from_pretrained(
