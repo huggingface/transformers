@@ -883,52 +883,38 @@ class ContinuousBatchingManager:
         if self._generation_thread is None:
             raise RuntimeError("Manager has not been started yet. Call start().")
 
-        with self._request_lock:
-            if request_id is None:
+        if request_id is None:
+            with self._request_lock:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
             # Include generation params from kwargs if needed
-            req_data = {"request_id": request_id, "input_ids": input_ids, **kwargs}
+        req_data = {"request_id": request_id, "input_ids": input_ids, **kwargs}
 
-        try:
-            # Use block=True with timeout to handle backpressure if queue is full
-            self.input_queue.put(req_data, block=True, timeout=10)  # Adjust timeout as needed
-            logger.debug(f"Added request {request_id} to queue.")
-            return request_id
-        except queue.Full:
-            logger.error(f"Input queue is full. Could not add request {request_id}.")
-            raise queue.Full("Input queue is full.")
+        # Use block=True with timeout to handle backpressure if queue is full
+        self.input_queue.put(req_data, block=True, timeout=10) # Adjust timeout as needed
+        logger.debug(f"Added request {request_id} to queue.")
+        return request_id
 
-    def get_result(self, block=True, timeout=None) -> Optional[Dict]:
+    def get_result(self, timeout=None) -> Optional[Dict]:
         """Retrieves one finished result from the output queue."""
         if self._generation_thread is None and self.output_queue.empty():
-            # Avoid blocking indefinitely if manager never started or already stopped and emptied
-            if not block:
-                return None
-            else:
-                raise queue.Empty("Manager not running and output queue is empty.")
+             # Avoid blocking indefinitely if manager never started or already stopped and emptied
+            return None
 
-        try:
-            result = self.output_queue.get(block=block, timeout=timeout)
-            logger.debug(f"Retrieved result for request {result.get('request_id')}")
-            return result  # Expected format: {"request_id": ..., "output_ids": ..., "status": ...}
-        except queue.Empty:
-            if not block:
-                return None
-            raise queue.Empty
+        result = self.output_queue.get(block=True, timeout=timeout)
+        logger.debug(f"Retrieved result for request {result.get('request_id')}")
+        return result # Expected format: {"request_id": ..., "output_ids": ..., "status": ...}
 
     def __iter__(self):
         """Allows iterating over results as they become available."""
-        while (
-            self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
-        ):
-            try:
-                yield self.get_result(block=True, timeout=0.1)  # Short timeout to allow checking thread status
-            except queue.Empty:
-                if self._generation_thread is None or not self._generation_thread.is_alive():
-                    # Thread stopped and queue is empty, break the iterator
-                    break
-                continue  # Continue waiting if thread is alive
+        while self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty():
+             try:
+                 yield self.get_result(timeout=0.1) # Short timeout to allow checking thread status
+             except queue.Empty:
+                 if self._generation_thread is None or not self._generation_thread.is_alive():
+                     # Thread stopped and queue is empty, break the iterator
+                     break
+                 continue # Continue waiting if thread is alive
 
     def _run_generation_loop(self):
         """The main loop running in the background thread."""
@@ -1125,9 +1111,10 @@ class ContinuousMixin:
 
             # Collect results until all requests are done
             finished_count = 0
+            for result in manager:
             while finished_count < num_requests:
                 try:
-                    result = manager.get_result(block=True, timeout=1.0)  # Use timeout to avoid potential deadlocks
+                    result = manager.get_result(timeout=1.0)  # Use timeout to avoid potential deadlocks
                     if result:
                         req_id = result["request_id"]
                         if req_id in request_ids:
