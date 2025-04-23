@@ -379,14 +379,14 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             batch_size,
             config.num_key_value_heads,
             cache_length,
-            config.head_dim,
+            config.hidden_size // config.num_attention_heads,
         )
         # (batch, head, head_features, head_features)
         linear_cache_expected_shape = (
             batch_size,
             config.num_attention_heads,
-            config.head_dim,
-            config.head_dim,
+            config.hidden_size // config.num_attention_heads,
+            config.hidden_size // config.num_attention_heads,
         )
 
         for layer_idx in range(config.num_hidden_layers):

@@ -240,7 +240,7 @@ class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.num_attention_heads = config.num_attention_heads
         self.num_hidden_layers = config.num_hidden_layers
         self.block_size = config.block_size
