@@ -203,6 +203,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         result = [1] + ([0] * len(token_ids_0)) + [1]
         if token_ids_1 is not None:
             result += ([0] * len(token_ids_1)) + [1]
+        return result
 
     # CanineTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
