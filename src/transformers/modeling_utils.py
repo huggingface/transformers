@@ -2981,7 +2981,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         )
 
         new_lm_head._is_hf_initialized = True
-        
+
         if new_num_tokens > old_num_tokens and not mean_resizing:
             # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
             self._init_weights(new_lm_head)
