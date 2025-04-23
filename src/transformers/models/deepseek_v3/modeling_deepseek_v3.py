@@ -217,16 +217,16 @@ class DeepseekV3MoE(nn.Module):
         x_k = hidden_states.unsqueeze(1).expand(-1, K, -1)
 
         # 4) Compute the two inner projections via batched einsums:
-        #    gate_raw = Wg_k @ x_kᵀ → (N, K, I)
-        #     up_raw = Wu_k @ x_kᵀ → (N, K, I)
+        #    gate_raw = Wg_k @ x_k → (N, K, I)
+        #     up_raw = Wu_k @ x_k → (N, K, I)
         gate_raw = torch.einsum("nkij,nkj->nki", Wg_k, x_k)
         up_raw = torch.einsum("nkij,nkj->nki", Wu_k, x_k)
 
         # 5) FiLM-style fusion + activation:
         fused = self.act_fn(gate_raw) * up_raw  # (N, K, I)
 
-        # 6) Final down-projection: Wd_k @ fusedᵀ → (N, K, H)
-        expert_out = torch.einsum("nkih,nki->nkh", Wd_k, fused)
+        # 6) Final down-projection: Wd_k @ fused → (N, K, H)
+        expert_out = torch.einsum("nkij,nkj->nki", Wd_k, fused)
 
         # 7) Weight by the gate values and sum over the K experts → (N, H)
         weighted = expert_out * topk_weights.unsqueeze(-1)
