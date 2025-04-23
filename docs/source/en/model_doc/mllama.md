@@ -31,6 +31,9 @@ You can find all the original MLlama checkpoints under the [Llama 3.2](https://h
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
 ```python
 import torch
 from transformers import pipeline
@@ -55,26 +58,18 @@ messages = [
 pipeline(text=messages, return_full_text=False)
 ```
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import torch
 from transformers import BitsAndBytesConfig, MllamaForConditionalGeneration, AutoProcessor
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16
-)
 model = MllamaForConditionalGeneration.from_pretrained(
     "meta-llama/Llama-3.2-11B-Vision-Instruct",
     device_map="auto", 
     torch_dtype=torch.bfloat16,
-    attn_implementation="sdpa",
-    quantization_config=bnb_config
+    attn_implementation="sdpa"
 )
 processor = AutoProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision-Instruct")
 
@@ -100,18 +95,8 @@ output = model.generate(**inputs, max_new_tokens=25)
 print(processor.decode(output[0]))
 ```
 
-## Notes
-
-- MLlama has special handling for image tokens using `<|image|>` as a placeholder in the text
-- When training, mask out the `<|image|>` tokens in labels
-- For CUDA index errors during generation, expand the `lm_head`:
-    ```python
-    old_embeddings = model.get_output_embeddings()
-    num_tokens = model.vocab_size + 1
-    resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=num_tokens, mean_resizing=True)
-    resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
-    model.set_output_embeddings(resized_embeddings)
-    ```
+</hfoption>
+</hfoptions>
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mllama_architecture.png"/>
@@ -123,12 +108,8 @@ print(processor.decode(output[0]))
 - Use [`MllamaForCausalLM`] for generation with text only inputs to avoid unnecessarily loading the vision components.
 - Samples can contain multiple images and each sample can have different number of images. In these cases, the processor pads the inputs to the maximum number of images across samples and to a maximum number of tiles within each image.
 - Use the `<|image|>` token to indicate where an image should be inserted.
-
-   ```py
-   prompt = "<|image|> What does the image show?"
-
 - MLlama's input and output embeddings are not tied which means the `lm_head` layer has one less token (the `<|image|>` placeholder token) and fails if you want to calculate loss on image tokens or apply logit processors. For training, make sure to mask the `<|image|>` token in `labels` because the model should not be trained on predicting them.
-- For CUDA index errors during generation, expand the `lm_head` by one token.
+- For CUDA index errors during generation, expand the `lm_head` by one token:
 
 ```python
 old_embeddings = model.get_output_embeddings()
@@ -169,6 +150,7 @@ model.set_output_embeddings(resized_embeddings)
 
 [[autodoc]] MllamaTextModel
     - forward
+
 
 
 
