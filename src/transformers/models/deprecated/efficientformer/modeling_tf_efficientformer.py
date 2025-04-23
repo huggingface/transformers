@@ -1087,9 +1087,9 @@ class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    cls_logits: Optional[tf.Tensor] = None
+    distillation_logits: Optional[tf.Tensor] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -1188,3 +1188,11 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             if hasattr(self.distillation_classifier, "name"):
                 with tf.name_scope(self.distillation_classifier.name):
                     self.distillation_classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = [
+    "TFEfficientFormerForImageClassification",
+    "TFEfficientFormerForImageClassificationWithTeacher",
+    "TFEfficientFormerModel",
+    "TFEfficientFormerPreTrainedModel",
+]

@@ -107,6 +107,16 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -123,7 +133,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
         this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
-        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring
+        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -214,8 +224,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
             text = prompt_strings
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_number_of_features
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:

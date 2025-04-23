@@ -126,6 +126,104 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, torch.Size([2, 8]))
 
+    def test_data_collator_with_flattening(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="pt")
+        batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        self.assertIn("position_ids", batch)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+    def test_data_collator_with_flattening_flash_attn_kwargs(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+        data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+        batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertIn(expected_key, batch)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+        self.assertEqual(batch["cu_seq_lens_k"].shape, torch.Size([4]))
+        self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].shape, torch.Size([4]))
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
+        # The flash attn max_length_{k,q} are simple python ints
+        self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
+
+    def test_data_collator_with_flattening_seq_idx(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+        data_collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)
+        batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "seq_idx",
+        ]:
+            self.assertIn(expected_key, batch)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
+        self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])
+
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)
         features = [
@@ -350,6 +448,86 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
 
+    def test_data_collator_for_language_modeling_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForLanguageModeling instances
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42)
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape, torch.Size((2, 1000)))
+        self.assertEqual(batch_1["labels"].shape, torch.Size((2, 1000)))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42)
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape, torch.Size((2, 1000)))
+        self.assertEqual(batch_2["labels"].shape, torch.Size((2, 1000)))
+
+        self.assertTrue(torch.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(torch.all(batch_1["labels"] == batch_2["labels"]))
+
+        # check if seed is respected in multiple workers situation
+        features = [{"input_ids": list(range(1000))} for _ in range(10)]
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            generator=torch.Generator().manual_seed(42),
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, seed=42),
+        )
+
+        batch_3_input_ids = []
+        batch_3_labels = []
+        for batch in dataloader:
+            batch_3_input_ids.append(batch["input_ids"])
+            batch_3_labels.append(batch["labels"])
+
+        batch_3_input_ids = torch.stack(batch_3_input_ids)
+        batch_3_labels = torch.stack(batch_3_labels)
+        self.assertEqual(batch_3_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_3_labels.shape, torch.Size((5, 2, 1000)))
+
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, seed=42),
+        )
+
+        batch_4_input_ids = []
+        batch_4_labels = []
+        for batch in dataloader:
+            batch_4_input_ids.append(batch["input_ids"])
+            batch_4_labels.append(batch["labels"])
+        batch_4_input_ids = torch.stack(batch_4_input_ids)
+        batch_4_labels = torch.stack(batch_4_labels)
+        self.assertEqual(batch_4_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_4_labels.shape, torch.Size((5, 2, 1000)))
+
+        self.assertTrue(torch.all(batch_3_input_ids == batch_4_input_ids))
+        self.assertTrue(torch.all(batch_3_labels == batch_4_labels))
+
+        # try with different seed
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, seed=43),
+        )
+
+        batch_5_input_ids = []
+        batch_5_labels = []
+        for batch in dataloader:
+            batch_5_input_ids.append(batch["input_ids"])
+            batch_5_labels.append(batch["labels"])
+        batch_5_input_ids = torch.stack(batch_5_input_ids)
+        batch_5_labels = torch.stack(batch_5_labels)
+        self.assertEqual(batch_5_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_5_labels.shape, torch.Size((5, 2, 1000)))
+
+        self.assertFalse(torch.all(batch_3_input_ids == batch_5_input_ids))
+        self.assertFalse(torch.all(batch_3_labels == batch_5_labels))
+
     def test_data_collator_for_whole_word_mask(self):
         tokenizer = BertTokenizer(self.vocab_file)
         data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
@@ -364,6 +542,86 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
+
+    def test_data_collator_for_whole_word_mask_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForWholeWordMask instances
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42)
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape, torch.Size((2, 1000)))
+        self.assertEqual(batch_1["labels"].shape, torch.Size((2, 1000)))
+
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42)
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape, torch.Size((2, 1000)))
+        self.assertEqual(batch_2["labels"].shape, torch.Size((2, 1000)))
+
+        self.assertTrue(torch.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(torch.all(batch_1["labels"] == batch_2["labels"]))
+
+        # check if seed is respected in multiple workers situation
+        features = [{"input_ids": list(range(1000))} for _ in range(10)]
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            generator=torch.Generator().manual_seed(42),
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+        )
+
+        batch_3_input_ids = []
+        batch_3_labels = []
+        for batch in dataloader:
+            batch_3_input_ids.append(batch["input_ids"])
+            batch_3_labels.append(batch["labels"])
+
+        batch_3_input_ids = torch.stack(batch_3_input_ids)
+        batch_3_labels = torch.stack(batch_3_labels)
+        self.assertEqual(batch_3_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_3_labels.shape, torch.Size((5, 2, 1000)))
+
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+        )
+
+        batch_4_input_ids = []
+        batch_4_labels = []
+        for batch in dataloader:
+            batch_4_input_ids.append(batch["input_ids"])
+            batch_4_labels.append(batch["labels"])
+        batch_4_input_ids = torch.stack(batch_4_input_ids)
+        batch_4_labels = torch.stack(batch_4_labels)
+        self.assertEqual(batch_4_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_4_labels.shape, torch.Size((5, 2, 1000)))
+
+        self.assertTrue(torch.all(batch_3_input_ids == batch_4_input_ids))
+        self.assertTrue(torch.all(batch_3_labels == batch_4_labels))
+
+        # try with different seed
+        dataloader = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=43),
+        )
+
+        batch_5_input_ids = []
+        batch_5_labels = []
+        for batch in dataloader:
+            batch_5_input_ids.append(batch["input_ids"])
+            batch_5_labels.append(batch["labels"])
+        batch_5_input_ids = torch.stack(batch_5_input_ids)
+        batch_5_labels = torch.stack(batch_5_labels)
+        self.assertEqual(batch_5_input_ids.shape, torch.Size((5, 2, 1000)))
+        self.assertEqual(batch_5_labels.shape, torch.Size((5, 2, 1000)))
+
+        self.assertFalse(torch.all(batch_3_input_ids == batch_5_input_ids))
+        self.assertFalse(torch.all(batch_3_labels == batch_5_labels))
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1077,6 +1335,33 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
 
+    def test_data_collator_for_language_modeling_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForLanguageModeling instances
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="tf")
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_1["labels"].shape.as_list(), [2, 1000])
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="tf")
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_2["labels"].shape.as_list(), [2, 1000])
+
+        self.assertTrue(np.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(np.all(batch_1["labels"] == batch_2["labels"]))
+
+        # try with different seed
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=43, return_tensors="tf")
+        batch_3 = data_collator(features)
+        self.assertEqual(batch_3["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_3["labels"].shape.as_list(), [2, 1000])
+
+        self.assertFalse(np.all(batch_1["input_ids"] == batch_3["input_ids"]))
+        self.assertFalse(np.all(batch_1["labels"] == batch_3["labels"]))
+
     def test_data_collator_for_whole_word_mask(self):
         tokenizer = BertTokenizer(self.vocab_file)
         data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
@@ -1091,6 +1376,33 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 10])
         self.assertEqual(batch["labels"].shape.as_list(), [2, 10])
+
+    def test_data_collator_for_whole_word_mask_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForWholeWordMask instances
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="tf")
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_1["labels"].shape.as_list(), [2, 1000])
+
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="tf")
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_2["labels"].shape.as_list(), [2, 1000])
+
+        self.assertTrue(np.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(np.all(batch_1["labels"] == batch_2["labels"]))
+
+        # try with different seed
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=43, return_tensors="tf")
+        batch_3 = data_collator(features)
+        self.assertEqual(batch_3["input_ids"].shape.as_list(), [2, 1000])
+        self.assertEqual(batch_3["labels"].shape.as_list(), [2, 1000])
+
+        self.assertFalse(np.all(batch_1["input_ids"] == batch_3["input_ids"]))
+        self.assertFalse(np.all(batch_1["labels"] == batch_3["labels"]))
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1589,14 +1901,96 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
         data_collator = DataCollatorWithFlattening(return_tensors="np")
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        self.assertIn("position_ids", batch)
+
         self.assertEqual(batch["input_ids"].shape, (1, 16))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertIn("position_ids", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+    def test_data_collator_with_flattening_flash_attn_kwargs(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="np", return_flash_attn_kwargs=True)
+        batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertIn(expected_key, batch)
+
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertEqual(batch["position_ids"].shape, (1, 16))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+        self.assertEqual(batch["cu_seq_lens_k"].shape, (4,))
+        self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].shape, (4,))
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
+        # The flash attn max_length_{k,q} are simple python ints
+        self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
+
+    def test_data_collator_with_flattening_seq_idx(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="np", return_seq_idx=True)
+        batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "seq_idx",
+        ]:
+            self.assertIn(expected_key, batch)
+
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertEqual(batch["position_ids"].shape, (1, 16))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
+        self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])
 
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1772,6 +2166,32 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
 
+    def test_data_collator_for_language_modeling_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForLanguageModeling instances
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="np")
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_1["labels"].shape, (2, 1000))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="np")
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_2["labels"].shape, (2, 1000))
+
+        self.assertTrue(np.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(np.all(batch_1["labels"] == batch_2["labels"]))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, seed=43, return_tensors="np")
+        batch_3 = data_collator(features)
+        self.assertEqual(batch_3["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_3["labels"].shape, (2, 1000))
+
+        self.assertFalse(np.all(batch_1["input_ids"] == batch_3["input_ids"]))
+        self.assertFalse(np.all(batch_1["labels"] == batch_3["labels"]))
+
     def test_data_collator_for_whole_word_mask(self):
         tokenizer = BertTokenizer(self.vocab_file)
         data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
@@ -1786,6 +2206,32 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 10))
         self.assertEqual(batch["labels"].shape, (2, 10))
+
+    def test_data_collator_for_whole_word_mask_with_seed(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        # check if seed is respected between two different DataCollatorForWholeWordMask instances
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
+        batch_1 = data_collator(features)
+        self.assertEqual(batch_1["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_1["labels"].shape, (2, 1000))
+
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
+        batch_2 = data_collator(features)
+        self.assertEqual(batch_2["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_2["labels"].shape, (2, 1000))
+
+        self.assertTrue(np.all(batch_1["input_ids"] == batch_2["input_ids"]))
+        self.assertTrue(np.all(batch_1["labels"] == batch_2["labels"]))
+
+        data_collator = DataCollatorForWholeWordMask(tokenizer, seed=43, return_tensors="np")
+        batch_3 = data_collator(features)
+        self.assertEqual(batch_3["input_ids"].shape, (2, 1000))
+        self.assertEqual(batch_3["labels"].shape, (2, 1000))
+
+        self.assertFalse(np.all(batch_1["input_ids"] == batch_3["input_ids"]))
+        self.assertFalse(np.all(batch_1["labels"] == batch_3["labels"]))
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)

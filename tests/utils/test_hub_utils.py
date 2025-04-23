@@ -150,7 +150,7 @@ class GetFromCacheTests(unittest.TestCase):
             _raise_exceptions_for_connection_errors=False,
         )
         # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
+        config = json.loads(open(resolved_file).read())
         self.assertEqual(config["hidden_size"], 768)
 
     def test_get_file_from_repo_local(self):
@@ -189,3 +189,12 @@ class GetFromCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "is a gated repository"):
             # All files except README.md are protected on a gated repo.
             has_file(GATED_REPO, "gated_file.txt", token=False)
+
+    def test_cached_files_exception_raised(self):
+        """Test that unhadled exceptions, e.g. ModuleNotFoundError, is properly re-raised by cached_files when hf_hub_download fails."""
+        with mock.patch(
+            "transformers.utils.hub.hf_hub_download", side_effect=ModuleNotFoundError("No module named 'MockModule'")
+        ):
+            with self.assertRaises(ModuleNotFoundError):
+                # The error should be re-raised by cached_files, not caught in the exception handling block
+                cached_file(RANDOM_BERT, "nonexistent.json")

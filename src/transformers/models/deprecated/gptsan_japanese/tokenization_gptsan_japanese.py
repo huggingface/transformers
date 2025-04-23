@@ -427,7 +427,7 @@ class SubWordJapaneseTokenizer:
             )
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
-        self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
+        self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
 
     def __len__(self):
         return len(self.ids_to_tokens)
@@ -513,3 +513,6 @@ class SubWordJapaneseTokenizer:
 
     def convert_id_to_token(self, index):
         return self.ids_to_tokens[index][0]
+
+
+__all__ = ["GPTSanJapaneseTokenizer"]
