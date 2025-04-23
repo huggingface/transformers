@@ -503,12 +503,12 @@ class MptIntegrationTests(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): [
-                    "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
-                    "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
-                ],
-                ("cuda", 7): [
                     "Hello my name is Tiffany. I am a mother of two beautiful children. I have been a nanny for over",
                     "Today I am going at the gym and then I am going to go to the mall with my mom. I am going to go to the",
+                ],
+                ("cuda", 7): [
+                    "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
+                    "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
                 ],
             }
         )
