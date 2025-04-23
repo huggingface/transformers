@@ -363,6 +363,22 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
             do_resize=do_resize, size=size, do_pad=do_pad, max_image_tiles=max_image_tiles
         )
 
+    def convert_to_rgb(
+        self,
+        image: ImageInput,
+    ) -> ImageInput:
+        """
+        Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+        as is.
+        Args:
+            image (ImageInput):
+                The image to convert.
+
+        Returns:
+            ImageInput: The converted image.
+        """
+        return convert_to_rgb(image)
+
     def pad(
         self,
         image: "torch.Tensor",
