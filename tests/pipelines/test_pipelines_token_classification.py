@@ -54,9 +54,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    if model_mapping is not None:
+    if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if tf_model_mapping is not None:
+    if not hasattr(tf_model_mapping, "is_dummy"):
         tf_model_mapping = {
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
@@ -778,7 +778,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_tf
     def test_tf_only(self):
         model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
-        # We test that if we don't specificy framework='tf', it gets detected automatically
+        # We test that if we don't specify framework='tf', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 

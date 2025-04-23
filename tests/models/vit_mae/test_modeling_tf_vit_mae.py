@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -269,22 +268,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             output_for_dict_input = model(inputs_np, noise=noise)
             output_for_kw_input = model(**inputs_np, noise=noise)
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
-
-    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
-    # to generate masks during test
-    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-        # make masks reproducible
-        np.random.seed(2)
-
-        num_patches = int((tf_model.config.image_size // tf_model.config.patch_size) ** 2)
-        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        tf_noise = tf.constant(noise)
-
-        # Add `noise` argument.
-        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
-        tf_inputs_dict["noise"] = tf_noise
-
-        super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test

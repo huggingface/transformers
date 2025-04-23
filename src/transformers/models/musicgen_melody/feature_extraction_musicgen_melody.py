@@ -25,6 +25,7 @@ from ...audio_utils import chroma_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, is_torchaudio_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -36,6 +37,7 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchaudio",))
 class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a MusicgenMelody feature extractor.
@@ -242,7 +244,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         if sampling_rate is None:
             logger.warning_once(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -329,3 +331,6 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if "spectrogram" in output:
             del output["spectrogram"]
         return output
+
+
+__all__ = ["MusicgenMelodyFeatureExtractor"]

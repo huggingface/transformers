@@ -323,7 +323,7 @@ class PvtV2EncoderLayer(nn.Module):
         )
         # Transformer block
         # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").tolist()
         block_layers = []
         for block_idx in range(config.depths[layer_idx]):
             block_layers.append(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -847,7 +846,7 @@ class PegasusXStandaloneDecoderModelTester:
 
 
 @require_torch
-class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 LXMERT Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -779,7 +778,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass

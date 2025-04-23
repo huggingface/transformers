@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -233,13 +233,13 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
+        when number of images doesn't match number of image tokens in the text.
         Also we need to test multi-image cases when one prompr has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
@@ -260,19 +260,19 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -341,16 +341,12 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
-        pass
-
     @unittest.skip("Low memory will be removed soon so no need to fix it")
     def test_beam_search_low_memory(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -359,6 +355,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass

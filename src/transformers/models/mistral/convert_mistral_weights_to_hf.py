@@ -112,7 +112,7 @@ def get_concat_dim(key):
 
 
 def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig):
-    """Convert the state dict, when a single `nn.Module` is sharded accross different files."""
+    """Convert the state dict, when a single `nn.Module` is sharded across different files."""
     new_dict = {}
 
     num_shards = len(loaded_shards)
@@ -208,7 +208,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     else:
         shards = [file for file in os.listdir(input_dir) if re.match(r"consolidated.\d+.pth", file)]
         shards = sorted(shards, key=lambda x: int(x.split(".")[1]))
-        loaded_shards = [torch.load(os.path.join(input_dir, file), map_location="cpu") for file in shards]
+        loaded_shards = [
+            torch.load(os.path.join(input_dir, file), map_location="cpu", weights_only=True) for file in shards
+        ]
         full_state_dict = convert_state_dict_sharded(loaded_shards, config)
 
     # Load weights into model and resave them

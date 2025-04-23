@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -303,7 +302,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
@@ -385,4 +384,4 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[-5:], expected_slice, rtol=TOLERANCE)
+        torch.testing.assert_close(mean_prediction[-5:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)

@@ -113,7 +113,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Override original method to fix state_dict keys on load for cases when weights are loaded
         without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
-        state_dict = self._fix_state_dict_keys_on_load(state_dict)
+        state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
     def _init_weights(self, module):

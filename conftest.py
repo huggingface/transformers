@@ -46,10 +46,6 @@ NOT_DEVICE_TESTS = {
     "test_keep_in_fp32_modules",
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
-    "test_save_load_fast_init_from_base",
-    "test_fast_init_context_manager",
-    "test_fast_init_tied_embeddings",
-    "test_save_load_fast_init_to_base",
     "test_torch_save_load",
     "test_initialization",
     "test_forward_signature",
@@ -61,7 +57,6 @@ NOT_DEVICE_TESTS = {
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_pt_tf_model_equivalence",
     "test_mismatched_shapes_have_properly_initialized_weights",
     "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
     "test_model_is_small",
@@ -71,7 +66,6 @@ NOT_DEVICE_TESTS = {
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
-    "/agents/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun
@@ -85,16 +79,9 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
-    )
-    config.addinivalue_line(
-        "markers", "is_pt_flax_cross_test: mark test to run only when PT and FLAX interactions are tested"
-    )
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
-    config.addinivalue_line("markers", "agent_tests: mark the agent tests that are run on their specific schedule")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
 
 

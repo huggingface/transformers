@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from parameterized import parameterized
 
@@ -32,7 +30,6 @@ from transformers import (
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_pandas,
     require_sentencepiece,
     require_tokenizers,
@@ -97,12 +94,13 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = LayoutXLMTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00e9d,running"
@@ -158,7 +156,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             _, _, boxes = self.get_question_words_and_boxes()
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_rust = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
                 tokenizer_py = self.tokenizer_class.from_pretrained(
@@ -207,7 +205,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
                 words[1] = tokenizer_r.mask_token
@@ -234,7 +232,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
-        tokenizers: List[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -250,7 +248,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -537,8 +535,8 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -991,8 +989,8 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
@@ -1293,7 +1291,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
 
@@ -1347,7 +1345,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 words, boxes = self.get_words_and_boxes()
                 tokens_r = tokenizer_r.encode_plus(
                     words,
@@ -1425,48 +1423,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        words, boxes=boxes, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()
@@ -1687,7 +1643,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -1786,7 +1742,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 

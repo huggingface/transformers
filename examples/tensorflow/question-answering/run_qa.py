@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,7 +61,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.49.0.dev0")
+check_min_version("4.52.0.dev0")
 
 logger = logging.getLogger(__name__)
 

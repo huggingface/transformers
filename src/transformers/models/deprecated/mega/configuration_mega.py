@@ -238,3 +238,6 @@ class MegaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["MegaConfig", "MegaOnnxConfig"]

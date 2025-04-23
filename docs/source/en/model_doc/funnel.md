@@ -17,14 +17,9 @@ rendered properly in your Markdown viewer.
 # Funnel Transformer
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=funnel">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/funnel-transformer-small">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
-
 
 ## Overview
 
