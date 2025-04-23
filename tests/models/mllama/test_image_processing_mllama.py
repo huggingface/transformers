@@ -298,7 +298,11 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             return torch.all(pixel_values == 0, dim=(3, 4, 5))
 
         for image_processing_class in self.image_processor_list:
-            image_processor_dict = {**self.image_processor_dict, "size": {"height": 50, "width": 50}, "max_image_tiles": 4}
+            image_processor_dict = {
+                **self.image_processor_dict,
+                "size": {"height": 50, "width": 50},
+                "max_image_tiles": 4,
+            }
             image_processor = image_processing_class(**image_processor_dict)
 
             # image fits 2x2 tiles grid (width x height)

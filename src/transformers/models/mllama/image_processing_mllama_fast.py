@@ -12,38 +12,40 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union, Tuple, List, Dict
+from typing import Dict, List, Optional, Tuple, Union
+
 import PIL
 from PIL import Image
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
-    BaseImageProcessorFast, 
-    SizeDict, 
-    ChannelDimension, 
-    TensorType, 
-    validate_fast_preprocess_arguments,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    BatchFeature,
+    ChannelDimension,
     DefaultFastImageProcessorKwargs,
     ImageInput,
+    SizeDict,
+    TensorType,
     Unpack,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BatchFeature,
     group_images_by_shape,
     reorder_images,
+    validate_fast_preprocess_arguments,
 )
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import (
-    add_start_docstrings, 
-    is_vision_available,  
-    is_torch_available, 
-    is_torchvision_available, 
-    is_torchvision_v2_available
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    is_vision_available,
 )
 from .image_processing_mllama import (
-    get_all_supported_aspect_ratios, 
-    get_image_size_fit_to_canvas, 
-    get_optimal_tiled_canvas
+    get_all_supported_aspect_ratios,
+    get_image_size_fit_to_canvas,
+    get_optimal_tiled_canvas,
 )
+
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
@@ -243,6 +245,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max
         aspect_ratios_ids[i, 0] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
     return aspect_ratios_ids
 
+
 # Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
 def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
@@ -357,10 +360,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         )
 
         _validate_mllama_preprocess_arguments(
-            do_resize=do_resize, 
-            size=size, 
-            do_pad=do_pad, 
-            max_image_tiles=max_image_tiles
+            do_resize=do_resize, size=size, do_pad=do_pad, max_image_tiles=max_image_tiles
         )
 
     def pad(
@@ -478,7 +478,9 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         aspect_ratio_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # do_resize=False is not supported, validated
-            stacked_images, aspect_ratio = self.resize(image=stacked_images, size=size, interpolation=interpolation, max_image_tiles=max_image_tiles)
+            stacked_images, aspect_ratio = self.resize(
+                image=stacked_images, size=size, interpolation=interpolation, max_image_tiles=max_image_tiles
+            )
             # do_pad=False is not supported, validated
             stacked_images = self.pad(
                 image=stacked_images,
