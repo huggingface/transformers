@@ -500,7 +500,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
 
-        expected_output = Expectations(
+        expected_outputs = Expectations(
             {
                 ("xpu", 3): [
                     "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
@@ -512,7 +512,7 @@ class MptIntegrationTests(unittest.TestCase):
                 ],
             }
         )
-        expected_outputs = expected_outputs.get_expectation()
+        expected_output = expected_outputs.get_expectation()
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
