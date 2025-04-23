@@ -334,8 +334,7 @@ non_model_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    # `examples/pytorch/_tests_requirements.txt` is installed for `test_run_seq2seq_no_dist`, which runs an example under the hood.
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1 && uv pip install -r examples/pytorch/_tests_requirements.txt"],
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="not generate",
     parallelism=6,
 )
