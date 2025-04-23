@@ -720,6 +720,8 @@
         title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
+      - local: model_doc/siglip
+        title: SigLIP
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation
