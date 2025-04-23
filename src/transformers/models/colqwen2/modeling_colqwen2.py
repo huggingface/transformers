@@ -24,6 +24,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_available,
     replace_return_docstrings,
 )
@@ -202,7 +203,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     def get_decoder(self):
         return self.vlm.model
 
-    # todo: remove and use vlm forward?
     def inner_forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -254,6 +254,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         return outputs
 
     @add_start_docstrings_to_model_forward(COLQWEN2_FOR_RETRIEVAL_INPUT_DOCSTRING)
+    @can_return_tuple
     @replace_return_docstrings(output_type=ColQwen2ForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -270,7 +271,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, ColQwen2ForRetrievalOutput]:  # noqa: F821
+    ) -> ColQwen2ForRetrievalOutput:
         r"""
         Returns:
         """
@@ -322,13 +323,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [embeddings, vlm_output.past_key_values, vlm_hidden_states, vlm_output.attentions]
-                if v is not None
-            )
 
         return ColQwen2ForRetrievalOutput(
             embeddings=embeddings,

@@ -28,6 +28,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     replace_return_docstrings,
 )
 from .configuration_colpali import ColPaliConfig
@@ -191,6 +192,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING)
+    @can_return_tuple
     @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -201,7 +203,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, ColPaliForRetrievalOutput]:
+    ) -> ColPaliForRetrievalOutput:
         r"""
         Returns:
         """
@@ -233,19 +235,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    embeddings,
-                    vlm_output.past_key_values,
-                    vlm_hidden_states,
-                    vlm_output.attentions,
-                    vlm_image_hidden_states,
-                ]
-                if v is not None
-            )
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,
