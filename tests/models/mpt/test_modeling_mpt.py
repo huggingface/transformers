@@ -20,9 +20,9 @@ from transformers import MptConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
-    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
