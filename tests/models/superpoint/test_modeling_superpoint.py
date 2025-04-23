@@ -133,7 +133,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_flaky(description="The `indices` computed with `topk()` in `top_k_keypoints` is not stable.")
+    @is_flaky  # The `indices` computed with `topk()` in `top_k_keypoints` is not stable.
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 

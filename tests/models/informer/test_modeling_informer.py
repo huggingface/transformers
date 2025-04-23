@@ -465,7 +465,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
         )
 
-    @is_flaky()
+    @is_flaky
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 

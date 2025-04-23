@@ -374,7 +374,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @pytest.mark.generate
-    @is_flaky(description="TODO: check why flaky")
+    @is_flaky  # TODO: check why flaky
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()
 

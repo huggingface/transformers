@@ -406,7 +406,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky()
+    @is_flaky
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

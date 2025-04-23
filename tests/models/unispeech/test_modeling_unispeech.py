@@ -328,9 +328,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @is_flaky(
-        description="The `codevector_idx` computed with `argmax()` in `UniSpeechGumbelVectorQuantizer.forward` is not stable."
-    )
+    @is_flaky  # The `codevector_idx` computed with `argmax()` in `UniSpeechGumbelVectorQuantizer.forward` is not stable.
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 

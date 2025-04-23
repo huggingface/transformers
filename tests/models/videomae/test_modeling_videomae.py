@@ -351,7 +351,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky()
+    @is_flaky
     def test_flash_attn_2_inference_equivalence(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

@@ -367,7 +367,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @is_flaky(max_attempts=5, description="flaky on some models.")
+    @is_flaky  # flaky on some models.
     def test_save_load(self):
         super().test_save_load()
 
@@ -692,7 +692,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @require_torch_sdpa
     @slow
-    @is_flaky(max_attempts=5, description="flaky on some models.")
+    @is_flaky  # flaky on some models.
     def test_eager_matches_sdpa_generate(self):
         """Overwritten -- mochi has custom inputs and custom output checks"""
 
@@ -879,7 +879,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @is_flaky(max_attempts=5, description="flaky on some models.")
+    @is_flaky  # flaky on some models.
     def test_save_load(self):
         super().test_save_load()
 

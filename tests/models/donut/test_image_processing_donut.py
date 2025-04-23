@@ -154,7 +154,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-    @is_flaky()
+    @is_flaky
     def test_call_pil(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
@@ -188,7 +188,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-    @is_flaky()
+    @is_flaky
     def test_call_numpy(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
@@ -222,7 +222,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-    @is_flaky()
+    @is_flaky
     def test_call_pytorch(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
