@@ -246,9 +246,9 @@ def write_model(
         # some constans from original code
         rope_scaling = {
             "rope_type": "llama3",
-            "factor": 8.0,
+            "factor": params.get("rope_scaling_factor", 8.0),
             "low_freq_factor": 1.0,
-            "high_freq_factor": 4.0,
+            "high_freq_factor": params.get("rope_high_freq_factor", 4.0),
             "original_max_position_embeddings": 8192,
         }
         config_kwargs.update({"rope_scaling": rope_scaling})
