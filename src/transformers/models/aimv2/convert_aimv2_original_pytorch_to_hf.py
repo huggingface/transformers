@@ -164,13 +164,14 @@ def write_model(
     if hf_repo_id != "apple/aimv2-large-patch14-224-lit":
         config.use_head = False
 
+    if hf_repo_id == "apple/aimv2-large-patch14-native":
+        config.is_native = True
+
     original_state_dict = load_original_state_dict(hf_repo_id)
 
     print("Converting model...")
 
     state_dict = {}
-    # For `apple/aimv2-large-patch14-native` we don't have position_embedding in state_dict
-    strict_loading = False
     result = convert_old_keys_to_new_keys(original_state_dict, key_mapping)
     all_keys = list(original_state_dict.keys())
 
@@ -187,19 +188,17 @@ def write_model(
         # Check if position embeddings exist before squeezing
         if new_key.endswith("position_embedding.weight"):
             state_dict[new_key] = value.squeeze(0)
-            strict_loading = True
 
     print(f"Loading the checkpoint in a {model_class.__name__}.")
     model = model_class(config)
-    model.load_state_dict(state_dict, strict=strict_loading, assign=True)
+    model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
 
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
     del state_dict, model
-
-    # Safety check: reload the converted model
     gc.collect()
+
     print("Reloading the model to check if it's saved correctly.")
     model = model_class.from_pretrained(output_dir, device_map="auto")
     print("Model reloaded successfully.")

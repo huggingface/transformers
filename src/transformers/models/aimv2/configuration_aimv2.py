@@ -68,6 +68,8 @@ class AIMv2VisionConfig(PretrainedConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
+        is_native (`str`, *optional*, defaults to `False`):
+            Whether to use ckpt trained for image native resolution or not.
     Example:
 
     ```python
@@ -103,6 +105,7 @@ class AIMv2VisionConfig(PretrainedConfig):
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
+        is_native: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -123,6 +126,7 @@ class AIMv2VisionConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
+        self.is_native = is_native
 
 
 class AIMv2TextConfig(PretrainedConfig):

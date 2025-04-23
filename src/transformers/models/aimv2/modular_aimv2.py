@@ -16,8 +16,7 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -29,14 +28,13 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
 from ...utils import (
-    ModelOutput,
     can_return_tuple,
     logging,
 )
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipOutput
 
 
 logger = logging.get_logger(__name__)
@@ -84,6 +82,8 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
+        is_native (`str`, *optional*, defaults to `False`):
+            Whether to use ckpt trained for image native resolution or not.
     Example:
 
     ```python
@@ -116,6 +116,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
+        is_native: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -138,6 +139,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
+        self.is_native = is_native
 
         del self.layer_norm_eps
 
@@ -296,38 +298,8 @@ class AIMv2Config(SiglipConfig):
     pass
 
 
-@dataclass
-class AIMv2Output(ModelOutput):
-    """
-    Args:
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`AIMv2TextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`AIMv2VisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AIMv2TextModel`].
-        vision_model_output (`BaseModelOutput`):
-            The output of the [`AIMv2VisionModel`].
-    """
-
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
-    text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+class AIMv2Output(SiglipOutput):
+    pass
 
 
 class AIMv2RMSNorm(LlamaRMSNorm):
@@ -364,7 +336,8 @@ class AIMv2VisionEmbeddings(nn.Module):
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         num_patches = (config.image_size // config.patch_size) ** 2
-        self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
+        if not self.config.is_native:
+            self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     @staticmethod
@@ -389,7 +362,7 @@ class AIMv2VisionEmbeddings(nn.Module):
         hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
         hidden_states = self.rms_norm(hidden_states)
 
-        if self.config.image_size != height or self.config.image_size != width:
+        if self.config.is_native:
             pos_embed = self.build_2d_sincos_position_embedding(
                 height // self.patch_size,
                 width // self.patch_size,
@@ -580,6 +553,8 @@ class AIMv2PreTrainedModel(PreTrainedModel):
         elif hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
                 module.logit_scale.data.fill_(math.log(1 / 0.07))
+        elif isinstance(module, AIMv2AttentionPoolingHead):
+            module.cls_token.data.normal_(mean=0.0, std=std)
 
 
 class AIMv2VisionModel(AIMv2PreTrainedModel):
@@ -590,6 +565,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         self.config = config
         self.embeddings = AIMv2VisionEmbeddings(config)
         self.encoder = AIMv2Encoder(config)
+        # The only change from SiglipVisionTransformer is, layernorm -> rms_norm.
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.use_head = config.use_head
@@ -716,7 +692,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
 
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
-        self.max_logit_scale = math.log(config.max_logit_scale)
+        self.max_log_logit_scale = math.log(config.max_logit_scale)
 
         self.post_init()
 
@@ -779,7 +755,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
-        logit_scale = self.logit_scale.clamp(0.0, self.max_logit_scale).exp()
+        logit_scale = self.logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
