@@ -14,10 +14,10 @@
 """Testing suite for the PyTorch Qwen2.5-VL model."""
 
 import gc
+import tempfile
 import unittest
 
 import requests
-import tempfile
 
 from transformers import (
     AutoProcessor,
@@ -26,7 +26,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.utils import is_cv2_available
 from transformers.testing_utils import (
     is_flaky,
     require_cv2,
@@ -36,6 +35,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_cv2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -45,6 +45,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+
 
 if is_cv2_available():
     import cv2
@@ -266,6 +267,59 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
+
+    def test_video_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        B = self.model_tester.batch_size
+        C = config.vision_config.in_chans
+        T = config.vision_config.temporal_patch_size
+        P = config.vision_config.patch_size
+
+        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+
+        F = 4
+        patch_H = self.model_tester.image_size // P
+        patch_W = self.model_tester.image_size // P
+        patch_T = F // T
+        patches_per_video = patch_T * patch_H * patch_W
+        pixel_values_videos = floats_tensor(
+            [
+                # first dim: batch_size * num_patches
+                B * patches_per_video,
+                # second dim: in_channels * temporal_patch_size * patch_size^2
+                C * T * (P**2),
+            ]
+        )
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B)
+
+        # sanity check
+        assert pixel_values_videos.shape[0] == video_grid_thw.prod(dim=1).sum().item()
+
+        # Insert video token sequence
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[:, self.model_tester.num_image_tokens] = self.model_tester.video_token_id
+
+        insertion_point = self.model_tester.num_image_tokens
+
+        assert (B * patches_per_video) + insertion_point <= self.model_tester.seq_length
+        for b in range(B):
+            input_ids[b, insertion_point - 1] = self.model_tester.vision_start_token_id
+            input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
+
+        for model_class in self.all_model_classes:
+            second_per_grid_ts = torch.tensor([1.0] * B, device=torch_device)
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+            )
+            self.assertIsNotNone(outputs)
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
