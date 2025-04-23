@@ -16,6 +16,8 @@
 
 from typing import Optional, Union
 
+import numpy as np
+
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -58,6 +60,7 @@ class DonutFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_thumbnail: Optional[bool]
     do_align_long_axis: Optional[bool]
     do_pad: Optional[bool]
+    random_padding: Optional[bool]
 
 
 @add_start_docstrings(
@@ -171,8 +174,8 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         delta_height = output_height - input_height
 
         if random_padding:
-            pad_top = torch.random.randint(low=0, high=delta_height + 1)
-            pad_left = torch.random.randint(low=0, high=delta_width + 1)
+            pad_top = np.random.randint(low=0, high=delta_height + 1)
+            pad_left = np.random.randint(low=0, high=delta_width + 1)
         else:
             pad_top = delta_height // 2
             pad_left = delta_width // 2
@@ -236,6 +239,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         do_thumbnail: bool,
         do_align_long_axis: bool,
         do_pad: bool,
+        random_padding: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
@@ -262,7 +266,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
             if do_thumbnail:
                 stacked_images = self.thumbnail(image=stacked_images, size=size)
             if do_pad:
-                stacked_images = self.pad_image(image=stacked_images, size=size, random_padding=False)
+                stacked_images = self.pad_image(image=stacked_images, size=size, random_padding=random_padding)
 
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)

@@ -38,9 +38,6 @@ class DonutProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-DonutProcessorKwargs.__annotations__["images_kwargs"] = DonutImagesKwargs
-
-
 logger = logging.get_logger(__name__)
 
 
