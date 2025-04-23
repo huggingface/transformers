@@ -509,7 +509,7 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
-AIMV2_START_DOCSTRING = r"""
+AIMV2_VISION_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -519,7 +519,7 @@ AIMV2_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+        config ([`AIMv2VisionConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -528,7 +528,7 @@ AIMV2_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -542,7 +542,7 @@ AIMV2_VISION_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """The vision model from AIMv2 without any head or projection on top.""",
-    AIMV2_START_DOCSTRING,
+    AIMV2_VISION_START_DOCSTRING,
 )
 class AIMv2VisionModel(AIMv2PreTrainedModel):
     main_input_name = "pixel_values"
@@ -698,6 +698,21 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     normed_tensor = torch.pow(sum_tensor, 0.5)
     return normed_tensor
 
+
+AIMV2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 AIMV2_TEXT_INPUTS_DOCSTRING = r"""
     Args:

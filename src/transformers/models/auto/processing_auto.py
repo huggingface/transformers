@@ -46,7 +46,6 @@ logger = logging.get_logger(__name__)
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("aimv2", "CLIPProcessor"),
-        ("aimv2_vision_model", "CLIPProcessor"),
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
