@@ -204,7 +204,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.accelerate_fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
-
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
         output_dir = self.get_auto_remove_tmp_dir()
