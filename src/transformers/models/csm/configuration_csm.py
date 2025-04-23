@@ -156,10 +156,10 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         rope_theta=500000,
         rope_scaling={
             "factor": 32.0,
-            "high_freq_factor": 4.0,
-            "low_freq_factor": 1.0,
-            "original_max_position_embeddings": 8192,
-            "rope_type": "llama3",
+            "high_freq_factor": 0.0078125,
+            "low_freq_factor": 0.001953125,
+            "original_max_position_embeddings": 16,
+            "rope_type": "llama3"
         },
         attention_bias=False,
         attention_dropout=0.0,
@@ -380,9 +380,9 @@ class CsmConfig(PretrainedConfig):
         rope_theta=500000,
         rope_scaling={
             "factor": 32.0,
-            "high_freq_factor": 4.0,
-            "low_freq_factor": 1.0,
-            "original_max_position_embeddings": 8192,
+            "high_freq_factor": 0.5,
+            "low_freq_factor": 0.125,
+            "original_max_position_embeddings": 1024,
             "rope_type": "llama3",
         },
         attention_bias=False,
