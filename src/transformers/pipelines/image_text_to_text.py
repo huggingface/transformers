@@ -58,12 +58,12 @@ class Chat:
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        messages = retrieve_images_in_messages(messages, images)
+        messages = add_images_to_messages(messages, images)
 
         self.messages = messages
 
 
-def retrieve_images_in_messages(
+def add_images_to_messages(
     messages: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]
 ):
     """
@@ -71,7 +71,7 @@ def retrieve_images_in_messages(
     """
     if images is None:
         images = []
-    elif not isinstance(images, (Iterable)) or isinstance(images, str):
+    elif not isinstance(images, Iterable) or isinstance(images, str):
         images = [images]
     idx_images = 0
     for message in messages:
