@@ -1873,7 +1873,7 @@ class TrainingArguments:
             with open(self.fsdp_config, encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
 
-        if self.fsdp_config is not None:
+        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
             for k in list(self.fsdp_config.keys()):
                 if k.startswith("fsdp_"):
                     v = self.fsdp_config.pop(k)
