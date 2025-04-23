@@ -18,7 +18,6 @@ import unittest
 
 import requests
 import tempfile
-import cv2
 
 from transformers import (
     AutoProcessor,
@@ -27,8 +26,10 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.utils import is_cv2_available
 from transformers.testing_utils import (
     is_flaky,
+    require_cv2,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -45,6 +46,8 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
+if is_cv2_available():
+    import cv2
 
 if is_torch_available():
     import torch
@@ -538,6 +541,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_cv2
     def test_small_model_integration_test_with_video(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
