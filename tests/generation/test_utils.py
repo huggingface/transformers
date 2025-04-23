@@ -134,7 +134,7 @@ VLM_CLASS_NAMES = [
     "mistral3",
     "chameleon",
     "internvl",
-    "qwen2_5_omni",
+    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`
 ]
 
 
@@ -230,6 +230,7 @@ class GenerationTesterMixin:
             for key in [
                 "image_token_id",
                 "video_token_id",
+                "audio_token_id",
                 "vision_start_token_id",
                 "audio_start_token_id",
                 "audio_end_token_id",
