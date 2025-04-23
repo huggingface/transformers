@@ -374,7 +374,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = bool(config.no_rope_layers[layer_idx])
+        self.use_chunked_attention = config.attention_chunk_size is not None and bool(config.no_rope_layers[layer_idx])
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -643,7 +643,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+            if self.config.get_text_config().get("attention_chunk_size") is not None:
+                past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+            else:
+                past_key_values = Cache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -748,26 +751,30 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        cond1 = first_cache_position >= attention_chunk_size
-        cond2 = (first_cache_position < attention_chunk_size) & (
-            first_cache_position + sequence_length > attention_chunk_size
-        )
-        key_length = (
-            torch.where(
-                cond1,
-                attention_chunk_size + sequence_length - 1,
-                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+        if attention_chunk_size is None:
+            key_length = full_cache_length
+        else:
+            cond1 = first_cache_position >= attention_chunk_size
+            cond2 = (first_cache_position < attention_chunk_size) & (
+                first_cache_position + sequence_length > attention_chunk_size
             )
-            if use_cache
-            else full_cache_length
-        )
+            key_length = (
+                torch.where(
+                    cond1,
+                    attention_chunk_size + sequence_length - 1,
+                    torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+                )
+                if use_cache
+                else full_cache_length
+            )
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                offsets = (first_cache_position, max(first_cache_position - attention_chunk_size + 1, 0))
-                chunked_attention_mask = make_flex_block_causal_mask(
-                    attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
-                )
+                if attention_chunk_size is not None:
+                    offsets = (first_cache_position, max(first_cache_position - attention_chunk_size + 1, 0))
+                    chunked_attention_mask = make_flex_block_causal_mask(
+                        attention_mask, attention_chunk_size, sequence_length, key_length, offsets=offsets
+                    )
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
@@ -780,16 +787,17 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         dtype, device = input_tensor.dtype, input_tensor.device
+        target_length = max(full_cache_length, attention_chunk_size) if attention_chunk_size is not None else full_cache_length
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=max(full_cache_length, attention_chunk_size),
+            target_length=target_length,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        if full_cache_length > self.config.attention_chunk_size:
+        if attention_chunk_size is not None and full_cache_length > attention_chunk_size:
             start_idx = max(first_cache_position - attention_chunk_size + 1, 0)
             end_idx = start_idx + key_length
             chunked_attention_mask = self.create_chunked_attention_mask(

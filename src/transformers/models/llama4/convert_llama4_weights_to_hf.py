@@ -65,6 +65,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"layers.(\d+).feed_forward.w3.weight":                  r"language_model.model.layers.\1.feed_forward.up_proj.weight",                 # might need to be fused for efficiency?
     # r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
     r"layers.(\d+).feed_forward.mlp.fc2_weight":             r"language_model.model.layers.\1.feed_forward.down_proj.weight",
+    r"layers.(\d+).feed_forward.w2.weight":                  r"language_model.model.layers.\1.feed_forward.down_proj.weight",
     r"layers.(\d+).feed_forward.mlp.layer_norm.weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
 
     # Vision encoder mapping
@@ -166,8 +167,8 @@ def get_concat_dim(key):
     return 0
 
 
-def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1.3):
-    hidden_dim = 4 * int(2 * hidden_dim / 3)
+def compute_intermediate_size(hidden_dim, ffn_exp=4, multiple_of=1024, ffn_dim_multiplier=1.2):
+    hidden_dim = ffn_exp * int(2 * hidden_dim / 3)
     hidden_dim = int(ffn_dim_multiplier * hidden_dim)
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
     return hidden_dim
@@ -203,6 +204,9 @@ def max_context_length(model_path, instruct=False):
     with open(os.path.join(model_path, "params.json"), "r") as f:
         params = json.load(f)
     params = params.get("model", params)
+    if params.get("moe_args") is None:
+        # Dense model - max context length TBC
+        return 10485760 
     num_experts = params["moe_args"]["num_experts"]
     return 10485760 if num_experts == 16 else 1048576
 
@@ -248,18 +252,29 @@ def write_model(
             "original_max_position_embeddings": 8192,
         }
         config_kwargs.update({"rope_scaling": rope_scaling})
+    
+    if attention_chunk_size is None:
+        config_kwargs.update({"cache_implementation": "static"})
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
     dim_per_head = dim // num_heads
-    # intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])
+    intermediate_size_mlp = compute_intermediate_size(dim, ffn_exp=params["ffn_exp"], multiple_of=params["multiple_of"], ffn_dim_multiplier=params["ffn_dim_multiplier"])
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
-    num_experts = params["moe_args"]["num_experts"]
-    interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
+    if hasattr(params, "moe_args"):
+        num_experts = params["moe_args"]["num_experts"]
+        interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
+        moe_layers = None
+    else:
+        num_experts = 0
+        interleave_moe_layer_step = 0
+        moe_layers = []
 
+    # Ensure all layers are rope if `nope_layer_interval` is None
     no_rope_layer_interval = params["nope_layer_interval"]
+    no_rope_layer_interval = num_heads * 2 if no_rope_layer_interval is None else no_rope_layer_interval
 
     bos_token_id = 200000
     eos_token_id = [200001, 200007, 200008] if instruct else 200001
@@ -273,9 +288,10 @@ def write_model(
         rope_theta=rope_theta,
         num_hidden_layers=num_layers,
         intermediate_size=8192,
-        intermediate_size_mlp=16384,
+        intermediate_size_mlp=intermediate_size_mlp,
         max_position_embeddings=max_context_length(input_base_path, instruct),
         num_local_experts=num_experts,
+        moe_layers=moe_layers,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
         no_rope_layer_interval=no_rope_layer_interval,
@@ -336,7 +352,7 @@ def write_model(
         sharded_keys = []
         for _key in all_keys_raw:
             try:
-                if (loaded[0][_key] == loaded[1][_key]).all():
+                if num_shards == 1 or (loaded[0][_key] == loaded[1][_key]).all():
                     repeated_keys.append(_key)
                 else:
                     sharded_keys.append(_key)
@@ -354,7 +370,7 @@ def write_model(
         for key in tqdm(all_keys, desc="Renaming and processing all keys", unit="key"):
             new_key = new_keys[key]
             print(key, new_key)
-            if not is_param_same_across_shards(new_key):
+            if num_shards > 1 and not is_param_same_across_shards(new_key):
                 current_parameter = [chunk.pop(key) for chunk in loaded if not isinstance(chunk[key], io.BytesIO)]
             else:
                 print(f"{key} (now {new_key}) is the same across all shards.")
@@ -519,7 +535,11 @@ def write_model(
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
-        out = model.generate(**inputs, max_new_tokens=4)
+        # out = model.generate(**inputs, max_new_tokens=4)
+
+        inputs = torch.tensor([[200000, 200005, 1556, 200006, 368, 198, 6802, 38, 7116, 563, 1609, 373, 38647, 3664, 310, 481, 24980, 19, 12485, 310, 49484, 7289, 1753, 12248, 9050, 517, 290, 3649, 17719, 27983, 40, 61612, 59088, 105849, 99286, 354, 152859, 2305, 63, 29, 38, 62808, 302, 199400, 26, 1102, 63, 30, 38, 9635, 13166, 57740, 302, 199400, 26, 1102, 63, 31, 38, 36999, 199400, 26, 1102, 63, 32, 38, 15393, 181975, 7640, 26, 1102, 63, 33, 38, 5366, 316, 365, 26, 7283, 63, 34, 38, 14996, 2158, 109296, 26, 1102, 63, 35, 38, 39903, 26, 1102, 63, 36, 38, 157957, 16707, 26, 1102, 63, 37, 38, 3374, 105289, 379, 143147, 26, 7283, 63, 580, 38, 166492, 26, 1102, 63, 825, 38, 17321, 8767, 3009, 26, 1102, 63, 738, 38, 86883, 15777, 26, 1102, 63, 974, 38, 144152, 26, 1102, 40, 7045, 59088, 105849, 99286, 354, 152859, 2305, 40, 61612, 6838, 153351, 5359, 2305, 2152, 38, 220, 11217, 641, 372, 2170, 262, 24871, 17285, 24980, 38, 372, 7038, 2520, 650, 517, 511, 1574, 40, 7045, 6838, 153351, 5359, 19700, 73594, 913, 12248, 17590, 393, 57159, 8039, 101380, 33980, 3623, 310, 290, 4195, 25622, 4568, 430, 8280, 1978, 3066, 2395, 481, 60411, 19, 537, 481, 72110, 172809, 430, 1862, 38647, 24, 262, 2432, 1978, 3066, 4440, 262, 31575, 102141, 1750, 323, 82786, 17719, 26, 200008, 200005, 140680, 200006, 368]])
+        inputs = inputs.to(model.device)
+        out = model.generate(inputs, do_sample=False, max_new_tokens=4, use_cache=False)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
@@ -565,8 +585,8 @@ LLAMA4_TEXT_POST_TRAIN_SPECIAL_TOKENS = [
     "<|python_end|>",
     "<|finetune_right_pad|>",
 ] + get_reserved_special_tokens(
-    "text_post_train", 61, 6
-)  # <|text_post_train_reserved_special_token_6|>, ..., <|text_post_train_reserved_special_token_66|>
+    "text_post_train", 61, 8
+)  # <|text_post_train_reserved_special_token_8|>, ..., <|text_post_train_reserved_special_token_68|>
 
 # 200080, ..., 201133
 LLAMA4_VISION_SPECIAL_TOKENS = [
