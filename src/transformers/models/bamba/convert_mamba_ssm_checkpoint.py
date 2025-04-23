@@ -267,7 +267,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
-        args.mamba2_checkpoint_directory,
+        args.mamba_ssm_checkpoint_directory,
         args.precision,
         args.output_dir,
     )
