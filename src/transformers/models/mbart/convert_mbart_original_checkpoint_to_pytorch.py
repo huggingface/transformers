@@ -43,7 +43,7 @@ def make_linear_from_emb(emb):
 def convert_fairseq_mbart_checkpoint_from_disk(
     checkpoint_path, hf_config_path="facebook/mbart-large-en-ro", finetuned=False, mbart_50=False
 ):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
 

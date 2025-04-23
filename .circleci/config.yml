@@ -27,7 +27,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality:dev
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
@@ -87,7 +87,7 @@ jobs:
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality:dev
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
@@ -138,7 +138,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality:dev
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -154,7 +154,7 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
             - run: ruff check examples tests src utils
-            - run: ruff format tests src utils --check
+            - run: ruff format examples tests src utils --check
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
             - run: python utils/check_doc_toc.py
@@ -163,7 +163,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-consistency:dev
+            - image: huggingface/transformers-consistency
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes

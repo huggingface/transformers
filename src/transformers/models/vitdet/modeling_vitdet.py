@@ -535,7 +535,7 @@ class VitDetEncoder(nn.Module):
         depth = config.num_hidden_layers
 
         # stochastic depth decay rule
-        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth, device="cpu")]
 
         layers = []
         for i in range(depth):

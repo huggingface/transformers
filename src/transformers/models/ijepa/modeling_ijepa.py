@@ -187,6 +187,8 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
 def eager_attention_forward(
@@ -465,8 +467,8 @@ class IJepaEncoder(nn.Module):
 class IJepaPooler(nn.Module):
     def __init__(self, config: IJepaConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
+        self.activation = ACT2FN[config.pooler_act]
 
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding

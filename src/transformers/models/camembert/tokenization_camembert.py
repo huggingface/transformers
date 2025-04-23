@@ -22,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class CamembertTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Construct a CamemBERT tokenizer. Based on
