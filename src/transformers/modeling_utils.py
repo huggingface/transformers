@@ -21,7 +21,6 @@ import importlib.metadata
 import inspect
 import itertools
 import json
-import math
 import os
 import re
 import shutil
@@ -285,6 +284,21 @@ def restore_default_torch_dtype(func):
             torch.set_default_dtype(old_dtype)
 
     return _wrapper
+
+
+def get_torch_context_manager_or_global_device():
+    """
+    Test if a device context manager is currently in use, or if it is not the case, check if the default device
+    is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
+    """
+    device_in_context = torch.tensor([]).device
+    default_device = torch.get_default_device()
+    # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
+    if device_in_context == default_device:
+        if default_device != torch.device("cpu"):
+            return default_device
+        return None
+    return device_in_context
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -711,12 +725,11 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
+    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.HQQ,
         QuantizationMethod.BITS_AND_BYTES,
-        QuantizationMethod.QUARK,
     }
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_quark
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
@@ -2449,6 +2462,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._init_weights(module)
         module._is_hf_initialized = True
 
+    @torch.no_grad()
+    def initialize_weights(self):
+        """
+        This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
+        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the
+        module graph along the recursion. It can handle an arbitrary number of sub-models. Without it, every composite
+        model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
+        is extremely error prone and inefficient.
+
+        Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
+        `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
+        `module.weight.data.zero_()`.
+        """
+        if not hasattr(torch.nn.Module, "smart_apply"):
+            # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
+            # to apply as we go down the graph
+            def smart_apply(self, fn):
+                for module in self.children():
+                    # We found a sub-model: recursively dispatch its own init function now!
+                    if hasattr(module, "_init_weights"):
+                        module.smart_apply(module._initialize_weights)
+                    else:
+                        module.smart_apply(fn)
+                fn(self)
+                return self
+
+            torch.nn.Module.smart_apply = smart_apply
+
+        # Let the magic happen with this simple call
+        self.smart_apply(self._initialize_weights)
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -3074,7 +3118,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if _init_weights:
             # Initialize weights
-            self.apply(self._initialize_weights)
+            self.initialize_weights()
 
             # Tie weights should be skipped when not initializing all weights
             # since from_pretrained(...) calls tie weights anyways
@@ -4122,6 +4166,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         else:
             _adapter_model_path = None
 
+        # Potentially detect context manager or global device, and use it (only if no device_map was provided)
+        if device_map is None and not is_deepspeed_zero3_enabled():
+            device_in_context = get_torch_context_manager_or_global_device()
+            if device_in_context == torch.device("meta"):
+                # TODO Cyril: raise an error instead of the warning in v4.53 (and change the test to check for raise instead of success)
+                logger.warning(
+                    "We detected that you are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`\n"
+                    "This is an anti-pattern and will raise an Error in version v4.53\nIf you want to initialize a model on the meta device, use "
+                    "the context manager or global device with `from_config`, or `ModelClass(config)`"
+                )
+            device_map = device_in_context
+
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
             device_map = {"": device_map}
@@ -4146,7 +4202,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
             if not is_accelerate_available():
                 raise ValueError(
-                    "Using a `device_map` or `tp_plan` requires `accelerate`. You can install it with `pip install accelerate`"
+                    (
+                        "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
+                        "requires `accelerate`. You can install it with `pip install accelerate`"
+                    )
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -4640,10 +4699,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
-            QuantizationMethod.QUARK,
         }
 
         # Get all the keys of the state dicts that we have to initialize the model
@@ -4808,7 +4866,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
+            caching_allocator_warmup(model_to_load, expanded_device_map, hf_quantizer)
 
         error_msgs = []
         # Iterate on all the shards to load the weights
@@ -4820,7 +4878,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             map_location = "cpu"
             if (
                 shard_file.endswith(".safetensors")
-                and not is_hqq_or_bnb_or_quark
+                and not is_hqq_or_bnb
                 and not (is_deepspeed_zero3_enabled() and not is_quantized)
             ):
                 map_location = "meta"
@@ -5286,9 +5344,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 )
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
-                self.apply(self._initialize_weights)
+                self.initialize_weights()
         else:
-            self.apply(self._initialize_weights)
+            self.initialize_weights()
 
     def get_parameter_or_buffer(self, target: str):
         """
@@ -5326,6 +5384,10 @@ class PoolerStartLogits(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerStartLogits` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerStartLogits`."
+        )
 
     def forward(
         self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
@@ -5368,6 +5430,10 @@ class PoolerEndLogits(nn.Module):
         self.activation = nn.Tanh()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense_1 = nn.Linear(config.hidden_size, 1)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerEndLogits` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerEndLogits`."
+        )
 
     def forward(
         self,
@@ -5435,6 +5501,10 @@ class PoolerAnswerClass(nn.Module):
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.activation = nn.Tanh()
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
+        logger.warning_once(
+            "[DEPRECATION WARNING] `PoolerAnswerClass` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMPoolerAnswerClass`."
+        )
 
     def forward(
         self,
@@ -5516,6 +5586,12 @@ class SquadHeadOutput(ModelOutput):
     end_top_index: Optional[torch.LongTensor] = None
     cls_logits: Optional[torch.FloatTensor] = None
 
+    def __post_init__(self):
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SquadHeadOutput` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSquadHeadOutput`."
+        )
+
 
 class SQuADHead(nn.Module):
     r"""
@@ -5535,6 +5611,11 @@ class SQuADHead(nn.Module):
         self.start_logits = PoolerStartLogits(config)
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
+
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SQuADHead` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSQuADHead`."
+        )
 
     @replace_return_docstrings(output_type=SquadHeadOutput, config_class=PretrainedConfig)
     def forward(
@@ -5689,6 +5770,11 @@ class SequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
+        logger.warning_once(
+            "[DEPRECATION WARNING] `SequenceSummary` is deprecated and will be removed in v4.53. "
+            "Please use model-specific class, e.g. `XLMSequenceSummary`."
+        )
+
     def forward(
         self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
     ) -> torch.FloatTensor:
@@ -5775,7 +5861,17 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, factor=2):
+def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
+    """Check if the device is an accelerator. We need to function, as device_map can be "disk" as well, which is not
+    a proper `torch.device`.
+    """
+    if device == "disk":
+        return False
+    else:
+        return torch.device(device).type not in ["meta", "cpu"]
+
+
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
     the model, which is actually the loading speed botteneck.
@@ -5794,9 +5890,11 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    # Remove disk and cpu devices, and cast to proper torch.device
+    factor = 2 if hf_quantizer is None else hf_quantizer.get_cuda_warm_up_factor()
+
+    # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
-        param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
+        param: torch.device(device) for param, device in expanded_device_map.items() if is_accelerator_device(device)
     }
     if not len(accelerator_device_map):
         return
@@ -5810,7 +5908,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = math.prod(param.shape) * param.element_size()
+        param_byte_count = param.numel() * param.element_size()
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
@@ -5823,8 +5921,14 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         if device.type == "cuda":
             index = device.index if device.index is not None else torch.cuda.current_device()
             device_memory = torch.cuda.mem_get_info(index)[0]
-            # Allow up to 95% of max device memory
-            byte_count = min(byte_count, int(0.95 * device_memory))
+            # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
+            # than that amount might sometimes lead to unecesary cuda OOM, if the last parameter to be loaded on the device is large,
+            # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
+            # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
+            # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
+            # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
+            # if using e.g. 90% of device size, while a 140GiB device would allocate too little
+            byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 

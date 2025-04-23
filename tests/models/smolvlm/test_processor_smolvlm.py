@@ -435,7 +435,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modality="image")
@@ -445,14 +446,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            padding="longest",
+            padding="max_length",
             max_length=76,
             truncation=True,
-            max_image_size={"longest_edge": 30},
+            max_image_size={"longest_edge": 300},
         )
 
         self.assertEqual(inputs["pixel_values"].shape[2], 3)
-        self.assertEqual(inputs["pixel_values"].shape[3], 30)
+        self.assertEqual(inputs["pixel_values"].shape[3], 300)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
@@ -529,3 +530,29 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             processor(text=texts, images=None)
         self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=20,
+            )

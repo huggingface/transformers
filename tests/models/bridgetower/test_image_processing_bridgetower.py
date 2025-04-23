@@ -16,18 +16,24 @@
 import unittest
 from typing import Optional, Union
 
-import numpy as np
+import requests
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import BridgeTowerImageProcessor
+
+    if is_torchvision_available():
+        from transformers import BridgeTowerImageProcessorFast
 
 
 class BridgeTowerImageProcessingTester:
@@ -76,46 +82,7 @@ class BridgeTowerImageProcessingTester:
         }
 
     def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to BridgeTowerImageProcessor,
-        assuming do_resize is set to True with a scalar size and size_divisor.
-        """
-        if not batched:
-            size = self.size["shortest_edge"]
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            scale = size / min(w, h)
-            if h < w:
-                newh, neww = size, scale * w
-            else:
-                newh, neww = scale * h, size
-
-            max_size = int((1333 / 800) * size)
-            if max(newh, neww) > max_size:
-                scale = max_size / max(newh, neww)
-                newh = newh * scale
-                neww = neww * scale
-
-            newh, neww = int(newh + 0.5), int(neww + 0.5)
-            expected_height, expected_width = (
-                newh // self.size_divisor * self.size_divisor,
-                neww // self.size_divisor * self.size_divisor,
-            )
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
+        return self.size["shortest_edge"], self.size["shortest_edge"]
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
@@ -137,6 +104,7 @@ class BridgeTowerImageProcessingTester:
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BridgeTowerImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BridgeTowerImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -147,10 +115,60 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "size_divisor"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+
+    def _assertEquivalence(self, a, b):
+        self.assertTrue(torch.allclose(a, b, atol=1e-1))
+        self.assertLessEqual(torch.mean(torch.abs(a - b)).item(), 1e-3)
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+
+        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assertEquivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assertEquivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())

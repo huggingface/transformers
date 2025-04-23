@@ -47,7 +47,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -1115,6 +1114,13 @@ class JambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JambaRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JambaMambaMixer):
+            A = torch.arange(1, module.ssm_state_size + 1)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.data.copy_(torch.log(A))
+            module.D.data.fill_(1.0)
 
 
 JAMBA_INPUTS_DOCSTRING = r"""
@@ -1427,7 +1433,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
