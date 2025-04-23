@@ -20,6 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    convert_to_rgb,
     get_resize_output_image_size,
     pad,
     resize,
@@ -40,7 +41,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_vision_available, requires
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +51,7 @@ if is_vision_available():
     import PIL
 
 
+@requires(backends=("vision",))
 class DonutImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Donut image processor.
@@ -150,10 +152,21 @@ class DonutImageProcessor(BaseImageProcessor):
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        if input_data_format == ChannelDimension.LAST:
+            rot_axes = (0, 1)
+        elif input_data_format == ChannelDimension.FIRST:
+            rot_axes = (1, 2)
+        else:
+            raise ValueError(f"Unsupported data format: {input_data_format}")
+
         if (output_width < output_height and input_width > input_height) or (
             output_width > output_height and input_width < input_height
         ):
-            image = np.rot90(image, 3)
+            image = np.rot90(image, 3, axes=rot_axes)
 
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -299,16 +312,16 @@ class DonutImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_pad: bool = None,
+        do_thumbnail: Optional[bool] = None,
+        do_align_long_axis: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
         random_padding: bool = False,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -405,6 +418,8 @@ class DonutImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
+
+        images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

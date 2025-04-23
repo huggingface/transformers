@@ -2271,3 +2271,15 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MegaForCausalLM",
+    "MegaForMaskedLM",
+    "MegaForMultipleChoice",
+    "MegaForQuestionAnswering",
+    "MegaForSequenceClassification",
+    "MegaForTokenClassification",
+    "MegaModel",
+    "MegaPreTrainedModel",
+]

@@ -112,12 +112,12 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
-    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.26.0,<1.0",
+    "hf_xet",
+    "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -129,7 +129,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
-    "kernels>=0.3.2,<0.4",
+    "kernels>=0.4.4,<0.5",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -163,6 +163,9 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.11.2",
+    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
+    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
+    # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.4.3",
@@ -186,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.0",
+    "torch>=2.1",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -283,6 +286,7 @@ extras["tf-cpu"] = deps_list(
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
+extras["hf_xet"] = deps_list("hf_xet")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
@@ -307,7 +311,12 @@ extras["hub-kernels"] = deps_list("kernels")
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5")
+extras["audio"] = deps_list(
+    "librosa",
+    "pyctcdecode",
+    "phonemizer",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
+)
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -338,7 +347,6 @@ extras["testing"] = (
         "evaluate",
         "pytest-timeout",
         "ruff",
-        "sacrebleu",
         "rouge-score",
         "nltk",
         "GitPython",
@@ -348,6 +356,7 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -424,10 +433,6 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
-extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
-)
-
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
@@ -446,7 +451,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.51.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.52.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

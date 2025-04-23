@@ -906,3 +906,6 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         if not return_dict:
             return tuple(x for x in [loss, logits, hidden_states] if x is not None)
         return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
+
+
+__all__ = ["GraphormerForGraphClassification", "GraphormerModel", "GraphormerPreTrainedModel"]

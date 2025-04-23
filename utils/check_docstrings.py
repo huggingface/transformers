@@ -67,6 +67,7 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Llama4Processor",
     # Deprecated
     "InputExample",
     "InputFeatures",
@@ -105,7 +106,6 @@ OBJECTS_TO_IGNORE = [
     "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2QFormerConfig",
     "Blip2VisionConfig",
     "BlipTextConfig",
     "BlipVisionConfig",
@@ -383,6 +383,7 @@ OBJECTS_TO_IGNORE = [
     "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
+    "MLCDVisionConfig",
     "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
@@ -579,6 +580,7 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "Llama4TextConfig",
 ]
 
 # Supported math operations when interpreting the value of defaults.

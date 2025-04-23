@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -297,6 +297,20 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_video = prcocess_out.pixel_values_videos
                 expected_output_video_shape = (171500, 1176)
                 self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+
+    def test_custom_image_size(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                image_processing.save_pretrained(tmpdirname)
+                image_processor_loaded = image_processing_class.from_pretrained(
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                )
+
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            prcocess_out = image_processor_loaded(image_inputs, return_tensors="pt")
+            expected_output_video_shape = [112, 1176]
+            self.assertListEqual(list(prcocess_out.pixel_values.shape), expected_output_video_shape)
 
     @require_vision
     @require_torch

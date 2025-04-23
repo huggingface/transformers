@@ -786,3 +786,6 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
+
+
+__all__ = ["MCTCTForCTC", "MCTCTModel", "MCTCTPreTrainedModel"]

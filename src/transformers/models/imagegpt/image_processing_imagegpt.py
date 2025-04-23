@@ -32,6 +32,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -56,6 +57,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
+@requires(backends=("vision",))
 class ImageGPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ImageGPT image processor. This image processor can be used to resize images to a smaller resolution
@@ -177,10 +179,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_normalize: bool = None,
+        do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

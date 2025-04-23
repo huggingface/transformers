@@ -79,7 +79,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     model_type = "vision-encoder-decoder"
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

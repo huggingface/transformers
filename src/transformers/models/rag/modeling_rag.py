@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -112,8 +112,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
@@ -202,8 +202,8 @@ class RetrievAugLMOutput(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    doc_scores: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    doc_scores: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
@@ -1122,7 +1122,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
-class RagTokenForGeneration(RagPreTrainedModel):
+class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,

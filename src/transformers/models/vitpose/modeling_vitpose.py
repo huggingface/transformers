@@ -62,7 +62,7 @@ class VitPoseEstimatorOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    heatmaps: torch.FloatTensor = None
+    heatmaps: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 

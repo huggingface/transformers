@@ -19,7 +19,6 @@ from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
-    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -39,11 +38,15 @@ from .test_pipelines_common import ANY
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+    example_video_filepath = None
 
-    if _run_pipeline_tests:
-        example_video_filepath = hf_hub_download(
-            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
-        )
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls.example_video_filepath is None:
+            cls.example_video_filepath = hf_hub_download(
+                repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
+            )
 
     def get_test_pipeline(
         self,
@@ -54,6 +57,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
+        self._load_dataset()
         video_classifier = VideoClassificationPipeline(
             model=model,
             tokenizer=tokenizer,

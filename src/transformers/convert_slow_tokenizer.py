@@ -1730,7 +1730,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             ).converted()
         except Exception:
             raise ValueError(
-                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"Converting from SentencePiece and Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
                 f"with a SentencePiece tokenizer.model file."
                 f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )

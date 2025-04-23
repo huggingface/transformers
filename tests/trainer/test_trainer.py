@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -100,7 +99,6 @@ from transformers.testing_utils import (
     require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
-    require_torchdynamo,
     require_vision,
     require_wandb,
     run_first,
@@ -3995,10 +3993,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_non_xpu
     @require_torch_non_multi_gpu
-    @require_torchdynamo
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
-        import torchdynamo
+        from torch import _dynamo as torchdynamo
 
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
@@ -4018,30 +4015,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             del trainer
 
             # 2. TorchDynamo eager
-            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager", output_dir=tmp_dir)
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, torch_compile_backend="eager", output_dir=tmp_dir
+            )
             metrics = trainer.evaluate()
             self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
             del trainer
             torchdynamo.reset()
 
             # 3. TorchDynamo nvfuser
-            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser", output_dir=tmp_dir)
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, torch_compile_backend="nvfuser", output_dir=tmp_dir
+            )
             metrics = trainer.evaluate()
             self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
             torchdynamo.reset()
 
             # 4. TorchDynamo fx2trt
-            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt", output_dir=tmp_dir)
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, torch_compile_backend="fx2trt", output_dir=tmp_dir
+            )
             metrics = trainer.evaluate()
             self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
             torchdynamo.reset()
 
-    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
-    @require_torchdynamo
+    @require_torch_gpu
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
-        import torchdynamo
+        from torch import _dynamo as torchdynamo
 
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
@@ -4086,7 +4088,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
             a.grad = None
-            args = TrainingArguments(output_dir=tmp_dir, torchdynamo="nvfuser")
+            args = TrainingArguments(output_dir=tmp_dir, torch_compile_backend="nvfuser")
             trainer = CustomTrainer(model=mod, args=args)
             # warmup
             for _ in range(10):
@@ -4923,8 +4925,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
             "git log".split(),
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             check=True,
             encoding="utf-8",
             cwd=repo,
@@ -5961,3 +5962,22 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             param = next(model.parameters())
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
+
+    @require_bitsandbytes
+    def test_bnb_8bit_optimizer_skip_embedding(self):
+        model = BasicTextGenerationModel(8, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for name_optim in ["rmsprop_bnb_8bit", "adamw_8bit"]:
+                args = TrainingArguments(
+                    output_dir=tmp_dir,
+                    report_to="none",
+                    optim=name_optim,
+                )
+                trainer = Trainer(model=model, args=args)
+                optimizer = trainer.create_optimizer()
+                modules = optimizer.mng.module_weight_config_triple
+                self.assertNotEqual(len(modules), 0)
+                module, name, config = modules[0]
+                self.assertIsInstance(module, torch.nn.Embedding)
+                self.assertEqual(name, "weight")
+                self.assertDictEqual(config, {"optim_bits": 32})
