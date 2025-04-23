@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -306,10 +305,6 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
-
-    # Ignore copy
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
 
     @require_flash_attn
     @require_torch_gpu

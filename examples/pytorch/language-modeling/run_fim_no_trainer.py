@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -518,7 +517,7 @@ def main():
                 covariance_matrix=1e-5 * sigma,
             )
             new_token_embeddings = torch.stack(
-                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                tuple(dist.sample() for _ in range(len(special_tokens))),
                 dim=0,
             )
     else:
@@ -538,7 +537,7 @@ def main():
             covariance_matrix=1e-5 * sigma,
         )
         new_token_embeddings = torch.stack(
-            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            tuple(dist.sample() for _ in range(len(special_tokens))),
             dim=0,
         )
 
@@ -892,9 +891,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -908,6 +904,9 @@ def main():
 
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump({"perplexity": perplexity}, f)
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

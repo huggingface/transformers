@@ -639,9 +639,9 @@ class HieraEncoder(nn.Module):
         super().__init__()
         total_depth = sum(config.depths)
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, total_depth)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, total_depth, device="cpu")]
         # query strides rule
-        cumulative_depths = torch.tensor(config.depths).cumsum(0).tolist()
+        cumulative_depths = torch.tensor(config.depths, device="cpu").cumsum(0).tolist()
         query_pool_layer = cumulative_depths[: config.num_query_pool]
         query_strides = [math.prod(config.query_stride) if i in query_pool_layer else 1 for i in range(total_depth)]
 

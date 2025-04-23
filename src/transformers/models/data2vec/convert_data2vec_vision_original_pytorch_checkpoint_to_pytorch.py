@@ -224,7 +224,7 @@ def load_beit_model(args, is_finetuned, is_large):
     )
     patch_size = model.patch_embed.patch_size
     args.window_size = (args.input_size // patch_size[0], args.input_size // patch_size[1])
-    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu")
+    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu", weights_only=True)
 
     print(f"Load ckpt from {args.beit_checkpoint}")
     checkpoint_model = None

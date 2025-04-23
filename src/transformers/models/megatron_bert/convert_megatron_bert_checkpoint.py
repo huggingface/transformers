@@ -294,9 +294,9 @@ def main():
     if args.path_to_checkpoint.endswith(".zip"):
         with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
             with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
-                input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+                input_state_dict = torch.load(pytorch_dict, map_location="cpu", weights_only=True)
     else:
-        input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
+        input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu", weights_only=True)
 
     if args.config_file == "":
         # Default config of megatron-bert 345m

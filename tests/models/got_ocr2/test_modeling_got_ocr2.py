@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -221,12 +220,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
-    )
-    def test_past_key_values_format(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")

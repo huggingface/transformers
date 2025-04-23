@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -340,11 +339,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")

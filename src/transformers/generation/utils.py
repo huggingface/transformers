@@ -33,7 +33,9 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
+    HybridChunkedCache,
     OffloadedCache,
+    OffloadedHybridCache,
     QuantizedCacheConfig,
     StaticCache,
 )
@@ -561,17 +563,17 @@ class GenerationMixin:
                 device = model_inputs[input_ids_key].device
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
-            # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = getattr(self, self.base_model_prefix, None)
-            if base_model is None:
+            # the 4D causal mask exists, it should be present in the base model (XXXModel class) or in its decoder.
+            base_model = getattr(self, self.base_model_prefix, self)
+            decoder = base_model.get_decoder() if hasattr(base_model, "get_decoder") else None
+            causal_mask_creation_function = getattr(
+                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+            )
+            if causal_mask_creation_function is None and decoder is not None:  # it may be in the decoder
                 causal_mask_creation_function = getattr(
-                    self, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                    decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
                 )
-            else:
-                causal_mask_creation_function = getattr(
-                    base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
-                )
-            if causal_mask_creation_function is None:
+            if causal_mask_creation_function is None:  # can't be found
                 logger.warning_once(
                     f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
                     "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
@@ -962,8 +964,14 @@ class GenerationMixin:
         elif different_tokenizers:
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
-                    target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device
+                    target_tokenizer,
+                    assistant_tokenizer,
+                    self.config.vocab_size,
+                    assistant_model=assistant_model,
+                    assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
+                # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
+                assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,
@@ -1430,27 +1438,6 @@ class GenerationMixin:
 
         return transition_scores
 
-    def _validate_model_class(self):
-        """
-        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
-        right class to use.
-        """
-        # TODO(joao): remove this function in v4.50, i.e. when we remove the inheritance of `GenerationMixin` from
-        # `PreTrainedModel`. With that inheritance removed, all model classes inheriting from `GenerationMixin` can
-        # safely call `GenerationMixin.generate`
-        if not self.can_generate():
-            terminations_with_generation_support = [
-                "ForCausalLM",
-                "ForConditionalGeneration",
-                "ForSpeechSeq2Seq",
-                "ForVision2Seq",
-            ]
-            raise TypeError(
-                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
-                "it doesn't have a language model head. Classes that support generation often end in one of these "
-                f"names: {terminations_with_generation_support}."
-            )
-
     def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
         if assistant_model is None:
             return
@@ -1848,6 +1835,9 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != batch_size
+            or isinstance(
+                cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
+            )  # due to internal slicing, we always re-init
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1962,6 +1952,9 @@ class GenerationMixin:
             )
             generation_config.cache_implementation = None
 
+        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
+            self.config.get_text_config(), "cache_implementation", None
+        )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._supports_static_cache:
@@ -2211,7 +2204,6 @@ class GenerationMixin:
         """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
 

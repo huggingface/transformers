@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -279,10 +278,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_compile_model_forward(self):
         pass
 
 

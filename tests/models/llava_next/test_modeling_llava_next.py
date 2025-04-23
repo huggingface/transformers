@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -340,10 +339,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA Next has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 
