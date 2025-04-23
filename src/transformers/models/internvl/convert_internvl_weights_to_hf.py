@@ -312,6 +312,7 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, 
                 "start_image_token": "<img>",
                 "end_image_token": "</img>",
                 "context_image_token": "<IMG_CONTEXT>",
+                "video_token": "<video>",
             },
         )
         tokenizer.model_max_length = CONTEXT_LENGTH
