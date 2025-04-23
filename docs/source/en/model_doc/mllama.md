@@ -124,7 +124,6 @@ print(processor.decode(output[0]))
 
    ```py
    prompt = "<|image|> What does the image show?"
-   \```
 
 - MLlama's input and output embeddings are not tied which means the `lm_head` layer has one less token (the `<|image|>` placeholder token) and fails if you want to calculate loss on image tokens or apply logit processors. For training, make sure to mask the `<|image|>` token in `labels` because the model should not be trained on predicting them.
 - For CUDA index errors during generation, expand the `lm_head` by one token.
