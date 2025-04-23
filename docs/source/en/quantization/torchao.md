@@ -149,7 +149,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int8WeightOnlyConfig
+from torchao.quantization import Int8DynamicActivationInt8WeightConfig
 
 quant_config = Int8DynamicActivationInt8WeightConfig()
 # or int8 weight only quantization
@@ -179,7 +179,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
+from torchao.quantization import GemliteUIntXWeightOnlyConfig
 
 # For batch size N, we recommend gemlite, which may require autotuning
 # default is 4 bit, 8 bit is also supported by passing `bit_width=8`
@@ -216,7 +216,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int8WeightOnlyConfig
+from torchao.quantization import Int8DynamicActivationInt8WeightConfig
 
 quant_config = Int8DynamicActivationInt8WeightConfig()
 # quant_config = Int8WeightOnlyConfig()
