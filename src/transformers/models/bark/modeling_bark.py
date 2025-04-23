@@ -1602,7 +1602,7 @@ class BarkModel(BarkPreTrainedModel):
 
     def enable_cpu_offload(
         self,
-        gpu_id: Optional[int] = 0,
+        accelerator_id: Optional[int] = 0,
         **kwargs,
     ):
         r"""
@@ -1610,22 +1610,22 @@ class BarkModel(BarkPreTrainedModel):
         method moves one whole sub-model at a time to the accelerator when it is used, and the sub-model remains in accelerator until the next sub-model runs.
 
         Args:
-            gpu_id (`int`, *optional*, defaults to 0):
+            accelerator_id (`int`, *optional*, defaults to 0):
                 accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
             kwargs (`dict`, *optional*):
                 additional keyword arguments:
-                    `accelerator_id`: accelerator id on which the sub-models will be loaded and offloaded.
+                    `gpu_id`: accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
 
-        accelerator_id = kwargs.get("accelerator_id", 0)
+        gpu_id = kwargs.get("gpu_id", 0)
 
         if gpu_id != 0:
             warnings.warn(
-                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers, you can use `accelerator_id` through kwargs instead.",
+                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers. Please use `accelerator_id` instead.",
                 FutureWarning,
             )
             accelerator_id = gpu_id
