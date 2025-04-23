@@ -1343,6 +1343,37 @@ class CsmBackboneModel(CsmPreTrainedModel):
         return causal_mask
 
 
+@dataclass
+class CsmGenerateOutput(GenerateDecoderOnlyOutput):
+    """
+    TODO: udpate
+    Outputs of decoder-only generation models, when using non-beam methods.
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+            Returns the model cache, used to speed up decoding. Different models have a different cache format, check
+    """
+
+    audio: Optional[List[torch.Tensor]] = None
+
+
 CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=BACKBONE_INPUT_IDS_DOCSTRING)
 
 
@@ -1548,7 +1579,9 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         - stop when all the generated codebook tokens are the codebook_eos_token_id
         """
         # init values
-        pad_token_id = generation_config._pad_token_tensor
+        # *************** Csm specific ***************
+        pad_token_id = self.config.codebook_pad_token_id
+        # ============================================
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -1830,9 +1863,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
             # same for the audio eos token
             audio_eos_frame_ids = (
-                torch.ones(
-                    (input_ids.shape[0], 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long
-                )
+                torch.ones((1, 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
                 * self.config.codebook_eos_token_id
             )
             audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
@@ -1867,6 +1898,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         synced_gpus: Optional[bool] = None,  # TODO: to test
         streamer: Optional["BaseStreamer"] = None,  # TODO: to test
         depth_decoder_generate_kwargs: Optional[Dict[str, Any]] = None,
+        output_audio: Optional[bool] = False,
         **kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -1932,7 +1964,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
                 "Csm does not support `output_hidden_states=False`, this will be ignored in favor of `True`."
             )
 
-        return super().generate(
+        generate_output = super().generate(
             input_ids=input_ids,
             input_values=input_values,
             input_values_mask=input_values_mask,
@@ -1945,6 +1977,34 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             output_hidden_states=True,
             **kwargs,
         )
+
+        if not output_audio:
+            return CsmGenerateOutput(**generate_output)
+        else:
+            generate_returned_dict = not isinstance(generate_output, torch.Tensor)
+            if generate_returned_dict:
+                generated_audio_codes = generate_output.sequences
+            else:
+                generated_audio_codes = generate_output
+
+            # infer the codec model
+            with torch.no_grad():
+                audio_values = []
+                for audio_codes_batch in generated_audio_codes:
+                    eos_idxs = (audio_codes_batch == self.config.codebook_eos_token_id).all(dim=-1).nonzero()
+                    if eos_idxs.numel() != 0:
+                        cutoff_idx = eos_idxs.min()
+                    else:
+                        cutoff_idx = audio_codes_batch.shape[1]
+
+                    audio_codes_batch = audio_codes_batch[:cutoff_idx]
+                    codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
+                    audio_values.append(codec_decode_output.audio_values[0, 0])
+
+            if generate_returned_dict:
+                return CsmGenerateOutput(audio=audio_values, **generate_output)
+            else:
+                return (generated_audio_codes, audio_values)
 
 
 __all__ = ["CsmDepthDecoderModel", "CsmDepthDecoderForCausalLM", "CsmBackboneModel", "CsmForCausalLM"]
