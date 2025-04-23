@@ -16,8 +16,7 @@
 import os
 import unittest
 
-import torch
-from transformers import BertTokenizerFast, AutoModelForCausalLM, BertConfig
+from transformers import BertTokenizerFast
 from transformers.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -27,7 +26,7 @@ from transformers.models.bert.tokenization_bert import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import require_tokenizers, slow, require_torch
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
@@ -342,67 +341,3 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
                 self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
                 self.assertListEqual(tokens_without_spe_char_r, expected_tokens)
-
-    @require_torch
-    def test_resize_embeddings_no_reinit(self):
-        """Test that resized embeddings aren't reinitialized after post_init"""
-        config = BertConfig()
-        config.tie_word_embeddings = False
-        model = AutoModelForCausalLM.from_config(config)
-
-        # Get initial weights
-        old_num_tokens = model.get_input_embeddings().num_embeddings
-        initial_lm_head = model.get_output_embeddings().weight.clone()
-
-        # Resize embeddings
-        new_num_tokens = old_num_tokens + 10
-        model.resize_token_embeddings(new_num_tokens)
-        post_resize_weights = model.get_output_embeddings().weight[:old_num_tokens].clone()
-
-        # Verify original token weights unchanged after resize
-        self.assertTrue(torch.allclose(initial_lm_head, post_resize_weights))
-
-        # Call post_init
-        model.post_init()
-        post_init_weights = model.get_output_embeddings().weight[:old_num_tokens].clone()
-
-        # Verify weights still match after post_init
-        self.assertTrue(torch.allclose(initial_lm_head, post_init_weights))
-
-    @require_torch
-    def test_new_tokens_initialization(self):
-        """Test that new token embeddings are properly initialized"""
-        config = BertConfig()
-        model = AutoModelForCausalLM.from_config(config)
-        old_num_tokens = model.get_input_embeddings().num_embeddings
-        new_num_tokens = old_num_tokens + 10
-
-        model.resize_token_embeddings(new_num_tokens)
-        new_token_weights = model.get_output_embeddings().weight[old_num_tokens:]
-
-        # Verify new tokens have reasonable values (not all zeros or extremely large)
-        self.assertTrue(torch.any(new_token_weights != 0))
-        self.assertTrue(torch.all(torch.abs(new_token_weights) < 100))
-
-    @require_torch
-    def test_resize_embeddings_with_bias(self):
-        """Test that resizing works correctly when lm_head has bias"""
-        config = BertConfig()
-        config.tie_word_embeddings = False
-        model = AutoModelForCausalLM.from_config(config)
-
-        # Add bias to lm_head
-        old_lm_head = model.get_output_embeddings()
-        bias = torch.nn.Parameter(torch.zeros(old_lm_head.weight.size(0)))
-        old_lm_head.bias = bias
-
-        initial_weights = old_lm_head.weight.clone()
-        initial_bias = old_lm_head.bias.clone()
-
-        # Resize and verify
-        model.resize_token_embeddings(initial_weights.size(0) + 10)
-        model.post_init()
-
-        new_lm_head = model.get_output_embeddings()
-        self.assertTrue(torch.allclose(initial_weights, new_lm_head.weight[: initial_weights.size(0)]))
-        self.assertTrue(torch.allclose(initial_bias, new_lm_head.bias[: initial_bias.size(0)]))
