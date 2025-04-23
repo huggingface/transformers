@@ -84,6 +84,11 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] MobileNetV2ImageProcessor
     - preprocess
+
+## MobileNetV2ImageProcessorFast
+
+[[autodoc]] MobileNetV2ImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
 
 ## MobileNetV2Model
