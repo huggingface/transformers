@@ -16,15 +16,17 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -91,6 +93,55 @@ class InternVLVisionAttention(JanusVisionAttention):
 
         self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
         self.k_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ):
+        batch_size, seq_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
+        query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
+
+        output = self.projection_layer(attn_output)
+        output = self.projection_dropout(output)
+
+        outputs = (output, attn_weights) if output_attentions else (output, None)
+        return outputs
 
 
 class InternVLVisionPreTrainedModel(PreTrainedModel):
@@ -609,26 +660,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
     @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
-        **lm_kwargs,
-    ) -> Union[Tuple, InternVLCausalLMOutputWithPast]:
+    def forward(**super_kwargs):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -679,25 +711,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
         The images depict the Statue of Liberty and the Golden Gate Bridge.
         ```"""
-        super().forward(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            labels=labels,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            image_sizes=image_sizes,
-            **lm_kwargs,
-        )
+        super().forward(**super_kwargs)
 
 
 __all__ = [
