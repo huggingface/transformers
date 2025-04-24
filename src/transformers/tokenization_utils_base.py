@@ -2044,10 +2044,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 # We should not raise errors for files that are not strictly needed, but we should do it for the others
-                raise_errors = not (
-                    file_path in [ADDED_TOKENS_FILE, SPECIAL_TOKENS_MAP_FILE, CHAT_TEMPLATE_FILE]
-                    or CHAT_TEMPLATE_DIR in file_path
-                )
+                raise_errors = file_path in cls.vocab_files_names
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,
                     file_path,
