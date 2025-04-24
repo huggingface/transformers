@@ -16,6 +16,7 @@ import copy
 import unittest
 
 from parameterized import parameterized
+from types import SimpleNamespace
 
 from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
@@ -46,6 +47,8 @@ if is_torch_available():
         GenerationConfig,
         LlamaConfig,
         StaticCache,
+        SlidingWindowCache,
+        HybridCache,
         convert_and_export_with_cache,
     )
 
@@ -695,3 +698,201 @@ class CacheExportIntegrationTest(unittest.TestCase):
             dynamic_shapes=dynamic_shapes,
             strict=False,
         )
+
+class SyntheticCacheTest(unittest.TestCase):
+    """
+    Synthetic tests for StaticCache, SlidingWindowCache, and HybridCache.
+    Uses window_size=4, max_cache_len=4 for all tests.
+    """
+    
+    def setUp(self):
+        """Set up common configuration for all tests."""
+        self.window_size = 4
+        self.max_cache_len = 4
+        self.config = SimpleNamespace(
+            num_hidden_layers=1,
+            num_key_value_heads=1,
+            num_attention_heads=1,
+            head_dim=1,
+            hidden_size=1,
+            sliding_window=self.window_size,
+            sliding_window_pattern=2 # Example pattern
+        )
+
+    def _extract_both_caches(self, cache):
+        """Helper to extract flattened key and value states from the cache."""
+        # Assumes layer 0, batch 0, head 0
+        k = cache.key_cache[0][0, 0, :, 0].tolist()
+        v = cache.value_cache[0][0, 0, :, 0].tolist()
+        return k, v
+
+    def test_static_cache_within_bounds(self):
+        """
+        Test StaticCache preserves values at written positions within bounds.
+        Example (max_cache_len=4):
+        step 1 (pos 0): [1.0, 0.0, 0.0, 0.0]
+        step 2 (pos 1): [1.0, 2.0, 0.0, 0.0]
+        step 3 (pos 2): [1.0, 2.0, 3.0, 0.0]
+        step 4 (pos 3): [1.0, 2.0, 3.0, 4.0]
+        """
+        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        expected_state = [0.0] * self.max_cache_len
+        
+        for step in range(1, self.max_cache_len + 1): # Test up to cache capacity
+            pos_idx = step - 1
+            value = float(step)
+            
+            static_cache.update(
+                key_states=torch.tensor([[[[value]]]]),
+                value_states=torch.tensor([[[[value]]]]), # Use same value for simplicity
+                layer_idx=0,
+                cache_kwargs={"cache_position": torch.tensor([pos_idx])}
+            )
+            
+            expected_state[pos_idx] = value
+            stored_keys, stored_values = self._extract_both_caches(static_cache)
+            
+            self.assertEqual(stored_keys, expected_state, f"Static Key cache failed at step {step}")
+            self.assertEqual(stored_values, expected_state, f"Static Value cache failed at step {step}")
+
+    def test_static_cache_out_of_bounds(self):
+        """Test StaticCache raises IndexError for out-of-bounds positions."""
+        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)        
+        pos_out_of_bounds = torch.tensor([self.max_cache_len]) # Position >= max_cache_len
+        
+        with self.assertRaises(IndexError):
+            static_cache.update(
+                key_states=torch.tensor([[[[1.0]]]]),
+                value_states=torch.tensor([[[[1.0]]]]),
+                layer_idx=0,
+                cache_kwargs={"cache_position": pos_out_of_bounds}
+            )
+
+    def test_sliding_window_cache(self):
+        """
+        Test SlidingWindowCache accumulates then slides.
+        Example (window_size=4):
+        step 4 (pos 3): [1.0, 2.0, 3.0, 4.0]
+        step 5 (pos 4): [2.0, 3.0, 4.0, 5.0] (shift happens as pos > window_size-1)
+        step 6 (pos 5): [3.0, 4.0, 5.0, 6.0]
+        """
+        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        expected_state = [0.0] * self.window_size 
+        
+        for step in range(1, 7): # Test beyond window size
+            pos_idx = step - 1
+            value = float(step)
+            
+            sliding_cache.update(
+                key_states=torch.tensor([[[[value]]]]),
+                value_states=torch.tensor([[[[value]]]]),
+                layer_idx=0,
+                cache_kwargs={"cache_position": torch.tensor([pos_idx]), "sliding_window": self.window_size}
+            )
+            
+            # Calculate expected state based on corrected sliding logic
+            clamped_pos = min(pos_idx, self.window_size - 1)
+            to_shift = pos_idx > self.window_size - 1 
+            
+            if to_shift:
+                expected_state = expected_state[1:] + [0.0] # Shift left, add placeholder
+            
+            expected_state[clamped_pos] = value # Insert new value
+
+            # Only verify key cache for simplicity, assuming value is symmetrical
+            stored_keys, _ = self._extract_both_caches(sliding_cache) 
+            self.assertEqual(stored_keys, expected_state, f"SlidingWindowCache failed at step {step}")
+
+    def test_hybrid_cache_static_mode(self):
+        """
+        Test HybridCache acts like StaticCache when 'sliding_window' is absent.
+        Example (max_cache_len=4):
+        step 4 (pos 3): [1.0, 2.0, 3.0, 4.0]
+        step 5 (pos 3): [1.0, 2.0, 3.0, 5.0] (pos clamped, overwrites last)
+        step 6 (pos 3): [1.0, 2.0, 3.0, 6.0] (pos clamped, overwrites last)
+        """
+        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        expected_state = [0.0] * self.max_cache_len
+        
+        for step in range(1, 7): # Test beyond cache size
+            pos_idx_clamped = min(step - 1, self.max_cache_len - 1)
+            value = float(step)
+            
+            hybrid_cache.update(
+                key_states=torch.tensor([[[[value]]]]),
+                value_states=torch.tensor([[[[value]]]]),
+                layer_idx=0,
+                cache_kwargs={"cache_position": torch.tensor([pos_idx_clamped])} # Use clamped pos
+            )
+            
+            expected_state[pos_idx_clamped] = value
+            stored_keys, _ = self._extract_both_caches(hybrid_cache)
+            self.assertEqual(stored_keys, expected_state, f"HybridCache (static) failed at step {step}")
+
+    def test_hybrid_cache_sliding_mode(self):
+        """
+        Test HybridCache acts like SlidingWindowCache when 'sliding_window' is present.
+        Example (window_size=4):
+        step 4 (pos 3): [1.0, 2.0, 3.0, 4.0]
+        step 5 (pos 4): [2.0, 3.0, 4.0, 5.0]
+        step 6 (pos 5): [3.0, 4.0, 5.0, 6.0]
+        """
+        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        expected_state = [0.0] * self.window_size
+        
+        for step in range(1, 7): # Test beyond window size
+            pos_idx = step - 1
+            value = float(step)
+
+            hybrid_cache.update(
+                key_states=torch.tensor([[[[value]]]]),
+                value_states=torch.tensor([[[[value]]]]),
+                layer_idx=0,
+                cache_kwargs={"cache_position": torch.tensor([pos_idx]), "sliding_window": self.window_size}
+            )
+
+            clamped_pos = min(pos_idx, self.window_size - 1)
+            to_shift = pos_idx > self.window_size - 1
+            if to_shift:
+                expected_state = expected_state[1:] + [0.0]
+            expected_state[clamped_pos] = value
+
+            stored_keys, _ = self._extract_both_caches(hybrid_cache)
+            self.assertEqual(stored_keys, expected_state, f"HybridCache (sliding) failed at step {step}")
+
+    def test_sliding_window_cache_prompt_longer_than_max_cache_len(self):
+        """Test SlidingWindowCache when prompt length > max_cache_len (should keep only last max_cache_len tokens)."""
+        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        prompt_len = self.max_cache_len + 2  # e.g., 6 if max_cache_len=4
+        values = [float(i + 1) for i in range(prompt_len)]
+        key_states = torch.tensor([[[[v] for v in values]]])  # shape (1,1,6,1)
+        value_states = torch.tensor([[[[v] for v in values]]])  # shape (1,1,6,1)
+        cache_position = torch.arange(prompt_len)
+        sliding_cache.update(
+            key_states=key_states,
+            value_states=value_states,
+            layer_idx=0,
+            cache_kwargs={"cache_position": cache_position, "sliding_window": self.window_size}
+        )
+        stored_keys, stored_values = self._extract_both_caches(sliding_cache)
+        self.assertEqual(stored_keys, values[-self.window_size:], "SlidingWindowCache did not keep last window tokens")
+        self.assertEqual(stored_values, values[-self.window_size:], "SlidingWindowCache did not keep last window tokens")
+
+    def test_hybrid_cache_prompt_longer_than_max_cache_len(self):
+        """Test HybridCache when prompt length > max_cache_len (should keep only last max_cache_len tokens in sliding mode)."""
+        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        prompt_len = self.max_cache_len + 2  # e.g., 6 if max_cache_len=4
+        values = [float(i + 1) for i in range(prompt_len)]
+        key_states = torch.tensor([[[[v] for v in values]]])  # shape (1,1,6,1)
+        value_states = torch.tensor([[[[v] for v in values]]])  # shape (1,1,6,1)
+        cache_position = torch.arange(prompt_len)
+        # Use sliding mode
+        hybrid_cache.update(
+            key_states=key_states,
+            value_states=value_states,
+            layer_idx=0,
+            cache_kwargs={"cache_position": cache_position, "sliding_window": self.window_size}
+        )
+        stored_keys, stored_values = self._extract_both_caches(hybrid_cache)
+        self.assertEqual(stored_keys, values[-self.window_size:], "HybridCache (sliding) did not keep last window tokens")
+        self.assertEqual(stored_values, values[-self.window_size:], "HybridCache (sliding) did not keep last window tokens")
