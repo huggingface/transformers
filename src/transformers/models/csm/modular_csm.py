@@ -615,11 +615,10 @@ class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
-        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
+        self.register_buffer("audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False) 
 
     def forward(self, input_ids):
-        audio_tokens_offsets = self.audio_tokens_offsets.to(input_ids.device)
-        input_embeds = self.embed_audio_tokens(input_ids + audio_tokens_offsets)
+        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
         input_embeds = input_embeds.sum(dim=2)
         return input_embeds
 
@@ -639,7 +638,6 @@ class CsmBackboneModel(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
-        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
 
     @add_start_docstrings_to_model_forward(CSM_BACKBONE_INPUTS_DOCSTRING)
     def forward(self, **super_kwargs):

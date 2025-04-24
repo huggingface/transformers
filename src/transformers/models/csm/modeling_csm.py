@@ -1008,11 +1008,10 @@ class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
-        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
+        self.register_buffer("audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False)
 
     def forward(self, input_ids):
-        audio_tokens_offsets = self.audio_tokens_offsets.to(input_ids.device)
-        input_embeds = self.embed_audio_tokens(input_ids + audio_tokens_offsets)
+        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
         input_embeds = input_embeds.sum(dim=2)
         return input_embeds
 
@@ -1057,7 +1056,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
         self.norm = CsmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = CsmRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.audio_tokens_offsets = torch.arange(config.num_codebooks) * config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
