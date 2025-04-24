@@ -702,9 +702,9 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
         return DinoDetrImageProcessor() if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = DinoDetrForObjectDetection.from_pretrained(
-            "/Users/konstantinospitas/projects/dino_detr/tests/pretrained_checkpoint"
-        ).to(torch_device)
+        model = DinoDetrForObjectDetection.from_pretrained("/Users/konstantinospitas/Desktop/checkpoint_tmp").to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
