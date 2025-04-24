@@ -484,7 +484,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         )
         expected_slice = (
             torch.Tensor([[0, 1, 0, 604, 2235, 220, 1664, 1636], [0, 1, 0, 604, 2235, 220, 1664, 1636]])
-            .to(torch.bfloat16)
+            .to(torch.int64)
             .to(torch_device)
         )
 
