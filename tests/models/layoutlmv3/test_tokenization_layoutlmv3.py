@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@ import shutil
 import tempfile
 import unittest
 from functools import lru_cache
-from typing import List
 
 from parameterized import parameterized
 
@@ -189,7 +187,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [0] + text + [2] + [2] + text_2 + [2]
 
     def test_add_special_tokens(self):
-        tokenizers: List[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -205,7 +203,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size

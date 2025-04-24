@@ -42,6 +42,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -54,6 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class SegformerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Segformer image processor.

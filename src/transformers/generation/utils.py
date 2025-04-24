@@ -33,7 +33,9 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
+    HybridChunkedCache,
     OffloadedCache,
+    OffloadedHybridCache,
     QuantizedCacheConfig,
     StaticCache,
 )
@@ -564,17 +566,17 @@ class GenerationMixin:
                 device = model_inputs[input_ids_key].device
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
-            # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = getattr(self, self.base_model_prefix, None)
-            if base_model is None:
+            # the 4D causal mask exists, it should be present in the base model (XXXModel class) or in its decoder.
+            base_model = getattr(self, self.base_model_prefix, self)
+            decoder = base_model.get_decoder() if hasattr(base_model, "get_decoder") else None
+            causal_mask_creation_function = getattr(
+                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+            )
+            if causal_mask_creation_function is None and decoder is not None:  # it may be in the decoder
                 causal_mask_creation_function = getattr(
-                    self, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                    decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
                 )
-            else:
-                causal_mask_creation_function = getattr(
-                    base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
-                )
-            if causal_mask_creation_function is None:
+            if causal_mask_creation_function is None:  # can't be found
                 logger.warning_once(
                     f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
                     "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
@@ -965,8 +967,14 @@ class GenerationMixin:
         elif different_tokenizers:
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
-                    target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device
+                    target_tokenizer,
+                    assistant_tokenizer,
+                    self.config.vocab_size,
+                    assistant_model=assistant_model,
+                    assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
+                # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
+                assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,
@@ -1435,27 +1443,6 @@ class GenerationMixin:
 
         return transition_scores
 
-    def _validate_model_class(self):
-        """
-        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
-        right class to use.
-        """
-        # TODO(joao): remove this function in v4.50, i.e. when we remove the inheritance of `GenerationMixin` from
-        # `PreTrainedModel`. With that inheritance removed, all model classes inheriting from `GenerationMixin` can
-        # safely call `GenerationMixin.generate`
-        if not self.can_generate():
-            terminations_with_generation_support = [
-                "ForCausalLM",
-                "ForConditionalGeneration",
-                "ForSpeechSeq2Seq",
-                "ForVision2Seq",
-            ]
-            raise TypeError(
-                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
-                "it doesn't have a language model head. Classes that support generation often end in one of these "
-                f"names: {terminations_with_generation_support}."
-            )
-
     def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
         if assistant_model is None:
             return
@@ -1835,6 +1822,9 @@ class GenerationMixin:
 
         Returns the resulting cache object.
         """
+        if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
+            cache_implementation = "hybrid_chunked"
+
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
@@ -1850,6 +1840,9 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != batch_size
+            or isinstance(
+                cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
+            )  # due to internal slicing, we always re-init
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1963,6 +1956,9 @@ class GenerationMixin:
             )
             generation_config.cache_implementation = None
 
+        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
+            self.config.get_text_config(), "cache_implementation", None
+        )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._supports_static_cache:
@@ -2106,6 +2102,47 @@ class GenerationMixin:
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
+    def _valid_auto_compile_criteria(self, model_kwargs: Dict, generation_config: GenerationConfig) -> bool:
+        """
+        Determines whether to trigger auto-compilation of the model's forward pass at generation time.
+        """
+        # Override: honor `disable_compile` flag
+        if generation_config.disable_compile:
+            return False
+
+        # Base logic
+        valid_hardware = self.device.type == "cuda" or bool(
+            generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
+        )
+        using_compilable_cache = (
+            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
+        )
+        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache
+
+        # Exception 1: Some quantization methods do not support compilation
+        if getattr(self, "hf_quantizer", None) is not None:
+            can_compile &= self.hf_quantizer.is_compileable
+
+        if hasattr(self, "hf_device_map"):
+            all_model_devices = set(self.hf_device_map.values())
+            # Exception 2: Don't compile if the model is using CPU offload (as of April 2025, this results in a crash)
+            has_cpu_offload = "cpu" in all_model_devices and len(all_model_devices) > 1
+            can_compile &= not has_cpu_offload
+
+            # Exception 3: Disk offload is not supported for compilation
+            has_disk_offload = "disk" in all_model_devices
+            can_compile &= not has_disk_offload
+
+        # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
+        # them
+        if generation_config.compile_config is not None and not can_compile:
+            logger.warning_once(
+                "You have set `compile_config`, but we are unable to meet the criteria for compilation. Compilation "
+                "will be skipped."
+            )
+
+        return can_compile
+
     @torch.no_grad()
     def generate(
         self,
@@ -2212,7 +2249,6 @@ class GenerationMixin:
         """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
 
@@ -3399,18 +3435,16 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), Cache):
-            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            if getattr(self, "hf_quantizer", None) is not None:
-                is_compileable &= self.hf_quantizer.is_compileable
-            is_compileable = is_compileable and not generation_config.disable_compile
-            if is_compileable and (
-                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-            ):
-                os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward = self.get_compiled_call(generation_config.compile_config)
+        if self._valid_auto_compile_criteria(model_kwargs, generation_config):
+            os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            model_forward = self.get_compiled_call(generation_config.compile_config)
 
-        is_prefill = True
+        if generation_config.prefill_chunk_size is not None:
+            model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
+            is_prefill = False
+        else:
+            is_prefill = True
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -4859,6 +4893,45 @@ class GenerationMixin:
                 )
         else:
             return input_ids
+
+    def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
+        # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
+        # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
+        torch._dynamo.config.cache_size_limit = 64
+
+        chunk_size = generation_config.prefill_chunk_size
+        # Only chunk up the token just before last, so that decoding is completely performed outside this function
+        # (here we simply prefill the cache)
+        input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
+
+        if "past_key_values" not in model_kwargs:
+            raise ValueError("Cannot use prefill chunkink without a cache")
+
+        model_forward = self.get_compiled_call(generation_config.compile_config)
+        attention_mask = model_kwargs.pop("attention_mask", None)
+
+        past_length = 0
+        for input_chunk in input_chunks:
+            current_length = past_length + input_chunk.shape[-1]
+            # Prepare inputs
+            if attention_mask is not None:
+                model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+            model_kwargs["cache_position"] = torch.arange(
+                past_length, current_length, dtype=torch.long, device=input_chunk.device
+            )
+            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
+            model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+
+            outputs = model_forward(**model_inputs, return_dict=True)
+
+            model_kwargs["past_key_values"] = outputs.past_key_values
+            past_length = current_length
+
+        model_kwargs["attention_mask"] = attention_mask
+        model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+        _ = model_kwargs.pop("position_ids", None)
+
+        return model_kwargs
 
 
 def _speculative_sampling(

@@ -129,7 +129,7 @@ def convert_weight_and_push(
     print(f"Downloading weights for {name}...")
     checkpoint_path = cached_download(checkpoint)
     print(f"Converting {name}...")
-    from_state_dict = torch.load(checkpoint_path)["state_dict"]
+    from_state_dict = torch.load(checkpoint_path, weights_only=True)["state_dict"]
     from_model.load_state_dict(from_state_dict)
     from_model.eval()
     with torch.no_grad():

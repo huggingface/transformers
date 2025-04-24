@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -328,6 +327,10 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip(

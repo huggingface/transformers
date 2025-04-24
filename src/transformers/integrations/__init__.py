@@ -53,7 +53,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
-    "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
@@ -192,7 +192,7 @@ if TYPE_CHECKING:
         unset_hf_deepspeed_config,
     )
     from .eetq import replace_with_eetq_linear
-    from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (

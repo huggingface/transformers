@@ -836,6 +836,10 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             (ModernBertForSequenceClassification, ModernBertForTokenClassification, ModernBertForQuestionAnswering),
         ):
             init_weight(module.classifier, stds["final_out"])
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     @classmethod
     def _autoset_attn_implementation(

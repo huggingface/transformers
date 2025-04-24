@@ -999,6 +999,14 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: RemBertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
+        `prepare_inputs_for_generation` method.
+        """
+        return False
+
 
 @add_start_docstrings(
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
