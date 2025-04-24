@@ -30,8 +30,8 @@ from transformers import (
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
-    require_torch_large_accelerator,
     require_torch,
+    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
