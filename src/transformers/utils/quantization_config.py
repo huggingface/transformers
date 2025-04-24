@@ -1791,12 +1791,10 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         quantization_mode: Optional[str] = "offline",
         **kwargs,
     ):
-        assert linear_class in ["bitlinear", "autobitlinear"], (
-            f"linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}"
-        )
-        assert quantization_mode in ["online", "offline"], (
-            f"quantization_mode must be either 'online' or 'offline', but got {quantization_mode}"
-        )
+        if linear_class not in ["bitlinear", "autobitlinear"]:
+            raise ValueError(f"linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}")
+        if quantization_mode not in ["online", "offline"]:
+            raise ValueError(f"quantization_mode must be either 'online' or 'offline', but got {quantization_mode}")
         self.quant_method = QuantizationMethod.BITNET
         self.modules_to_not_convert = modules_to_not_convert
         self.linear_class = linear_class

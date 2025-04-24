@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2025 Microsoft, EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2025 The BitNet Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +11,6 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch BitNet model."""
 
 from typing import Callable, Optional, Tuple
@@ -29,7 +23,6 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
     logging,
 )
 from ..gemma.modeling_gemma import GemmaMLP
@@ -122,23 +115,17 @@ class BitNetAttention(LlamaAttention):
 
 
 class BitNetDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: BitNetConfig, layer_idx: int):
-        super().__init__()
-        self.self_attn = BitNetAttention(config=config, layer_idx=layer_idx)
-        self.mlp = BitNetMLP(config)
+    pass
 
 
 class BitNetModel(LlamaModel):
     pass
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class BitNetForCausalLM(LlamaForCausalLM):
     def forward(
         self,
-        **super_kwargs: Unpack[KwargsForCausalLM],
+        **super_kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
         Args:

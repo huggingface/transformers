@@ -78,7 +78,6 @@ Several versions of the model weights are available on Hugging Face:
 ```bash
 pip install git+https://github.com/shumingma/transformers.git
 ```
-We are actively working with the Hugging Face team to integrate the necessary code into the main `transformers` library. This installation method may change in the future.
 
 ### Example
 
