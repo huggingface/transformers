@@ -732,12 +732,12 @@ class DecisionTransformerOutput(ModelOutput):
             heads.
     """
 
-    state_preds: torch.FloatTensor = None
-    action_preds: torch.FloatTensor = None
-    return_preds: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    state_preds: Optional[torch.FloatTensor] = None
+    action_preds: Optional[torch.FloatTensor] = None
+    return_preds: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[torch.FloatTensor] = None
+    attentions: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
 
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):

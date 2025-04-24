@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,7 +81,6 @@ from transformers.utils.import_utils import (
     is_tf_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
-    is_torchdynamo_available,
 )
 
 
@@ -116,7 +114,6 @@ if is_torch_available():
     from transformers.modeling_utils import (
         _find_disjoint,
         _find_identical,
-        dtype_byte_size,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -237,7 +234,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     # Download model -> Huggingface Hub not concerned by our offline mode
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
@@ -281,7 +278,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
                     hub_api = HfApi()
@@ -575,7 +572,7 @@ class ModelUtilsTest(TestCasePlus):
 
         def remove_torch_dtype(model_path):
             file = f"{model_path}/config.json"
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 s = json.load(f)
             s.pop("torch_dtype")
             with open(file, "w", encoding="utf-8") as f:
@@ -704,31 +701,6 @@ class ModelUtilsTest(TestCasePlus):
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
 
-    def test_torch_dtype_byte_sizes(self):
-        torch_dtypes_and_bytes = [
-            (torch.double, 8),
-            (torch.float64, 8),
-            (torch.float, 4),
-            (torch.float32, 4),
-            (torch.half, 2),
-            (torch.float16, 2),
-            (torch.bfloat16, 2),
-            (torch.long, 8),
-            (torch.int64, 8),
-            (torch.int, 4),
-            (torch.int32, 4),
-            (torch.short, 2),
-            (torch.int16, 2),
-            (torch.uint8, 1),
-            (torch.int8, 1),
-            (torch.float8_e4m3fn, 1),
-            (torch.float8_e5m2, 1),
-            (torch.bool, 0.125),
-        ]
-
-        for torch_dtype, bytes_per_element in torch_dtypes_and_bytes:
-            self.assertEqual(dtype_byte_size(torch_dtype), bytes_per_element)
-
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
         model = NoSuperInitModel(config)
@@ -771,7 +743,7 @@ class ModelUtilsTest(TestCasePlus):
                         self.assertEqual(len(state_dict), 1)
 
                 # Check the index and the shard files found match
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
@@ -1510,8 +1482,6 @@ class ModelUtilsTest(TestCasePlus):
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
-        if not is_torchdynamo_available():
-            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -1747,8 +1717,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
-        # `GenerationMixin`)
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
                 pass
@@ -1756,7 +1726,7 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithPrepareInputs.can_generate()
         self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
-        self.assertTrue(can_generate)
+        self.assertFalse(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """

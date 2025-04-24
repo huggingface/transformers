@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Google T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import shutil
 import tempfile
 import unittest
 from functools import lru_cache
-from typing import Tuple
 
 from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
 from transformers.utils import cached_property, is_tf_available, is_torch_available
@@ -57,7 +55,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # XXX The default common tokenizer tests assume that every ID is decodable on its own.
         # This assumption is invalid for ByT5 because single bytes might not be
         # valid utf-8 (byte 128 for instance).

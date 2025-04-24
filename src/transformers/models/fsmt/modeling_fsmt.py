@@ -112,6 +112,7 @@ _CONFIG_FOR_DOC = "FSMTConfig"
 """
 
 Here is how to compare BLEU scores against fairseq implementation:
+(don't forget to install sacrebleu: `pip install sacrebleu`)
 
 # en-ru
 
@@ -482,7 +483,7 @@ class FSMTEncoder(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,

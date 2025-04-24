@@ -108,7 +108,7 @@ def convert_mamba_checkpoint_file_to_huggingface_model_file(
         )
     logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}")
     # Load weights and config from paths
-    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
+    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu", weights_only=True)
     with open(config_json_file, "r", encoding="utf-8") as json_file:
         original_ssm_config_dict = json.load(json_file)
 

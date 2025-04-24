@@ -69,7 +69,7 @@ class SamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -103,8 +103,8 @@ class SamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
     vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -223,7 +223,9 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -262,7 +264,9 @@ class SamSdpaAttention(SamAttention):
     def __init__(self, config, downsample_rate=None):
         super().__init__(config, downsample_rate)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -514,8 +518,8 @@ class SamMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         output_attentions: Optional[bool] = None,
-        attention_similarity: torch.Tensor = None,
-        target_embedding: torch.Tensor = None,
+        attention_similarity: Optional[torch.Tensor] = None,
+        target_embedding: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.

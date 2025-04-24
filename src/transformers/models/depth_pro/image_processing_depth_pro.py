@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
@@ -53,6 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchvision", "torch"))
 class DepthProImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DepthPro image processor.

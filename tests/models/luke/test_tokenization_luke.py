@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import unittest
 from functools import lru_cache
-from typing import Tuple
 
 from transformers import AddedToken, LukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
@@ -90,7 +88,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
-    def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
@@ -99,7 +97,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         sequence = "Encode this sequence."
-        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
+        space_encoding = tokenizer.byte_encoder[b" "[0]]
 
         # Testing encoder arguments
         encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
@@ -141,7 +139,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."

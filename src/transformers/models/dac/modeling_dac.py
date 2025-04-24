@@ -53,11 +53,11 @@ class DacOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor = None
-    audio_values: torch.FloatTensor = None
-    quantized_representation: torch.FloatTensor = None
-    audio_codes: torch.LongTensor = None
-    projected_latents: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
+    quantized_representation: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.LongTensor] = None
+    projected_latents: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -74,10 +74,10 @@ class DacEncoderOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor = None
-    quantized_representation: torch.FloatTensor = None
-    audio_codes: torch.FloatTensor = None
-    projected_latents: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    quantized_representation: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.FloatTensor] = None
+    projected_latents: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -89,7 +89,7 @@ class DacDecoderOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Dac.
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class Snake1d(nn.Module):

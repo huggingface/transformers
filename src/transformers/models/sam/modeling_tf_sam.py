@@ -71,7 +71,7 @@ class TFSamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -105,8 +105,8 @@ class TFSamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: tf.Tensor = None
-    pred_masks: tf.Tensor = None
+    iou_scores: Optional[tf.Tensor] = None
+    pred_masks: Optional[tf.Tensor] = None
     vision_hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_attentions: Tuple[tf.Tensor, ...] | None = None
     mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
