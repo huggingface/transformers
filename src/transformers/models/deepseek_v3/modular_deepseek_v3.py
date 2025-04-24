@@ -174,6 +174,27 @@ class DeepseekV3MoE(nn.Module):
         )
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def execute_experts_hooks(self, subname: str) -> torch.Tensor:
+        """
+        Execute Hf hooks like AlignDevicesHook.
+        Arguments:
+        - subname: projection name (gate_proj, up_proj, down_proj)
+        Returns:
+        - Stack all expert projection weights once (no bias since bias=False).
+          Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
+        """
+        has_hooks = hasattr(self.experts, "_hf_hook")
+        W_l = []
+        for e in self.experts:
+            submodule = getattr(e, subname)
+            if has_hooks:
+                submodule._hf_hook.pre_forward(submodule)
+            W_l.append(submodule.weight)
+            if has_hooks:
+                submodule._hf_hook.post_forward(submodule, None)
+
+        return torch.stack(W_l, dim=0)
+
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         """
         Vectorized MoE: no Python loop, no change to __init__.
@@ -184,16 +205,16 @@ class DeepseekV3MoE(nn.Module):
         Returns:
         - final_hidden_states: (N, H)
         """
-        N, H = hidden_states.shape
+        # N, H = hidden_states.shape
         # E = len(self.experts)
         K = topk_indices.shape[1]
-        # I = self.intermediate_size  # size of each expert’s inner layer
+        # I = self.config.moe_intermediate_size  # size of each expert’s inner layer
 
         # 1) Stack all expert projection weights once (no bias since bias=False).
         #    Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
-        Wg = torch.stack([e.gate_proj.weight for e in self.experts], dim=0)
-        Wu = torch.stack([e.up_proj.weight for e in self.experts], dim=0)
-        Wd = torch.stack([e.down_proj.weight for e in self.experts], dim=0)
+        Wg = self.execute_experts_hooks("gate_proj")
+        Wu = self.execute_experts_hooks("up_proj")
+        Wd = self.execute_experts_hooks("down_proj")
 
         # 2) For each token and its K experts, gather the appropriate weight slices:
         #    Shapes become (N, K, I, H) for the first two, (N, K, H, I) for the third.
