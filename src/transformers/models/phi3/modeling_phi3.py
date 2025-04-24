@@ -511,6 +511,7 @@ class Phi3Model(Phi3PreTrainedModel):
         self.norm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Phi3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.sliding_window = config.get_text_config().sliding_window
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -687,7 +688,7 @@ class Phi3Model(Phi3PreTrainedModel):
             device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
-            config=self.config,
+            sliding_window=self.sliding_window,
             past_key_values=past_key_values,
         )
 
@@ -713,7 +714,7 @@ class Phi3Model(Phi3PreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
-        config: Phi3Config,
+        sliding_window: int | None,
         past_key_values: Cache,
     ):
         """
@@ -749,12 +750,12 @@ class Phi3Model(Phi3PreTrainedModel):
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
             )
             diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.get_text_config().sliding_window is not None:
+            if sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
