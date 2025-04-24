@@ -544,7 +544,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_input_ids_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
-                ("cuda", 7): torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
+                ("cuda", 7): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
                 ("cuda", 8): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
             }
         )  # fmt: skip
@@ -564,7 +564,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                 }
             )  # fmt: skip
@@ -591,7 +591,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_input_ids_all = Expectations(
             {
                 ("xpu", 3): [128000, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
-                ("cuda", 7): [128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
+                ("cuda", 7): [128000, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
                 ("cuda", 8): [128000, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
             }
         )
@@ -611,7 +611,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "If I had to write a haiku about my life, I would write:\nLife is a messy tapestry\n Threads of joy and sorrow\nWeft of memories",
-                    ("cuda", 7): "If I had to write a haiku about my life, I think it would be something like:\n\"Life is a messy stream\nTwists and turns, ups",
+                    ("cuda", 7): "If I had to write a haiku about my life, I would write:\nLife is a messy stream\nRipples of joy and pain\nFlowing, ever",
                     ("cuda", 8): "If I had to write a haiku about my life, I would write:\nLife is a messy stream\nRipples of joy and pain\nFlowing, ever",
                 }
             )  # fmt: skip
@@ -650,7 +650,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324]),
-                ("cuda", 7): torch.tensor([8.3594, 7.7148, 4.7266, 0.7803, 3.1504]),
+                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207]),
                 ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207]),
             }
         )
@@ -695,7 +695,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                  }
             )  # fmt: skip
@@ -712,7 +712,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
-                    ("cuda", 7): "This image shows is a photograph of a stop sign in front of a Chinese archway. The stop sign is red with white letters and is",
+                    ("cuda", 7): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                     ("cuda", 8): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                 }
             )  # fmt: skip
