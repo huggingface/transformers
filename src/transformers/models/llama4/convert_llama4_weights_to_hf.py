@@ -205,8 +205,7 @@ def max_context_length(model_path, instruct=False):
         params = json.load(f)
     params = params.get("model", params)
     if params.get("moe_args") is None:
-        # Dense model - max context length TBC
-        return 10485760 
+        return 8192
     num_experts = params["moe_args"]["num_experts"]
     return 10485760 if num_experts == 16 else 1048576
 
