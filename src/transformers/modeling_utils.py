@@ -4965,6 +4965,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
+                # make sure to tie weights correctly.
+                model.tie_weights()
+
                 parameters_to_initialize = {
                     name: param for name, param in model.named_parameters() if not name.startswith(prefix)
                 }
