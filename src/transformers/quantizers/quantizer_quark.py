@@ -111,3 +111,58 @@ class QuarkHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self):
         return False
+
+    def update_tp_plan(self, config):
+        import copy
+        text_plan = config.base_model_tp_plan
+        print(f"\nUpdate tp plan: {config.get_text_config() is not None}")
+        if config.get_text_config() is not None:
+           text_plan = config.get_text_config().base_model_tp_plan
+        text_plan_cp = copy.deepcopy(text_plan)
+        text_plan = {}
+        for key in text_plan_cp:
+             text_plan[key+".weight"] =  text_plan_cp[key]
+        update_plan ={
+                "layers.*.self_attn.q_proj.weight_scale": "sequence_parallel",
+                "layers.*.self_attn.k_proj.weight_scale": "sequence_parallel",
+                "layers.*.self_attn.v_proj.weight_scale": "sequence_parallel",
+                "layers.*.self_attn.o_proj.weight_scale": "sequence_parallel",
+
+                "layers.*.self_attn.q_proj.input_scale": "sequence_parallel",
+                "layers.*.self_attn.k_proj.input_scale": "sequence_parallel",
+                "layers.*.self_attn.v_proj.input_scale": "sequence_parallel",
+                "layers.*.self_attn.o_proj.input_scale": "sequence_parallel",
+
+                "layers.*.self_attn.q_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.self_attn.k_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.self_attn.v_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.self_attn.o_proj.weight_zero_point": "sequence_parallel",
+
+                "layers.*.self_attn.q_proj.input_zero_point": "sequence_parallel",
+                "layers.*.self_attn.k_proj.input_zero_point": "sequence_parallel",
+                "layers.*.self_attn.v_proj.input_zero_point": "sequence_parallel",
+                "layers.*.self_attn.o_proj.input_zero_point": "sequence_parallel",
+
+                "layers.*.mlp.gate_proj.weight_scale": "sequence_parallel",
+                "layers.*.mlp.up_proj.weight_scale": "sequence_parallel",
+                "layers.*.mlp.down_proj.weight_scale": "sequence_parallel",
+                "layers.*.mlp.gate_proj.input_scale": "sequence_parallel",
+                "layers.*.mlp.up_proj.input_scale": "sequence_parallel",
+                "layers.*.mlp.down_proj.input_scale": "sequence_parallel",
+
+                "layers.*.mlp.gate_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.mlp.up_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.mlp.down_proj.weight_zero_point": "sequence_parallel",
+                "layers.*.mlp.gate_proj.input_zero_point": "sequence_parallel",
+                "layers.*.mlp.up_proj.input_zero_point": "sequence_parallel",
+                "layers.*.mlp.down_proj.input_zero_point": "sequence_parallel",
+                }
+        text_plan.update(update_plan)
+        if text_plan is not None:
+            if config.get_text_config() is not None:
+                config.get_text_config().base_model_tp_plan = text_plan
+            else:
+                config.base_model_tp_plan = text_plan
+            return config
+
+        return config
