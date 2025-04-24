@@ -2043,11 +2043,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 elif is_remote_url(file_path):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
-                raise_errors = (
-                    False
-                    if file_path in [ADDED_TOKENS_FILE, SPECIAL_TOKENS_MAP_FILE, CHAT_TEMPLATE_FILE]
+                # We should not raise errors for files that are not strictly needed, but we should do it for the others
+                raise_errors = not (
+                    file_path in [ADDED_TOKENS_FILE, SPECIAL_TOKENS_MAP_FILE, CHAT_TEMPLATE_FILE]
                     or CHAT_TEMPLATE_DIR in file_path
-                    else True
                 )
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,
@@ -2067,16 +2066,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not gguf_file:
-            raise EnvironmentError(
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing all relevant files for a {cls.__name__} tokenizer."
-            )
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
