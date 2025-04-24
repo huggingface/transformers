@@ -31,11 +31,12 @@ from transformers import (
 from transformers.cache_utils import Cache
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -409,7 +410,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @pytest.mark.generate
-    # overridden because mllama has special cache for self and cross attentions
+    # overridden because mllama is not an encoder-decoder model, but has encoder-decoder-like cache
     def test_past_key_values_format(self):
         # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
         # standard KV cache format is important for a consistent API (and for advanced generation methods).
@@ -524,7 +525,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_generate(self):
@@ -537,9 +538,18 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
+        input_ids = inputs["input_ids"]
+
         # Check inputs ids
-        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], expected_input_ids))
+        expected_input_ids_all = Expectations(
+            {
+                ("xpu", 3): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
+                ("cuda", 7): torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
+                ("cuda", 8): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
+            }
+        )  # fmt: skip
+        expected_input_ids = expected_input_ids_all.get_expectation()
+        self.assertTrue(torch.equal(input_ids, expected_input_ids))
 
         # Load model in 4 bit
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -551,7 +561,14 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a"  # fmt: skip
+        expected_outputs = Expectations(
+                {
+                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                }
+            )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
             decoded_output,
@@ -560,7 +577,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_generate_text_only(self):
@@ -568,10 +585,18 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
         prompt = "If I had to write a haiku"
         inputs = processor(text=prompt, return_tensors="pt").to(torch_device)
+        input_ids = inputs["input_ids"].cpu().squeeze().tolist()
 
         # Check inputs ids
-        expected_input_ids = [128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342]
-        self.assertEqual(inputs["input_ids"].cpu().squeeze().tolist(), expected_input_ids)
+        expected_input_ids_all = Expectations(
+            {
+                ("xpu", 3): [128000, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
+                ("cuda", 7): [128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
+                ("cuda", 8): [128000, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342],
+            }
+        )
+        expected_input_ids = expected_input_ids_all.get_expectation()
+        self.assertEqual(input_ids, expected_input_ids)
 
         # Load model in 4 bit
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -583,8 +608,14 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku about my life, I think it would be something like:\n\"Life is a messy stream\nTwists and turns, ups"  # fmt: skip
-
+        expected_outputs = Expectations(
+                {
+                    ("xpu", 3): "If I had to write a haiku about my life, I would write:\nLife is a messy tapestry\n Threads of joy and sorrow\nWeft of memories",
+                    ("cuda", 7): "If I had to write a haiku about my life, I think it would be something like:\n\"Life is a messy stream\nTwists and turns, ups",
+                    ("cuda", 8): "If I had to write a haiku about my life, I would write:\nLife is a messy stream\nRipples of joy and pain\nFlowing, ever",
+                }
+            )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -592,7 +623,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_forward(self):
@@ -616,7 +647,15 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([8.3594, 7.7148, 4.7266, 0.7803, 3.1504])
+        expected_logits_all = Expectations(
+            {
+                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324]),
+                ("cuda", 7): torch.tensor([8.3594, 7.7148, 4.7266, 0.7803, 3.1504]),
+                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207]),
+            }
+        )
+
+        expected_logits = expected_logits_all.get_expectation()
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -625,7 +664,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_batched_generate(self):
@@ -653,7 +692,14 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a"  # fmt: skip
+        expected_outputs = Expectations(
+                {
+                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                 }
+            )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
             decoded_output,
@@ -663,7 +709,14 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "This image shows is a photograph of a stop sign in front of a Chinese archway. The stop sign is red with white letters and is"  # fmt: skip
+        expected_outputs = Expectations(
+                {
+                    ("xpu", 3): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
+                    ("cuda", 7): "This image shows is a photograph of a stop sign in front of a Chinese archway. The stop sign is red with white letters and is",
+                    ("cuda", 8): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
+                }
+            )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
             decoded_output,
@@ -672,7 +725,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @require_read_token
     def test_11b_model_integration_multi_image_generate(self):

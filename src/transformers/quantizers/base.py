@@ -252,6 +252,17 @@ class HfQuantizer(ABC):
 
         return model
 
+    def get_cuda_warm_up_factor(self):
+        """
+        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
+        A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
+        we allocate half the memory of the weights residing in the empty model, etc...
+        """
+        # By default we return 4, i.e. half the model size (this corresponds to the case where the model is not
+        # really pre-processed, i.e. we do not have the info that weights are going to be 8 bits before actual
+        # weight loading)
+        return 4
+
     def _dequantize(self, model):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
