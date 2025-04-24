@@ -395,6 +395,11 @@ class Llama4Config(PretrainedConfig):
     ```"""
 
     model_type = "llama4"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",
