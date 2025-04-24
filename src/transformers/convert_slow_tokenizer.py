@@ -552,6 +552,9 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
+        # store extractor to convert tokens to ids from sp directly
+        self.extractor = self.SpmExtractor(self.original_tokenizer.vocab_file)
+
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
@@ -1325,6 +1328,59 @@ class GemmaConverter(SpmConverter):
             ]
         )
 
+class GeneralSPMConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        if not getattr(self.original_tokenizer, "legacy", True):  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
+
+    def post_processor(self):
+       # return None
+        single = f"{(self.original_tokenizer.bos_token + ':0 ') if self.original_tokenizer.add_bos_token else ''}$A:0{(' ' + self.original_tokenizer.eos_token + ':0') if self.original_tokenizer.add_eos_token else ''}"
+        pair = f"{single}{(' ' + self.original_tokenizer.bos_token + ':1') if self.original_tokenizer.add_bos_token else ''} $B:1{(' ' + self.original_tokenizer.eos_token + ':1') if self.original_tokenizer.add_eos_token else ''}"
+        return processors.TemplateProcessing(
+            single=single,
+            pair=pair,
+            special_tokens=[
+                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
+                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
+            ],
+        )
 
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
@@ -1368,8 +1424,17 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        # the processor is defined in the LlamaTokenizerFast class.
-        return None
+       # return None
+        single = f"{(self.original_tokenizer.bos_token + ':0 ') if self.original_tokenizer.add_bos_token else ''}$A:0{(' ' + self.original_tokenizer.eos_token + ':0') if self.original_tokenizer.add_eos_token else ''}"
+        pair = f"{single}{(' ' + self.original_tokenizer.bos_token + ':1') if self.original_tokenizer.add_bos_token else ''} $B:1{(' ' + self.original_tokenizer.eos_token + ':1') if self.original_tokenizer.add_eos_token else ''}"
+        return processors.TemplateProcessing(
+            single=single,
+            pair=pair,
+            special_tokens=[
+                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
+                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
+            ],
+        )
 
 
 class MarkupLMConverter(Converter):
@@ -1690,6 +1755,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
+    "SPMTokenizer": GeneralSPMConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
