@@ -139,6 +139,8 @@ class CsmPreTrainedModel(PreTrainedModel):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
                 module.weight.data[i].normal_(mean=0.0, std=std)
+        elif isinstance(module, CsmRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
