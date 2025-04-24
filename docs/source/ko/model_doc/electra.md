@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ELECTRA
+# ELECTRA[[electra]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
-## Overview
+## 개요[[overview]]
 
 ELECTRA 모델은 [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
 Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었습니다. ELECTRA는 두가지 트랜스포머 모델인 생성 모델과 판별 모델을 학습시키는 새로운 사전학습 접근법입니다. 생성 모델의 역할은 시퀀스에 있는 토큰을 대체하는 것이며 마스킹된 언어 모델로 학습됩니다. 우리가 관심을 가진 판별 모델은 시퀀스에서 어떤 토큰이 생성 모델에 의해 대체되었는지 식별합니다. 
@@ -35,13 +35,13 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 
 이 모델은 [lysandre](https://huggingface.co/lysandre)이 기여했습니다. 원본 코드는 [이곳](https://github.com/google-research/electra)에서 찾아보실 수 있습니다.
 
-## 사용 팁
+## 사용 팁[[usage-tips]]
 
 - ELECTRA는 사전학습 방법으로 기본 모델인 BERT의 구조와 거의 차이가 없습니다. 유일한 차이는 임베딩 크기와 히든 크기를 구분했다는 점입니다. 임베딩 크기는 일반적으로 더 작고, 히든 크기는 더 큽니다. 임베딩에서 임베딩 크기를 히든 크기로 변환하기 위해 추가로 선형 변환 층이 사용됩니다. 임베딩 크기와 히든 크기가 동일할 경우에는 이 선형 변환 층이 필요하지 않습니다. 
 - ELECTRA는 또 다른 (작은) 마스킹된 언어 모델을 사용해 사전학습 된 트랜스포머 모델입니다.  작은 언어 모델이 입력 텍스트의 일부를 무작위로 마스킹하고, 그 자리에 새로운 토큰을 삽입합니다. ELECTRA는 원래 토큰과 대체된 토큰을 구분하는 역할을 수행합니다. GAN 훈련과 비슷하지만, 생성 모델은 ELECTRA 모델을 속이는 것이 아니라 원래 텍스트를 복원하는 목표로 몇 단계 학습합니다. 그 후 ELECTRA가 학습을 하게 됩니다.
 - [구글 리서치의 구현](https://github.com/google-research/electra)으로 저장된 ELECTRA checkpoints는 생성 모델과 판별 모델을 포함합니다. 변환 스크립트에서는 사용자가 어떤 모델을 어떤 아키텍처로 내보낼지 명시해야 합니다. 일단 Hugging Face 포맷으로 변환되면, 이 체크포인트들은 모든 ELECTRA 모델에서 불러올 수 있습니다. 즉, 판별 모델은 [`ElectraForMaskedLM`] 모델에, 생성 모델은 [`ElectraForPreTraining`]모델에 불러올 수 있다는 의미입니다. (단, 생성 모델에는 분류 헤드가 존재하지 않기 때문에, 해당 부분은 무작위로 초기화됩니다.)
 
-## 참고 자료
+## 참고 자료[[resources]]
 
 - [텍스트 분류 가이드](../tasks/sequence_classification)
 - [토큰 분류 가이드](../tasks/token_classification)
