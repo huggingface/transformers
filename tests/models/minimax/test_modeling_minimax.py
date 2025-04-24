@@ -474,3 +474,20 @@ class MiniMaxIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
+
+    def test_small_model_generation(self):
+        model_id = "geetu040/MiniMax-tiny"
+        dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
+
+        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+        expected_slice = (
+            torch.Tensor([[0, 1, 0, 604, 2235, 220, 1664, 1636], [0, 1, 0, 604, 2235, 220, 1664, 1636]])
+            .to(torch.bfloat16)
+            .to(torch_device)
+        )
+
+        outputs = model.generate(dummy_input, max_new_tokens=5, do_sample=False)
+
+        torch.testing.assert_close(outputs, expected_slice, atol=1e-3, rtol=1e-3)
