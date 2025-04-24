@@ -397,6 +397,26 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
 
     # Ignore copy
+    @pytest.mark.generate
+    def test_past_key_values_format(self, custom_all_cache_shapes=None):
+        """
+        Test that the KV cache is formatted correctly.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config).to(torch_device)
+            model = model.eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            past_kv = outputs["past_key_values"]
+
+            batch_size, seq_length = inputs["input_ids"].shape
+            self._check_past_key_values_for_generate(batch_size, past_kv, seq_length, config)
+
+    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
