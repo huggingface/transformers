@@ -287,7 +287,7 @@ class Llama4TextAttention(nn.Module):
         self.attn_temperature_tuning = config.attn_temperature_tuning
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.use_rope = int((layer_idx + 1) % 4 != 0)  # rope unused for dense layers
+        self.use_rope = config.no_rope_layers[layer_idx]
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
