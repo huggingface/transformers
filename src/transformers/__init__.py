@@ -637,7 +637,6 @@ _import_structure = {
     ],
     "models.csm": [
         "CsmConfig",
-        "CsmBackboneConfig",
         "CsmDepthDecoderConfig",
     ],
     "models.mpnet": [
@@ -914,13 +913,6 @@ _import_structure = {
         "WhisperFeatureExtractor",
         "WhisperProcessor",
         "WhisperTokenizer",
-    ],
-    "models.csm": [
-        "CsmConfig",
-        "CsmBackboneConfig",
-        "CsmDepthDecoderConfig",
-        "CsmAudioTokenizer",
-        "CsmProcessor",
     ],
     "models.x_clip": [
         "XCLIPConfig",
@@ -3093,9 +3085,8 @@ else:
     _import_structure["models.csm"].extend(
         [
             "CsmForCausalLM",
-            "CsmDepthDecoderForCausalLM",
-            "CsmDepthDecoderModel",
-            "CsmBackboneModel",
+            "CsmPreTrainedModel",
+            "CsmProcessor",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -7166,11 +7157,8 @@ if TYPE_CHECKING:
             CpmAntPreTrainedModel,
         )
         from .models.csm import (
-            CsmAudioTokenizer,
-            CsmBackbone,
-            CsmDepthDecoder,
-            CsmDepthDecoderForCausalLM,
             CsmForCausalLM,
+            CsmPreTrainedModel,
             CsmProcessor,
         )
         from .models.ctrl import (

@@ -54,7 +54,7 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
 
 class CsmProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = [ "chat_template"]
+    valid_kwargs = ["chat_template"]
     feature_extractor_class = "EncodecFeatureExtractor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -130,9 +130,7 @@ class CsmProcessor(ProcessorMixin):
 
         return_tensors = common_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
-            raise ValueError(
-                f"{self.__class__.__name__} only supports `return_tensors='pt'`."
-            )
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         if isinstance(text, str):
             text = [text]
@@ -157,8 +155,7 @@ class CsmProcessor(ProcessorMixin):
         if audio is not None:
             encoded_length_kwargs = audio_kwargs.pop("encoded_length_kwargs", {})
             num_audio_tokens_list = [
-                self._get_encoded_length(audio_array.shape[-1], **encoded_length_kwargs)
-                for audio_array in audio
+                self._get_encoded_length(audio_array.shape[-1], **encoded_length_kwargs) for audio_array in audio
             ]
             num_audio_tokens_list_copy = num_audio_tokens_list.copy()
 
@@ -207,4 +204,4 @@ class CsmProcessor(ProcessorMixin):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["CsmProcessor", "CsmAudioTokenizer"]
+__all__ = ["CsmProcessor"]

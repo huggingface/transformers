@@ -2462,6 +2462,27 @@ class CpmAntPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class CsmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CsmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CsmProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CTRLForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

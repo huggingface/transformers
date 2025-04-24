@@ -1044,7 +1044,7 @@ class CsmBackboneModelEmbeddings(nn.Module):
 
 
 INPUT_IDS_DOCSTRING = r"""input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks) or (batch_size, sequence_length)`):
-            When of shape (batch_size, sequence_length), corresponds to the input sequence prepared with the processor, 
+            When of shape (batch_size, sequence_length), corresponds to the input sequence prepared with the processor,
 
 
             If the input_ids corresponds to an audio sequence, it is the concatenation of `num_codebooks` codebook indices, and the text padding idx.
@@ -1578,7 +1578,6 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
-        max_length = generation_config.max_length
         # *************** Csm specific ***************
         has_eos_stopping_criteria = generation_config._eos_token_tensor is not None
         # ============================================
@@ -1697,8 +1696,11 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
                 backbone_last_hidden_state=backbone_last_hidden_state,
                 generation_config=depth_decoder_generation_config,
             )
-            # codebook_ids = torch.cat([first_codebook_ids, depth_decoder_outputs], dim=-1)
-            codebook_ids = depth_decoder_outputs if isinstance(depth_decoder_outputs, torch.Tensor) else codebook_ids
+            codebook_ids = (
+                depth_decoder_outputs
+                if isinstance(depth_decoder_outputs, torch.Tensor)
+                else depth_decoder_outputs.sequences
+            )
             next_tokens = codebook_ids
             # ============================================
 
@@ -2025,4 +2027,4 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             return generate_output
 
 
-__all__ = ["CsmDepthDecoderModel", "CsmDepthDecoderForCausalLM", "CsmBackboneModel", "CsmForCausalLM"]
+__all__ = ["CsmPretrainedModel", "CsmForCausalLM"]

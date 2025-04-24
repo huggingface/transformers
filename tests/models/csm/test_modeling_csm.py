@@ -90,7 +90,7 @@ class CsmModelTester:
             "num_key_value_heads": 2,
             "sliding_window": 4,
             "codebook_dim": 64,
-            "use_cache": False
+            "use_cache": False,
         },
         config={
             "num_codebooks": 10,
@@ -167,7 +167,13 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
         if return_labels:
             inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.config["num_codebooks"]), dtype=torch.long, device=torch_device
+                (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                    self.model_tester.config["num_codebooks"],
+                ),
+                dtype=torch.long,
+                device=torch_device,
             )
 
         return inputs_dict
@@ -233,7 +239,6 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 if not has_matching_scores:
                     break
         self.assertTrue(has_matching_outputs or has_matching_scores)
-
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
@@ -377,9 +382,7 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.
         """
         # Sequence in which all but the last token is the same
-        input_ids = torch.tensor(
-            [[0, 1, 2, 3], [0, 1, 2, 4], [0, 1, 2, 5]], device=torch_device, dtype=torch.int64
-        )
+        input_ids = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 4], [0, 1, 2, 5]], device=torch_device, dtype=torch.int64)
         input_ids = input_ids.unsqueeze(-1).expand(-1, -1, self.model_tester.config["num_codebooks"])
         position_ids = torch.tensor([[0, 1, 2, 3]] * 3, device=torch_device, dtype=torch.int64)
 
@@ -423,7 +426,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
     def _load_conversation(self):
         ds = load_dataset("eustlb/dailytalk-dummy", split="train")
         ds = ds.filter(lambda x: x["conversation_id"] == 0)
-        ds = ds.sort('turn_id')
+        ds = ds.sort("turn_id")
         return ds[0]
 
     @slow
@@ -481,12 +484,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
         conversation = [
-            {
-                "role": "0",
-                "content": [
-                    {"type": "text", "text": "The past is just a story we tell ourselves."}
-                ]
-            },
+            {"role": "0", "content": [{"type": "text", "text": "The past is just a story we tell ourselves."}]},
         ]
 
         inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(torch_device)
@@ -550,21 +548,15 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
 
         # context
         for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):
-            conversation.append({
-                "role": f"{speaker_id}",
-                "content": [
-                    {"type": "text", "text": text},
-                    {"type": "audio", "path": audio['array']}
-                ]
-            })
+            conversation.append(
+                {
+                    "role": f"{speaker_id}",
+                    "content": [{"type": "text", "text": text}, {"type": "audio", "path": audio["array"]}],
+                }
+            )
 
         # text prompt
-        conversation.append({
-            "role": f"{ds[4]['speaker_id']}",
-            "content": [
-                {"type": "text", "text": ds[4]['text']}
-            ]
-        })
+        conversation.append({"role": f"{ds[4]['speaker_id']}", "content": [{"type": "text", "text": ds[4]["text"]}]})
 
         inputs = processor.apply_chat_template(
             conversation,
@@ -617,25 +609,25 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
                 {
                     "role": f"{ds[0]['speaker_id']}",
                     "content": [
-                        {"type": "text", "text": ds[0]['text']},
-                        {"type": "audio", "path": ds[0]['audio']['array']}
-                    ]
+                        {"type": "text", "text": ds[0]["text"]},
+                        {"type": "audio", "path": ds[0]["audio"]["array"]},
+                    ],
                 },
                 {
                     "role": f"{ds[1]['speaker_id']}",
                     "content": [
-                        {"type": "text", "text": ds[1]['text']},
-                    ]
-                }
+                        {"type": "text", "text": ds[1]["text"]},
+                    ],
+                },
             ],
             [
                 {
                     "role": f"{ds[0]['speaker_id']}",
                     "content": [
-                        {"type": "text", "text": ds[0]['text']},
-                    ]
+                        {"type": "text", "text": ds[0]["text"]},
+                    ],
                 }
-            ]
+            ],
         ]
 
         inputs = processor.apply_chat_template(
@@ -699,7 +691,3 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_close(output_tokens.cpu(), EXPECTED_OUTPUT_TOKENS)
-
-
-
-

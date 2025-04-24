@@ -94,10 +94,7 @@ def make_list_of_audio(
         list: A list of list of audios.
     """
     # If it's a list of batches, it's already in the right format
-    if (
-        isinstance(audio, (list, tuple))
-        and is_valid_list_of_audio(audio)
-    ):
+    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
         return audio
 
     # If it's a list of audios, it's a single batch, so convert it to a list of lists

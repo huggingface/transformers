@@ -33,13 +33,13 @@ class CsmDepthDecoderConfig(PretrainedConfig):
 
     Args:
         num_codebooks (`int`, *optional*, defaults to 32):
-            Number of codebooks used in the underlying codec model responsible for tokenizing the audio. 
+            Number of codebooks used in the underlying codec model responsible for tokenizing the audio.
+        backbone_hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden representations of the backbone model used with this depth decoder.
         vocab_size (`int`, *optional*, defaults to 2051):
             Vocabulary size of the CsmDepthDecoder model. Defines the number of different audio tokens that can be represented by each codebook.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations.
-        backbone_hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations of the backbone model used with this depth decoder.
         intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 4):
@@ -61,20 +61,20 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             CsmDepthDecoder 2 up to 4096, CodeLlama up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 2050):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to None):
+        bos_token_id (`int`, *optional*):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to None):
+        eos_token_id (`int`, *optional*):
             End of stream token id.
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*, defaults to {"factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192, "rope_type": "llama3"}):
+        rope_scaling (`Dict`, *optional*, defaults to `{'factor': 32.0, 'high_freq_factor': 0.0078125, 'low_freq_factor': 0.001953125, 'original_max_position_embeddings': 16, 'rope_type': 'llama3'}`):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
@@ -117,7 +117,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*, defaults to None):
+        head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
 
     ```python
@@ -159,7 +159,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             "high_freq_factor": 0.0078125,
             "low_freq_factor": 0.001953125,
             "original_max_position_embeddings": 16,
-            "rope_type": "llama3"
+            "rope_type": "llama3",
         },
         attention_bias=False,
         attention_dropout=0.0,
@@ -246,10 +246,9 @@ class CsmConfig(PretrainedConfig):
     Args:
         num_codebooks (`int`, *optional*, defaults to 32):
             Number of codebooks used in the underlying codec model responsible for tokenizing the audio.
-        codebook_vocab_size (`int`, *optional*, defaults to 2051):
-            Vocabulary size of the codebooks. Defines the number of different audio tokens that can be represented by each codebook.
-        vocab_size (`int`, *optional*, defaults to 128256):
+        vocab_size (`int`, *optional*, defaults to 2051):
             Vocabulary size of the CsmBackbone model. Defines the number of different text tokens that can be represented.
+        text_vocab_size (`<fill_type>`, *optional*, defaults to 128256): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
@@ -271,7 +270,7 @@ class CsmConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -286,9 +285,11 @@ class CsmConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
+        audio_token_id (`<fill_type>`, *optional*, defaults to 128002): <fill_docstring>
+        audio_eos_token_id (`<fill_type>`, *optional*, defaults to 128003): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*, defaults to `{"factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192, "rope_type": "llama3"}`):
+        rope_scaling (`Dict`, *optional*, defaults to `{'factor': 32.0, 'high_freq_factor': 0.5, 'low_freq_factor': 0.125, 'original_max_position_embeddings': 1024, 'rope_type': 'llama3'}`):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
@@ -331,8 +332,11 @@ class CsmConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*, defaults to None):
+        head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+        tie_codebooks_embeddings (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        depth_decoder_config (`<fill_type>`, *optional*): <fill_docstring>
+        codec_config (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
     >>> from transformers import CsmBackboneModel, CsmBackboneConfig

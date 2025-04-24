@@ -219,13 +219,15 @@ def write_tokenizer(output_dir):
     #     "content": "<|audio_eos|>",
     #     ...
     # }
-    print("Tokenizer saved successfully. Please manually modify in tokenizer_config.json AND tokenizer.json as follows: ")
+    print(
+        "Tokenizer saved successfully. Please manually modify in tokenizer_config.json AND tokenizer.json as follows: "
+    )
     print("""
-    # "128002": { 
+    # "128002": {
     #     "content": "<|AUDIO|>",
     #     ...
     # }
-    # "128003": { 
+    # "128003": {
     #     "content": "<|audio_eos|>",
     #     ...
     # }

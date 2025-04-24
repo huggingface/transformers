@@ -1527,7 +1527,9 @@ class GenerationTesterMixin:
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1)
+            padded_attention_mask = torch.cat(
+                (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
+            )
             model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
