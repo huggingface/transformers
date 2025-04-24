@@ -13,6 +13,7 @@
 # limitations under the License.
 import importlib
 import os
+import re
 import tempfile
 import unittest
 
