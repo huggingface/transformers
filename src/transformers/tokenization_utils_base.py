@@ -2043,6 +2043,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 elif is_remote_url(file_path):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
+                raise_errors = (
+                    False
+                    if file_path in [ADDED_TOKENS_FILE, SPECIAL_TOKENS_MAP_FILE, CHAT_TEMPLATE_FILE]
+                    or CHAT_TEMPLATE_DIR in file_path
+                    else True
+                )
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,
                     file_path,
@@ -2055,9 +2061,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
+                    _raise_exceptions_for_gated_repo=raise_errors,
+                    _raise_exceptions_for_missing_entries=raise_errors,
+                    _raise_exceptions_for_connection_errors=raise_errors,
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
