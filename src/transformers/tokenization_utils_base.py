@@ -1989,23 +1989,35 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
                     fast_tokenizer_file = FULL_TOKENIZER_FILE
-                    resolved_config_file = cached_file(
-                        pretrained_model_name_or_path,
-                        TOKENIZER_CONFIG_FILE,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        resume_download=resume_download,
-                        proxies=proxies,
-                        token=token,
-                        revision=revision,
-                        local_files_only=local_files_only,
-                        subfolder=subfolder,
-                        user_agent=user_agent,
-                        _raise_exceptions_for_gated_repo=False,
-                        _raise_exceptions_for_missing_entries=False,
-                        _raise_exceptions_for_connection_errors=False,
-                        _commit_hash=commit_hash,
-                    )
+
+                    try:
+                        resolved_config_file = cached_file(
+                            pretrained_model_name_or_path,
+                            TOKENIZER_CONFIG_FILE,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            resume_download=resume_download,
+                            proxies=proxies,
+                            token=token,
+                            revision=revision,
+                            local_files_only=local_files_only,
+                            subfolder=subfolder,
+                            user_agent=user_agent,
+                            _raise_exceptions_for_missing_entries=False,
+                            _commit_hash=commit_hash,
+                        )
+                    except OSError:
+                        # Re-raise any error raised by cached_file in order to get a helpful error message
+                        raise
+                    except Exception:
+                        # For any other exception, we throw a generic error.
+                        raise OSError(
+                            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                            f"containing all relevant files for a {cls.__name__} tokenizer."
+                        )
+
                     commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                     if resolved_config_file is not None:
                         with open(resolved_config_file, encoding="utf-8") as reader:
@@ -2043,34 +2055,34 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 elif is_remote_url(file_path):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
-                resolved_vocab_files[file_id] = cached_file(
-                    pretrained_model_name_or_path,
-                    file_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                    _commit_hash=commit_hash,
-                )
+                try:
+                    resolved_vocab_files[file_id] = cached_file(
+                        pretrained_model_name_or_path,
+                        file_path,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                except OSError:
+                    # Re-raise any error raised by cached_file in order to get a helpful error message
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+                    raise OSError(
+                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                        f"containing all relevant files for a {cls.__name__} tokenizer."
+                    )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not gguf_file:
-            raise EnvironmentError(
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing all relevant files for a {cls.__name__} tokenizer."
-            )
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:

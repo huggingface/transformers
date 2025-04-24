@@ -474,7 +474,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
 
     def _init_weights(self, module):
         std = (
@@ -927,6 +926,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
 
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
+    _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -1583,6 +1583,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
+    _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
     base_model_prefix = ""
     config_class = Llama4Config

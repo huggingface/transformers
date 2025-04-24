@@ -1030,6 +1030,20 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
+
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
+        """
+        # Overriden for deeply nested config like Qwen2-Omni. We don't have any omni model
+        # except for Qwen yet. This has to be generalized if more deeply nested configs are
+        # added. NOTE: currently method used only by vLLM
+        return self.thinker_config.get_text_config()
+
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Qwen2_5OmniConfig
@@ -1145,7 +1159,8 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
+                                token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
             remove_index (`int`) An index id to subtract from `token_indices` before chunking
 
@@ -1158,12 +1173,12 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             i, start_idx = 0, 0  # skip bos token
             current_chunk = 1
             while i < len(token_indices):  # skip eos token
-                if token_indices[0][i] - remove_index >= current_chunk * tokens_per_chunk:
+                if token_indices[i] - remove_index >= current_chunk * tokens_per_chunk:
                     yield (start_idx, i)
                     start_idx = i
                     current_chunk += 1
                 i += 1
-            yield (start_idx, token_indices.shape[1])
+            yield (start_idx, len(token_indices))
 
         return list(_iter())
 
@@ -1400,8 +1415,8 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                         )
 
                         t_ntoken_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
-                        video_chunk_indexes = self.get_chunked_index(video_llm_pos_ids, t_ntoken_per_chunk, st_idx)
-                        audio_chunk_indexes = self.get_chunked_index(audio_llm_pos_ids, t_ntoken_per_chunk, st_idx)
+                        video_chunk_indexes = self.get_chunked_index(video_llm_pos_ids[0], t_ntoken_per_chunk, st_idx)
+                        audio_chunk_indexes = self.get_chunked_index(audio_llm_pos_ids[0], t_ntoken_per_chunk, st_idx)
                         sub_len = 0
                         for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
                             video_chunk_index = video_chunk_indexes[j] if j < len(video_chunk_indexes) else None
@@ -1696,7 +1711,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2)).float()
         scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
         self.register_buffer(
             "positional_embedding",
@@ -2462,7 +2477,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+            )
 
         if not return_dict:
             output = (logits,) + outputs
@@ -4052,6 +4069,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         self.speaker_map = {}
         if config.enable_audio_output:
             self.enable_talker()
+        self.post_init()
 
     def enable_talker(self):
         self.talker = Qwen2_5OmniTalkerForConditionalGeneration(self.config.talker_config)
@@ -4225,12 +4243,44 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             return thinker_result
 
         # 2. Generate speech tokens from talker module
+        embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(self.talker.device)
+        if thinker_kwargs.get("input_features", None) is not None:
+            audio_ids_mask = input_ids == self.config.thinker_config.audio_token_index
+            audio_mask = audio_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            audio_mask_tensor = torch.zeros(
+                [audio_ids_mask.sum(), embeds_to_talker.shape[-1]],
+                dtype=embeds_to_talker.dtype,
+                device=self.talker.device,
+            )
+            embeds_to_talker.masked_scatter_(audio_mask, audio_mask_tensor)
+        if thinker_kwargs.get("pixel_values", None) is not None:
+            image_ids_mask = input_ids == self.config.thinker_config.image_token_index
+            image_mask = image_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            image_mask_tensor = torch.zeros(
+                [image_ids_mask.sum(), embeds_to_talker.shape[-1]],
+                dtype=embeds_to_talker.dtype,
+                device=self.talker.device,
+            )
+            embeds_to_talker.masked_scatter_(image_mask, image_mask_tensor)
+        if thinker_kwargs.get("pixel_values_videos", None) is not None:
+            video_ids_mask = input_ids == self.config.thinker_config.video_token_index
+            video_mask = video_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            video_mask_tensor = torch.zeros(
+                [video_ids_mask.sum(), embeds_to_talker.shape[-1]],
+                dtype=embeds_to_talker.dtype,
+                device=self.talker.device,
+            )
+            embeds_to_talker.masked_scatter_(video_mask, video_mask_tensor)
+
+        processed_thinker_hidden = (
+            (embeds_to_talker,) + thinker_result.hidden_states[0][1:],
+        ) + thinker_result.hidden_states[1:]
         thinker_generate_ids = thinker_result.sequences[:, input_ids.size(1) :].to(self.talker.device)
         thinker_token_embeds = [
-            token_hidden_states[0].to(self.talker.device) for token_hidden_states in thinker_result.hidden_states
+            token_hidden_states[0].to(self.talker.device) for token_hidden_states in processed_thinker_hidden
         ]
         thinker_hidden_states = [
-            token_hidden_states[-1].to(self.talker.device) for token_hidden_states in thinker_result.hidden_states
+            token_hidden_states[-1].to(self.talker.device) for token_hidden_states in processed_thinker_hidden
         ]
 
         talker_text_bos_token = speaker_params["bos_token"]

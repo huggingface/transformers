@@ -19,9 +19,10 @@ from parameterized import parameterized
 
 from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -302,7 +303,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class GraniteIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -328,15 +329,27 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
 
         # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-1.9798, -3.1626, -2.8062, -2.3777, -2.7091, -2.2338, -2.5924, -2.3974]])
+        EXPECTED_MEANS = Expectations(
+                {
+                    ("xpu", 3): torch.tensor([[-3.1406, -2.5469, -2.6250, -2.1250, -2.6250, -2.6562, -2.6875, -2.9688]]),
+                    ("cuda", 7): torch.tensor([[-1.9798, -3.1626, -2.8062, -2.3777, -2.7091, -2.2338, -2.5924, -2.3974]]),
+                    ("cuda", 8): torch.tensor([[-3.1406, -2.5469, -2.6250, -2.1250, -2.6250, -2.6562, -2.6875, -2.9688]]),
+                }
+            )
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
 
-        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1).float(), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.8750, -2.1875, -2.1875, -2.1875, -2.1875, -2.8438, -2.1875, -2.1875,
-        -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875]])
+        EXPECTED_SLICES = Expectations(
+                {
+                    ("xpu", 3): torch.tensor([[2.2031, -5.0625, -5.0625, -5.0625, -5.0625, -0.9180, -5.0625, -5.0625, -5.0625, -5.0625, -5.5312, -2.1719, -1.7891, -0.4922, -2.5469]]),
+                    ("cuda", 7): torch.tensor([[4.8750, -2.1875, -2.1875, -2.1875, -2.1875, -2.8438, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875]]),
+                    ("cuda", 8): torch.tensor([[2.0938, -5.0312, -5.0312, -5.0312, -5.0312, -1.0469, -5.0312, -5.0312, -5.0312, -5.0312, -5.5625, -2.1875, -1.7891, -0.5820, -2.6250]]),
+                }
+            )
+        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
         # fmt: on
-
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE.to(torch_device),
@@ -358,6 +371,13 @@ class GraniteIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]])
+        EXPECTED_MEANS = Expectations(
+                {
+                    ("xpu", 3): torch.tensor([[-3.2693, -2.5957, -2.6234, -2.1675, -2.6386, -2.6850, -2.7039, -2.9656]]),
+                    ("cuda", 7): torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]]),
+                    ("cuda", 8): torch.tensor([[-3.2934, -2.6019, -2.6258, -2.1691, -2.6394, -2.6876, -2.7032, -2.9688]]),
+                }
+            )
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
 
         torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
