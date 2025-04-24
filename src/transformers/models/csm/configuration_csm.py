@@ -241,7 +241,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
 class CsmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the csm-1b.
 
     e.g. [eustlb/csm-1b](https://huggingface.co/eustlb/csm-1b)
