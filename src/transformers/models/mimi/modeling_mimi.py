@@ -209,31 +209,6 @@ class MimiConv1d(nn.Module):
         end = padded.shape[-1] - extra_pad
         return padded[..., :end]
 
-    def _get_output_length(self, input_length: int) -> int:
-        """
-        Return the length of the output of the MimiConv1d.
-        """
-        # padding size
-        n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
-        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
-        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
-        extra_padding = ideal_length - input_length
-
-        if self.causal:
-            padding_left = self.padding_total
-            padding_right = extra_padding
-        else:
-            padding_left = self.padding_left
-            padding_right = self.padding_right + extra_padding
-
-        # padding
-        input_length = input_length + padding_left + padding_right
-
-        # conv
-        output_lenght = (input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1) // self.conv.stride[0] + 1
-        return output_lenght
-
-
     def forward(self, hidden_states):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
@@ -1620,26 +1595,6 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values
-
-    def get_encoded_length(self, input_length: int) -> int:
-        """
-        Return the number of frames of the encoded audio waveform.
-        """
-        output_length = input_length
-
-        # encoder
-        for layer in self.encoder.layers:
-            if isinstance(layer, MimiConv1d):
-                output_length = layer._get_output_length(output_length)
-            elif isinstance(layer, MimiResnetBlock):
-                for el in layer.block:
-                    if isinstance(el, MimiConv1d):
-                        output_length = el._get_output_length(output_length)
-
-        # downsample
-        output_length = self.downsample._get_output_length(output_length)
-
-        return output_length
 
     def encode(
         self,
