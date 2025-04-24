@@ -56,7 +56,6 @@ if TYPE_CHECKING:
     from .clip import *
     from .clipseg import *
     from .clvp import *
-    from .csm import *
     from .code_llama import *
     from .codegen import *
     from .cohere import *
@@ -68,6 +67,7 @@ if TYPE_CHECKING:
     from .convnextv2 import *
     from .cpm import *
     from .cpmant import *
+    from .csm import *
     from .ctrl import *
     from .cvt import *
     from .dab_detr import *
