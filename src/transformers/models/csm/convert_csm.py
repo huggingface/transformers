@@ -168,6 +168,15 @@ def write_model(
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
+    # default generation config
+    model.generation_config._from_model_config = False
+    model.generation_config.do_sample = True
+    model.generation_config.top_k = 50
+    model.generation_config.temperature = 0.9
+    model.generation_config.depth_decoder_do_sample = True
+    model.generation_config.depth_decoder_top_k = 50
+    model.generation_config.depth_decoder_temperature = 0.9
+
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
     del state_dict, model
