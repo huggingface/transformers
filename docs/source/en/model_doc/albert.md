@@ -30,7 +30,7 @@ rendered properly in your Markdown viewer.
 
 
 
-You can find all the original ALBERT checkpoints [HERE](https://huggingface.co/collections/google/albert-release-64ff65ba18830fabea2f2cec)
+You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
 
 > [!TIP]
 > Click on the ALBERT models in the right sidebar for more examples of how to apply ALBERT to different natural language processing (NLP) tasks.
