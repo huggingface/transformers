@@ -277,6 +277,36 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         return _is_torchao_serializable
 
+    def get_cuda_warm_up_factor(self):
+        """
+        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
+        A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
+        we allocate half the memory of the weights residing in the empty model, etc...
+        """
+        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
+            from torchao.core.config import AOBaseConfig
+
+            quant_type = self.quantization_config.quant_type
+            if isinstance(quant_type, AOBaseConfig):
+                # Extract size digit using fuzzy match on the class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
+
+                if size_digit == "4":
+                    return 8
+                else:
+                    return 4
+
+        # Original mapping for non-AOBaseConfig types
+        map_to_target_dtype = {
+            "int4_weight_only": 8,
+            "int8_weight_only": 4,
+            "int8_dynamic_activation_int8_weight": 4,
+            "autoquant": 4,
+        }
+
+        return map_to_target_dtype[self.quantization_config.quant_type]
+
     @property
     def is_trainable(self) -> bool:
         supported_quant_types_for_training = [
