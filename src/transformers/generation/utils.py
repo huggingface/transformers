@@ -2106,7 +2106,9 @@ class GenerationMixin:
             return False
 
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(generation_config.compile_config._compile_all_devices)
+        valid_hardware = self.device.type == "cuda" or bool(
+            generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
+        )
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
@@ -2125,6 +2127,14 @@ class GenerationMixin:
             # Exception 3: Disk offload is not supported for compilation
             has_disk_offload = "disk" in all_model_devices
             can_compile &= not has_disk_offload
+
+        # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
+        # them
+        if generation_config.compile_config is not None and not can_compile:
+            logger.warning_once(
+                "You have set `compile_config`, but we are unable to meet the criteria for compilation. Compilation "
+                "will be skipped."
+            )
 
         return can_compile
 
