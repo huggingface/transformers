@@ -14,15 +14,19 @@
 # limitations under the License.
 
 import argparse
+import gc
 import os
 import re
-import gc
 
 import torch
+from tokenizers.processors import TemplateProcessing
 
 from transformers import (
+    AutoFeatureExtractor,
+    AutoTokenizer,
     CsmConfig,
     CsmForCausalLM,
+    CsmProcessor,
     MimiModel,
 )
 from transformers.utils.hub import cached_file
@@ -81,7 +85,8 @@ def write_model(
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
 
-    codec_model = MimiModel.from_pretrained(codec_model_path_or_repo) 
+    codec_model = MimiModel.from_pretrained(codec_model_path_or_repo)
+    codec_model.config._attn_implementation_autoset = False
 
     config = CsmConfig(
         codec_config=codec_model.config,
@@ -174,6 +179,65 @@ def write_model(
     print("Model reloaded successfully.")
 
 
+def write_tokenizer(output_dir):
+    # from https://github.com/SesameAILabs/csm/blob/2d720827843b653c4d67bb4445b1c0a4f59e646f/generator.py#L22-L36
+    def load_llama3_tokenizer():
+        """
+        https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
+        """
+        tokenizer_name = "meta-llama/Llama-3.2-1B"
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        bos = tokenizer.bos_token
+        eos = tokenizer.eos_token
+        tokenizer._tokenizer.post_processor = TemplateProcessing(
+            single=f"{bos}:0 $A:0 {eos}:0",
+            pair=f"{bos}:0 $A:0 {eos}:0 {bos}:1 $B:1 {eos}:1",
+            special_tokens=[(f"{bos}", tokenizer.bos_token_id), (f"{eos}", tokenizer.eos_token_id)],
+        )
+
+        return tokenizer
+
+    tokenizer = load_llama3_tokenizer()
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.save_pretrained(output_dir)
+
+    # manually modify in tokenizer_config.json
+    # "128002": {
+    #     "content": "<|AUDIO|>",
+    #     ...
+    # }
+    # "128003": {
+    #     "content": "<|audio_eos|>",
+    #     ...
+    # }
+    print("Tokenizer saved successfully. Please manually modify in tokenizer_config.json AND tokenizer.json as follows: ")
+    print("""
+    # "128002": { 
+    #     "content": "<|AUDIO|>",
+    #     ...
+    # }
+    # "128003": { 
+    #     "content": "<|audio_eos|>",
+    #     ...
+    # }
+    """)
+
+
+def write_processor(output_dir, codec_model_path_or_repo):
+    chat_template = "\n{%- for message in messages %}\n    {#-- Validate role is a stringified integer --#}\n    {%- if not message['role'] is string or not message['role'].isdigit() %}\n        {{- raise_exception(\"The role must be an integer or a stringified integer (e.g. '0') designating the speaker id\") }}\n    {%- endif %}\n\n    {#-- Validate content is a list --#}\n    {%- set content = message['content'] %}\n    {%- if content is not iterable or content is string %}\n        {{- raise_exception(\"The content must be a list\") }}\n    {%- endif %}\n\n    {#-- Collect content types --#}\n    {%- set content_types = content | map(attribute='type') | list %}\n    {%- set is_last = loop.last %}\n\n    {#-- Last message validation --#}\n    {%- if is_last %}\n        {%- if 'text' not in content_types %}\n            {{- raise_exception(\"The last message must include one item of type 'text'\") }}\n        {%- elif (content_types | select('equalto', 'text') | list | length > 1) or (content_types | select('equalto', 'audio') | list | length > 1) %}\n            {{- raise_exception(\"At most two items are allowed in the last message: one 'text' and one 'audio'\") }}\n        {%- endif %}\n\n    {#-- All other messages validation --#}\n    {%- else %}\n        {%- if content_types | select('equalto', 'text') | list | length != 1\n              or content_types | select('equalto', 'audio') | list | length != 1 %}\n            {{- raise_exception(\"Each message (except the last) must contain exactly one 'text' and one 'audio' item\") }}\n        {%- elif content_types | reject('in', ['text', 'audio']) | list | length > 0 %}\n            {{- raise_exception(\"Only 'text' and 'audio' types are allowed in content\") }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n\n{%- for message in messages %}\n    {{- bos_token }}\n    {{- '[' + message['role'] + ']' }}\n    {{- message['content'][0]['text'] }}\n    {{- eos_token }}\n    {%- if message['content']|length > 1 %}\n        {{- '<|AUDIO|><|audio_eos|>' }}\n    {%- endif %}\n{%- endfor %}\n"
+    tokenizer = AutoTokenizer.from_pretrained(output_dir)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(codec_model_path_or_repo)
+
+    processor = CsmProcessor(
+        tokenizer=tokenizer,
+        feature_extractor=feature_extractor,
+        chat_template=chat_template,
+    )
+
+    processor.save_pretrained(output_dir)
+    print("Processor saved successfully.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Convert Csm weights to HuggingFace format")
     parser.add_argument(
@@ -189,6 +253,12 @@ def main():
         help="Name of the model in input_path_or_repo",
     )
     parser.add_argument(
+        "--codec_model_path_or_repo",
+        type=str,
+        required=True,
+        help="Path or repo containing the codec model",
+    )
+    parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
@@ -200,16 +270,15 @@ def main():
     write_model(
         args.input_path_or_repo,
         args.model_name,
+        args.codec_model_path_or_repo,
         output_dir=args.output_dir,
         safe_serialization=args.safe_serialization,
     )
 
+    write_tokenizer(args.output_dir)
+
+    write_processor(args.output_dir, args.codec_model_path_or_repo)
+
 
 if __name__ == "__main__":
-    write_model(
-        "sesame/csm-1b",
-        "ckpt.pt",
-        "kyutai/mimi",
-        output_dir="/home/eustache_lebihan/add-sesame/transformers/tmp",
-        safe_serialization=True,
-    )
+    main()
