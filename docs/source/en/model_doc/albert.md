@@ -94,11 +94,7 @@ for token_id in top_k[0]:
 <hfoption id="transformers-cli">
 
 ```bash
-transformers-cli mask \
-  --model albert-base-v2 \
-  --text "The capital of France is [MASK]." \
-  --device cuda \  # Optional
-  --torch_dtype float16
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model albert-base-v2 --device 0
 ```
 
 </hfoption>
