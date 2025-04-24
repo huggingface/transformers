@@ -9,7 +9,8 @@ from transformers.generation import GenerationConfig
 
 
 # --- Common Setup ---
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
+# model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -30,7 +31,7 @@ generation_config = GenerationConfig(
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
     batch_size=8, # Internal micro-batch size for the processor
-    num_blocks=16,
+    num_blocks=8,
     block_size=1024
 )
 
@@ -73,7 +74,6 @@ for i, output_ids in enumerate(batch_outputs):
     print(f"  Output: {output_text}")
 print("-" * 20)
 print("--- Finished Simple Batch Generation Example ---\n\n")
-
 
 # --- Example 2: Involved Performant Version using ContinuousBatchingManager ---
 print("--- Running Involved Continuous Batching Example ---")
@@ -119,7 +119,7 @@ def retrieve_results():
     finished_count = 0
     while finished_count < len(submitted_requests):
         try:
-            result = manager.get_result(block=True, timeout=1) # Wait for 1 second
+            result = manager.get_result(timeout=1.0) # Wait for 1 second
             if result:
                 req_id = result["request_id"]
                 if req_id in submitted_requests:
@@ -172,7 +172,7 @@ print("Manager stopped.")
 print("Checking for any remaining results in queue...")
 while True:
     try:
-        result = manager.get_result(block=False)
+        result = manager.get_result(timeout=1.0)
         if result:
              req_id = result["request_id"]
              if req_id not in results: # Avoid printing duplicates

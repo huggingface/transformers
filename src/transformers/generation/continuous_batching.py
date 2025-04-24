@@ -60,7 +60,7 @@ class RequestState:
     allocated_blocks: List[int] = field(default_factory=list)
     cache_indices: List[int] = field(default_factory=list)  # Physical indices in the flat cache tensor
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: str = "pending"  # pending, prefilling, generating, finished, failed
+    status: str = "pending"  # pending, prefilling, decoding, finished, failed
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
@@ -108,7 +108,7 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        cache_shape = (num_blocks, self.num_key_value_heads, self.block_size, self.head_dim)  # block_num first
+        cache_shape = (num_blocks, self.num_key_value_heads, self.block_size, self.head_dim)
 
         self.dtype = dtype
         self.device = device  # Store main device
@@ -184,8 +184,8 @@ class PagedAttentionCache(Cache):
         """Reshapes K/V cache for easier indexing during updates."""
         # Shape: (num_blocks * block_size, num_heads, head_dim)
         total_slots = self.num_blocks * self.block_size
-        k_cache = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
-        v_cache = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+        k_cache = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+        v_cache = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         return k_cache, v_cache
 
     def update(
@@ -193,7 +193,8 @@ class PagedAttentionCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        fill_index: torch.Tensor,
+        cumulative_seqlens_k: torch.Tensor,
+        cache_index,
         **kwargs,
     ) -> (torch.Tensor, torch.Tensor):
         """
@@ -210,11 +211,12 @@ class PagedAttentionCache(Cache):
             Tuple[`torch.Tensor`, `torch.Tensor`]: A tuple containing the *entire* key and value cache tensors for the specified layer, possibly after reshaping for attention calculation.
                                                   Note: The reshaping might depend on the specific attention implementation. Returning the full cache for now.
         """
+        fill_index = kwargs["fill_index"]
         if fill_index.numel() == 0:
             # Nothing to write, return the current cache state
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-        if key_states.shape[0] != fill_index.numel() or value_states.shape[0] != fill_index.numel():
+        if key_states.shape[2] != fill_index.numel() or value_states.shape[2] != fill_index.numel():
             raise ValueError(
                 f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of fill indices ({fill_index.numel()})"
             )
@@ -226,8 +228,8 @@ class PagedAttentionCache(Cache):
         indices_device = fill_index.to(k_cache_flat.device)
 
         try:
-            k_cache_flat[indices_device] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
-            v_cache_flat[indices_device] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
+            k_cache_flat[:, indices_device, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
+            v_cache_flat[:, indices_device, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
         except IndexError as e:
             logger.error(
                 f"IndexError during cache update. Fill indices shape: {indices_device.shape}, "
@@ -236,11 +238,8 @@ class PagedAttentionCache(Cache):
             )
             raise e
 
-        # The attention mechanism might need the cache in its original 4D shape or the flat 3D shape.
-        # Returning the original 4D tensors for now, as the attention function might reshape it internally
-        # based on block tables or other mechanisms.
-        # If the attention function *always* expects the flat cache, we could return k_cache_flat, v_cache_flat.
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
+        return k_cache_flat[:,cache_index,:][None,...], v_cache_flat[:,cache_index,:][None,...]
 
     def write_to_cache(
         self, request_id: str, key_states: torch.Tensor, value_states: torch.Tensor, logical_indices: List[int]
@@ -556,13 +555,13 @@ class ContinuousBatchProcessor:
         num_free_blocks = self.cache.get_num_free_blocks()
         potential_batch_tokens = 0
 
-        # 1. Prioritize requests already running (in active_requests and status 'generating')
+        # 1. Prioritize requests already running (in active_requests and status 'decoding')
         # These only need 1 new token slot, which usually fits.
-        running_requests = [req_id for req_id, state in self.active_requests.items() if state.status == "generating"]
+        running_requests = [req_id for req_id, state in self.active_requests.items() if state.status == "decoding"]
         selected_requests.extend(running_requests)
         potential_batch_tokens += len(running_requests)  # 1 token per running request
 
-        # 2. Add requests that finished prefilling ('prefilling' -> 'generating')
+        # 2. Add requests that finished prefilling ('prefilling' -> 'decoding')
         # These also only need 1 new token slot for the first generation step.
         prefilled_requests = [req_id for req_id, state in self.active_requests.items() if state.status == "prefilling"]
         # Check if adding these exceeds max batch size
@@ -615,7 +614,7 @@ class ContinuousBatchProcessor:
                     state.status = "prefilling"  # Prefill the remainder
 
             elif num_free_blocks > 0:  # Try splitting
-                # Only split new requests or remainder requests, not already generating ones
+                # Only split new requests or remainder requests, not already decoding ones
                 if state.status in ["pending", "split_pending_remainder"]:
                     allocatable_blocks = num_free_blocks
                     num_free_blocks = 0  # Use all remaining blocks
@@ -675,21 +674,11 @@ class ContinuousBatchProcessor:
         self._get_new_requests()
 
         if not self.active_requests and not self.waiting_requests:
-            # Check stop event only if nothing is active/waiting
-            if self.stop_event.is_set():
-                return None
-            # If not stopping, wait a bit before checking again
-            time.sleep(0.01)
-            return None  # Indicate no work to do currently
+            return None
 
         self.requests_to_process_next = self._schedule_batch()
 
         if not self.requests_to_process_next:
-            # Could not schedule anything, maybe waiting for blocks to free up
-            # Or maybe just no new requests and nothing active
-            if not self.active_requests and self.stop_event.is_set():
-                return None  # Stop signal and nothing running
-            time.sleep(0.01)  # Wait briefly if schedule was empty but still active/waiting
             return None
 
         batch_input_ids = []
@@ -710,11 +699,11 @@ class ContinuousBatchProcessor:
         # requests_in_batch.sort(key=lambda r: len(r.prompt_ids) if r.status.startswith("prefill") else 1)
 
         for state in requests_in_batch:
-            if state.status == "generating":
+            if state.status == "decoding":
                 # Add the single next token ID (using last generated or last prompt token)
-                last_token = state.output_ids[-1] if state.output_ids else state.prompt_ids[-1]
+                last_token = state.output_ids[-1]
                 tokens_to_add = [last_token]
-                start_pos = state.current_len()  # Position of the token we are generating NEXT
+                start_pos = state.current_len()  # Position of the token we are decoding NEXT
                 positions_to_add = [start_pos]
 
                 # Allocate blocks if needed (should only need 1 block extra occasionally)
@@ -728,7 +717,7 @@ class ContinuousBatchProcessor:
                     if len(allocated) < new_blocks_needed:
                         # This should be rare if scheduling logic is correct
                         logger.error(
-                            f"Failed to allocate block for generating request {state.request_id}. This might lead to errors."
+                            f"Failed to allocate block for decoding request {state.request_id}. This might lead to errors."
                         )
                         # How to handle this? Skip request? Mark as failed?
                         # For now, continue, but cache write might fail.
@@ -743,6 +732,7 @@ class ContinuousBatchProcessor:
                 physical_write_index = self.cache._get_physical_indices(state.request_id, [write_logical_index])[0]
 
                 batch_cache_indices.extend(physical_read_indices)
+                batch_cache_indices.append(physical_write_index)
                 batch_fill_indices.append(physical_write_index)  # Only one write position per generation request
 
                 seq_len_q = 1  # Query length is 1 for generation
@@ -773,13 +763,11 @@ class ContinuousBatchProcessor:
                         continue  # Skip adding this request to the batch tensors
                     state.allocated_blocks.extend(allocated)
 
-                # Calculate cache indices for write (all tokens being prefilled)
-                # Read indices are not needed for prefill as attention is causal within the prefill
                 write_logical_indices = list(range(start_pos, start_pos + len(tokens_to_add)))
                 physical_write_indices = self.cache._get_physical_indices(state.request_id, write_logical_indices)
 
                 batch_fill_indices.extend(physical_write_indices)
-                # batch_cache_indices remain empty for pure prefill steps if using causal attention
+                batch_cache_indices.extend(physical_write_indices)
 
                 seq_len_q = len(tokens_to_add)  # Query length is the number of prefill tokens
                 seq_len_k = len(tokens_to_add)  # Key length is also the number of prefill tokens (causal attention)
@@ -822,10 +810,6 @@ class ContinuousBatchProcessor:
         # TODO: Verify cumulative_seqlens_k logic - does it need full context length or just batch length?
         # Assuming flash_attn_varlen_func needs cumulative lengths of K *within the batch*:
         cumulative_seqlens_k_tensor = torch.tensor(cumulative_seqlens_k, dtype=torch.int32, device=self.model_device)
-        # TODO: cache_index and fill_index logic needs review based on model/attention requirements
-        # Assuming `fill_index` tells the cache where to write the *new* K/V for this batch
-        # Assuming `cache_index` tells the attention where to *read* K/V from (using block mapping)
-        # This seems highly dependent on the specific attention implementation using the cache.
 
         # Placeholder kwargs - these need careful construction based on assumed PagedAttention API used by model
         model_kwargs = {
@@ -833,16 +817,19 @@ class ContinuousBatchProcessor:
             "cumulative_seqlens_k": cumulative_seqlens_k_tensor,  # K includes context length? If so, need state.current_len()
             "max_seqlen_q": max_seqlen_q,
             "max_seqlen_k": max_seqlen_k,  # Needs to be max *total* K length in batch?
-            # "cache_index": torch.tensor(batch_cache_indices, dtype=torch.long, device=self.model_device), # Indices to READ from KV cache
-            # "fill_index": torch.tensor(
-            #     batch_fill_indices, dtype=torch.long, device=self.model_device
-            # ),  # Indices to WRITE to KV cache
+            "fill_index": torch.tensor(
+                batch_fill_indices, dtype=torch.long, device=self.model_device
+            ),  # Indices to WRITE to KV cache
+            "cache_index": torch.tensor(
+                batch_cache_indices, dtype=torch.long, device=self.model_device
+            ),  # Indices to READ from KV cache
             "logits_indices": logits_indices,  # Indices used *after* forward pass to get next token logits
             "block_tables": {
                 req_id: self.cache.get_block_table(req_id) for req_id in self.requests_to_process_next
             },  # Pass block tables if needed by attention mechanism
-            # Pass the cache object itself
-            "cache": self.cache,  # Or just "cache": self.cache if the model expects that name
+            "cache": self.cache,
+            # XXX: this to disable the automatic declaration of `DynamicCache`, thus saving memory
+            "use_cache": False,
         }
         # Recalculate max_seqlen_k to be the maximum *total* sequence length in the batch
         max_total_len_k = 0
@@ -869,9 +856,28 @@ class ContinuousBatchProcessor:
             state = self.active_requests[req_id]
 
             if state.status == "prefilling":  # Just finished prefilling the whole prompt
-                # No token generated yet, just move to 'generating' state
-                state.status = "generating"
+                # No token generated yet, just move to 'decoding' state
+                state.status = "decoding"
                 state.prompt_ids = []  # Clear prompt_ids as they are now in cache
+                token = generated_ids[token_idx_in_generation]
+                token_idx_in_generation += 1
+
+                state.output_ids.append(token)
+
+                is_eos = token == state.eos_token_id
+                is_max_len = state.generated_len() >= state.max_new_tokens
+
+                if is_eos or is_max_len:
+                    state.status = "finished"
+                    logger.debug(f"Request {req_id} finished. Reason: {'EOS' if is_eos else 'Max Length'}")
+                    finished_request_ids.append(req_id)
+                    self.output_queue.put(
+                        {
+                            "request_id": state.request_id,
+                            "output_ids": state.output_ids,
+                            "status": "finished",
+                        }
+                    )
 
             elif state.status == "prefilling_split":  # Finished prefilling a *part* of the prompt
                 # Ignore the generated token for this step.
@@ -882,11 +888,11 @@ class ContinuousBatchProcessor:
                     state.prompt_ids = []  # Clear the processed part
                 else:
                     # No remainder, move to generation
-                    state.status = "generating"
+                    state.status = "decoding"
                     state.prompt_ids = []
                 logger.debug(f"Request {req_id} finished prefill split. Status: {state.status}")
 
-            elif state.status == "generating":
+            elif state.status == "decoding":
                 # This request generated a token
                 if token_idx_in_generation >= len(generated_ids):
                     logger.error(
@@ -899,7 +905,6 @@ class ContinuousBatchProcessor:
 
                     state.output_ids.append(token)
 
-                    # Check for completion
                     is_eos = token == state.eos_token_id
                     is_max_len = state.generated_len() >= state.max_new_tokens
 
@@ -964,7 +969,6 @@ class ContinuousBatchingManager:
 
         # Clear any stale state before starting
         self._result_queue = queue.Queue()
-        self._stop_event = threading.Event()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
         logger.info("Continuous batching manager started.")
@@ -984,8 +988,8 @@ class ContinuousBatchingManager:
             logger.warning("Manager not started.")
             return
 
-        if not self._stop_event.is_set():
-            self._stop_event.set()
+        if not self.stop_event.is_set():
+            self.stop_event.set()
             logger.info("Stopping continuous batching manager...")
 
         if block:
@@ -1095,12 +1099,7 @@ class ContinuousBatchingManager:
                         outputs = self.model.forward(
                             input_ids=input_ids,
                             position_ids=position_ids,
-                            # past_key_values=model_kwargs["past_key_values"],  # Pass the cache object
-                            # use_cache=True,  # Important for HF models
-                            # Pass other relevant kwargs prepared by the processor
-                            **{
-                                k: v for k, v in model_kwargs.items() if k not in ["past_key_values", "logits_indices"]
-                            },
+                            **model_kwargs,
                         )
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
@@ -1126,7 +1125,6 @@ class ContinuousBatchingManager:
                 # Using simple argmax for now:
                 generated_ids = torch.argmax(next_token_logits, dim=-1).squeeze(0)  # Squeeze batch dim if necessary
 
-                # Update Batch State
                 batch_processor.update_batch(generated_ids)
 
         except Exception as e:
@@ -1241,7 +1239,8 @@ class ContinuousMixin:
                 request_ids[req_id] = i  # Store original index
 
             # Collect results until all requests are done
-            for result in manager:
+            finished_requests = 0
+            while finished_requests < num_requests:
                 try:
                     result = manager.get_result(timeout=1.0)  # Use timeout to avoid potential deadlocks
                     if result:
@@ -1258,16 +1257,14 @@ class ContinuousMixin:
                         else:
                             logger.warning(f"Received result for unknown request ID: {req_id}")
 
+                    finished_requests += 1
+
                 except queue.Empty:
                     # Timeout occurred, check if the manager is still alive
                     if not manager._generation_thread.is_alive():
                         logger.error("Generation thread terminated unexpectedly.")
-                        # Mark remaining requests as failed
-                        for req_id, index in request_ids.items():
-                            if index not in results:
-                                results[index] = []
-                        break  # Exit loop
-                    continue  # Continue waiting
+                        break
+                    continue
 
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)

@@ -204,11 +204,10 @@ def eager_attention_forward(
     attention_mask_ = torch.full(
             [1, 1, query.shape[2],key.shape[2]+1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
     )
-    cuq = cumulative_seqlens_q +1
-    cuk = cumulative_seqlens_k +1
-    attention_mask_[0,0, 0:cuq[0], 0 : cuk[0]] = 0
-    for i in range(1, len(cuk)):
-        attention_mask_[..., cuq[i - 1] : cuq[i], cuk[i - 1] : cuk[i]] = 0
+    cuq = cumulative_seqlens_q
+    cuk = cumulative_seqlens_k
+    for i in range(len(cuk) - 1):
+        attention_mask_[..., cuq[i] : cuq[i + 1], cuk[i] : cuk[i + 1]] = 0
 
     if attention_mask.shape == attention_mask_.shape:
         attention_mask_.masked_fill_(attention_mask!=0, torch.finfo(query.dtype).min)
