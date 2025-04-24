@@ -25,9 +25,7 @@ rendered properly in your Markdown viewer.
 
 # ALBERT
 
-
 [ALBERT](https://huggingface.co/papers/1909.11942) is designed to address memory limitations of scaling and training of [BERT](./bert). It adds two parameter reduction techniques. The first, factorized embedding parametrization, splits the larger vocabulary embedding matrix into two smaller matrices so you can grow the hidden size without adding a lot more parameters. The second, cross-layer parameter sharing, allows layer to share parameters which keeps the number of learnable parameters lower.
-
 
 
 You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
