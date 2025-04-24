@@ -705,7 +705,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             `len(past_key_values) + len(input_ids)`
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
