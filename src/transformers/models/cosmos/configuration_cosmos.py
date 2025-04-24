@@ -36,8 +36,6 @@ class CosmosVQVAEConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        codebook_size (`int`, *optional*, defaults to 32768):
-            Codebook size of the VQ model.
         embed_dim (`int`, *optional*, defaults to 6):
             Dimension of the quantized vector in codebook.
         latent_channels (`int`, *optional*, defaults to 16):
@@ -89,28 +87,26 @@ class CosmosVQVAEConfig(PretrainedConfig):
 
     def __init__(
         self,
-        codebook_size: int = 32768,
         embed_dim: int = 6,
         latent_channels: int = 16,
-        double_latent: bool = False,
-        in_channels: int = 3,
-        out_channels: int = 3,
         temporal_downsample_factor: int = 8,
+        attn_resolutions: List[int] = None,
         base_channels: int = 128,
         channel_multiplier: List[int] = [2, 4, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: List[int] = None,
         hidden_size: int = 512,
-        num_attention_heads: int = 1,
-        attention_dropout: float = 0.0,
         patch_size: int = 4,
         levels: List[int] = [8, 8, 8, 5, 5, 5],
         dropout: float = 0.0,
+        double_latent: bool = False,
+        in_channels: int = 3,
+        out_channels: int = 3,
+        num_attention_heads: int = 1,
+        attention_dropout: float = 0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.codebook_size = codebook_size
         self.embed_dim = embed_dim
         self.latent_channels = latent_channels
         self.double_latent = double_latent
@@ -179,43 +175,6 @@ class CosmosTextConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -331,8 +290,6 @@ class CosmosConfig(PretrainedConfig):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
-        vocabulary_map (`Dict`, *optional*):
-            Not used by the model
         prompt_encoder_config (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
@@ -353,7 +310,6 @@ class CosmosConfig(PretrainedConfig):
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
-        vocabulary_map: Dict[int, int] = None,
         prompt_encoder_config: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
         **kwargs,

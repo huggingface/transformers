@@ -81,8 +81,6 @@ class CosmosVQVAEConfig(Emu3VQVAEConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        codebook_size (`int`, *optional*, defaults to 32768):
-            Codebook size of the VQ model.
         embed_dim (`int`, *optional*, defaults to 6):
             Dimension of the quantized vector in codebook.
         latent_channels (`int`, *optional*, defaults to 16):
@@ -131,7 +129,6 @@ class CosmosVQVAEConfig(Emu3VQVAEConfig):
 
     def __init__(
         self,
-        codebook_size: int = 32768,
         embed_dim: int = 6,
         latent_channels: int = 16,
         temporal_downsample_factor: int = 8,
@@ -143,9 +140,27 @@ class CosmosVQVAEConfig(Emu3VQVAEConfig):
         patch_size: int = 4,
         levels: List[int] = [8, 8, 8, 5, 5, 5],
         dropout: float = 0.0,
-        **super_kwargs,
+        double_latent: bool = False,
+        in_channels: int = 3,
+        out_channels: int = 3,
+        num_attention_heads: int = 1,
+        attention_dropout: float = 0.0,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(
+            embed_dim=embed_dim,
+            latent_channels=latent_channels,
+            temporal_downsample_factor=temporal_downsample_factor,
+            attn_resolutions=attn_resolutions,
+            base_channels=base_channels,
+            channel_multiplier=channel_multiplier,
+            num_res_blocks=num_res_blocks,
+            hidden_size=hidden_size,
+            double_latent=double_latent,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_attention_heads=num_attention_heads,
+            attention_dropout=attention_dropout,
+        )
         self.patch_size = patch_size
         self.levels = levels
         self.dropout = dropout
@@ -201,43 +216,6 @@ class CosmosTextConfig(Emu3TextConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -289,18 +267,39 @@ class CosmosTextConfig(Emu3TextConfig):
         tie_word_embeddings: bool = False,
         rope_theta: float = 500000.0,
         rope_scaling: Optional = None,
-        rope_latent_shape: List[int] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        rope_latent_shape: List[int] = None,
         apply_abs_pos_emb: bool = False,
         cross_attn_hidden_size: int = 1024,
         insert_cross_attn_layers: List[int] = None,
         is_video_to_world: bool = False,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_theta=rope_theta,
+            rope_scaling=rope_scaling,
+            mlp_bias=mlp_bias,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            initializer_range=initializer_range,
+        )
 
         self.rope_latent_shape = rope_latent_shape
         self.apply_abs_pos_emb = apply_abs_pos_emb
@@ -325,8 +324,6 @@ class CosmosConfig(Emu3Config):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
-        vocabulary_map (`Dict`, *optional*):
-            Not used by the model
         prompt_encoder_config (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
@@ -342,11 +339,13 @@ class CosmosConfig(Emu3Config):
 
     def __init__(
         self,
+        vq_config: Union[Dict, CosmosVQVAEConfig] = None,
+        text_config: Union[Dict, CosmosTextConfig] = None,
         prompt_encoder_config: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(text_config=text_config, vq_config=vq_config)
 
         del self.vocabulary_map
 
