@@ -441,7 +441,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(torch_device)
 
         model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device, attn_implementation="sdpa")
-        output_tokens = model.generate(**inputs, do_sample=False)
+        output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
         EXPECTED_OUTPUT_TOKENS = torch.tensor([[
@@ -492,7 +492,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(torch_device)
 
         model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device, attn_implementation="sdpa")
-        output_tokens = model.generate(**inputs, do_sample=False)
+        output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         print(output_tokens)
         # fmt: off
@@ -573,7 +573,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device, attn_implementation="sdpa")
-        output_tokens = model.generate(**inputs, do_sample=False)
+        output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
         EXPECTED_OUTPUT_TOKENS = torch.tensor([[
@@ -645,7 +645,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device, attn_implementation="sdpa")
-        output_tokens = model.generate(**inputs, do_sample=False)
+        output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
         EXPECTED_OUTPUT_TOKENS = torch.tensor([

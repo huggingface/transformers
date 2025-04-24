@@ -208,7 +208,7 @@ class MimiConv1d(nn.Module):
         padded = nn.functional.pad(hidden_states, paddings, mode, value)
         end = padded.shape[-1] - extra_pad
         return padded[..., :end]
-    
+
     def _get_output_length(self, input_length: int) -> int:
         """
         Return the length of the output of the MimiConv1d.
@@ -218,14 +218,14 @@ class MimiConv1d(nn.Module):
         n_frames = torch.ceil(n_frames).to(torch.int64) - 1
         ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
         extra_padding = ideal_length - input_length
-    
+
         if self.causal:
             padding_left = self.padding_total
             padding_right = extra_padding
         else:
             padding_left = self.padding_left
             padding_right = self.padding_right + extra_padding
-        
+
         # padding
         input_length = input_length + padding_left + padding_right
 
@@ -1620,7 +1620,7 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values
-    
+
     def get_encoded_length(self, input_length: int) -> int:
         """
         Return the number of frames of the encoded audio waveform.
@@ -1638,7 +1638,7 @@ class MimiModel(MimiPreTrainedModel):
 
         # downsample
         output_length = self.downsample._get_output_length(output_length)
-    
+
         return output_length
 
     def encode(

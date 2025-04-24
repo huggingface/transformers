@@ -14,19 +14,17 @@
 # limitations under the License.
 
 import math
-import inspect
+from typing import Any, Dict, Optional
+
 from ...utils import is_torch_available
 
-from typing import Dict, Any, Optional
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 from ...audio_utils import make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ..auto import AutoFeatureExtractor, AutoModel
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
@@ -106,7 +104,7 @@ class CsmProcessor(ProcessorMixin):
             else:
                 padding_left = padding_left
                 padding_right = padding_right + extra_padding
-            
+
             cur_length = cur_length + padding_left + padding_right
             cur_length = (cur_length - dilation * (kernel_size - 1) - 1) // stride + 1
 
