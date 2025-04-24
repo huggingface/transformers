@@ -844,6 +844,13 @@ class PretrainedConfig(PushToHubMixin):
                 serializable_config_dict[key] = value
 
         self._remove_keys_not_serialized(serializable_config_dict)
+
+        if hasattr(self, "quantization_config"):
+            serializable_config_dict["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
         return serializable_config_dict
@@ -871,6 +878,13 @@ class PretrainedConfig(PushToHubMixin):
             output[key] = value
 
         self._remove_keys_not_serialized(output)
+
+        if hasattr(self, "quantization_config"):
+            output["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
         self.dict_torch_dtype_to_str(output)
 
         return output
@@ -972,15 +986,10 @@ class PretrainedConfig(PushToHubMixin):
 
     def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
         """
-        Checks and removes if tehre are any keys in the dict that should not be serialized when saving the config.
+        Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
         if hasattr(self, "quantization_config"):
-            d["quantization_config"] = (
-                self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
-                else self.quantization_config
-            )
             # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
             _ = d.pop("_pre_quantization_dtype", None)
 
