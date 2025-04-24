@@ -26,7 +26,10 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-[SigLIP2](https://huggingface.co/papers/2502.14786) is a family of multilingual vision-language encoders, it is build upon the success of the original [SigLIP](siglip). The original image-text training objective is extended by several independently developed techniques. These include decoder-based pretraining, self-supervised losses such as self-distillation and masked prediction, as well as online data curation.
+[SigLIP2](https://huggingface.co/papers/2502.14786) is a family of multilingual vision-language encoders that builds on the [SigLIP](./siglip) training recipe. It includes decoder-based pretraining, self-distillation, and masked prediction to improve dense prediction tasks (segmentation, depth estimation, etc.). This model is available in two variants:
+
+- NaFlex supports different resolutions and maintains the native image aspect ratio
+- FixRes supports fixed resolutions and is backwards compatible with [SigLIP](./siglip)
 
 The model comes in two variants
 
