@@ -229,9 +229,9 @@ class MiniMaxLightningAttention(nn.Module):
                 end_idx = min(start_idx + self.block_size, seq_len)
                 current_block_size = end_idx - start_idx
 
-                current_query_states = query_states[:, :, start_idx:end_idx].contiguous()
-                current_key_states = key_states[:, :, start_idx:end_idx].contiguous()
-                current_value_states = value_states[:, :, start_idx:end_idx].contiguous()
+                current_query_states = query_states[:, :, start_idx:end_idx]
+                current_key_states = key_states[:, :, start_idx:end_idx]
+                current_value_states = value_states[:, :, start_idx:end_idx]
 
                 current_query_decay = self.query_decay[:, :current_block_size]
                 current_key_decay = self.key_decay[:, -current_block_size:]
