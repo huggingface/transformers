@@ -502,6 +502,7 @@ class DinoDetrModelOutput(ModelOutput):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
+    last_hidden_state: torch.FloatTensor = None
     hidden_states: list[torch.FloatTensor] = None
     references: list[torch.FloatTensor] = None
     encoder_last_hidden_state: torch.FloatTensor = None
@@ -2890,6 +2891,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    hs[-1],
                     hs,
                     reference,
                     hs_enc,
@@ -2904,6 +2906,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 if v is not None
             )
         return DinoDetrModelOutput(
+            last_hidden_state=hs[-1],
             hidden_states=hs,
             references=reference,
             encoder_last_hidden_state=hs_enc,
@@ -3017,31 +3020,34 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         )
         if not return_dict:
             (
+                last_hidden_state,
                 hs,
                 reference,
                 hs_enc,
                 ref_enc,
                 init_box_proposal,
             ) = (
-                outputs_model_part[0][1:],
-                outputs_model_part[1],
+                outputs_model_part[0],
+                outputs_model_part[1][1:],
                 outputs_model_part[2],
                 outputs_model_part[3],
                 outputs_model_part[4],
+                outputs_model_part[5],
             )
             if self.training:
-                dn_meta = outputs_model_part[5]
+                dn_meta = outputs_model_part[6]
             if self.training and (output_hidden_states or self.model.output_hidden_states):
+                decoder_hidden_states = outputs_model_part[7]
+                encoder_hidden_states = outputs_model_part[8]
+            if not self.training and (output_hidden_states or self.model.output_hidden_states):
                 decoder_hidden_states = outputs_model_part[6]
                 encoder_hidden_states = outputs_model_part[7]
-            if not self.training and (output_hidden_states or self.model.output_hidden_states):
-                decoder_hidden_states = outputs_model_part[5]
-                encoder_hidden_states = outputs_model_part[6]
             if output_attentions:
                 encoder_attentions = outputs_model_part[-2]
                 decoder_attentions = outputs_model_part[-1]
 
         else:
+            last_hidden_state = outputs_model_part.last_hidden_state
             hs = outputs_model_part.hidden_states[1:]
             reference = outputs_model_part.references
             hs_enc = outputs_model_part.encoder_last_hidden_state
@@ -3153,7 +3159,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             return tuple(
                 v
                 for v in [
-                    hs[-1],
+                    last_hidden_state,
                     reference[-1],
                     hs_enc,
                     ref_enc,
@@ -3171,7 +3177,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 if v is not None
             )
         dict_outputs = DinoDetrObjectDetectionOutput(
-            last_hidden_state=hs[-1],
+            last_hidden_state=last_hidden_state,
             reference=reference[-1],
             encoder_last_hidden_state=hs_enc,
             encoder_reference=ref_enc,
