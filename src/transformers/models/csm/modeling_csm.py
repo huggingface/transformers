@@ -23,7 +23,7 @@ import math
 import os
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -1608,7 +1608,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # *************** Csm specific ***************
-        depth_decoder_generate_kwargs = model_kwargs.pop("depth_decoder_generate_kwargs", {})
+        depth_decoder_generation_config = generation_config.depth_decoder_generation_config
         # ============================================
 
         model_forward = self.__call__
@@ -1632,7 +1632,9 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+            # *************** Csm specific ***************
+            model_inputs.update({"output_hidden_states": True})
+            # ============================================
 
             if is_prefill:
                 outputs = self(**model_inputs, return_dict=True)
@@ -1693,7 +1695,7 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             depth_decoder_outputs = self.depth_decoder.generate(
                 input_ids=first_codebook_ids,
                 backbone_last_hidden_state=backbone_last_hidden_state,
-                **depth_decoder_generate_kwargs,
+                generation_config=depth_decoder_generation_config,
             )
             # codebook_ids = torch.cat([first_codebook_ids, depth_decoder_outputs], dim=-1)
             codebook_ids = depth_decoder_outputs if isinstance(depth_decoder_outputs, torch.Tensor) else codebook_ids
@@ -1762,25 +1764,6 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
                 )
         else:
             return input_ids
-
-    def _validate_model_kwargs(self, model_kwargs):
-        """
-        This method overrides [~generation.utils.GenerationMixin._validate_model_kwargs].
-        We need to pass to generate the depth_decoder_generate_kwargs, yet they are not model_kwargs.
-        """
-        model_kwargs.pop("depth_decoder_generate_kwargs", None)
-        super()._validate_model_kwargs(model_kwargs)
-
-    def _validate_depth_decoder_generate_kwargs(self, depth_decoder_generate_kwargs):
-        min_new_tokens = depth_decoder_generate_kwargs.get("min_new_tokens", self.config.num_codebooks - 1)
-        max_new_tokens = depth_decoder_generate_kwargs.get("max_new_tokens", self.config.num_codebooks - 1)
-        if {min_new_tokens, max_new_tokens} != {self.config.num_codebooks - 1}:
-            raise ValueError(
-                f"depth_decoder_generate_kwargs' min_new_tokens ({min_new_tokens}) and max_new_tokens ({max_new_tokens}) must be equal to self.config.num_codebooks - 1 ({self.config.num_codebooks - 1})"
-            )
-        depth_decoder_generate_kwargs["min_new_tokens"] = min_new_tokens
-        depth_decoder_generate_kwargs["max_new_tokens"] = max_new_tokens
-        depth_decoder_generate_kwargs["return_dict_in_generate"] = False
 
     def _get_stopping_criteria(
         self,
@@ -1877,6 +1860,61 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
 
         return {"inputs_embeds": inputs_embeds, "labels": labels}
 
+    def _prepare_generation_config(
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
+    ) -> Tuple[GenerationConfig, Dict]:
+        """
+        This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
+        It ensures that the depth decoder generation config is initialized and that passed args as depth_decoder_* are properly handled.
+        """
+        # extract depth decoder kwargs and remove them from the main kwargs
+        depth_decoder_kwargs = {
+            k[len("depth_decoder_") :]: v for k, v in kwargs.items() if k.startswith("depth_decoder_")
+        }
+
+        # remove the depth decoder keys from the original kwargs
+        kwargs = {k: v for k, v in kwargs.items() if not k.startswith("depth_decoder_")}
+
+        # initialize the generation config
+        generation_config, model_kwargs = super()._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+
+        # get the depth decoder generation config kwargs
+        from_generation_config = {
+            k[len("depth_decoder_") :]: v
+            for k, v in generation_config.to_diff_dict().items()
+            if k.startswith("depth_decoder_")
+        }
+
+        # initialize the depth decoder generation config
+        depth_decoder_generation_config = GenerationConfig(**from_generation_config)
+        depth_decoder_generation_config.update(**depth_decoder_kwargs)
+
+        # ensure the depth decoder generation config is valid
+        depth_decoder_min_new_tokens = getattr(depth_decoder_generation_config, "min_new_tokens") or (
+            self.config.num_codebooks - 1
+        )
+        depth_decoder_max_new_tokens = getattr(depth_decoder_generation_config, "max_new_tokens") or (
+            self.config.num_codebooks - 1
+        )
+
+        if {depth_decoder_min_new_tokens, depth_decoder_max_new_tokens} != {self.config.num_codebooks - 1}:
+            raise ValueError(
+                f"depth_decoder_generation_config's min_new_tokens ({depth_decoder_min_new_tokens}) and max_new_tokens ({depth_decoder_max_new_tokens}) must be equal to self.config.num_codebooks - 1 ({self.config.num_codebooks - 1})"
+            )
+        elif depth_decoder_generation_config.return_dict_in_generate:
+            logger.warning(
+                "depth_decoder_generation_config.return_dict_in_generate is set to True, but this will be ignored as the depth decoder model does not return a dictionary in generate"
+            )
+            depth_decoder_generation_config.return_dict_in_generate = False
+
+        depth_decoder_generation_config.min_new_tokens = depth_decoder_min_new_tokens
+        depth_decoder_generation_config.max_new_tokens = depth_decoder_max_new_tokens
+        generation_config.depth_decoder_generation_config = depth_decoder_generation_config
+
+        return generation_config, model_kwargs
+
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1885,9 +1923,8 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        synced_gpus: Optional[bool] = None,  # TODO: to test
-        streamer: Optional["BaseStreamer"] = None,  # TODO: to test
-        depth_decoder_generate_kwargs: Optional[Dict[str, Any]] = None,
+        synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         output_audio: Optional[bool] = False,
         **kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
@@ -1943,28 +1980,17 @@ class CsmForCausalLM(CsmPreTrainedModel, GenerationMixin):
             (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor`.
         """
         # TODO: ensure the user is not requesting an unsupported generation mode (!= greedy/ sampling)
-        # TODO: ensure the user is not using another stopping criteria than max length one
         # TODO: ensure not using unsupported logits processors
-
-        depth_decoder_generate_kwargs = {} if depth_decoder_generate_kwargs is None else depth_decoder_generate_kwargs
-        self._validate_depth_decoder_generate_kwargs(depth_decoder_generate_kwargs)
-
-        if kwargs.pop("output_hidden_states", True) is False:
-            logger.warning(
-                "Csm does not support `output_hidden_states=False`, this will be ignored in favor of `True`."
-            )
 
         generate_output = super().generate(
             input_ids=input_ids,
             input_values=input_values,
             input_values_mask=input_values_mask,
-            depth_decoder_generate_kwargs=depth_decoder_generate_kwargs,
             generation_config=generation_config,
             logits_processor=logits_processor,
             stopping_criteria=stopping_criteria,
             synced_gpus=synced_gpus,
             streamer=streamer,
-            output_hidden_states=True,
             **kwargs,
         )
 
