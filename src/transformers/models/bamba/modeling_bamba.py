@@ -1313,7 +1313,7 @@ class BambaModel(BambaPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
         target_length = (
             attention_mask.shape[-1]
