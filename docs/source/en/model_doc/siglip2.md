@@ -122,7 +122,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 - Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
 - When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
-- Model was trained with *lowercased* text, make sure you make the same preprocessing for your text labels.
+- Model was trained with *lowercased* text, so make sure your text labels are preprocessed the same way.
 - To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
 - The NaFlex variant processes different types of images at the appropriate resolution (using a larger resolution to process document images for example), while also minimizing the impact of aspect ratio distortion for certain inference tasks like OCR.
 
