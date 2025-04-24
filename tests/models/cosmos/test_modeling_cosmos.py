@@ -424,16 +424,18 @@ class CosmosModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_torchscript_simple(self):
         pass
 
+    @unittest.skip("Cosmos is not expected to generate from embeddings because it doesn't accept text tokens.")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         # convert shorthand name to torch.dtype
-        if torch_dtype == "fp16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bf16":
-            torch_dtype = torch.bfloat16
+        if torch_dtype == "fp16" or torch_dtype == "bf16":
+            self.skipTest("Cosmos uses 3D pooling which is not implemented in half precision.")
         elif torch_dtype == "fp32":
             torch_dtype = torch.float32
 
@@ -1027,6 +1029,22 @@ class CosmosVideoWorldModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     @unittest.skip("VQ-VAE module doesn't initialize weights properly")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(
+        "Cosmos can't be initialized on meta, it has `tensor.item()` in init which is not possible with meta tensors."
+    )
+    def test_can_be_initialized_on_meta(self):
+        pass
+
+    @unittest.skip(
+        "Cosmos can't be initialized on meta, it has `tensor.item()` in init which is not possible with meta tensors."
+    )
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
+
+    @unittest.skip("Prompt encoder embeddings are not initalized properly")
+    def test_can_init_all_missing_weights(self):
         pass
 
     @unittest.skip(
