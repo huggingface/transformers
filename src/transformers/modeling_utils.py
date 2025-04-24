@@ -738,6 +738,8 @@ def _load_state_dict_into_meta_model(
         if param_name not in expected_keys:
             continue
 
+        if not param.dtype.is_floating_point:
+            continue
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
