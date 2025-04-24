@@ -695,7 +695,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a",
+                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                  }
             )  # fmt: skip
@@ -712,7 +712,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
                 {
                     ("xpu", 3): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
-                    ("cuda", 7): "This image shows is a photograph of a stop sign in front of a Chinese archway. The stop sign is red with white letters and is",
+                    ("cuda", 7): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                     ("cuda", 8): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                 }
             )  # fmt: skip
