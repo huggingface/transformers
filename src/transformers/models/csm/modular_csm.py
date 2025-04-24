@@ -615,7 +615,9 @@ class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
-        self.register_buffer("audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False) 
+        self.register_buffer(
+            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False
+        )
 
     def forward(self, input_ids):
         input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
@@ -853,7 +855,7 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             else None,
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
-    
+
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
