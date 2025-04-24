@@ -1336,4 +1336,4 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
             return generate_output
 
 
-__all__ = ["CsmPretrainedModel", "CsmForCausalLM"]
+__all__ = ["CsmPreTrainedModel", "CsmForCausalLM"]

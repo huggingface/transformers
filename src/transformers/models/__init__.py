@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from .clip import *
     from .clipseg import *
     from .clvp import *
+    from .csm import *
     from .code_llama import *
     from .codegen import *
     from .cohere import *
