@@ -92,6 +92,7 @@ else:
             ("glpn", ("GLPNImageProcessor",)),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
+            ("mm-grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
             ("groupvit", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("hiera", ("BitImageProcessor", "BitImageProcessorFast")),
             ("idefics", ("IdeficsImageProcessor",)),

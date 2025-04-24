@@ -68,6 +68,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
+        ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),

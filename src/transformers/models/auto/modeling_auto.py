@@ -141,6 +141,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granitemoeshared", "GraniteMoeSharedModel"),
         ("graphormer", "GraphormerModel"),
         ("grounding-dino", "GroundingDinoModel"),
+        ("mm-grounding-dino", "MMGroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         ("hgnet_v2", "HGNetV2Backbone"),
@@ -964,6 +965,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Object Detection mapping
         ("grounding-dino", "GroundingDinoForObjectDetection"),
+        ("mm-grounding-dino", "MMGroundingDinoForObjectDetection"),
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("owlv2", "Owlv2ForObjectDetection"),
         ("owlvit", "OwlViTForObjectDetection"),
