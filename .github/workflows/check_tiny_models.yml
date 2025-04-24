@@ -3,7 +3,7 @@ name: Check Tiny Models
 on:
   push:
     branches:
-      - check_tiny_models*
+      - fix_tiny_gh
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
@@ -22,11 +22,11 @@ jobs:
           fetch-depth: 2
 
       - uses: actions/checkout@v4
-      - name: Set up Python 3.8
+      - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
           # Semantic version range syntax or exact version of a Python version
-          python-version: '3.8'
+          python-version: '3.9'
           # Optional - x64 or x86 architecture, defaults to x64
           architecture: 'x64'
 
