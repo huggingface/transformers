@@ -4293,6 +4293,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             model_kwargs = kwargs
 
+        # Remove torch.compile related kwargs from the model_kwargs
+        if "disable_compile" in model_kwargs:
+            model_kwargs.pop("disable_compile")
+        if "compile_config" in model_kwargs:
+            model_kwargs.pop("compile_config")
+
         pre_quantized = hasattr(config, "quantization_config")
         if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
             pre_quantized = False
