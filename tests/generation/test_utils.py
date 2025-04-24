@@ -1596,7 +1596,7 @@ class GenerationTesterMixin:
                         else text_config.num_attention_heads
                     )
                     encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
-                    batch_size, seq_length = inputs["decoder_input_ids"].shape
+                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
                     # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
                     # autoregressive generation, we're keeping the test general and not checking the 3rd dim
                     default_cross_attention_shape = (
@@ -1615,7 +1615,7 @@ class GenerationTesterMixin:
                         for _ in range(num_decoder_layers)
                     ]
                 else:
-                    batch_size, seq_length = inputs["input_ids"].shape
+                    batch_size, seq_length = inputs["input_ids"].shape[:2]
                     default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
                     all_cache_shapes = [
                         [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
