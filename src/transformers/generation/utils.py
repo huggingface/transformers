@@ -2097,6 +2097,47 @@ class GenerationMixin:
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
+    def _valid_auto_compile_criteria(self, model_kwargs: Dict, generation_config: GenerationConfig) -> bool:
+        """
+        Determines whether to trigger auto-compilation of the model's forward pass at generation time.
+        """
+        # Override: honor `disable_compile` flag
+        if generation_config.disable_compile:
+            return False
+
+        # Base logic
+        valid_hardware = self.device.type == "cuda" or bool(
+            generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
+        )
+        using_compilable_cache = (
+            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
+        )
+        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache
+
+        # Exception 1: Some quantization methods do not support compilation
+        if getattr(self, "hf_quantizer", None) is not None:
+            can_compile &= self.hf_quantizer.is_compileable
+
+        if hasattr(self, "hf_device_map"):
+            all_model_devices = set(self.hf_device_map.values())
+            # Exception 2: Don't compile if the model is using CPU offload (as of April 2025, this results in a crash)
+            has_cpu_offload = "cpu" in all_model_devices and len(all_model_devices) > 1
+            can_compile &= not has_cpu_offload
+
+            # Exception 3: Disk offload is not supported for compilation
+            has_disk_offload = "disk" in all_model_devices
+            can_compile &= not has_disk_offload
+
+        # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
+        # them
+        if generation_config.compile_config is not None and not can_compile:
+            logger.warning_once(
+                "You have set `compile_config`, but we are unable to meet the criteria for compilation. Compilation "
+                "will be skipped."
+            )
+
+        return can_compile
+
     @torch.no_grad()
     def generate(
         self,
@@ -3389,16 +3430,10 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), Cache):
-            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            if getattr(self, "hf_quantizer", None) is not None:
-                is_compileable &= self.hf_quantizer.is_compileable
-            is_compileable = is_compileable and not generation_config.disable_compile
-            if is_compileable and (
-                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-            ):
-                os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward = self.get_compiled_call(generation_config.compile_config)
+        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if compile_forward:
+            os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:
             model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)

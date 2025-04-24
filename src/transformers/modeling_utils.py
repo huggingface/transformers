@@ -856,7 +856,7 @@ def _get_resolved_checkpoint_files(
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
-    This function will download the data if necesary.
+    This function will download the data if necessary.
     """
     is_sharded = False
 
@@ -3296,7 +3296,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             save_peft_format (`bool`, *optional*, defaults to `True`):
                 For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
-                keys of the state dict of adapters needs to be pre-pended with `base_model.model`. Advanced users can
+                keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
                 disable this behaviours by setting `save_peft_format` to `False`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -3400,7 +3400,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 if save_peft_format:
                     logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
                     )
                     peft_state_dict = {}
                     for key, value in state_dict.items():
@@ -4444,7 +4444,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            config._pre_quantization_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+            original_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+
+            def _assign_original_dtype(module):
+                for child in module.children():
+                    if isinstance(child, PreTrainedModel):
+                        child.config._pre_quantization_dtype = original_dtype
+                    _assign_original_dtype(child)
+
+            config._pre_quantization_dtype = original_dtype
+            _assign_original_dtype(model)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4969,7 +4978,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     name: param for name, param in model.named_parameters() if not name.startswith(prefix)
                 }
                 for name, param in parameters_to_initialize.items():
-                    # First move data to correct
+                    # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
+                    if param.device.type == "meta":
+                        continue
+                    # Shard the param
                     to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
                     shard_and_distribute_module(
                         model,
@@ -5253,7 +5265,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def loss_function(self, value):
         self._loss_function = value
 
-    def get_compiled_call(self, compile_config: CompileConfig):
+    def get_compiled_call(self, compile_config: Optional[CompileConfig]) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
@@ -5261,7 +5273,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Only reset it if not present or different from previous config
         if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
             return self.__call__
-        default_config = getattr(self.generation_config, "compile_config", CompileConfig())
+        compile_config = compile_config or CompileConfig()
+        default_config = getattr(self.generation_config, "compile_config", None) or CompileConfig()
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
@@ -5874,14 +5887,14 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
-    the model, which is actually the loading speed botteneck.
+    the model, which is actually the loading speed bottleneck.
     Calling this function allows to cut the model loading time by a very large margin.
 
     A few facts related to loading speed (taking into account the use of this function):
     - When loading a model the first time, it is usually slower than the subsequent times, because the OS is very likely
-    to cache the different state dicts (if enough ressources/RAM are available)
+    to cache the different state dicts (if enough resources/RAM are available)
     - Trying to force the OS to cache the files in advance (by e.g. accessing a small portion of them) is really hard,
-    and not a good idea in general as this is low level OS optimizations that depend on ressource usage anyway
+    and not a good idea in general as this is low level OS optimizations that depend on resource usage anyway
     - As of 18/03/2025, loading a Llama 70B model with TP takes ~1 min without file cache, and ~13s with full file cache.
     The baseline, i.e. only loading the tensor shards on device and adjusting dtype (i.e. copying them) is ~5s with full cache.
     These numbers are reported for TP on 4 H100 GPUs.
@@ -5922,7 +5935,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             index = device.index if device.index is not None else torch.cuda.current_device()
             device_memory = torch.cuda.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unecesary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
