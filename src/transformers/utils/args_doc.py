@@ -246,6 +246,15 @@ class ModelArgs:
     model's internal embedding lookup matrix.
     """
 
+    decoder_input_ids = r""" of shape `(batch_size, target_sequence_length)`:
+    Indices of decoder input sequence tokens in the vocabulary.
+
+    Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+    [`PreTrainedTokenizer.__call__`] for details.
+
+    [What are decoder input IDs?](../glossary#decoder-input-ids)
+    """
+
     decoder_inputs_embeds = r"""of shape `(batch_size, target_sequence_length, hidden_size)`:
     Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
     representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -844,8 +853,20 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                     )
 
     # ------ Returns section ------
+    if (
+        func_documentation is not None
+        and (match_start := re.search(r"(?m)^([ \t]*)(?=Return)", func_documentation)) is not None
+    ):
+        match_end = re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)
+        if match_end:
+            return_docstring = func_documentation[match_start.start() : match_end.start()]
+            func_documentation = func_documentation[match_end.start() :]
+        else:
+            return_docstring = func_documentation[match_start.start() :]
+            func_documentation = ""
+        docstring += set_min_indent(return_docstring, indent_level + 4)
 
-    if sig.return_annotation is not None and sig.return_annotation != inspect._empty:
+    elif sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
         return_docstring = _prepare_output_docstrings(return_annotation, config_class, add_intro=add_intro)
         return_docstring = return_docstring.replace("typing.", "")
