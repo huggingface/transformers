@@ -3074,7 +3074,9 @@ class Trainer:
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
-                logs["learning_rate"] = learning_rate
+                logs["learning_rate"] = (
+                    learning_rate.item() if isinstance(learning_rate, torch.Tensor) else learning_rate
+                )
             else:
                 logs["learning_rate"] = self._get_learning_rate()
 
@@ -3120,7 +3122,7 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
+            checkpoint_rng_state = torch.load(rng_file)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
