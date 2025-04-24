@@ -33,7 +33,7 @@ rendered properly in your Markdown viewer.
 You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
 
 > [!TIP]
-> Click on the ALBERT models in the right sidebar for more examples of how to apply ALBERT to different natural language processing (NLP) tasks.
+> Click on the ALBERT models in the right sidebar for more examples of how to apply ALBERT to different language tasks.
 
 The example below demonstrates how to generate text based with [`Pipeline`], [`AutoModel`] class or from command line.
 
