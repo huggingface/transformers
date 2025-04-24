@@ -27,26 +27,15 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     logging,
-    replace_return_docstrings,
     torch_int,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "CLIPConfig"
-_CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "openai/clip-vit-base-patch32"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
 
 
 # contrastive loss function, adapted from
@@ -529,110 +518,6 @@ class CLIPPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-CLIP_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CLIP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLIP_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLIP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class CLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -745,8 +630,7 @@ class CLIPTextTransformer(nn.Module):
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -824,10 +708,7 @@ class CLIPTextTransformer(nn.Module):
         )
 
 
-@add_start_docstrings(
-    """The text model from CLIP without any head or projection on top.""",
-    CLIP_START_DOCSTRING,
-)
+@auto_docstring
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -846,8 +727,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -857,8 +737,6 @@ class CLIPTextModel(CLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -895,8 +773,7 @@ class CLIPVisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -904,10 +781,6 @@ class CLIPVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -937,10 +810,7 @@ class CLIPVisionTransformer(nn.Module):
         )
 
 
-@add_start_docstrings(
-    """The vision model from CLIP without any head or projection on top.""",
-    CLIP_START_DOCSTRING,
-)
+@auto_docstring
 class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -956,8 +826,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -966,8 +835,6 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -996,7 +863,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         )
 
 
-@add_start_docstrings(CLIP_START_DOCSTRING)
+@auto_docstring
 class CLIPModel(CLIPPreTrainedModel):
     config_class = CLIPConfig
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer", "CLIPVisionEmbeddings"]
@@ -1036,7 +903,7 @@ class CLIPModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1080,7 +947,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1129,8 +996,7 @@ class CLIPModel(CLIPPreTrainedModel):
         return image_features
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPOutput, config_class=CLIPConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1143,7 +1009,8 @@ class CLIPModel(CLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> CLIPOutput:
         r"""
-        Returns:
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 
@@ -1218,12 +1085,7 @@ class CLIPModel(CLIPPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    CLIP Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLIP_START_DOCSTRING,
-)
+@auto_docstring
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -1247,8 +1109,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPTextModelOutput, config_class=CLIPTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1258,8 +1119,6 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> CLIPTextModelOutput:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1292,12 +1151,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    CLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLIP_START_DOCSTRING,
-)
+@auto_docstring
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1317,8 +1171,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPVisionModelOutput, config_class=CLIPVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1327,8 +1180,6 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> CLIPVisionModelOutput:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1365,12 +1216,11 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     CLIP vision encoder with an image classification head on top (a linear layer on top of the pooled final hidden states of
     the patch tokens) e.g. for ImageNet.
-    """,
-    CLIP_START_DOCSTRING,
+    """
 )
 class CLIPForImageClassification(CLIPPreTrainedModel):
     main_input_name = "pixel_values"
@@ -1391,13 +1241,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,

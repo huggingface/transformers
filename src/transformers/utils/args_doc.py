@@ -358,6 +358,15 @@ class ModelArgs:
     The sizes of the images in the batch, being (height, width) for each image.
     """
 
+    pixel_mask = r"""of shape `(batch_size, height, width)`:
+    Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
+    - 1 for pixels that are real (i.e. **not masked**),
+    - 0 for pixels that are padding (i.e. **masked**).
+
+    [What are attention masks?](../glossary#attention-mask)
+    """
+
 
 class ClassDocstring:
     PreTrainedModel = r"""
@@ -451,6 +460,10 @@ class ClassDocstring:
 
     ForPrediction = r"""
     The {model_name} Model with a distribution head on top for time-series forecasting.
+    """
+
+    WithProjection = r"""
+    The {model_name} Model with a projection layer on top (a linear layer on top of the pooled output).
     """
 
 

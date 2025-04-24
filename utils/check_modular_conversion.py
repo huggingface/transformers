@@ -1,9 +1,7 @@
 import argparse
-import cProfile
 import difflib
 import glob
 import logging
-import pstats
 import subprocess
 from io import StringIO
 
@@ -115,8 +113,8 @@ def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
 
 
 if __name__ == "__main__":
-    profiler = cProfile.Profile()
-    profiler.enable()
+    # profiler = cProfile.Profile()
+    # profiler.enable()
     parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
     parser.add_argument(
         "--files", default=["all"], type=str, nargs="+", help="List of modular_xxx.py files to compare."
@@ -179,6 +177,6 @@ if __name__ == "__main__":
             f"[bold green]Skipped {len(skipped_models)} models and their dependencies that are not in the diff: "
             f"{', '.join(sorted(skipped_models))}[/bold green]"
         )
-    profiler.disable()
-    stats = pstats.Stats(profiler)
-    stats.sort_stats("cumtime").print_stats()
+    # profiler.disable()
+    # stats = pstats.Stats(profiler)
+    # stats.sort_stats("cumtime").print_stats()
