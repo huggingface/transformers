@@ -154,7 +154,7 @@ visualizer("LLMs generate text through a process known as")
    past_key_values = DynamicCache()
    outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-   /```
+   ```
 
 ## GemmaConfig
 
