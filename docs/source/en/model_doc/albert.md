@@ -38,7 +38,7 @@ You can find all the original ALBERT checkpoints [HERE](https://huggingface.co/c
 The example below demonstrates how to generate text based with [`Pipeline`], [`AutoModel`] class or from command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py 
 import torch
