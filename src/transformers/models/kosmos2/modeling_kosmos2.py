@@ -1830,6 +1830,9 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         # normalized features
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+
+        if return_attentions:
+            return image_embeds, projection_attentions
         return image_embeds
 
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
