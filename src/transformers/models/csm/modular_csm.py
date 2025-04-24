@@ -650,7 +650,7 @@ CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_ID
 @dataclass
 class CsmGenerateOutput(GenerateDecoderOnlyOutput):
     """
-    Outputs of CsmForCausalLM.generate.
+    Outputs of CsmForConditionalGeneration.generate.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -685,7 +685,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
     """,
     CSM_START_DOCSTRING,
 )
-class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
+class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = [
         "backbone_model.embed_tokens.embed_audio_tokens.weight",
         "depth_decoder.model.embed_tokens.weight",
@@ -1336,4 +1336,4 @@ class CsmForCausalLM(LlamaForCausalLM, GenerationMixin):
             return generate_output
 
 
-__all__ = ["CsmPreTrainedModel", "CsmForCausalLM"]
+__all__ = ["CsmPreTrainedModel", "CsmBackboneModel", "CsmDepthDecoderModel", "CsmDepthDecoderForCausalLM", "CsmForConditionalGeneration"]

@@ -25,7 +25,7 @@ from transformers import (
     AutoFeatureExtractor,
     AutoTokenizer,
     CsmConfig,
-    CsmForCausalLM,
+    CsmForConditionalGeneration,
     CsmProcessor,
     MimiModel,
 )
@@ -163,7 +163,7 @@ def write_model(
 
     print("Loading the checkpoint in a Csm model.")
     with torch.device("meta"):
-        model = CsmForCausalLM(config)
+        model = CsmForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
@@ -184,7 +184,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    CsmForCausalLM.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    CsmForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
