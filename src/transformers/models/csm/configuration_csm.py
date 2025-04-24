@@ -284,7 +284,7 @@ class CsmConfig(PretrainedConfig):
             End of stream token id for codebooks.
         bos_token_id (`int`, *optional*, defaults to 128000):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 128001):
+        eos_token_id (`int`, *optional*):
             End of stream token id.
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
@@ -374,7 +374,7 @@ class CsmConfig(PretrainedConfig):
         codebook_pad_token_id=2050,
         codebook_eos_token_id=0,
         bos_token_id=128000,
-        eos_token_id=128001,
+        eos_token_id=None,
         audio_token_id=128002,
         audio_eos_token_id=128003,
         rope_theta=500000,
@@ -472,7 +472,7 @@ class CsmConfig(PretrainedConfig):
             self.depth_decoder_config = CsmDepthDecoderConfig(**depth_decoder_config)
         elif isinstance(depth_decoder_config, CsmDepthDecoderConfig):
             self.depth_decoder_config = depth_decoder_config
-        
+
         if codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
