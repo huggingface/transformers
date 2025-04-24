@@ -270,4 +270,5 @@ if __name__ == "__main__":
         args.mamba_ssm_checkpoint_directory,
         args.precision,
         args.output_dir,
+        save_model = "sharded",
     )
