@@ -100,8 +100,6 @@ class MiniMaxConfig(PretrainedConfig):
         block_size (`int`, *optional*, defaults to 256):
             The length of each attention block, determining how queries, keys, and values
             are grouped and processed for intra- and inter-block attention.
-        postnorm (`bool`, *optional*, defaults to `False`):
-            Use residual connections post-normalization.
         full_attn_alpha_factor (`float`, *optional*, defaults to 1):
             Weight for residual value in residual connection after normal attention.
         full_attn_beta_factor (`float`, *optional*, defaults to 1):
@@ -174,7 +172,6 @@ class MiniMaxConfig(PretrainedConfig):
         router_jitter_noise=0.0,
         attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
-        postnorm=False,
         full_attn_alpha_factor=1,
         full_attn_beta_factor=1,
         linear_attn_alpha_factor=1,
@@ -218,7 +215,6 @@ class MiniMaxConfig(PretrainedConfig):
         self.router_jitter_noise = router_jitter_noise
         self.attn_type_list = attn_type_list
         self.block_size = block_size
-        self.postnorm = postnorm
         self.full_attn_alpha_factor = full_attn_alpha_factor
         self.full_attn_beta_factor = full_attn_beta_factor
         self.linear_attn_alpha_factor = linear_attn_alpha_factor

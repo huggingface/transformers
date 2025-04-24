@@ -131,8 +131,6 @@ class MiniMaxConfig(MixtralConfig):
         block_size (`int`, *optional*, defaults to 256):
             The length of each attention block, determining how queries, keys, and values
             are grouped and processed for intra- and inter-block attention.
-        postnorm (`bool`, *optional*, defaults to `False`):
-            Use residual connections post-normalization.
         full_attn_alpha_factor (`float`, *optional*, defaults to 1):
             Weight for residual value in residual connection after normal attention.
         full_attn_beta_factor (`float`, *optional*, defaults to 1):
@@ -163,7 +161,6 @@ class MiniMaxConfig(MixtralConfig):
         self,
         attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
-        postnorm=False,
         full_attn_alpha_factor=1,
         full_attn_beta_factor=1,
         linear_attn_alpha_factor=1,
@@ -175,7 +172,6 @@ class MiniMaxConfig(MixtralConfig):
         super().__init__(**super_kwargs)
         self.attn_type_list = attn_type_list
         self.block_size = block_size
-        self.postnorm = postnorm
         self.full_attn_alpha_factor = full_attn_alpha_factor
         self.full_attn_beta_factor = full_attn_beta_factor
         self.linear_attn_alpha_factor = linear_attn_alpha_factor
@@ -392,7 +388,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
-        self.postnorm = config.postnorm
         self.attn_type = config.attn_type_list[layer_idx]
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
@@ -444,11 +439,8 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
                 into the model
         """
 
-        residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-        if self.postnorm:
-            residual = hidden_states
+        residual = hidden_states
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -465,10 +457,8 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
 
         # Fully Connected
-        residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.postnorm:
-            residual = hidden_states
+        residual = hidden_states
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 

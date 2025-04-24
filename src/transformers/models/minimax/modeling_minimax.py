@@ -523,7 +523,6 @@ class MiniMaxDecoderLayer(nn.Module):
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_idx = layer_idx
-        self.postnorm = config.postnorm
         self.attn_type = config.attn_type_list[layer_idx]
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
@@ -575,11 +574,8 @@ class MiniMaxDecoderLayer(nn.Module):
                 into the model
         """
 
-        residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-        if self.postnorm:
-            residual = hidden_states
+        residual = hidden_states
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -596,10 +592,8 @@ class MiniMaxDecoderLayer(nn.Module):
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
 
         # Fully Connected
-        residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.postnorm:
-            residual = hidden_states
+        residual = hidden_states
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
