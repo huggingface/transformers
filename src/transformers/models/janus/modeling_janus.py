@@ -31,6 +31,7 @@ from ...cache_utils import Cache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -343,6 +344,7 @@ class JanusVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
+        self.is_causal = False
 
         # Janus has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
         self.num_key_value_groups = 1
@@ -397,7 +399,7 @@ class JanusVisionAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
         attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
@@ -429,7 +431,7 @@ class JanusVisionMLP(nn.Module):
         return hidden_states
 
 
-class JanusVisionEncoderLayer(nn.Module):
+class JanusVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -536,19 +538,12 @@ class JanusVisionEncoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1281,7 +1276,7 @@ class JanusModel(JanusPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = input_ids == self.config.image_token_index
+            image_attention_mask = input_ids == self.config.image_token_id
 
             embed_dim = inputs_embeds.shape[-1]
             image_features = image_embeds.reshape(-1, embed_dim)
