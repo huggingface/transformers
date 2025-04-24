@@ -38,7 +38,7 @@ You can find all the original SigLIP2 checkpoints under the [SigLIP2](https://hu
 > [!TIP]
 > Click on the SigLIP2 models in the right sidebar for more examples of how to apply SigLIP2 to different image and text tasks.
 
-The example below demonstrates how to generate similarity scores between texts and image(s) with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates zero-shot classification with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
