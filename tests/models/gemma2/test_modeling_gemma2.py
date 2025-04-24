@@ -154,6 +154,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip("Gemma2 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
 
 @slow
 @require_torch_accelerator

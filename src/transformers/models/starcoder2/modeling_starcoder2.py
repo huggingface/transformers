@@ -34,6 +34,7 @@ from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -230,7 +231,7 @@ class Starcoder2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(nn.Module):
+class Starcoder2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

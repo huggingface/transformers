@@ -390,7 +390,7 @@ def convert_model(
         text_config=text_config,
         vision_config=vision_config,
         vq_config=vq_config,
-        image_token_index=tokenizer.vocab.get("<image_placeholder>"),
+        image_token_id=tokenizer.vocab.get("<image_placeholder>"),
     )
 
     # Save the config
