@@ -1467,6 +1467,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        vision_outputs = vision_outputs.to_tuple() if not return_dict else vision_outputs
+        query_outputs = query_outputs.to_tuple() if not return_dict else query_outputs
         language_model_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
@@ -1656,6 +1658,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
         image_embeds = vision_outputs[0]
 
@@ -1678,6 +1681,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
+            return_dict=True,
         )
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
