@@ -1202,7 +1202,10 @@ def _get_resolved_checkpoint_files(
                                 "_commit_hash": commit_hash,
                                 **has_file_kwargs,
                             }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs) and not is_remote_code:
+                            if (
+                                not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
+                                and not is_remote_code
+                            ):
                                 Thread(
                                     target=auto_conversion,
                                     args=(pretrained_model_name_or_path,),
@@ -4552,7 +4555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             revision=revision,
             commit_hash=commit_hash,
             transformers_explicit_filename=transformers_explicit_filename,
-            is_remote_code=cls.__module__.startswith("transformers_modules")  # This might be fragile?
+            is_remote_code=cls.__module__.startswith("transformers_modules"),  # This might be fragile?
         )
 
         is_sharded = sharded_metadata is not None
