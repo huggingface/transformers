@@ -25,7 +25,7 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     CsmConfig,
-    CsmForCausalLM,
+    CsmForConditionalGeneration,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -144,8 +144,8 @@ class CsmModelTester:
         return config, inputs_dict
 
 
-class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (CsmForCausalLM,) if is_torch_available() else ()
+class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
@@ -415,7 +415,7 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
 
-class CsmForCausalLMIntegrationTest(unittest.TestCase):
+class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         # TODO: @eustlb, update with correct sesame's repo
         self.model_checkpoint = "eustlb/csm-1b"
@@ -443,7 +443,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         audio = ds[0]["audio"]["array"]
         inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(torch_device)
 
-        model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        model = CsmForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
         output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
@@ -489,7 +489,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(torch_device)
 
-        model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        model = CsmForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
         output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         print(output_tokens)
@@ -564,7 +564,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
             return_dict=True,
         ).to(torch_device)
 
-        model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        model = CsmForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
         output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
@@ -636,7 +636,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
             return_dict=True,
         ).to(torch_device)
 
-        model = CsmForCausalLM.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        model = CsmForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
         output_tokens = model.generate(**inputs, do_sample=False, depth_decoder_do_sample=False)
 
         # fmt: off
