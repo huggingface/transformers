@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -392,13 +392,13 @@ class TrainingArguments:
             installation](https://github.com/intel/intel-extension-for-pytorch).
         mixed_precision_dtype (`str`, *optional*, defaults to `"no"`):
             The type of mixed precision to use. Can be one of `"no"`, `"fp16"`, `"bf16"`, or `"fp8"`.
-        mixed_precision_config (`dict`, *optional*):
+        mixed_precision_config (`dict`, *optional*, defaults to `{}`):
             A dictionary of configuration options for mixed precision training. Valid keys are:
             - fp16_opt_level
             - backend
             - full_eval: Whether to use full `mixed_precision_dtype` evaluation instead of 32-bit.
                          This will be faster and save memory but can harm metric values.
-        tf32 (`bool`, *optional*):
+        tf32 (`bool`, *optional*, defaults to `False`):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
@@ -1047,7 +1047,7 @@ class TrainingArguments:
             )
         },
     )
-    mixed_precision_dtype: Optional[str] = field(
+    mixed_precision_dtype: Optional[Literal["no", "fp16", "bf16", "fp8"]] = field(
         default=None,
         metadata={"help": "Mixed precision dtype to use. Can be one of `'no'`, `'fp16'`, `'bf16'`, or `'fp8'`."},
     )

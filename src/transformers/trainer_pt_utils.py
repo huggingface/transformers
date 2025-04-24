@@ -1320,7 +1320,8 @@ class AcceleratorConfig:
     mixed_precision: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The mixed precision policy to use. If not set, the policy will be determined by the `ACCELERATE_MIXED_PRECISION` environment variable. "
+            "help": "The mixed precision policy to use. If not set, the policy will be determined by the `ACCELERATE_MIXED_PRECISION` environment variable "
+            " (If not set already through the TrainingArguments). "
             "Should not be passed in through a config file (unless it's the one called during `accelerate launch --config_file`)."
         },
     )
@@ -1363,7 +1364,9 @@ class AcceleratorConfig:
         invalid_fields = ["mixed_precision", "dynamo_plugin", "fsdp_plugin"]
         for field in invalid_fields:
             if config_dict.get(field) is not None:
-                raise ValueError(f"The field `{field}` should not be set in the config file.")
+                raise ValueError(
+                    f"The field `{field}` should not be set in the config file. Please configure it through `accelerate config` instead."
+                )
         return cls(**config_dict)
 
     def to_dict(self):

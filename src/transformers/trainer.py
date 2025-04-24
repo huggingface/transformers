@@ -4297,9 +4297,13 @@ class Trainer:
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train and args.mixed_precision_config["full_eval"]:
-            model = model.to(
-                dtype=torch.float16 if args.mixed_precision_dtype == "fp16" else torch.bfloat16, device=args.device
-            )
+            if args.mixed_precision_dtype == "fp16":
+                model_dtype = torch.float16
+            elif args.mixed_precision_dtype == "bf16":
+                model_dtype = torch.bfloat16
+            else:
+                model_dtype = model.dtype
+            model = model.to(dtype=model_dtype, device=args.device)
 
         batch_size = self.args.eval_batch_size
 
@@ -4899,9 +4903,14 @@ class Trainer:
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
             if args.mixed_precision_config["full_eval"]:
-                model = model.to(
-                    dtype=torch.float16 if args.mixed_precision_dtype == "fp16" else torch.bfloat16, device=args.device
-                )
+                if args.mixed_precision_dtype == "fp16":
+                    model_dtype = torch.float16
+                elif args.mixed_precision_dtype == "bf16":
+                    model_dtype = torch.bfloat16
+                else:
+                    model_dtype = model.dtype
+
+                model = model.to(dtype=model_dtype, device=args.device)
 
         batch_size = (
             dataloader.total_batch_size
