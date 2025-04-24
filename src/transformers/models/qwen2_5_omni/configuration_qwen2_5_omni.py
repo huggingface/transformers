@@ -1045,7 +1045,6 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    @classmethod
     def get_text_config(self, decoder=False) -> "PretrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance

@@ -1589,7 +1589,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         )
 
     @staticmethod
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2LMHeadModel._reorder_cache
     def _reorder_cache(
         past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:

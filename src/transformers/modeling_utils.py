@@ -4444,7 +4444,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            config._pre_quantization_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+            original_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+
+            def _assign_original_dtype(module):
+                for child in module.children():
+                    if isinstance(child, PreTrainedModel):
+                        child.config._pre_quantization_dtype = original_dtype
+                    _assign_original_dtype(child)
+
+            config._pre_quantization_dtype = original_dtype
+            _assign_original_dtype(model)
 
         # Prepare the full device map
         if device_map is not None:
@@ -5253,7 +5262,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def loss_function(self, value):
         self._loss_function = value
 
-    def get_compiled_call(self, compile_config: CompileConfig):
+    def get_compiled_call(self, compile_config: Optional[CompileConfig]) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
@@ -5261,7 +5270,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Only reset it if not present or different from previous config
         if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
             return self.__call__
-        default_config = getattr(self.generation_config, "compile_config", CompileConfig())
+        default_config = getattr(self.generation_config, "compile_config", None) or CompileConfig()
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config

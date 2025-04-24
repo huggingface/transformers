@@ -69,6 +69,7 @@ deps = {
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff==0.11.2",
+    "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.4.3",
     "sagemaker": "sagemaker>=2.31.0",
