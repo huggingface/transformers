@@ -24,8 +24,11 @@ logger = logging.get_logger(__name__)
 
 class CsmDepthDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CsmDepthDecoder`]. It is used to instantiate an CsmDepthDecoder
-    model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`CsmDepthDecoderModel`]. It is used to instantiate an CSM depth decoder
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
+    a similar configuration to that of the csm-1b.
+
+    e.g. [eustlb/csm-1b](https://huggingface.co/eustlb/csm-1b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -237,8 +240,11 @@ class CsmDepthDecoderConfig(PretrainedConfig):
 
 class CsmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CsmBackboneModel`]. It is used to instantiate an CsmBackboneModel
-    model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    with the defaults will yield a similar configuration to that of the csm-1b.
+
+    e.g. [eustlb/csm-1b](https://huggingface.co/eustlb/csm-1b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -247,8 +253,9 @@ class CsmConfig(PretrainedConfig):
         num_codebooks (`int`, *optional*, defaults to 32):
             Number of codebooks used in the underlying codec model responsible for tokenizing the audio.
         vocab_size (`int`, *optional*, defaults to 2051):
-            Vocabulary size of the CsmBackbone model. Defines the number of different text tokens that can be represented.
-        text_vocab_size (`<fill_type>`, *optional*, defaults to 128256): <fill_docstring>
+            Vocabulary size of the Csm model. Defines the number of different audio tokens that can be represented by each codebook.
+        text_vocab_size (`int`, *optional*, defaults to 128256):
+            Vocabulary size of the text input for the Csm model. Defines the number of different text tokens that can be represented.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
@@ -285,8 +292,10 @@ class CsmConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        audio_token_id (`<fill_type>`, *optional*, defaults to 128002): <fill_docstring>
-        audio_eos_token_id (`<fill_type>`, *optional*, defaults to 128003): <fill_docstring>
+        audio_token_id (`int`, *optional*, defaults to 128002):
+            Audio token id in the text input.
+        audio_eos_token_id (`int`, *optional*, defaults to 128003):
+            End of stream token id for audio in the text input.
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*, defaults to `{'factor': 32.0, 'high_freq_factor': 0.5, 'low_freq_factor': 0.125, 'original_max_position_embeddings': 1024, 'rope_type': 'llama3'}`):
@@ -334,9 +343,12 @@ class CsmConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-        tie_codebooks_embeddings (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        depth_decoder_config (`<fill_type>`, *optional*): <fill_docstring>
-        codec_config (`<fill_type>`, *optional*): <fill_docstring>
+        tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie the codebooks embeddings of the backbone model to the codebooks embeddings of the depth decoder.
+        depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
+            Configuration for the depth decoder.
+        codec_config (`PretrainedConfig`, *optional*):
+            Configuration for the codec.
 
     ```python
     >>> from transformers import CsmBackboneModel, CsmBackboneConfig
