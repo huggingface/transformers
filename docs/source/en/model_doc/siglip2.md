@@ -57,6 +57,35 @@ pipeline(image, candidate_labels=candidate_labels)
 </hfoption>
 <hfoption id="AutoModel">
 
+The example below demonstrates a zero-shot classification with NaFlex variant of the model.
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
+
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
+
+# default value for `max_num_patches` is 256, but you can increase resulted image resolution providing higher values e.g. `max_num_patches=512`
+inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
+```
+
+The example below demonstrates a zero-shot classification with FixRes variant of the model.
+
 ```py
 import torch
 import requests
@@ -98,7 +127,7 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-large-patch16-512", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -128,30 +157,6 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 - The NaFlex variant processes different types of images at the appropriate resolution (using a larger resolution to process document images for example), while also minimizing the impact of aspect ratio distortion for certain inference tasks like OCR.
 
    NaFlex resizes the input image so the height and width are multiples of the patch size after resizing. It keeps the aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image is split into a sequence of patches and a mask with padding information is added.
-    ```py
-    import torch
-    import requests
-    from PIL import Image
-    from transformers import AutoProcessor, AutoModel
-
-    model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
-    processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
-
-    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
-    texts = [f'This is a photo of {label}.' for label in candidate_labels]
-
-    # default value for `max_num_patches` is 256, but you can increase resulted image resolution providing higher values e.g. `max_num_patches=512`
-    inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to("cuda")
-
-    with torch.no_grad():
-        outputs = model(**inputs)
-
-    logits_per_image = outputs.logits_per_image
-    probs = torch.sigmoid(logits_per_image)
-    print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-    ```
 - Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
     ```py
     # pip install -U flash-attn --no-build-isolation
