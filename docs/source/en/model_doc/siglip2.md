@@ -51,7 +51,7 @@ image = "https://huggingface.co/datasets/huggingface/documentation-images/resolv
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
 pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
-print(pipeline(image, candidate_labels=candidate_labels))
+pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
