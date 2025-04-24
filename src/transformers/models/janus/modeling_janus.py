@@ -344,6 +344,7 @@ class JanusVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
+        self.is_causal = False
 
         # Janus has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
         self.num_key_value_groups = 1
@@ -398,7 +399,7 @@ class JanusVisionAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
         attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
