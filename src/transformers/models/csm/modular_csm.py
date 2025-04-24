@@ -1336,4 +1336,10 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             return generate_output
 
 
-__all__ = ["CsmPreTrainedModel", "CsmBackboneModel", "CsmDepthDecoderModel", "CsmDepthDecoderForCausalLM", "CsmForConditionalGeneration"]
+__all__ = [
+    "CsmPreTrainedModel",
+    "CsmBackboneModel",
+    "CsmDepthDecoderModel",
+    "CsmDepthDecoderForCausalLM",
+    "CsmForConditionalGeneration",
+]
