@@ -336,14 +336,14 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             out_len = len(outputs)
 
-            correct_outlen = 7
+            correct_outlen = 8
 
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
             if model_class.__name__ == "DinoDetrForObjectDetection":
-                correct_outlen += 2
+                correct_outlen += 1
 
             self.assertEqual(out_len, correct_outlen)
 
