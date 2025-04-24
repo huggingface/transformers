@@ -544,7 +544,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_input_ids_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
-                ("cuda", 7): torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
+                ("cuda", 7): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
                 ("cuda", 8): torch.tensor([[128000, 128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device),
             }
         )  # fmt: skip
