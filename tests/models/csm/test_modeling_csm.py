@@ -16,7 +16,6 @@
 
 import collections
 import copy
-import inspect
 import re
 import unittest
 
@@ -37,17 +36,12 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_datasets_available
 
-from transformers.generation import (
-    GenerateDecoderOnlyOutput,
-    SampleDecoderOnlyOutput,
-)
-
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    ids_tensor,
     _config_zero_init,
+    ids_tensor,
 )
 
 
@@ -192,8 +186,8 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 }
             )
 
-        return logits_processor_kwargs     
-    
+        return logits_processor_kwargs
+
     def test_initialization(self):
         """
         Overrides [ModelTesterMixin.test_initialization] because of specificities of Mimi codec model.
@@ -420,7 +414,8 @@ class CsmForCausalLMTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
 class CsmForCausalLMIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "/home/eustache_lebihan/add-sesame/eustlb/csm-1b"
+        # TODO: @eustlb, update with correct sesame's repo
+        self.model_checkpoint = "eustlb/csm-1b"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -500,7 +495,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         output_tokens = model.generate(**inputs, do_sample=False)
 
         print(output_tokens)
-        # fmt: off 
+        # fmt: off
         EXPECTED_OUTPUT_TOKENS = torch.tensor([[
             [1656, 629, 723, 1785, 206, 1873, 1059, 1190, 1833, 240, 618, 350, 156, 109, 2010, 452, 435, 1764, 77, 654, 1133, 908, 1095, 74, 804, 494, 1760, 1343, 1312, 1464, 1657, 324],
             [366, 1532, 1945, 21, 145, 1428, 1417, 1987, 1793, 1444, 356, 1491, 849, 333, 788, 426, 1423, 1004, 414, 1823, 1169, 257, 1892, 696, 1572, 998, 1098, 523, 390, 1977, 546, 1692],
@@ -549,7 +544,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         Such tokens are to be retreived using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        
+
         ds = load_dataset("eustlb/dailytalk-dummy", split="train")
         conversation = []
 
@@ -562,8 +557,8 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
                     {"type": "audio", "path": audio['array']}
                 ]
             })
-        
-        # text prompt 
+
+        # text prompt
         conversation.append({
             "role": f"{ds[4]['speaker_id']}",
             "content": [
@@ -606,7 +601,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_close(output_tokens.cpu(), EXPECTED_OUTPUT_TOKENS)
-    
+
     @slow
     @require_torch_gpu
     def test_1b_model_integration_generate_batched(self):
@@ -615,7 +610,7 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
         Such tokens are to be retreived using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        
+
         ds = load_dataset("eustlb/dailytalk-dummy", split="train")
         conversation = [
             [
@@ -689,22 +684,22 @@ class CsmForCausalLMIntegrationTest(unittest.TestCase):
                 [983, 1961, 54, 135, 846, 711, 473, 1630, 1373, 1094, 251, 525, 632, 1014, 1594, 1594, 1752, 398, 1266, 1357, 942, 1680, 191, 874, 483, 1291, 381, 1873, 1964, 1278, 1477, 122],
                 [1663, 1969, 1887, 113, 145, 251, 1133, 156, 245, 1641, 209, 1322, 2037, 836, 539, 667, 940, 797, 1758, 1357, 191, 1137, 587, 1699, 27, 701, 395, 99, 1682, 876, 762, 839],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050],
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050], 
-                [2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050, 2050], 
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             ]
         ])
         # fmt: on
 
         torch.testing.assert_close(output_tokens.cpu(), EXPECTED_OUTPUT_TOKENS)
- 
+
 
 
 
