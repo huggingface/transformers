@@ -40,7 +40,7 @@ jobs:
 
       - name: Create all tiny models (locally)
         run: |
-          python utils/create_dummy_models.py tiny_local_models --all --num_workers 2
+          python utils/create_dummy_models.py tiny_local_models --all --num_workers 1
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
@@ -63,7 +63,7 @@ jobs:
 
       - name: Create + Upload tiny models for new model architecture(s)
         run: |
-          python utils/update_tiny_models.py --num_workers 2
+          python utils/update_tiny_models.py --num_workers 1
 
       - name: Full report
         run: cat tiny_models/reports/tiny_model_creation_report.json
