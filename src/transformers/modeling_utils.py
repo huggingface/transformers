@@ -856,7 +856,7 @@ def _get_resolved_checkpoint_files(
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
-    This function will download the data if necesary.
+    This function will download the data if necessary.
     """
     is_sharded = False
 
@@ -3296,7 +3296,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             save_peft_format (`bool`, *optional*, defaults to `True`):
                 For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
-                keys of the state dict of adapters needs to be pre-pended with `base_model.model`. Advanced users can
+                keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
                 disable this behaviours by setting `save_peft_format` to `False`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -3400,7 +3400,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 if save_peft_format:
                     logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
                     )
                     peft_state_dict = {}
                     for key, value in state_dict.items():
@@ -5887,14 +5887,14 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
-    the model, which is actually the loading speed botteneck.
+    the model, which is actually the loading speed bottleneck.
     Calling this function allows to cut the model loading time by a very large margin.
 
     A few facts related to loading speed (taking into account the use of this function):
     - When loading a model the first time, it is usually slower than the subsequent times, because the OS is very likely
-    to cache the different state dicts (if enough ressources/RAM are available)
+    to cache the different state dicts (if enough resources/RAM are available)
     - Trying to force the OS to cache the files in advance (by e.g. accessing a small portion of them) is really hard,
-    and not a good idea in general as this is low level OS optimizations that depend on ressource usage anyway
+    and not a good idea in general as this is low level OS optimizations that depend on resource usage anyway
     - As of 18/03/2025, loading a Llama 70B model with TP takes ~1 min without file cache, and ~13s with full file cache.
     The baseline, i.e. only loading the tensor shards on device and adjusting dtype (i.e. copying them) is ~5s with full cache.
     These numbers are reported for TP on 4 H100 GPUs.
@@ -5935,7 +5935,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             index = device.index if device.index is not None else torch.cuda.current_device()
             device_memory = torch.cuda.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unecesary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
