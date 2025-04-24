@@ -2,11 +2,11 @@ import argparse
 import importlib.util
 import logging
 import os
-import sys
 from typing import Dict
+import sys
 
-from psycopg2.extensions import register_adapter
 from psycopg2.extras import Json
+from psycopg2.extensions import register_adapter
 
 
 register_adapter(dict, Json)
