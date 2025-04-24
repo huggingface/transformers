@@ -279,14 +279,23 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def get_cuda_warm_up_factor(self):
         """
-        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
-        A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
-        we allocate half the memory of the weights residing in the empty model, etc...
+        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for CUDA warmup.
+        - A factor of 2 means we pre-allocate the full memory footprint of the model.
+        - A factor of 4 means we pre-allocate half of that, and so on
+
+        However, when using TorchAO, calculating memory usage with param.numel() * param.element_size() doesn't give the correct size for quantized weights (like int4 or int8)
+        That's because TorchAO internally represents quantized tensors using subtensors and metadata, and the reported element_size() still corresponds to the torch_dtype
+        not the actual bit-width of the quantized data.
+
+        To correct for this:
+        - Use a division factor of 8 for int4 weights
+        - Use a division factor of 4 for int8 weights
         """
         if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
             from torchao.core.config import AOBaseConfig
 
             quant_type = self.quantization_config.quant_type
+            # For autoquant case, it will be treated in the string implementation below in map_to_target_dtype
             if isinstance(quant_type, AOBaseConfig):
                 # Extract size digit using fuzzy match on the class name
                 config_name = quant_type.__class__.__name__
