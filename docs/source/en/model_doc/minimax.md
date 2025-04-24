@@ -30,7 +30,7 @@ alt="drawing" width="600"/>
 
 <small> Text benchmark for MiniMax. Taken from the <a href="https://github.com/MiniMax-AI/MiniMax-01" target="_blank">official code</a>. </small>
 
-This model was contributed by [geetu040](https://github.com/geetu040). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/tree/main).
+This model was contributed by [Armaghan](https://github.com/geetu040) and [Shakib](https://github.com/Shakib-IO). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/tree/main).
 
 ### Architectural details
 
