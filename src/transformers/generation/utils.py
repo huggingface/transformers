@@ -3435,7 +3435,8 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         model_forward = self.__call__
-        if self._valid_auto_compile_criteria(model_kwargs, generation_config):
+        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             model_forward = self.get_compiled_call(generation_config.compile_config)
 
