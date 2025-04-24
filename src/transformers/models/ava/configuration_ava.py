@@ -14,9 +14,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-logger = logging.get_logger(__name__)
 
 class AvaConfig(PretrainedConfig):
     """
@@ -207,24 +204,24 @@ class AvaConfig(PretrainedConfig):
         """Validate the configuration parameters"""
         if self.vocab_size <= 0:
             raise ValueError(f"vocab_size must be positive, got {self.vocab_size}")
-        
+
         if self.hidden_size <= 0:
             raise ValueError(f"hidden_size must be positive, got {self.hidden_size}")
-            
+
         if self.num_attention_heads <= 0:
             raise ValueError(f"num_attention_heads must be positive, got {self.num_attention_heads}")
-            
+
         if self.head_dim <= 0:
             raise ValueError(f"head_dim must be positive, got {self.head_dim}")
-            
+
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_attention_heads, got {self.hidden_size} and {self.num_attention_heads}"
             )
-            
+
         if self.kv_heads <= 0:
             raise ValueError(f"kv_heads must be positive, got {self.kv_heads}")
-            
+
         if self.num_attention_heads % self.kv_heads != 0:
             raise ValueError(
                 f"num_attention_heads must be divisible by kv_heads, got {self.num_attention_heads} and {self.kv_heads}"
@@ -234,13 +231,13 @@ class AvaConfig(PretrainedConfig):
     def from_predefined(cls, model_size="7b", **kwargs):
         """
         Instantiate a config from a predefined model architecture.
-        
+
         Args:
             model_size (`str`): 
                 One of the predefined model sizes (e.g., '100m', '500m', '1b', '3b', '7b', '13b', '30b', '65b', '100b')
             **kwargs:
                 Additional arguments to override the predefined config
-        
+
         Returns:
             AvaConfig: The configuration object
         """
@@ -248,17 +245,17 @@ class AvaConfig(PretrainedConfig):
             raise ValueError(
                 f"Unknown model size '{model_size}'. Available sizes: {list(cls.PREDEFINED_MODELS.keys())}"
             )
-            
+
         config_dict = cls.PREDEFINED_MODELS[model_size].copy()
         config_dict.update(kwargs)
-        
+
         return cls(**config_dict)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
         Instantiate a config from a pretrained model name or path.
-        
+
         This method handles both:
         - Actual pretrained model paths (files/directories)
         - Predefined model shortcuts (e.g., "ava/7b")
@@ -267,5 +264,5 @@ class AvaConfig(PretrainedConfig):
             if pretrained_model_name_or_path.startswith("ava/"):
                 model_size = pretrained_model_name_or_path.split("/")[-1]
                 return cls.from_predefined(model_size, **kwargs)
-                
+ 
         return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
