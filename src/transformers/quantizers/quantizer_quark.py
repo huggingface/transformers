@@ -117,11 +117,13 @@ class QuarkHfQuantizer(HfQuantizer):
             text_plan = config.base_model_tp_plan
 
             if config.get_text_config() is not None:
-            text_plan = config.get_text_config().base_model_tp_plan
+               text_plan = config.get_text_config().base_model_tp_plan
 
             # modify exsiting play
-            for key in text_plan_cp:
-                text_plan[key+".weight"] =  text_plan.pop(key)
+            text_plan_cp = {}
+            for key in text_plan:
+                text_plan_cp[key+".weight"] =  text_plan[key]
+            text_plan = text_plan_cp
 
             # create a plan with missing values from base plan
             update_plan ={
