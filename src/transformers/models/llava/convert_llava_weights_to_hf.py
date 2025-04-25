@@ -72,7 +72,7 @@ def load_original_state_dict(model_id):
                 for key in f.keys():
                     original_state_dict[key] = f.get_tensor(key)
 
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    # tied weights so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
@@ -127,7 +127,7 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         vision_config=vision_config,
     )
 
-    # llms-lab interleeave models do not use any selection startegy except for last hidden state
+    # llms-lab interleave models do not use any selection strategy except for last hidden state
     if "Qwen" in text_model_id:
         config.image_token_id = 151646
         if "siglip" in vision_model_id:

@@ -1313,7 +1313,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     def _init_weights(self, module):
-        """Initalize the weights"""
+        """Initialize the weights"""
         if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
