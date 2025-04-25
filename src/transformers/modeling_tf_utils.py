@@ -848,7 +848,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                 f"Unable to load weights from TF checkpoint file for '{resolved_archive_file}' "
                 f"at '{resolved_archive_file}'. "
                 "If you tried to load a TF model from a sharded checkpoint, you should try converting the model "
-                "by loading it in pytorch and saving it locally. A convertion script should be released soon."
+                "by loading it in pytorch and saving it locally. A conversion script should be released soon."
             )
 
 
@@ -980,10 +980,10 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
                     if _prefix is not None:
-                        delimeter = len(_prefix.split("/"))
+                        delimiter = len(_prefix.split("/"))
                         symbolic_weight_name = "/".join(
-                            symbolic_weight.name.split("/")[:delimeter]
-                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                            symbolic_weight.name.split("/")[:delimiter]
+                            + symbolic_weight.name.split("/")[delimiter + 1 :]
                         )
                     else:
                         symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
@@ -2042,7 +2042,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
-        # TODO (joao): flagged for delection due to embeddings refactor
+        # TODO (joao): flagged for detection due to embeddings refactor
 
         # If the variable holds the weights themselves, return them
         if isinstance(embedding_layer, tf.Tensor):
@@ -3312,7 +3312,7 @@ class TFSharedEmbeddings(keras.layers.Layer):
             Additional keyword arguments passed along to the `__init__` of `keras.layers.Layer`.
     """
 
-    # TODO (joao): flagged for delection due to embeddings refactor
+    # TODO (joao): flagged for detection due to embeddings refactor
 
     def __init__(self, vocab_size: int, hidden_size: int, initializer_range: Optional[float] = None, **kwargs):
         super().__init__(**kwargs)
