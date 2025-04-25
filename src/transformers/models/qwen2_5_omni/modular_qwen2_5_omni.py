@@ -49,6 +49,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    check_torch_load_is_safe,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -4078,6 +4079,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         self.has_talker = True
 
     def load_speakers(self, path):
+        check_torch_load_is_safe()
         for key, value in torch.load(path).items():
             self.speaker_map[key] = value
         logger.info("Speaker {} loaded".format(list(self.speaker_map.keys())))

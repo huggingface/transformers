@@ -1387,6 +1387,14 @@ def is_rich_available():
     return _rich_available
 
 
+def check_torch_load_is_safe():
+    if not is_torch_greater_or_equal("2.6"):
+        raise ValueError(
+            "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require to "
+            "upgrade torch to at least v2.6 in order to use the function: `pip install torch --upgrade`"
+        )
+
+
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:

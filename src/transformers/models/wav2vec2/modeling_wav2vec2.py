@@ -45,6 +45,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     cached_file,
+    check_torch_load_is_safe,
     is_peft_available,
     is_safetensors_available,
     logging,
@@ -1589,6 +1590,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
+                check_torch_load_is_safe()
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
@@ -1598,6 +1600,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
+                raise
+
+            except ValueError:
                 raise
 
             except Exception:
