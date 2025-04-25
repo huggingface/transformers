@@ -458,6 +458,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "audio_config": Qwen2_5OmniAudioEncoderConfig,
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
@@ -662,6 +667,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
 
     def __init__(
         self,
@@ -1034,6 +1044,20 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         self.enable_audio_output = enable_audio_output
 
         super().__init__(**kwargs)
+
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
+
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
+        """
+        # Overriden for deeply nested config like Qwen2-Omni. We don't have any omni model
+        # except for Qwen yet. This has to be generalized if more deeply nested configs are
+        # added. NOTE: currently method used only by vLLM
+        return self.thinker_config.get_text_config()
 
 
 __all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]
