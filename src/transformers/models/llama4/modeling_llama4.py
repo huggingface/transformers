@@ -857,7 +857,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■     |
 
         If the chunk size is 3.
-        This can just be appplied over the already created attention mask
+        This can just be applied over the already created attention mask
         """
         arange_vector = torch.arange(start, end, device=device)
         block_pos = torch.abs(
@@ -894,7 +894,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):

@@ -1887,7 +1887,7 @@ class _LazyModule(ModuleType):
                 #
                 # dict_keys(['models.nllb_moe.configuration_nllb_moe', 'models.sew_d.configuration_sew_d'])
                 #
-                # with this, we don't only want to be able to import these explicitely, we want to be able to import
+                # with this, we don't only want to be able to import these explicitly, we want to be able to import
                 # every intermediate module as well. Therefore, this is what is returned:
                 #
                 # {
