@@ -20,12 +20,11 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridChunkedCache
+from ...cache_utils import Cache, HybridChunkedCache, StaticCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -646,7 +645,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if self.config.get_text_config().get("attention_chunk_size") is not None:
                 past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
             else:
-                past_key_values = Cache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+                past_key_values = StaticCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
