@@ -4089,6 +4089,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # Get device with index assuming equal number of devices per host
             if device_type == "xpu":
                 index = torch.xpu.current_device()
+            elif device_type == "hpu":
+                index = torch.hpu.current_device()
             else:
                 index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
