@@ -27,6 +27,8 @@ from .utils.import_utils import requires
 
 logger = logging.get_logger(__name__)
 
+dynamic_image_processor_classes = {}
+
 
 INIT_SERVICE_KWARGS = [
     "processor_class",
