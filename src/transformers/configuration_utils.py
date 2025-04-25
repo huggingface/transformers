@@ -43,6 +43,8 @@ from .utils.generic import is_timm_config_dict
 
 logger = logging.get_logger(__name__)
 
+dynamic_config_classes = dict()
+
 
 class PretrainedConfig(PushToHubMixin):
     # no-format
@@ -198,7 +200,7 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
-    _auto_class: Optional[str] = None
+    _auto_class: Optional[str] = None  # This is an unused legacy property, we keep it in case custom code expects it
 
     def __setattr__(self, key, value):
         if key in super().__getattribute__("attribute_map"):
@@ -414,7 +416,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None:
+        if self.__class__.__name__ in dynamic_classes:
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`
@@ -1044,7 +1046,7 @@ class PretrainedConfig(PushToHubMixin):
         if not hasattr(auto_module, auto_class):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
-        cls._auto_class = auto_class
+        dynamic_classes[cls.__name__] = auto_class
 
     @staticmethod
     def _get_global_generation_defaults() -> dict[str, Any]:
