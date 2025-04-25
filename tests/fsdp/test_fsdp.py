@@ -201,6 +201,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
             for k, v in trainer.args.fsdp_config.items():
+                self.assertTrue(k in self.accelerate_fsdp_config)
                 self.assertEqual(v, self.accelerate_fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
