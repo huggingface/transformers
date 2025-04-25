@@ -454,7 +454,7 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
                 )
             if querylen != query_segment.size(1):
                 raise AssertionError(
-                    f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!"
+                    f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.size(1)}!"
                 )
 
             key_pos = key_pos.view(batch, -1, keylen)
