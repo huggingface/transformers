@@ -60,8 +60,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32):
-            The maximum sequence length that this model might ever be used with. CsmDepthDecoder 1 supports up to 2048 tokens,
-            CsmDepthDecoder 2 up to 4096, CodeLlama up to 16384.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -257,13 +256,13 @@ class CsmConfig(PretrainedConfig):
         text_vocab_size (`int`, *optional*, defaults to 128256):
             Vocabulary size of the text input for the Csm model. Defines the number of different text tokens that can be represented.
         hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
+            Dimension of the hidden representations of the backbone model.
         intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimension of the MLP representations.
+            Dimension of the MLP representations of the backbone model.
         num_hidden_layers (`int`, *optional*, defaults to 16):
-            Number of hidden layers in the Transformer decoder.
+            Number of hidden layers in the backbone model Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
+            Number of attention heads for each attention layer in the backbone model Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -272,7 +271,7 @@ class CsmConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
+            The non-linear activation function (function or string) in the backbone model Transformer decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -285,9 +284,9 @@ class CsmConfig(PretrainedConfig):
         pad_token_id (`int`, *optional*, defaults to 128002):
             Padding token id.
         codebook_pad_token_id (`int`, *optional*, defaults to 2050):
-            Padding token id for codebooks.
+            Padding token id for codebook tokens.
         codebook_eos_token_id (`int`, *optional*, defaults to 0):
-            End of stream token id for codebooks.
+            End of stream token id for codebook tokens.
         bos_token_id (`int`, *optional*, defaults to 128000):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
@@ -344,20 +343,20 @@ class CsmConfig(PretrainedConfig):
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
         tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie the codebooks embeddings of the backbone model to the codebooks embeddings of the depth decoder.
+            Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
         depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
             Configuration for the depth decoder.
         codec_config (`PretrainedConfig`, *optional*):
             Configuration for the codec.
 
     ```python
-    >>> from transformers import CsmBackboneModel, CsmBackboneConfig
+    >>> from transformers import CsmForConditionalGeneration, CsmConfig
 
-    >>> # Initializing a CsmBackboneConfig
-    >>> configuration = CsmBackboneConfig()
+    >>> # Initializing a CsmConfig
+    >>> configuration = CsmConfig()
 
     >>> # Initializing a model
-    >>> model = CsmBackboneModel(configuration)
+    >>> model = CsmForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
