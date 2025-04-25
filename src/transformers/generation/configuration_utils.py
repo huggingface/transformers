@@ -381,10 +381,12 @@ class GenerationConfig(PushToHubMixin):
         > Parameters related to performances and compilation
 
         compile_config (CompileConfig, *optional*):
-            If using a static cache, this controls how `generate` will `compile` the forward pass for performance
-            gains.
-
-        disable_compile (`bool`, *optional*): Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when specific criteria are met, including using a compileable cache. Please open an issue if you find the need to use this flag.
+            If using a compilable cache, this controls how `generate` will `compile` the forward pass for faster
+            inference.
+        disable_compile (`bool`, *optional*):
+            Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
+            specific criteria are met, including using a compileable cache. Please open an issue if you find the
+            need to use this flag.
 
         > Wild card
 
@@ -489,7 +491,7 @@ class GenerationConfig(PushToHubMixin):
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
         # Performance
-        self.compile_config = kwargs.pop("compile_config", CompileConfig())
+        self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -811,9 +813,10 @@ class GenerationConfig(PushToHubMixin):
             self.watermarking_config.validate()
 
         # 7. performances arguments
-        if not isinstance(self.compile_config, CompileConfig):
+        if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
             raise ValueError(
-                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an "
+                "instance of `CompileConfig`."
             )
 
         # 8. other incorrect combinations
