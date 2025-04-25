@@ -84,7 +84,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
 
 </hfoption>
-<hfoption id="AutoModel - NaFlex">
+<hfoption id="AutoModel (NaFlex)">
 
 ```py
 import torch
