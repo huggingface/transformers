@@ -1449,8 +1449,10 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         >>> processor = AutoProcessor.from_pretrained(model_id)
 
         >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
-        >>> conversation = []
+        >>> # ensure the audio is 24kHz
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
+        >>> conversation = []
         >>> # prepare a conversation with text and corresponding audio
         >>> for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):
         ...     conversation.append(
@@ -2068,7 +2070,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import CsmProcessor, CsmForConditionalGeneration
-        >>> from datasets import load_dataset
+        >>> from datasets import load_dataset, Audio
         >>> import soundfile as sf
 
         >>> model_id = "eustlb/csm-1b"
@@ -2077,6 +2079,9 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         >>> processor = AutoProcessor.from_pretrained(model_id)
 
         >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        >>> # ensure the audio is 24kHz
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+
         >>> conversation = []
         >>> # prepare a conversation with text and corresponding audio
         >>> for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):

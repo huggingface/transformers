@@ -65,16 +65,21 @@ class CsmProcessor(ProcessorMixin):
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
         ```python
         from transformers import CsmProcessor
+        from datasets import load_dataset
+
+        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        audio = ds[0]["audio"]["array"]
 
         processor = CsmProcessor.from_pretrained("eustlb/csm-1b")
 
         processor(
-            images=your_pil_image,
-            text=["<|image|>If I had to write a haiku for this one"],
-            images_kwargs = {"size": {"height": 448, "width": 448}},
-            text_kwargs = {"padding": "right"},
+            text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
+            audio=audio,
+            text_kwargs = {"padding": False},
+            audio_kwargs = {"sampling_rate": 16000},
             common_kwargs = {"return_tensors": "pt"},
         )
+        # this should error out because EncodecFeatureExtractor expects a 24kHz audio :)
         ```
 
     Args:
