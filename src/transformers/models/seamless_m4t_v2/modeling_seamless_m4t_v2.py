@@ -3374,7 +3374,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
 
         Parameters:
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-                Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+                Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
 
             tgt_lang (`str`, *optional*):

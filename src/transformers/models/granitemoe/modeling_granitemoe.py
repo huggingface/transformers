@@ -242,6 +242,7 @@ class GraniteMoeParallelExperts(nn.Module):
         [ScatterMoE](https://github.com/shawntan/scattermoe), as well as the
         [MoE kernel](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/fused_moe/fused_moe.py)
         used in vllm.
+
         Args:
             num_experts (int):
                 Number of experts.
@@ -259,11 +260,13 @@ class GraniteMoeParallelExperts(nn.Module):
     def forward(self, inputs, expert_size):
         """
         Forward pass of the GraniteMoeParallelExperts module.
+
         Args:
             inputs (Tensor):
                 Input tensor.
             expert_size:
                 Expert size information.
+
         Returns:
             Tensor: Output tensor.
         """
