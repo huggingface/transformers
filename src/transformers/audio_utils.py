@@ -86,26 +86,22 @@ def make_list_of_audio(
     audio: Union[list[AudioInput], AudioInput],
 ) -> AudioInput:
     """
-    Ensure that the output is a list of audios.
+    Ensure that the output is a list of audio.
     Args:
         audio (`Union[List[AudioInput], AudioInput]`):
             The input audio.
     Returns:
-        list: A list of list of audios.
+        list: A list of audio.
     """
-    # If it's a list of batches, it's already in the right format
+    # If it's a list of audios, it's already in the right format
     if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
         return audio
 
-    # If it's a list of audios, it's a single batch, so convert it to a list of lists
-    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
-        return audio
-
-    # If it's a single audio, convert it to a list of lists
+    # If it's a single audio, convert it to a list of
     if is_valid_audio(audio):
         return [audio]
 
-    raise ValueError("Invalid input type. Must be a single audio, a list of audios, or a list of batches of audios.")
+    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
