@@ -1630,7 +1630,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
 
-        # set target language corectly
+        # set target language correctly
         self.target_lang = target_lang
 
 
