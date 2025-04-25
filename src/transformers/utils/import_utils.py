@@ -45,6 +45,11 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
     package_version = "N/A"
     if package_exists:
         try:
+            # TODO: Once python 3.9 support is dropped, `importlib.metadata.packages_distributions()`
+            # should be used here to map from package name to distribution names
+            # e.g. PIL -> Pillow, Pillow-SIMD; quark -> amd-quark; onnxruntime -> onnxruntime-gpu.
+            # `importlib.metadata.packages_distributions()` is not available in Python 3.9.
+
             # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
         except importlib.metadata.PackageNotFoundError:
@@ -61,6 +66,12 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                         package_exists = False
                 except ImportError:
                     # If the package can't be imported, it's not available
+                    package_exists = False
+            elif pkg_name == "quark":
+                # TODO: remove once `importlib.metadata.packages_distributions()` is supported.
+                try:
+                    package_version = importlib.metadata.version("amd-quark")
+                except Exception:
                     package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
@@ -95,7 +106,8 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
-
+TORCHAO_MIN_VERSION = "0.4.0"
+AUTOROUND_MIN_VERSION = "0.5.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -147,8 +159,10 @@ _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
+_auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
+_quark_available = _is_package_available("quark")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -191,7 +205,7 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
-_torchao_available = _is_package_available("torchao")
+_torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
@@ -203,11 +217,16 @@ _liger_kernel_available = _is_package_available("liger_kernel")
 _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
+_kernels_available = _is_package_available("kernels")
 
 _torch_version = "N/A"
 _torch_available = False
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available, _torch_version = _is_package_available("torch", return_version=True)
+    if _torch_available:
+        _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
+        if not _torch_available:
+            logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
@@ -296,15 +315,6 @@ if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
             _jax_version = _flax_version = "N/A"
 
 
-_torch_fx_available = False
-if _torch_available:
-    torch_version = version.parse(_torch_version)
-    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
-        TORCH_FX_REQUIRED_VERSION.major,
-        TORCH_FX_REQUIRED_VERSION.minor,
-    )
-
-
 _torch_xla_available = False
 if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
     _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
@@ -314,6 +324,10 @@ if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
 
 def is_kenlm_available():
     return _kenlm_available
+
+
+def is_kernels_available():
+    return _kernels_available
 
 
 def is_cv2_available():
@@ -332,16 +346,28 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+def is_torch_accelerator_available():
+    if is_torch_available():
+        import torch
+
+        return hasattr(torch, "accelerator")
+
+    return False
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
     """
-    import torch
+    if is_torch_available():
+        import torch
 
-    if torch.get_deterministic_debug_mode() == 0:
-        return False
-    else:
-        return True
+        if torch.get_deterministic_debug_mode() == 0:
+            return False
+        else:
+            return True
+
+    return False
 
 
 def is_hadamard_available():
@@ -366,15 +392,12 @@ def is_torch_sdpa_available():
     elif _torch_version == "N/A":
         return False
 
-    # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
-    # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
-    # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
     # NOTE: MLU is OK with non-contiguous inputs.
     if is_torch_mlu_available():
-        return version.parse(_torch_version) >= version.parse("2.1.0")
+        return True
     # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
     if is_torch_npu_available():
-        return version.parse(_torch_version) >= version.parse("2.1.0")
+        return True
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
 
@@ -502,28 +525,23 @@ def is_torch_mps_available(min_version: Optional[str] = None):
     return False
 
 
-def is_torch_bf16_gpu_available():
+def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
-    return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    if torch.xpu.is_available():
+        return torch.xpu.is_bf16_supported()
+    if is_torch_hpu_available():
+        return True
+    return False
 
 
-def is_torch_bf16_cpu_available():
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    try:
-        # multiple levels of AttributeError depending on the pytorch version so do them all in one check
-        _ = torch.cpu.amp.autocast
-    except AttributeError:
-        return False
-
-    return True
+def is_torch_bf16_cpu_available() -> bool:
+    return is_torch_available()
 
 
 def is_torch_bf16_available():
@@ -542,10 +560,16 @@ def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
 
+    if is_torch_hpu_available():
+        if is_habana_gaudi1():
+            return False
+        else:
+            return True
+
     import torch
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
         _ = x @ x
 
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
@@ -573,8 +597,11 @@ def is_torch_bf16_available_on_device(device):
     if device == "cuda":
         return is_torch_bf16_gpu_available()
 
+    if device == "hpu":
+        return True
+
     try:
-        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
         _ = x @ x
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
@@ -594,16 +621,11 @@ def is_torch_tf32_available():
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
-    if int(torch.version.cuda.split(".")[0]) < 11:
-        return False
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
-        return False
-
     return True
 
 
 def is_torch_fx_available():
-    return _torch_fx_available
+    return is_torch_available()
 
 
 def is_peft_available():
@@ -651,31 +673,6 @@ def is_ftfy_available():
 
 def is_g2p_en_available():
     return _g2p_en_available
-
-
-@lru_cache()
-def is_torch_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-
-    if not _torch_available:
-        return False
-    if importlib.util.find_spec("torch_xla") is not None:
-        if check_device:
-            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-            try:
-                import torch_xla.core.xla_model as xm
-
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-        return True
-    return False
 
 
 @lru_cache
@@ -773,22 +770,71 @@ def is_torch_musa_available(check_device=False):
     return hasattr(torch, "musa") and torch.musa.is_available()
 
 
-def is_torchdynamo_available():
-    if not is_torch_available():
+@lru_cache
+def is_torch_hpu_available():
+    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
+    if (
+        not _torch_available
+        or importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
         return False
 
-    return version.parse(_torch_version) >= version.parse("2.0.0")
-
-
-def is_torch_compile_available():
-    if not is_torch_available():
+    torch_hpu_min_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
         return False
 
     import torch
 
-    # We don't do any version check here to support nighlies marked as 1.14. Ultimately needs to check version against
-    # 2.0 but let's do it later.
-    return hasattr(torch, "compile")
+    if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
+        # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
+        import habana_frameworks.torch  # noqa: F401
+
+    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
+    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
+    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
+    # dl1.24xlarge Gaudi1 instances on AWS for testing.
+    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
+    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+        original_masked_fill_ = torch.Tensor.masked_fill_
+
+        def patched_masked_fill_(self, mask, value):
+            if self.dtype == torch.int64:
+                logger.warning_once(
+                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
+                    "This operation will be performed out-of-place using tensor[mask] = value."
+                )
+                self[mask] = value
+            else:
+                original_masked_fill_(self, mask, value)
+
+        torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    return True
+
+
+@lru_cache
+def is_habana_gaudi1():
+    if not is_torch_hpu_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
+
+
+def is_torchdynamo_available():
+    return is_torch_available()
+
+
+def is_torch_compile_available():
+    return is_torch_available()
 
 
 def is_torchdynamo_compiling():
@@ -806,6 +852,23 @@ def is_torchdynamo_compiling():
             import torch._dynamo as dynamo  # noqa: F401
 
             return dynamo.is_compiling()
+        except Exception:
+            return False
+
+
+def is_torchdynamo_exporting():
+    if not is_torch_available():
+        return False
+
+    try:
+        import torch
+
+        return torch.compiler.is_exporting()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_exporting()
         except Exception:
             return False
 
@@ -904,10 +967,10 @@ def is_torch_xpu_available(check_device=False):
         return False
 
     torch_version = version.parse(_torch_version)
-    if torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 6):
+    if torch_version.major == 2 and torch_version.minor < 6:
         if is_ipex_available():
             import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        elif torch_version.major == 2 and torch_version.minor < 4:
             return False
 
     import torch
@@ -960,11 +1023,6 @@ def is_flash_attn_2_available():
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
         return False
 
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
-        return False
-
     if torch.version.cuda:
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
     elif torch.version.hip:
@@ -993,11 +1051,21 @@ def is_flash_attn_greater_or_equal(library_version: str):
 
 
 @lru_cache()
-def is_torch_greater_or_equal(library_version: str):
+def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1046,9 +1114,17 @@ def is_auto_awq_available():
     return _auto_awq_available
 
 
+def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION):
+    return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
+
+
 def is_optimum_quanto_available():
     # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
     return _is_optimum_quanto_available
+
+
+def is_quark_available():
+    return _quark_available
 
 
 def is_compressed_tensors_available():
@@ -1213,8 +1289,8 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
-def is_torchao_available():
-    return _torchao_available
+def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION):
+    return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
 def is_speech_available():
@@ -1562,6 +1638,11 @@ SCIPY_IMPORT_ERROR = """
 `pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+KERAS_NLP_IMPORT_ERROR = """
+{0} requires the keras_nlp library but it was not found in your environment. You can install it with pip.
+Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
@@ -1722,6 +1803,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
+        ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
     ]
 )
 
@@ -1752,8 +1834,10 @@ class DummyObject(type):
     `requires_backend` each time a user tries to access any method of that class.
     """
 
+    is_dummy = True
+
     def __getattribute__(cls, key):
-        if key.startswith("_") and key != "_from_config":
+        if (key.startswith("_") and key != "_from_config") or key == "is_dummy" or key == "mro" or key == "call":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
 
@@ -1782,7 +1866,7 @@ class _LazyModule(ModuleType):
         name: str,
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
-        module_spec: importlib.machinery.ModuleSpec = None,
+        module_spec: Optional[importlib.machinery.ModuleSpec] = None,
         extra_objects: Dict[str, object] = None,
     ):
         super().__init__(name)
@@ -1797,6 +1881,25 @@ class _LazyModule(ModuleType):
 
             for backends, module in import_structure.items():
                 missing_backends = []
+
+                # This ensures that if a module is importable, then all other keys of the module are importable.
+                # As an example, in module.keys() we might have the following:
+                #
+                # dict_keys(['models.nllb_moe.configuration_nllb_moe', 'models.sew_d.configuration_sew_d'])
+                #
+                # with this, we don't only want to be able to import these explicitely, we want to be able to import
+                # every intermediate module as well. Therefore, this is what is returned:
+                #
+                # {
+                #     'models.nllb_moe.configuration_nllb_moe',
+                #     'models.sew_d.configuration_sew_d',
+                #     'models',
+                #     'models.sew_d', 'models.nllb_moe'
+                # }
+
+                module_keys = set(
+                    chain(*[[k.rsplit(".", i)[0] for i in range(k.count(".") + 1)] for k in list(module.keys())])
+                )
                 for backend in backends:
                     if backend not in BACKENDS_MAPPING:
                         raise ValueError(
@@ -1805,7 +1908,7 @@ class _LazyModule(ModuleType):
                     callable, error = BACKENDS_MAPPING[backend]
                     if not callable():
                         missing_backends.append(backend)
-                self._modules = self._modules.union(set(module.keys()))
+                self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
                     if len(missing_backends):
@@ -1818,7 +1921,7 @@ class _LazyModule(ModuleType):
                     _import_structure.setdefault(key, []).extend(values)
 
                 # Needed for autocompletion in an IDE
-                self.__all__.extend(list(module.keys()) + list(chain(*module.values())))
+                self.__all__.extend(module_keys | set(chain(*module.values())))
 
             self.__file__ = module_file
             self.__spec__ = module_spec
@@ -1827,7 +1930,7 @@ class _LazyModule(ModuleType):
             self._name = name
             self._import_structure = _import_structure
 
-        # This can be removed once every exportable object has a `export()` export.
+        # This can be removed once every exportable object has a `require()` require.
         else:
             self._modules = set(import_structure.keys())
             self._class_to_module = {}
@@ -1865,8 +1968,19 @@ class _LazyModule(ModuleType):
                 def __init__(self, *args, **kwargs):
                     requires_backends(self, missing_backends)
 
+                def call(self, *args, **kwargs):
+                    pass
+
             Placeholder.__name__ = name
-            Placeholder.__module__ = self.__spec__
+
+            if name not in self._class_to_module:
+                module_name = f"transformers.{name}"
+            else:
+                module_name = self._class_to_module[name]
+                if not module_name.startswith("transformers."):
+                    module_name = f"transformers.{module_name}"
+
+            Placeholder.__module__ = module_name
 
             value = Placeholder
         elif name in self._class_to_module.keys():
@@ -1916,12 +2030,12 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
-def export(*, backends=()):
+def requires(*, backends=()):
     """
     This decorator enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
       to execute correctly without instantiating it
-    - The '@export' string is used to dynamically import objects
+    - The '@requires' string is used to dynamically import objects
     """
     for backend in backends:
         if backend not in BACKENDS_MAPPING:
@@ -1942,6 +2056,8 @@ BASE_FILE_REQUIREMENTS = {
     lambda e: "modeling_flax_" in e: ("flax",),
     lambda e: "modeling_" in e: ("torch",),
     lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
+    lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
+    lambda e: e.startswith("image_processing_"): ("vision",),
 }
 
 
@@ -1994,13 +2110,13 @@ def create_import_structure_from_path(module_path):
     If a file is given, it will return the import structure of the parent folder.
 
     Import structures are designed to be digestible by `_LazyModule` objects. They are
-    created from the __all__ definitions in each files as well as the `@export` decorators
+    created from the __all__ definitions in each files as well as the `@require` decorators
     above methods and objects.
 
     The import structure allows explicit display of the required backends for a given object.
     These backends are specified in two ways:
 
-    1. Through their `@export`, if they are exported with that decorator. This `@export` decorator
+    1. Through their `@require`, if they are exported with that decorator. This `@require` decorator
        accepts a `backend` tuple kwarg mentioning which backends are required to run this object.
 
     2. If an object is defined in a file with "default" backends, it will have, at a minimum, this
@@ -2010,6 +2126,7 @@ def create_import_structure_from_path(module_path):
        - If a file is named like `modeling_tf_*.py`, it will have a `tf` backend
        - If a file is named like `modeling_flax_*.py`, it will have a `flax` backend
        - If a file is named like `tokenization_*_fast.py`, it will have a `tokenizers` backend
+       - If a file is named like `image_processing*_fast.py`, it will have a `torchvision` + `torch` backend
 
     Backends serve the purpose of displaying a clear error message to the user in case the backends are not installed.
     Should an object be imported without its required backends being in the environment, any attempt to use the
@@ -2042,23 +2159,22 @@ def create_import_structure_from_path(module_path):
     }
     """
     import_structure = {}
-    if os.path.isdir(module_path):
-        directory = module_path
-        adjacent_modules = []
 
-        for f in os.listdir(module_path):
-            if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-                import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+    if os.path.isfile(module_path):
+        module_path = os.path.dirname(module_path)
 
-            elif not os.path.isdir(os.path.join(directory, f)):
-                adjacent_modules.append(f)
+    directory = module_path
+    adjacent_modules = []
 
-    else:
-        directory = os.path.dirname(module_path)
-        adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+    for f in os.listdir(module_path):
+        if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
+            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+
+        elif not os.path.isdir(os.path.join(directory, f)):
+            adjacent_modules.append(f)
 
     # We're only taking a look at files different from __init__.py
-    # We could theoretically export things directly from the __init__.py
+    # We could theoretically require things directly from the __init__.py
     # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
@@ -2094,15 +2210,15 @@ def create_import_structure_from_path(module_path):
                 base_requirements = requirements
                 break
 
-        # Objects that have a `@export` assigned to them will get exported
+        # Objects that have a `@require` assigned to them will get exported
         # with the backends specified in the decorator as well as the file backends.
         exported_objects = set()
-        if "@export" in file_content:
+        if "@requires" in file_content:
             lines = file_content.split("\n")
             for index, line in enumerate(lines):
                 # This allows exporting items with other decorators. We'll take a look
                 # at the line that follows at the same indentation level.
-                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@requires"):
                     continue
 
                 # Skipping line enables putting whatever we want between the
@@ -2110,7 +2226,7 @@ def create_import_structure_from_path(module_path):
                 # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
-                if "@export" in previous_line:
+                if "@requires" in previous_line:
                     skip_line = False
 
                     # Backends are defined on the same line as export
@@ -2285,7 +2401,8 @@ def spread_import_structure(nested_import_structure):
     return flattened_import_structure
 
 
-def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
+@lru_cache()
+def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 
@@ -2305,9 +2422,17 @@ def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
     }
 
     The import structure is a dict defined with frozensets as keys, and dicts of strings to sets of objects.
+
+    If `prefix` is not None, it will add that prefix to all keys in the returned dict.
     """
     import_structure = create_import_structure_from_path(module_path)
-    return spread_import_structure(import_structure)
+    spread_dict = spread_import_structure(import_structure)
+
+    if prefix is None:
+        return spread_dict
+    else:
+        spread_dict = {k: {f"{prefix}.{kk}": vv for kk, vv in v.items()} for k, v in spread_dict.items()}
+        return spread_dict
 
 
 def clear_import_cache():

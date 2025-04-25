@@ -247,8 +247,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars=True,
         strip_accents=None,
         cell_trim_length: int = -1,
-        max_column_id: int = None,
-        max_row_id: int = None,
+        max_column_id: Optional[int] = None,
+        max_row_id: Optional[int] = None,
         strip_column_names: bool = False,
         update_answer_coordinates: bool = False,
         min_question_length=None,
@@ -2242,8 +2242,8 @@ class NumericValue:
 
 @dataclass
 class NumericValueSpan:
-    begin_index: int = None
-    end_index: int = None
+    begin_index: Optional[int] = None
+    end_index: Optional[int] = None
     values: List[NumericValue] = None
 
 

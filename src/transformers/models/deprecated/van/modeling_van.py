@@ -311,7 +311,9 @@ class VanEncoder(nn.Module):
         hidden_sizes = config.hidden_sizes
         depths = config.depths
         mlp_ratios = config.mlp_ratios
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rates = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")
+        ]
 
         for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
             zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
@@ -534,3 +536,6 @@ class VanForImageClassification(VanPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["VanForImageClassification", "VanModel", "VanPreTrainedModel"]

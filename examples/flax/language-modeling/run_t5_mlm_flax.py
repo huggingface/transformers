@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import flax
 import jax
@@ -338,7 +337,7 @@ class FlaxDataCollatorForT5MLM:
     pad_token_id: int
     decoder_start_token_id: int
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
+    def __call__(self, examples: list[dict[str, np.ndarray]]) -> BatchEncoding:
         # convert list to dict and tensorize input
         batch = BatchEncoding(
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}

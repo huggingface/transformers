@@ -268,10 +268,10 @@ def convert_owlv2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pa
 
     # Verify pixel_values and input_ids
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_pixel_values_960.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
+    original_pixel_values = torch.load(filepath, weights_only=True).permute(0, 3, 1, 2)
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlv2_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath).squeeze()
+    original_input_ids = torch.load(filepath, weights_only=True).squeeze()
 
     filepath = hf_hub_download(repo_id="adirik/OWL-ViT", repo_type="space", filename="assets/astronaut.png")
     image = Image.open(filepath)

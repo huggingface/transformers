@@ -27,7 +27,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -545,10 +551,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -577,10 +583,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -636,7 +642,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_with_different_dtypes(self, torch_dtype_str):
         torch_dtype = {
@@ -658,7 +664,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
         torch_dtype = {

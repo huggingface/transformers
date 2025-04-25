@@ -14,25 +14,62 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# bitsandbytes
+# Bitsandbytes
 
-[bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) features the LLM.int8 and QLoRA quantization to enable accessible large language model inference and training.
+The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around CUDA functions. It enables working with large models using limited computational resources by reducing their memory footprint.
 
-[LLM.int8()](https://hf.co/papers/2208.07339) is a quantization method that aims to make large language model inference more accessible without significant degradation. Unlike naive 8-bit quantization, which can result in loss of critical information and accuracy, LLM.int8() dynamically adapts to ensure sensitive components of the computation retain higher precision when needed.
+At its core, bitsandbytes provides:
 
-QLoRA, or 4-bit quantization, compresses a model even further to 4-bits and inserts a small set of trainable low-rank adaptation (LoRA) weights to allowing training.
+- **Quantized Linear Layers**: `Linear8bitLt` and `Linear4bit` layers that replace standard PyTorch linear layers with memory-efficient quantized alternatives
+- **Optimized Optimizers**: 8-bit versions of common optimizers through its `optim` module, enabling training of large models with reduced memory requirements
+- **Matrix Multiplication**: Optimized matrix multiplication operations that leverage the quantized format
+
+bitsandbytes offers two main quantization features:
+
+1. **LLM.int8()** - An 8-bit quantization method that makes inference more accessible without significant performance degradation. Unlike naive quantization, [LLM.int8()](https://hf.co/papers/2208.07339) dynamically preserves higher precision for critical computations, preventing information loss in sensitive parts of the model.
+
+2. **QLoRA** - A 4-bit quantization technique that compresses models even further while maintaining trainability by inserting a small set of trainable low-rank adaptation (LoRA) weights.
+
+> **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
+
 
 Run the command below to install bitsandbytes.
 
 ```bash
 pip install --upgrade transformers accelerate bitsandbytes
 ```
+To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
+
+## Hardware Compatibility
+bitsandbytes is currently only supported on CUDA GPUs for CUDA versions 11.0 - 12.8. However, there's an ongoing multi-backend effort under development, which is currently in alpha. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
+
+### CUDA
+
+| Feature | Minimum Hardware Requirement |
+|---------|-------------------------------|
+| 8-bit optimizers | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
+| LLM.int8() | NVIDIA Turing (RTX 20 series, T4) or newer GPUs |
+| NF4/FP4 quantization | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
+
+### Multi-backend
+
+| Backend | Supported Versions | Python versions | Architecture Support | Status |
+|---------|-------------------|----------------|---------------------|---------|
+| AMD ROCm | 6.1+ | 3.10+ | minimum CDNA - gfx90a, RDNA - gfx1100 | Alpha |
+| Apple Silicon (MPS) | WIP | 3.10+ | M1/M2 chips | Planned |
+| Intel CPU | v2.4.0+ (ipex) | 3.10+ | Intel CPU | Alpha |
+| Intel GPU | v2.4.0+ (ipex) | 3.10+ | Intel GPU | Experimental |
+| Ascend NPU | 2.1.0+ (torch_npu) | 3.10+ | Ascend NPU | Experimental |
+
+> **Note:** Bitsandbytes is moving away from the multi-backend approach towards using [Pytorch Custom Operators](https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html), as the main mechanism for supporting new hardware, and dispatching to the correct backend.
+
+## Quantization Examples
 
 Quantize a model by passing a [`BitsAndBytesConfig`] to [`~PreTrainedModel.from_pretrained`]. This works for any model in any modality, as long as it supports [Accelerate](https://huggingface.co/docs/accelerate/index) and contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
-
+<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
 Quantizing a model in 8-bit halves the memory-usage, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
 ```py
@@ -42,6 +79,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7", 
+    device_map="auto",
     quantization_config=quantization_config
 )
 ```
@@ -56,6 +94,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
+    device_map="auto",
     quantization_config=quantization_config, 
     torch_dtype="auto"
 )
@@ -71,16 +110,16 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-560m", 
+    device_map="auto",
     quantization_config=quantization_config
 )
-tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
 model.push_to_hub("bloom-560m-8bit")
 ```
-
+</div>
 </hfoption>
 <hfoption id="4-bit">
-
+<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
 Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
 ```py
@@ -90,6 +129,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
+    device_map="auto",
     quantization_config=quantization_config
 )
 ```
@@ -104,6 +144,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
+    device_map="auto",
     quantization_config=quantization_config, 
     torch_dtype="auto"
 )
@@ -112,6 +153,20 @@ model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 
 Make sure you have the latest bitsandbytes version so you can serialize 4-bit models and push them to the Hub with [`~PreTrainedModel.push_to_hub`]. Use [`~PreTrainedModel.save_pretrained`] to save the 4-bit model locally.  
 
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-560m", 
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+model.push_to_hub("bloom-560m-4bit")
+```
+</div>
 </hfoption>
 </hfoptions>
 

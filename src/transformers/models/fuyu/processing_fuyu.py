@@ -25,6 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -326,6 +327,7 @@ def scale_bbox_to_transformed_image(
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
+@requires(backends=("vision",))
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
@@ -481,7 +483,7 @@ class FuyuProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
         encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:

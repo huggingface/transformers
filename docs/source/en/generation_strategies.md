@@ -31,7 +31,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("I look forward to", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
 # explicitly set to default length because Llama2 generation length is 4096
@@ -271,7 +271,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## DoLa
 
-[Decoding by Contrasting Layers (DoLa)](https://hf.co/papers/2309.03883) is a contrastive decoding strategy for improving factuality and reducing hallucination. This strategy works by contrasting the logit diffferences between the final and early layers. As a result, factual knowledge localized to particular layers are amplified. DoLa is not recommended for smaller models like GPT-2.
+[Decoding by Contrasting Layers (DoLa)](https://hf.co/papers/2309.03883) is a contrastive decoding strategy for improving factuality and reducing hallucination. This strategy works by contrasting the logit differences between the final and early layers. As a result, factual knowledge localized to particular layers are amplified. DoLa is not recommended for smaller models like GPT-2.
 
 Enable DoLa with the following parameters.
 

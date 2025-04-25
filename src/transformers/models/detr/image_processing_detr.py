@@ -63,6 +63,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -784,6 +785,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class DetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -928,7 +930,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -1237,7 +1239,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1568,7 +1570,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -1677,7 +1679,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes

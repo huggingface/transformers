@@ -62,7 +62,7 @@ class DepthProOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     features: Union[torch.FloatTensor, List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -94,7 +94,7 @@ class DepthProDepthEstimatorOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    predicted_depth: torch.FloatTensor = None
+    predicted_depth: Optional[torch.FloatTensor] = None
     field_of_view: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None

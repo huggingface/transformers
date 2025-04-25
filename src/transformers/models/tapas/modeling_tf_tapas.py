@@ -111,7 +111,7 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     logits_aggregation: tf.Tensor | None = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -170,10 +170,10 @@ class TFTapasEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -1562,9 +1562,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        shape_list(labels)[0] == shape_list(float_answer)[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    assert shape_list(labels)[0] == shape_list(float_answer)[0], (
+                        "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    )
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1615,9 +1615,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        assert shape_list(labels)[0] == shape_list(aggregation_labels)[0], (
+                            "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,

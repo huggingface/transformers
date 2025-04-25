@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ import json
 import os
 import warnings
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 
@@ -74,7 +73,7 @@ class BatchFeature(UserDict):
             initialization.
     """
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
 
@@ -450,7 +449,7 @@ class FeatureExtractionMixin(PushToHubMixin):
     @classmethod
     def get_feature_extractor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using `from_dict`.
@@ -521,13 +520,13 @@ class FeatureExtractionMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                 )
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -536,12 +535,12 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         try:
             # Load feature_extractor dict
-            with open(resolved_feature_extractor_file, "r", encoding="utf-8") as reader:
+            with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
 
         except json.JSONDecodeError:
-            raise EnvironmentError(
+            raise OSError(
                 f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
             )
 
@@ -565,7 +564,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return feature_extractor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
+    def from_dict(cls, feature_extractor_dict: dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
         """
         Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
         parameters.
@@ -601,7 +600,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         else:
             return feature_extractor
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
@@ -628,7 +627,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature_extractor
             object instantiated from that JSON file.
         """
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         feature_extractor_dict = json.loads(text)
         return cls(**feature_extractor_dict)

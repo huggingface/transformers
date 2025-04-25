@@ -61,8 +61,8 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -93,7 +93,7 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -692,7 +692,7 @@ class MaskFormerSwinEncoder(nn.Module):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.layers = nn.ModuleList(
             [
                 MaskFormerSwinStage(
@@ -766,7 +766,6 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin, swin->model
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -790,6 +789,11 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MaskFormerSwinEmbeddings):
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, MaskFormerSwinSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,13 @@
 # limitations under the License.
 import copy
 import glob
-import itertools
 import json
 import os
 import os.path
+import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import unittest
 import unittest.mock as mock
@@ -29,6 +29,7 @@ from pathlib import Path
 
 import requests
 from huggingface_hub import HfApi, HfFolder
+from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -37,6 +38,7 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    CLIPTextModelWithProjection,
     DynamicCache,
     LlavaForConditionalGeneration,
     MistralForCausalLM,
@@ -45,6 +47,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -55,10 +58,12 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_read_token,
     require_safetensors,
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -74,8 +79,8 @@ from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flax_available,
     is_tf_available,
+    is_torch_npu_available,
     is_torch_sdpa_available,
-    is_torchdynamo_available,
 )
 
 
@@ -109,7 +114,6 @@ if is_torch_available():
     from transformers.modeling_utils import (
         _find_disjoint,
         _find_identical,
-        dtype_byte_size,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -230,7 +234,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     # Download model -> Huggingface Hub not concerned by our offline mode
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
@@ -274,7 +278,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
                     hub_api = HfApi()
@@ -477,9 +481,11 @@ class ModelUtilsTest(TestCasePlus):
         # test that from_pretrained works with torch_dtype being strings like "float32" for PyTorch backend
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float32")
         self.assertEqual(model.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float16")
         self.assertEqual(model.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -490,14 +496,22 @@ class ModelUtilsTest(TestCasePlus):
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
+        # Load without dtype specified
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set torch_dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -506,6 +520,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -514,6 +529,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
         config = copy.deepcopy(model.config)
@@ -524,14 +540,15 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
-        # TODO @ARTHURZUCKER FIX THIS
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
-        # LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
-        # model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
-        # self.assertEqual(model.language_model.dtype, torch.float32)
-        # self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        # self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -539,20 +556,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlavaForConditionalGeneration.from_pretrained(
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
-
-    @require_torch
-    @unittest.skip("Broken by @arthurzucker because the fix was not correct. Knowing the context is super hard")
-    def test_model_from_pretrained_meta_device(self):
-        def is_on_meta(model_id, dtype):
-            with torch.device("meta"):
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-                return all(value.device.type == "meta" for value in model.state_dict().values())
-
-        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
-        dtypes = (None, "auto", torch.float16)
-
-        for model_id, dtype in itertools.product(model_ids, dtypes):
-            self.assertTrue(is_on_meta(model_id, dtype))
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
@@ -569,7 +572,7 @@ class ModelUtilsTest(TestCasePlus):
 
         def remove_torch_dtype(model_path):
             file = f"{model_path}/config.json"
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 s = json.load(f)
             s.pop("torch_dtype")
             with open(file, "w", encoding="utf-8") as f:
@@ -633,6 +636,14 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
+        # test model that init the model with _from_config
+        model = CLIPTextModelWithProjection.from_pretrained(
+            "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+            subfolder="text_encoder",
+            torch_dtype=torch.bfloat16,
+        )
+        self.assertEqual(model.dtype, torch.bfloat16)
+
     def test_model_from_pretrained_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
         # 1. explicit from_pretrained's attn_implementation argument
@@ -641,7 +652,7 @@ class ModelUtilsTest(TestCasePlus):
         if is_torch_sdpa_available():
             attn_implementation_available.append("sdpa")
 
-        if is_flash_attn_2_available():
+        if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
         for requested_attn_implementation in attn_implementation_available:
@@ -665,7 +676,7 @@ class ModelUtilsTest(TestCasePlus):
         if is_torch_sdpa_available():
             attn_implementation_available.append("sdpa")
 
-        if is_flash_attn_2_available():
+        if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
         for requested_attn_implementation in attn_implementation_available:
@@ -689,31 +700,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, "foo-bar-baz")
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-
-    def test_torch_dtype_byte_sizes(self):
-        torch_dtypes_and_bytes = [
-            (torch.double, 8),
-            (torch.float64, 8),
-            (torch.float, 4),
-            (torch.float32, 4),
-            (torch.half, 2),
-            (torch.float16, 2),
-            (torch.bfloat16, 2),
-            (torch.long, 8),
-            (torch.int64, 8),
-            (torch.int, 4),
-            (torch.int32, 4),
-            (torch.short, 2),
-            (torch.int16, 2),
-            (torch.uint8, 1),
-            (torch.int8, 1),
-            (torch.float8_e4m3fn, 1),
-            (torch.float8_e5m2, 1),
-            (torch.bool, 0.125),
-        ]
-
-        for torch_dtype, bytes_per_element in torch_dtypes_and_bytes:
-            self.assertEqual(dtype_byte_size(torch_dtype), bytes_per_element)
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
@@ -753,11 +739,11 @@ class ModelUtilsTest(TestCasePlus):
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
-                        state_dict = torch.load(shard_file)
+                        state_dict = torch.load(shard_file, weights_only=True)
                         self.assertEqual(len(state_dict), 1)
 
                 # Check the index and the shard files found match
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
@@ -1496,8 +1482,6 @@ class ModelUtilsTest(TestCasePlus):
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
-        if not is_torchdynamo_available():
-            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -1688,7 +1672,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_isin_mps_friendly(self):
         """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
         random_ids = torch.randint(0, 100, (100,))
-        # We can match against an interger
+        # We can match against an integer
         random_test_integer = torch.randint(0, 100, (1,)).item()
         self.assertTrue(
             torch.equal(
@@ -1733,8 +1717,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
-        # `GenerationMixin`)
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
                 pass
@@ -1742,7 +1726,7 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithPrepareInputs.can_generate()
         self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
-        self.assertTrue(can_generate)
+        self.assertFalse(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """
@@ -1906,6 +1890,61 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmpdir)
             self.assertEqual(len(cm.records), 1)
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
+
+    @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
+    @slow
+    @require_read_token
+    @require_torch_gpu
+    def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
+        """
+        This test is used to avoid regression on https://github.com/huggingface/transformers/pull/36380.
+        10s should be more than enough for both models, and allows for some margin as loading time are quite
+        unstable. Before #36380, it used to take more than 40s, so 10s is still reasonable.
+        Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up.
+        """
+        # First download the weights if not already on disk
+        _ = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import time
+            import argparse
+            from transformers import AutoModelForCausalLM
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("model_id", type=str)
+            parser.add_argument("max_loading_time", type=float)
+            args = parser.parse_args()
+
+            device = torch.device("cuda:0")
+
+            torch.cuda.synchronize(device)
+            t0 = time.time()
+            model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
+            torch.cuda.synchronize(device)
+            dt = time.time() - t0
+
+            # Assert loading is faster (it should be more than enough in both cases)
+            if dt > args.max_loading_time:
+                raise ValueError(f"Loading took {dt:.2f}s! It should not take more than {args.max_loading_time}s")
+            # Ensure everything is correctly loaded on gpu
+            bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
+            if len(bad_device_params) > 0:
+                raise ValueError(f"The following parameters are not on GPU: {bad_device_params}")
+            """
+        )
+
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+            tmp.write(script_to_run)
+            tmp.flush()
+            tmp.seek(0)
+            cmd = f"python {tmp.name} {model_id} {max_loading_time}".split()
+            try:
+                # We cannot use a timeout of `max_loading_time` as cuda initialization can take up to 15-20s
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True, timeout=60)
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"The following error was captured: {e.stderr}")
 
 
 @slow
@@ -2309,14 +2348,14 @@ class AttentionMaskTester(unittest.TestCase):
             num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
 
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+                assert (mask_4d != 0).sum().item() == num_tokens_masked
             if 0 in mask_2d:
                 # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
+                assert (mask_4d != 0).sum().item() >= num_tokens_masked
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
         elif not mask_converter.is_causal and context is None:
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == 0
+                assert (mask_4d != 0).sum().item() == 0
             if 0 in mask_2d:
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
         elif mask_converter.is_causal and context is not None:
@@ -2325,10 +2364,10 @@ class AttentionMaskTester(unittest.TestCase):
             num_tokens_masked = bsz * num_tokens_masked
 
             if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+                assert (mask_4d != 0).sum().item() == num_tokens_masked
             if 0 in mask_2d:
                 # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
+                assert (mask_4d != 0).sum().item() >= num_tokens_masked
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
 
     def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
@@ -2346,15 +2385,15 @@ class AttentionMaskTester(unittest.TestCase):
             # k * (k+1) / 2 tokens are masked in triangualar masks
             num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
 
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+            assert (mask_4d != 0).sum().item() == num_tokens_masked
         elif not mask_converter.is_causal and context is None:
-            assert (mask_4d != 0).sum().cpu().item() == 0
+            assert (mask_4d != 0).sum().item() == 0
         elif mask_converter.is_causal and context is not None:
             # k * (k+1) / 2 tokens are masked in triangualar masks
             num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
             num_tokens_masked = bsz * num_tokens_masked
 
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
+            assert (mask_4d != 0).sum().item() == num_tokens_masked
 
     def compute_num_context_mask(self, kv_len, context, q_len):
         # This function computes the # of attention tokens that are added for
@@ -2609,6 +2648,11 @@ class TestAttentionImplementation(unittest.TestCase):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
+
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
@@ -2618,6 +2662,11 @@ class TestAttentionImplementation(unittest.TestCase):
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
+
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
 
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 

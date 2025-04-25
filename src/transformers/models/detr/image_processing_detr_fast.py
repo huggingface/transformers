@@ -24,8 +24,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -57,6 +56,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_detr import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -255,7 +255,7 @@ def prepare_coco_panoptic_annotation(
     new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
+        masks = read_image(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
         masks = rgb_to_id(masks)
 
         ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
@@ -283,21 +283,12 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-class DetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class DetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class DetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 @add_start_docstrings(
@@ -319,8 +310,11 @@ class DetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocess
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
     """,
 )
+@requires(backends=("torchvision", "torch"))
 class DetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -333,10 +327,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = DetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = DetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = DetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DetrFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -380,7 +373,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -629,7 +622,13 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             Path to the directory containing the segmentation masks.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DetrFastImageProcessorPreprocessKwargs]) -> BatchFeature:
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[DetrFastImageProcessorKwargs],
+    ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
@@ -644,7 +643,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
@@ -719,15 +718,8 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 
@@ -841,7 +833,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -950,7 +942,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes

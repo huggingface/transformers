@@ -48,6 +48,10 @@ if is_detectron2_available():
     import detectron2
     from detectron2.modeling import META_ARCH_REGISTRY
 
+    # This is needed as otherwise their overload will break sequential loading by overwriting buffer over and over. See
+    # https://github.com/facebookresearch/detectron2/blob/9604f5995cc628619f0e4fd913453b4d7d61db3f/detectron2/layers/batch_norm.py#L83-L86
+    detectron2.layers.batch_norm.FrozenBatchNorm2d._load_from_state_dict = torch.nn.Module._load_from_state_dict
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
@@ -510,6 +514,10 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LayoutLMv2SelfAttention):
+            if self.config.fast_qkv:
+                module.q_bias.data.zero_()
+                module.v_bias.data.zero_()
         elif isinstance(module, LayoutLMv2Model):
             if hasattr(module, "visual_segment_embedding"):
                 module.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)

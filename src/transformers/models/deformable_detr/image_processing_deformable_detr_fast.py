@@ -12,8 +12,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -40,6 +39,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_deformable_detr import get_size_with_aspect_ratio
 
 
@@ -58,21 +58,12 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class DeformableDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -247,7 +238,7 @@ def prepare_coco_panoptic_annotation(
     new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
+        masks = read_image(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
         masks = rgb_to_id(masks)
 
         ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
@@ -294,8 +285,11 @@ def prepare_coco_panoptic_annotation(
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
     """,
 )
+@requires(backends=("torchvision", "torch"))
 class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -308,10 +302,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = DeformableDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = DeformableDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = DeformableDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -355,7 +348,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -605,7 +598,11 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[DeformableDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -621,7 +618,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
@@ -696,15 +693,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 

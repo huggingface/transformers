@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -62,7 +62,7 @@ for _ in range(max_new_tokens):
     # Greedily sample one next token
     next_token_ids = outputs.logits[:, -1:].argmax(-1)
     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)
-    # Prepare inputs for the next generation step by leaaving unprocessed tokens, in our case we have only one new token
+    # Prepare inputs for the next generation step by leaving unprocessed tokens, in our case we have only one new token
     # and expanding attn mask for the new token, as explained above
     attention_mask = inputs["attention_mask"]
     attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
@@ -88,7 +88,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", to
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
 # `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache
-# in the the legacy format
+# in the legacy format
 generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
 
 cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)

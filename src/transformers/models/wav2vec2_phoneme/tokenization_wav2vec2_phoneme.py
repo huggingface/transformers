@@ -408,7 +408,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
@@ -455,7 +455,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> str:
@@ -511,7 +511,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> List[str]:

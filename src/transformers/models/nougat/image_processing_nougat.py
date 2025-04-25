@@ -220,10 +220,21 @@ class NougatImageProcessor(BaseImageProcessor):
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        if input_data_format == ChannelDimension.LAST:
+            rot_axes = (0, 1)
+        elif input_data_format == ChannelDimension.FIRST:
+            rot_axes = (1, 2)
+        else:
+            raise ValueError(f"Unsupported data format: {input_data_format}")
+
         if (output_width < output_height and input_width > input_height) or (
             output_width > output_height and input_width < input_height
         ):
-            image = np.rot90(image, 3)
+            image = np.rot90(image, 3, axes=rot_axes)
 
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -360,16 +371,16 @@ class NougatImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_crop_margin: bool = None,
-        do_resize: bool = None,
+        do_crop_margin: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_pad: bool = None,
-        do_rescale: bool = None,
+        do_thumbnail: Optional[bool] = None,
+        do_align_long_axis: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
         rescale_factor: Union[int, float] = None,
-        do_normalize: bool = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

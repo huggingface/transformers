@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -233,7 +233,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
+        when number of images doesn't match number of image tokens in the text.
         Also we need to test multi-image cases when one prompr has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -331,19 +331,10 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")
@@ -351,6 +342,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -359,6 +351,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass

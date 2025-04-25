@@ -23,11 +23,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, StaticCache
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...utils import (
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-)
+from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -176,7 +173,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
@@ -433,6 +430,24 @@ class DiffLlamaDecoderLayer(LlamaDecoderLayer):
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = False
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, DiffLlamaRMSNorm):  # noqa: F821
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, DiffLlamaAttention):
+            module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q2.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k2.data.normal_(0, self.config.lambda_std_dev)
 
 
 class DiffLlamaModel(LlamaModel):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -35,6 +34,7 @@ from .utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -113,6 +113,8 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.musa.manual_seed_all(seed)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
+    if is_torch_hpu_available():
+        torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
     if is_tf_available():
@@ -162,10 +164,10 @@ class EvalPrediction:
 
     def __init__(
         self,
-        predictions: Union[np.ndarray, Tuple[np.ndarray]],
-        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
-        losses: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        predictions: Union[np.ndarray, tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
+        losses: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
@@ -187,22 +189,22 @@ class EvalPrediction:
 
 
 class EvalLoopOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
+    predictions: Union[np.ndarray, tuple[np.ndarray]]
+    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
+    metrics: Optional[dict[str, float]]
     num_samples: Optional[int]
 
 
 class PredictionOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
+    predictions: Union[np.ndarray, tuple[np.ndarray]]
+    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
+    metrics: Optional[dict[str, float]]
 
 
 class TrainOutput(NamedTuple):
     global_step: int
     training_loss: float
-    metrics: Dict[str, float]
+    metrics: dict[str, float]
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
@@ -264,12 +266,12 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: Union[float, List[float]]
-    hyperparameters: Dict[str, Any]
+    objective: Union[float, list[float]]
+    hyperparameters: dict[str, Any]
     run_summary: Optional[Any] = None
 
 
-def default_compute_objective(metrics: Dict[str, float]) -> float:
+def default_compute_objective(metrics: dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
@@ -294,7 +296,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 
-def default_hp_space_optuna(trial) -> Dict[str, float]:
+def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
     assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
@@ -306,7 +308,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> Dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, float]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -333,7 +335,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> Dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, float]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -508,6 +510,11 @@ class TrainerMemoryTracker:
 
             self.torch = torch
             self.gpu = {}
+        elif is_torch_hpu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
         else:
             self.torch = None
 
@@ -573,6 +580,10 @@ class TrainerMemoryTracker:
             elif is_torch_npu_available():
                 self.torch.npu.reset_peak_memory_stats()
                 self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                self.torch.hpu.reset_peak_memory_stats()
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.hpu.empty_cache()
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()
 
@@ -588,6 +599,8 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
             elif is_torch_npu_available():
                 self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_at_start = self.torch.hpu.memory_allocated()
             elif is_torch_mps_available():
                 self.gpu_mem_used_at_start = self.torch.mps.current_allocated_memory()
 
@@ -623,6 +636,10 @@ class TrainerMemoryTracker:
                 self.torch.xpu.empty_cache()
             elif is_torch_npu_available():
                 self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.npu.empty_cache()
+                pass
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()
 
@@ -648,6 +665,9 @@ class TrainerMemoryTracker:
             elif is_torch_npu_available():
                 self.gpu_mem_used_now = self.torch.npu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_now = self.torch.hpu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.hpu.max_memory_allocated()
             elif is_torch_mps_available():
                 self.gpu_mem_used_now = self.torch.mps.current_allocated_memory()
                 # self.torch.mps.max_memory_allocated() does not exist yet
@@ -740,6 +760,9 @@ def has_length(dataset):
         return len(dataset) is not None
     except TypeError:
         # TypeError: len() of unsized object
+        return False
+    except AttributeError:
+        # Ray DataSets raises an AttributeError: https://github.com/ray-project/ray/blob/master/python/ray/data/dataset.py#L5616
         return False
 
 
@@ -843,7 +866,7 @@ class RemoveColumnsCollator:
                 self.message_logged = True
         return {k: v for k, v in feature.items() if k in self.signature_columns}
 
-    def __call__(self, features: List[dict]):
+    def __call__(self, features: list[dict]):
         features = [self._remove_columns(feature) for feature in features]
         return self.data_collator(features)
 

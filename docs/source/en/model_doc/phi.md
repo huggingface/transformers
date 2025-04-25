@@ -13,165 +13,116 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Phi
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Phi](https://huggingface.co/papers/2306.11644) is a 1.3B parameter transformer model optimized for Python code generation. It focuses on "textbook-quality" training data of code examples, exercises and synthetic Python problems rather than scaling the model size or compute.
 
-## Overview
+You can find all the original Phi checkpoints under the [Phi-1](https://huggingface.co/collections/microsoft/phi-1-6626e29134744e94e222d572) collection.
 
-The Phi-1 model was proposed in [Textbooks Are All You Need](https://arxiv.org/abs/2306.11644) by Suriya Gunasekar, Yi Zhang, Jyoti Aneja, Caio César Teodoro Mendes, Allie Del Giorno, Sivakanth Gopi, Mojan Javaheripi, Piero Kauffmann, Gustavo de Rosa, Olli Saarikivi, Adil Salim, Shital Shah, Harkirat Singh Behl, Xin Wang, Sébastien Bubeck, Ronen Eldan, Adam Tauman Kalai, Yin Tat Lee and Yuanzhi Li.
+> [!TIP]
+> Click on the Phi models in the right sidebar for more examples of how to apply Phi to different language tasks.
 
-The Phi-1.5 model was proposed in [Textbooks Are All You Need II: phi-1.5 technical report](https://arxiv.org/abs/2309.05463) by Yuanzhi Li, Sébastien Bubeck, Ronen Eldan, Allie Del Giorno, Suriya Gunasekar and Yin Tat Lee.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
 
-### Summary
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-In Phi-1 and Phi-1.5 papers, the authors showed how important the quality of the data is in training relative to the model size.
-They selected high quality "textbook" data alongside with synthetically generated data for training their small sized Transformer
-based model Phi-1 with 1.3B parameters. Despite this small scale, phi-1 attains pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP.
-They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable
-to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability
-to “think step by step” or perform some rudimentary in-context learning.
-With these two experiments the authors successfully showed the huge impact of quality of training data when training machine learning models.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the Phi-1 paper is the following:
+pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, torch_dtype=torch.bfloat16)
+pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n"""''')")
 
-*We introduce phi-1, a new large language model for code, with significantly smaller size than
-competing models: phi-1 is a Transformer-based model with 1.3B parameters, trained for 4 days on
-8 A100s, using a selection of “textbook quality” data from the web (6B tokens) and synthetically
-generated textbooks and exercises with GPT-3.5 (1B tokens). Despite this small scale, phi-1 attains
-pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP. It also displays surprising emergent
-properties compared to phi-1-base, our model before our finetuning stage on a dataset of coding
-exercises, and phi-1-small, a smaller model with 350M parameters trained with the same pipeline as
-phi-1 that still achieves 45% on HumanEval.*
-
-The abstract from the Phi-1.5 paper is the following:
-
-*We continue the investigation into the power of smaller Transformer-based language models as
-initiated by TinyStories – a 10 million parameter model that can produce coherent English – and
-the follow-up work on phi-1, a 1.3 billion parameter model with Python coding performance close
-to the state-of-the-art. The latter work proposed to use existing Large Language Models (LLMs) to
-generate “textbook quality” data as a way to enhance the learning process compared to traditional
-web data. We follow the “Textbooks Are All You Need” approach, focusing this time on common
-sense reasoning in natural language, and create a new 1.3 billion parameter model named phi-1.5,
-with performance on natural language tasks comparable to models 5x larger, and surpassing most
-non-frontier LLMs on more complex reasoning tasks such as grade-school mathematics and basic
-coding. More generally, phi-1.5 exhibits many of the traits of much larger LLMs, both good –such
-as the ability to “think step by step” or perform some rudimentary in-context learning– and bad,
-including hallucinations and the potential for toxic and biased generations –encouragingly though, we
-are seeing improvement on that front thanks to the absence of web data. We open-source phi-1.5 to
-promote further research on these urgent topics.*
-
-This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
-
-The original code for Phi-1, Phi-1.5 and Phi-2 can be found [here](https://huggingface.co/microsoft/phi-1), [here](https://huggingface.co/microsoft/phi-1_5) and [here](https://huggingface.co/microsoft/phi-2), respectively.
-
-## Usage tips
-
-- This model is quite similar to `Llama` with the main difference in [`PhiDecoderLayer`], where they used [`PhiAttention`] and [`PhiMLP`] layers in parallel configuration.
-- The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
-
-## How to use Phi-2
-
-<Tip warning={true}>
-
-Phi-2 has been integrated in the development version (4.37.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
-
-* When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
-
-* Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
-
-</Tip>
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
-
->>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
-
->>> outputs = model.generate(**inputs, max_length=30)
->>> text = tokenizer.batch_decode(outputs)[0]
->>> print(text)
-Can you help me write a formal email to a potential business partner proposing a joint venture?
-Input: Company A: ABC Inc.
-Company B
 ```
 
-### Example :
+</hfoption>
 
-```python
->>> from transformers import PhiForCausalLM, AutoTokenizer
+<hfoption id="AutoModel">
 
->>> # define the model and tokenizer.
->>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5")
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> # feel free to change the prompt to your liking.
->>> prompt = "If I were an AI that had just achieved"
+tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
->>> # apply the tokenizer.
->>> tokens = tokenizer(prompt, return_tensors="pt")
+input_ids = tokenizer('''def print_prime(n):
+   """
+   Print all primes between 1 and n
+   """''', return_tensors="pt").to("cuda")
 
->>> # use the model to generate new tokens.
->>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)
-
->>> tokenizer.batch_decode(generated_output)[0]
-'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-## Combining Phi and Flash Attention 2
-
-First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+</hfoption>
+<hfoption id="transformers-cli">
 
 ```bash
-pip install -U flash-attn --no-build-isolation
+echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers-cli run --task text-classification --model microsoft/phi-1.5 --device 0
 ```
 
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+</hfoption>
+</hfoptions>
 
-To load and run a model using Flash Attention 2, refer to the snippet below:
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-```python
->>> import torch
->>> from transformers import PhiForCausalLM, AutoTokenizer
+The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
->>> # define the model and tokenizer and push the model and tokens to the GPU.
->>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")  # doctest: +SKIP
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
+```py
+import torch
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
->>> # feel free to change the prompt to your liking.
->>> prompt = "If I were an AI that had just achieved"
+bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
+tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
 
->>> # apply the tokenizer.
->>> tokens = tokenizer(prompt, return_tensors="pt").to("cuda")
+input_ids = tokenizer('''def print_prime(n):
+   """
+   Print all primes between 1 and n
+   """''', return_tensors="pt").to("cuda")
 
->>> # use the model to generate new tokens.
->>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)  # doctest: +SKIP
-
->>> tokenizer.batch_decode(generated_output)[0]  # doctest: +SKIP
-'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-### Expected speedups
+## Notes
 
-Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `microsoft/phi-1` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
+- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [`~AutoModel.from_pretrained`]. Otherwise, make sure you update Transformers to the latest stable version.
 
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/phi_1_speedup_plot.jpg">
-</div>
+    ```py
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+    model = AutoModelForCausalLM.from_pretrained(
+        "microsoft/phi-1",
+        torch_dtype=torch.float16,
+        device_map="auto",
+        trust_remote_code=True,
+        attn_implementation="sdpa")
+    
+    input_ids = tokenizer('''def print_prime(n):
+       """
+       Print all primes between 1 and n
+       """''', return_tensors="pt").to("cuda")
+    
+    output = model.generate(**input_ids, cache_implementation="static")
+    print(tokenizer.decode(output[0], skip_special_tokens=True))
+    ```
 
 ## PhiConfig
 
 [[autodoc]] PhiConfig
-
-<frameworkcontent>
-<pt>
 
 ## PhiModel
 
@@ -193,6 +144,3 @@ Below is an expected speedup diagram that compares pure inference time between t
 
 [[autodoc]] PhiForTokenClassification
     - forward
-
-</pt>
-</frameworkcontent>

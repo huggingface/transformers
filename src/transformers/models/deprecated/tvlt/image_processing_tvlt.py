@@ -79,7 +79,7 @@ class TvltImageProcessor(BaseImageProcessor):
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
         patch_size (`List[int]` *optional*, defaults to [16,16]):
             The patch size of image patch embedding.
@@ -220,14 +220,14 @@ class TvltImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
+        do_center_crop: Optional[bool] = None,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -277,16 +277,16 @@ class TvltImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         videos: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         patch_size: List[int] = None,
-        num_frames: int = None,
+        num_frames: Optional[int] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
+        do_center_crop: Optional[bool] = None,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         is_mixed: bool = False,
@@ -433,3 +433,6 @@ class TvltImageProcessor(BaseImageProcessor):
             data = {"pixel_values": videos, "pixel_mask": video_masks}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["TvltImageProcessor"]

@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
+@requires(backends=("sentencepiece",))
 class CpmTokenizer(PreTrainedTokenizer):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 

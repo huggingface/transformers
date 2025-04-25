@@ -173,7 +173,7 @@ def _preprocess_resize_output_shape(image, output_shape):
         # multichannel case: append shape of last axis
         output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
+        raise ValueError("output_shape length cannot be smaller than the image number of dimensions")
 
     return image, output_shape
 
@@ -214,21 +214,21 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
     Args:
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to a square with gray pixels on the bottom and the right. Can be overriden by
+            Whether to pad the image to a square with gray pixels on the bottom and the right. Can be overridden by
             `do_pad` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 960, "width": 960}`):
-            Size to resize the image to. Can be overriden by `size` in the `preprocess` method.
+            Size to resize the image to. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling method to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
+            Resampling method to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -345,10 +345,10 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(factors)
                 if np.any(anti_aliasing_sigma < 0):
-                    raise ValueError("Anti-aliasing standard deviation must be " "greater than or equal to zero")
+                    raise ValueError("Anti-aliasing standard deviation must be greater than or equal to zero")
                 elif np.any((anti_aliasing_sigma > 0) & (factors <= 1)):
                     warnings.warn(
-                        "Anti-aliasing standard deviation greater than zero but " "not down-sampling along all axes"
+                        "Anti-aliasing standard deviation greater than zero but not down-sampling along all axes"
                     )
             filtered = ndi.gaussian_filter(image, anti_aliasing_sigma, cval=cval, mode=ndi_mode)
         else:
@@ -369,12 +369,12 @@ class Owlv2ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_pad: bool = None,
-        do_resize: bool = None,
+        do_pad: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

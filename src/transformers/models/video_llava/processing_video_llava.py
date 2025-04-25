@@ -87,6 +87,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -103,7 +105,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        VideoLlavaImageProcessor's [`~VideoLlavaImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        VideoLlavaImageProcessor's [`~VideoLlavaImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -195,14 +197,16 @@ class VideoLlavaProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=return_tensors,
+            return_tensors=None,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
+
         data.update(text_inputs)
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

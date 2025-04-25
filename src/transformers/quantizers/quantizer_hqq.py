@@ -124,7 +124,14 @@ class HqqHfQuantizer(HfQuantizer):
             # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
             _valid_modules = set()
             _find_hqq_quantizable_layers(model, _valid_modules)
-            _valid_modules -= set(model.config.quantization_config["skip_modules"])
+
+            # Remove skipped modules
+            _skipped_modules = set()
+            for _module in _valid_modules:
+                for _skip_module in model.config.quantization_config["skip_modules"]:
+                    if _skip_module in _module:
+                        _skipped_modules.add(_module)
+            _valid_modules -= _skipped_modules
 
             # Append new expected layers based on _ref_keys
             _ref_keys = HQQLinear(
@@ -163,13 +170,15 @@ class HqqHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            return (
-                (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear))
-                and tensor_name != "weight"
-                and tensor_name != "bias"
-            )
+            return (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear)) and tensor_name != "weight"
         else:
-            return isinstance(module, torch.nn.Linear) and tensor_name == "weight"
+            return (
+                isinstance(module, torch.nn.Linear)
+                and tensor_name == "weight"
+                # bias doesn't need to be quantized, we use this as a workaround to avoid loading bias into HQQLinear assuming it was loaded
+                # in the state_dict directly with the weight because hqq overwrote load_state_dict for this layer
+                or (isinstance(module, HQQLinear) and tensor_name == "bias")
+            )
 
     def create_quantized_param(
         self,
@@ -181,7 +190,7 @@ class HqqHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer is processsed here.
+        Each nn.Linear layer is processed here.
         We first check if the corresponding module state_dict contains already HQQ quantized parameters.
         If not, we create a temp linear layer with the module state_dict params and use it for quantization
         """
@@ -193,6 +202,10 @@ class HqqHfQuantizer(HfQuantizer):
         layer_name = ".".join(param_name.split(".")[:-1])
         parent_module = find_parent(model, layer_name)
         node = layer_name.split(".")[-1]
+
+        if tensor_name == "bias":
+            # this should already be set
+            return
 
         # set module state_dict
         module_state_dict = {}
@@ -234,10 +247,24 @@ class HqqHfQuantizer(HfQuantizer):
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
-        if hasattr(module, "quant_config"):
+        quant_config = model.config.quantization_config["quant_config"]
+        skip_modules = model.config.quantization_config["skip_modules"]
+        module_tag = ".".join(module.name.split(".")[-2:])
+        module_quant_config = None
+        if "weight_quant_params" in quant_config:
+            module_quant_config = quant_config
+        elif module_tag in quant_config:
+            module_quant_config = quant_config[module_tag]
+
+        for skip_module in skip_modules:
+            if skip_module in module.name:
+                module_quant_config = None
+                break
+
+        if module_quant_config is not None:
             hqq_layer = HQQLinear(
                 module,
-                module.quant_config,
+                quant_config=module_quant_config,
                 compute_dtype=self.torch_dtype,
                 device=target_device,
                 del_orig=True,
@@ -273,12 +300,8 @@ class HqqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        keep_in_fp32_modules: List[str] = None,
         **kwargs,
     ):
-        keep_in_fp32_modules = keep_in_fp32_modules if keep_in_fp32_modules is not None else []
-
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear -> HQQLinear conversion in create_quantized_param().
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)

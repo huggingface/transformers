@@ -54,7 +54,7 @@ class TvpVideoGroundingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -773,7 +773,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):

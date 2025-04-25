@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -184,39 +183,6 @@ class Qwen2VLVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_qwen2_vl_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_qwen2_vl_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        config.torch_dtype = torch.float16
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_grid_thw=image_grid_thw,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -345,15 +311,13 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(
-        reason="Qwen2-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
+    def test_save_load_fast_init_from_base(self):
         pass
 
 

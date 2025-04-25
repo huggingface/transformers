@@ -1,4 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +19,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
 from ..utils.quantization_config import (
     AqlmConfig,
+    AutoRoundConfig,
     AwqConfig,
     BitNetConfig,
     BitsAndBytesConfig,
@@ -31,12 +33,14 @@ from ..utils.quantization_config import (
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    QuarkConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
+from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
@@ -49,6 +53,7 @@ from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
@@ -61,6 +66,7 @@ AUTO_QUANTIZER_MAPPING = {
     "gptq": GptqHfQuantizer,
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
+    "quark": QuarkHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
@@ -71,6 +77,7 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    "auto-round": AutoRoundQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -81,6 +88,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gptq": GPTQConfig,
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
+    "quark": QuarkConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
@@ -90,6 +98,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
+    "auto-round": AutoRoundConfig,
 }
 
 logger = logging.get_logger(__name__)
@@ -190,10 +199,16 @@ class AutoHfQuantizer:
             warning_msg = ""
 
         if isinstance(quantization_config, dict):
-            quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
+            if isinstance(quantization_config_from_args, AutoRoundConfig):
+                quantization_config = AutoRoundConfig.from_dict(quantization_config)
+            else:
+                quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
-            isinstance(quantization_config, (GPTQConfig, AwqConfig, FbgemmFp8Config, CompressedTensorsConfig))
+            isinstance(
+                quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig)
+            )
             and quantization_config_from_args is not None
         ):
             # special case for GPTQ / AWQ / FbgemmFp8 config collision

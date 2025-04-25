@@ -23,6 +23,7 @@ import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -41,6 +42,7 @@ SPIECE_UNDERLINE = "▁"
 # Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
 
 
+@requires(backends=("sentencepiece",))
 class MarianTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Marian tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -339,7 +341,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state.update(
-            {k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"]}
+            dict.fromkeys(["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"])
         )
         return state
 

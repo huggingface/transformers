@@ -42,6 +42,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -54,6 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class SegformerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Segformer image processor.
@@ -219,12 +221,12 @@ class SegformerImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -260,8 +262,8 @@ class SegformerImageProcessor(BaseImageProcessor):
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
-        do_reduce_labels: bool = None,
-        do_resize: bool = None,
+        do_reduce_labels: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:

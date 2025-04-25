@@ -74,9 +74,9 @@ class TFViTMAEModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    mask: tf.Tensor = None
-    ids_restore: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    mask: Optional[tf.Tensor] = None
+    ids_restore: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -99,7 +99,7 @@ class TFViTMAEDecoderOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -129,9 +129,9 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    mask: tf.Tensor = None
-    ids_restore: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    mask: Optional[tf.Tensor] = None
+    ids_restore: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -314,7 +314,7 @@ class TFViTMAEEmbeddings(keras.layers.Layer):
         return sequence_unmasked, mask, ids_restore
 
     def call(
-        self, pixel_values: tf.Tensor, noise: tf.Tensor = None, interpolate_pos_encoding: bool = False
+        self, pixel_values: tf.Tensor, noise: Optional[tf.Tensor] = None, interpolate_pos_encoding: bool = False
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
@@ -775,7 +775,7 @@ class TFViTMAEMainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        noise: tf.Tensor = None,
+        noise: Optional[tf.Tensor] = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -943,7 +943,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        noise: tf.Tensor = None,
+        noise: Optional[tf.Tensor] = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1294,7 +1294,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        noise: tf.Tensor = None,
+        noise: Optional[tf.Tensor] = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

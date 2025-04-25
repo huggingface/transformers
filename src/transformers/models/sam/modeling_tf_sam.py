@@ -30,7 +30,13 @@ from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -65,7 +71,7 @@ class TFSamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -99,8 +105,8 @@ class TFSamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: tf.Tensor = None
-    pred_masks: tf.Tensor = None
+    iou_scores: Optional[tf.Tensor] = None
+    pred_masks: Optional[tf.Tensor] = None
     vision_hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_attentions: Tuple[tf.Tensor, ...] | None = None
     mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -982,9 +988,8 @@ class TFSamVisionAttention(keras.layers.Layer):
 
         return tf.gather(rel_pos_resized, tf.cast(relative_coords, tf.int32))
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: tf.Tensor,
         query: tf.Tensor,
         rel_pos_h: tf.Tensor,
         rel_pos_w: tf.Tensor,
@@ -996,8 +1001,6 @@ class TFSamVisionAttention(keras.layers.Layer):
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`tf.Tensor`):
-                attention map.
             query (`tf.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`tf.Tensor`):
@@ -1010,8 +1013,8 @@ class TFSamVisionAttention(keras.layers.Layer):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`tf.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -1022,10 +1025,12 @@ class TFSamVisionAttention(keras.layers.Layer):
         reshaped_query = tf.reshape(query, (batch_size, query_height, query_width, dim))
         rel_h = tf.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = tf.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = tf.reshape(attn, (batch_size, query_height, query_width, key_height, key_width))
-        attn = attn + tf.expand_dims(rel_h, axis=-1) + tf.expand_dims(rel_w, axis=-2)
-        attn = tf.reshape(attn, (batch_size, query_height * query_width, key_height * key_width))
-        return attn
+
+        rel_h = tf.expand_dims(rel_h, axis=-1)
+        rel_w = tf.expand_dims(rel_w, axis=-2)
+        decomposed_rel_pos = rel_h + rel_w
+
+        return decomposed_rel_pos
 
     def call(self, hidden_states: tf.Tensor, output_attentions=False, training=False) -> tf.Tensor:
         batch_size, height, width, _ = shape_list(hidden_states)
@@ -1039,9 +1044,11 @@ class TFSamVisionAttention(keras.layers.Layer):
         attn_weights = tf.matmul(query * self.scale, key, transpose_b=True)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = tf.reshape(decomposed_rel_pos, shape_list(attn_weights))
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
@@ -1399,6 +1406,70 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+SAM_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
+            details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from Sam without any head or projection on top.""",
+    SAM_START_DOCSTRING,
+)
+class TFSamVisionModel(TFSamPreTrainedModel):
+    config_class = SamVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: SamVisionConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.vision_encoder = TFSamVisionEncoder(config, name="vision_encoder")
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_encoder", None) is not None:
+            with tf.name_scope(self.vision_encoder.name):
+                self.vision_encoder.build(None)
+
+    def get_input_embeddings(self):
+        return self.vision_encoder.patch_embed
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSamVisionEncoderOutput, config_class=SamVisionConfig)
+    def call(
+        self,
+        pixel_values: TFModelInputType | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+        **kwargs,
+    ) -> TFSamVisionEncoderOutput | Tuple[tf.Tensor]:
+        r"""
+        Returns:
+
+        """
+        return self.vision_encoder(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+
 @add_start_docstrings(
     "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
     " optional 2D location and bounding boxes.",
@@ -1652,4 +1723,4 @@ class TFSamModel(TFSamPreTrainedModel):
                 self.mask_decoder.build(None)
 
 
-__all__ = ["TFSamModel", "TFSamPreTrainedModel"]
+__all__ = ["TFSamVisionModel", "TFSamModel", "TFSamPreTrainedModel"]

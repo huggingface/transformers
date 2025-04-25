@@ -73,6 +73,9 @@ class PaliGemmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "paligemma"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,13 +18,22 @@ import tempfile
 import unittest
 
 import numpy as np
+from pytest import mark
 
 from transformers import ViTMAEConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -241,20 +249,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
     def test_model_outputs_equivalence(self):
         pass
@@ -268,6 +262,80 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "google/vit-base-patch16-224"
         model = ViTMAEModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                # ForPretraining model has random `noise` -> need to set seed
+                # to make the test deterministic
+                torch.manual_seed(12345)
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                torch.manual_seed(12345)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(**inputs_dict)
+
+    @unittest.skip("Not applicable for VideoMAE")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                # This is an excepton in the module, it's initialized with xavier_uniform without using initializer_range
+                if name.endswith("patch_embeddings.projection.weight"):
+                    continue
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
 
 # We will verify our results on an image of cute cats

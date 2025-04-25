@@ -93,7 +93,7 @@ def get_image_size_fit_to_canvas(
     canvas_height and canvas_width, while ensuring that the image dimensions are not smaller than
     tile_size. If the image is larger than the canvas, the returned size will fit within the canvas.
     If the image already fits within the canvas, the size remains unchanged.
-    The aspect ratio of the original image is preserved.
+    The aspect ratio of the original image is preserved as much as possible.
 
     Args:
         image_height (`int`):
@@ -120,10 +120,12 @@ def get_image_size_fit_to_canvas(
 
     if scale_w < scale_h:
         new_width = target_width
-        new_height = min(math.floor(image_height * scale_w), target_height)
+        # minimum height is 1 to avoid invalid height of 0
+        new_height = min(math.floor(image_height * scale_w) or 1, target_height)
     else:
         new_height = target_height
-        new_width = min(math.floor(image_width * scale_h), target_width)
+        # minimum width is 1 to avoid invalid width of 0
+        new_width = min(math.floor(image_width * scale_h) or 1, target_width)
 
     return new_height, new_width
 
@@ -695,8 +697,6 @@ class MllamaImageProcessor(BaseImageProcessor):
         if self.do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
 
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
         batch_images = []
         batch_aspect_ratios = []
 
@@ -707,6 +707,13 @@ class MllamaImageProcessor(BaseImageProcessor):
 
             # iterate over images in a batch sample
             for image in images:
+                # default PIL images to channels_last
+                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                    input_data_format = ChannelDimension.LAST
+
+                # convert to numpy array for processing
+                image = to_numpy_array(image)
+
                 # convert images to channels first format for faster processing
                 # LAST is slower for `pad` and not supported by `split_to_tiles`
                 data_format = ChannelDimension.FIRST
@@ -735,7 +742,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                     image = self.rescale(
                         image=image,
                         scale=rescale_factor,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 
@@ -744,7 +751,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                         image=image,
                         mean=image_mean,
                         std=image_std,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 
