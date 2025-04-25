@@ -43,7 +43,7 @@ from .utils.generic import is_timm_config_dict
 
 logger = logging.get_logger(__name__)
 
-dynamic_config_classes = dict()
+dynamic_config_classes = {}
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -416,7 +416,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__.__name__ in dynamic_classes:
+        if self.__class__.__name__ in dynamic_config_classes:
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`
@@ -1046,7 +1046,7 @@ class PretrainedConfig(PushToHubMixin):
         if not hasattr(auto_module, auto_class):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
-        dynamic_classes[cls.__name__] = auto_class
+        dynamic_config_classes[cls.__name__] = auto_class
 
     @staticmethod
     def _get_global_generation_defaults() -> dict[str, Any]:
