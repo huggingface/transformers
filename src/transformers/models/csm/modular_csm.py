@@ -71,6 +71,50 @@ _CONFIG_FOR_DOC = "CsmConfig"
 
 @dataclass
 class CsmOutputWithPast(ModelOutput):
+    """
+    Base class for the model autoregressive outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        depth_decoder_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction) of the depth decoder model.
+        depth_decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the depth decoder (scores for each vocabulary token before SoftMax).
+        depth_decoder_past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        depth_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        depth_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+        backbone_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction) of the backbone model.
+    """
+
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -223,20 +267,20 @@ DEPTH_DECODER_INPUT_IDS_DOCSTRING = r"""input_ids (`torch.LongTensor` of shape `
 
 
 INPUT_IDS_DOCSTRING = r"""input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks) or (batch_size, sequence_length)`):
-            When of shape (batch_size, sequence_length), corresponds to the input sequence prepared with the processor,
+            1. (batch_size, sequence_length): corresponds to the input sequence prepared with the processor from the text prompt. Such input
+            requires `input_values` to be provided so that audio can be encoded in codebook tokens and then merged with the text tokens.
 
+            2. (batch_size, sequence_length, num_codebooks): codebook tokens generated during the autoregressive decoding. Such input is not meant to be used by end users.
 
-            If the input_ids corresponds to an audio sequence, it is the concatenation of `num_codebooks` codebook indices, and the text padding idx.
-            If the input_ids corresponds to a text sequence, it is the concatenation of `num_codebooks` codebook padding indices, and the text token.
-
-            #TODO: complete this
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)"""
 
 
-CSM_DEPTH_DECODER_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_docstring=DEPTH_DECODER_INPUT_IDS_DOCSTRING))
+CSM_DEPTH_DECODER_INPUTS_DOCSTRING = r"""{}""".format(
+    INPUTS_DOCSTRING_BASE.format(input_ids_docstring=DEPTH_DECODER_INPUT_IDS_DOCSTRING)
+)
 
 
 CSM_BACKBONE_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING))
@@ -442,7 +486,7 @@ class CsmCodebooksHead(nn.Module):
 
 @add_start_docstrings(
     """
-    The CsmDepthDecoder Model transformer, with a CsmCodebooksHead on top,
+    The CsmDepthDecoder Model transformer, with a [`CsmCodebooksHead`] on top,
     which can be seen a position-specific language modeling head, allowing to use a different linear layer for each codebook
     (e.g. position 0 is the first codebook and uses the first codebook head, etc.)
     """,
@@ -723,7 +767,7 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(CSM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CsmOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -741,18 +785,16 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, CsmOutputWithPast]:
         r"""
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should be in `[config.audio_token_id, -100, -101]`.
+                Requires targeted `input_values` to be provided as audio tokens will be infered from it using the `codec_model`.
+                - `config.audio_token_id` indicates an audio frames (considering sequence length elements as frames)
+                - `-100` will be ignored in the loss computation
+                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
 
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks + 1)`, *optional*):
-                Labels for computing the masked language modeling loss. The `num_codebooks` first tokens along last dimension are
-                the codebook indices in a growing order (see `input_ids` docstring). Indicies should be in:
-                1. `[0, ..., config.vocab_size]` for codebook tokens
-                2. `[0, ..., config.backbone_config.vocab_size]` for text tokens
-
-                Text frames (see `input_ids` docstring) indices should be all set to `-100`.
-                Audio frames that should not intervene in the loss computation for depth decoder should have all tokens expect the
-                first one set to `-100`.
+                Such labels can be prepared using `output_labels=True` when calling [`CsmProcessor`].
 
             logits_to_keep (`int` or `torch.Tensor`, *optional*):
                 Kept for compatibility. Does not support another value than:
@@ -763,9 +805,37 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
 
         Example:
 
-        #TODO
         ```python
-        pass
+        >>> from transformers import CsmProcessor, CsmForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> model_id = "eustlb/csm-1b"
+        >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        >>> conversation = []
+
+        >>> # prepare a conversation with text and corresponding audio
+        >>> for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):
+        ...     conversation.append(
+        ...         {
+        ...             "role": f"{speaker_id}",
+        ...             "content": [{"type": "text", "text": text}, {"type": "audio", "path": audio["array"]}],
+        ...         }
+        ...     )
+
+        >>> inputs = processor.apply_chat_template(
+        ...     conversation,
+        ...     tokenize=True,
+        ...     return_dict=True,
+        ...     output_labels=True,
+        ... ).to(torch_device)
+
+        >>> model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        >>> output = model(**inputs)
+        >>> output.loss.backward()
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1298,11 +1368,11 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
         **kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
-        This method overrides [~generation.utils.GenerationMixin.generate] to match the specifics of the Csm model.
+        This method overrides [`~generation.utils.GenerationMixin.generate`] to match the specifics of the Csm model.
         Indeed, Csm model requires a custom generation sampling step:
         1. Infer the backbone model to sample the first codebook token
-        2. Call generate on the depth decoder with the first codebook token as input_ids to sample the next codebook tokens
-        3. Use these generated codebook tokens as input_ids to sample the next first codebook token using the backbone model
+        2. Call generate on the depth decoder with the first codebook token as `input_ids` to sample the next codebook tokens
+        3. Use these generated codebook tokens as `input_ids` to sample the next first codebook token using the backbone model
         4. Repeat until stopping criteria is met
 
         <Tip warning={true}>
@@ -1315,6 +1385,9 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
         Parameters:
             inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
                 The sequence used as a prompt for the backbone model.
+            input_values (`torch.Tensor` of shape (batch_size, audio_sequence_length), *optional*):
+                The batched audio input values that will be encoded into codebook tokens using the codec model and
+                and merged with the text input ids provided in `input_ids`.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -1339,14 +1412,53 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            output_audio (`bool`, *optional*):
+                Whether to return the generated audio.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
-                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
+                forwarded to the `forward` function of the model. Depth decoder specific kwargs should be prefixed with *depth_decoder_*.
 
         Return:
-            [`~generation.GenerateDecoderOnlyOutput`] or `torch.LongTensor`: A [`~generation.GenerateDecoderOnlyOutput`]
-            (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor`.
+            [`CsmGenerateOutput`] or `torch.LongTensor` or `List[torch.FloatTensor]`: A [`CsmGenerateOutput`]
+            (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor` when `output_audio=False`
+            or a `List[torch.FloatTensor]` otherwise.
+
+        Example:
+
+        ```python
+        >>> from transformers import CsmProcessor, CsmForConditionalGeneration
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> model_id = "eustlb/csm-1b"
+        >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        >>> conversation = []
+        >>> # prepare a conversation with text and corresponding audio
+        >>> for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):
+        ...     conversation.append(
+        ...         {
+        ...             "role": f"{speaker_id}",
+        ...             "content": [{"type": "text", "text": text}, {"type": "audio", "path": audio["array"]}],
+        ...         }
+        ...     )
+
+        >>> # text prompt
+        >>> conversation.append({"role": f"{ds[4]['speaker_id']}", "content": [{"type": "text", "text": ds[4]["text"]}]})
+
+        >>> inputs = processor.apply_chat_template(
+        ...     conversation,
+        ...     tokenize=True,
+        ...     return_dict=True,
+        ... ).to(torch_device)
+
+        >>> model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        >>> audio_values = model.generate(**inputs, output_audio=True)
+        >>> sf.write("output.wav", audio_values[0].cpu().numpy(), 24000)
+        ```
         """
         # TODO: ensure the user is not requesting an unsupported generation mode (!= greedy/ sampling)
         # TODO: ensure not using unsupported logits processors
