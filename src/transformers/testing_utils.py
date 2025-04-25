@@ -2970,6 +2970,21 @@ if is_torch_available():
         "cpu": lambda: 0,
         "default": lambda: 1,
     }
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.reset_max_memory_allocated,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_MAX_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.max_memory_allocated,
+        "cpu": 0,
+        "default": 0,
+    }
+    BACKEND_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.memory_allocated,
+        "cpu": 0,
+        "default": 0,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
@@ -2993,6 +3008,9 @@ if is_torch_xpu_available():
     BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
+    BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
 
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
@@ -3011,6 +3029,16 @@ def backend_empty_cache(device: str):
 def backend_device_count(device: str):
     return _device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
 
+
+def backend_reset_max_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
+
+
+def backend_max_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_MAX_MEMORY_ALLOCATED)
+
+def backend_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_MEMORY_ALLOCATED)
 
 if is_torch_available():
     # If `TRANSFORMERS_TEST_DEVICE_SPEC` is enabled we need to import extra entries
