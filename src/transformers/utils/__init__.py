@@ -116,6 +116,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    check_torch_load_is_safe,
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,

@@ -116,6 +116,9 @@ class InternVLVisionAttention(nn.Module):
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
 
+        # Needed for flash attention
+        self.is_causal = False
+
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
@@ -124,9 +127,6 @@ class InternVLVisionAttention(nn.Module):
 
         self.q_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
         self.k_norm = InternVLVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-
-        # Needed for flash attention
-        self.is_causal = False
 
     def forward(
         self,

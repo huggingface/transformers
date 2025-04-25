@@ -1186,7 +1186,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         seq_len = math.ceil(hidden_states.shape[1] / self.config.time_reduction)
         if seq_len <= 0:
             raise ValueError(
-                f"The squence length after time reduction is invalid: {seq_len}. Your input feature is too short."
+                f"The sequence length after time reduction is invalid: {seq_len}. Your input feature is too short."
             )
 
         batch_size = hidden_states.shape[0]
@@ -1231,7 +1231,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
 
         unfolded = False
         bs, seq_len, _ = hidden_states.shape
-        max_seq_len = 500  # maxium position for absolute positional encoding
+        max_seq_len = 500  # maximum position for absolute positional encoding
         if seq_len > max_seq_len:
             # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
             unfolded = True

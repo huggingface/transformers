@@ -1310,7 +1310,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `ZambaHybridDynamicCache`
+        # Overwritten -- has a unique cache type, `ZambaHybridDynamicCache`
 
         empty_past_kv = past_key_values is None
 
