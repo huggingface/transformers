@@ -1,17 +1,3 @@
-# coding=utf-8
-# Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch CPMAnt"""
 
 import math
@@ -27,14 +13,11 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_cpmant import CpmAntConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
-_CONFIG_FOR_DOC = "CpmAntConfig"
 
 
 class CpmAntLayerNorm(nn.Module):
@@ -523,12 +506,8 @@ class CpmAntOutput(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class CpmAntPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = CpmAntConfig
     base_model_prefix = "cpmant"
 
@@ -562,34 +541,8 @@ CPMANT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CPMANT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
-            Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare CPMAnt Model outputting raw hidden-states without any specific head on top.",
-    CPMANT_START_DOCSTRING,
-)
+@auto_docstring
 class CpmAntModel(CpmAntPreTrainedModel):
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
@@ -628,12 +581,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
 
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -731,31 +679,22 @@ class CpmAntModel(CpmAntPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
-    """,
-    CPMANT_START_DOCSTRING,
-)
+@auto_docstring
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
-        self.cpmant = CpmAntModel(config)
 
+        self.cpmant = CpmAntModel(config)
         # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(
             config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
         )
+
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -769,32 +708,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
-                Indices of input sequence tokens in the vocabulary.
-
-                Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                CPMAnt will process attention mask automatically, this parameter is a dummy parameter for
-                text-generation pipeline.
-
         Example:
 
         Text Generation with CpmAntForCausalLM.

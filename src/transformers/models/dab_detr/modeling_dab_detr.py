@@ -25,21 +25,12 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_dab_detr import DabDetrConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DabDetrConfig"
-_CHECKPOINT_FOR_DOC = "IDEA-Research/dab_detr-base"
 
 
 @dataclass
@@ -858,6 +849,7 @@ class DabDetrMLP(nn.Module):
         return input_tensor
 
 
+@auto_docstring
 # Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DabDetr
 class DabDetrPreTrainedModel(PreTrainedModel):
     config_class = DabDetrConfig
@@ -894,64 +886,8 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             module.class_embed.bias.data.fill_(bias_value)
 
 
-DAB_DETR_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`DabDetrConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DAB_DETR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it.
-
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DetrImageProcessor.__call__`]
-            for details.
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-# Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DabDetr,DETR->ConditionalDETR
-class DabDetrEncoder(DabDetrPreTrainedModel):
-    """
+@auto_docstring(
+    custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`DabDetrEncoderLayer`].
 
@@ -960,11 +896,10 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
     Small tweak for DAB-DETR:
 
     - object_queries are added to the forward pass.
-
-    Args:
-        config: DabDetrConfig
     """
-
+)
+# Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DabDetr,DETR->ConditionalDETR
+class DabDetrEncoder(DabDetrPreTrainedModel):
     def __init__(self, config: DabDetrConfig):
         super().__init__(config)
 
@@ -977,6 +912,7 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds,
@@ -987,29 +923,8 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-
-                [What are attention masks?](../glossary#attention-mask)
-
-            object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
-                Object queries that are added to the queries in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
+            Object queries that are added to the queries in each self-attention layer.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1069,9 +984,8 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         )
 
 
-# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoder with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR
-class DabDetrDecoder(DabDetrPreTrainedModel):
-    """
+@auto_docstring(
+    custom_intro="""
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DabDetrDecoderLayer`].
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
@@ -1080,11 +994,10 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
     - object_queries and query_position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
-
-    Args:
-        config: DabDetrConfig
     """
-
+)
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoder with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR
+class DabDetrDecoder(DabDetrPreTrainedModel):
     def __init__(self, config: DabDetrConfig):
         super().__init__(config)
         self.config = config
@@ -1114,6 +1027,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds,
@@ -1126,27 +1040,13 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(encoder_sequence_length, batch_size, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            memory_key_padding_mask (`torch.Tensor.bool` of shape `(batch_size, sequence_length)`):
-                The memory_key_padding_mask indicates which positions in the memory (encoder outputs) should be ignored during the attention computation,
-                ensuring padding tokens do not influence the attention mechanism.
-            object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(num_queries, batch_size, number_of_anchor_points)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        memory_key_padding_mask (`torch.Tensor.bool` of shape `(batch_size, sequence_length)`):
+            The memory_key_padding_mask indicates which positions in the memory (encoder outputs) should be ignored during the attention computation,
+            ensuring padding tokens do not influence the attention mechanism.
+        object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`, *optional*):
+            Position embeddings that are added to the queries and keys in each cross-attention layer.
+        query_position_embeddings (`torch.FloatTensor` of shape `(num_queries, batch_size, number_of_anchor_points)`):
+            Position embeddings that are added to the queries and keys in each self-attention layer.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1273,13 +1173,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The bare DAB-DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
-    hidden-states, intermediate hidden states, reference points, output coordinates without any specific head on top.
-    """,
-    DAB_DETR_START_DOCSTRING,
-)
+@auto_docstring
 class DabDetrModel(DabDetrPreTrainedModel):
     def __init__(self, config: DabDetrConfig):
         super().__init__(config)
@@ -1338,8 +1232,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    @add_start_docstrings_to_model_forward(DAB_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DabDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1353,8 +1246,6 @@ class DabDetrModel(DabDetrPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], DabDetrModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1543,12 +1434,11 @@ class DabDetrMHAttentionMap(nn.Module):
         return weights
 
 
-@add_start_docstrings(
-    """
-    DAB_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
+@auto_docstring(
+    custom_intro="""
+    DAB-DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
     top, for tasks such as COCO detection.
-    """,
-    DAB_DETR_START_DOCSTRING,
+    """
 )
 class DabDetrForObjectDetection(DabDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
@@ -1587,8 +1477,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
-    @add_start_docstrings_to_model_forward(DAB_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DabDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1608,8 +1497,6 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
 
         Examples:
 
