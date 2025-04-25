@@ -327,6 +327,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration")
     ]
 )
 
