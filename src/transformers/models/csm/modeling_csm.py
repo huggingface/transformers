@@ -103,7 +103,7 @@ START_DOCSTRING_BASE = r"""
 """
 
 
-CSM_START_DOCSTRING = START_DOCSTRING_BASE.format(config_class="CsmConfig")
+CSM_START_DOCSTRING = r"""{}""".format(START_DOCSTRING_BASE.format(config_class="CsmConfig"))
 
 
 @add_start_docstrings(
@@ -416,7 +416,7 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-CSM_DEPTH_DECODER_START_DOCSTRING = START_DOCSTRING_BASE.format(config_class="CsmDepthDecoderConfig")
+CSM_DEPTH_DECODER_START_DOCSTRING = r"""{}""".format(START_DOCSTRING_BASE.format(config_class="CsmDepthDecoderConfig"))
 
 
 INPUTS_DOCSTRING_BASE = r"""
@@ -497,8 +497,8 @@ DEPTH_DECODER_INPUT_IDS_DOCSTRING = r"""input_ids (`torch.LongTensor` of shape `
             [What are input IDs?](../glossary#input-ids)"""
 
 
-CSM_DEPTH_DECODER_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(
-    input_ids_docstring=DEPTH_DECODER_INPUT_IDS_DOCSTRING
+CSM_DEPTH_DECODER_INPUTS_DOCSTRING = r"""{}""".format(
+    INPUTS_DOCSTRING_BASE.format(input_ids_docstring=DEPTH_DECODER_INPUT_IDS_DOCSTRING)
 )
 
 
@@ -1028,7 +1028,7 @@ INPUT_IDS_DOCSTRING = r"""input_ids (`torch.LongTensor` of shape `(batch_size, s
             [What are input IDs?](../glossary#input-ids)"""
 
 
-CSM_BACKBONE_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING)
+CSM_BACKBONE_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING))
 
 
 @add_start_docstrings(
@@ -1315,7 +1315,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
     audio: Optional[List[torch.Tensor]] = None
 
 
-CSM_INPUTS_DOCSTRING = INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING)
+CSM_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING))
 
 
 @add_start_docstrings(
@@ -1503,6 +1503,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
+        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -1522,6 +1523,8 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1533,11 +1536,11 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
