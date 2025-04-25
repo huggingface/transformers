@@ -55,19 +55,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-#Initialize fill-mask pipeline
-albert_fill_mask = pipeline(
+pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    device=0 if torch.cuda.is_available() else -1
+    torch_dtype=torch.float16,
+    device=0
 )
-
-# Masked prompt (use [MASK] token)
-prompt = "Plants create energy through a process known as [MASK]."
-results = albert_fill_mask(prompt, top_k=5)  # Get top 5 predictions
-
-for result in results:
-    print(f"Prediction: {result['token_str']} | Score: {result['score']:.4f}")
+pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
 ```
 
 </hfoption>
