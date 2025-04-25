@@ -82,7 +82,6 @@ from transformers.testing_utils import (
     require_liger_kernel,
     require_lomo,
     require_non_hpu,
-    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
