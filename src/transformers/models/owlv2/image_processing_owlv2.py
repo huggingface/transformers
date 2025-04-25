@@ -214,21 +214,21 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
     Args:
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to a square with gray pixels on the bottom and the right. Can be overriden by
+            Whether to pad the image to a square with gray pixels on the bottom and the right. Can be overridden by
             `do_pad` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 960, "width": 960}`):
-            Size to resize the image to. Can be overriden by `size` in the `preprocess` method.
+            Size to resize the image to. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling method to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
+            Resampling method to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.

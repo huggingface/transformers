@@ -101,6 +101,7 @@ else:
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
+            ("janus", ("JanusImageProcessor")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
@@ -116,7 +117,7 @@ else:
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
-            ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
+            ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
@@ -130,10 +131,10 @@ else:
             ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("poolformer", ("PoolFormerImageProcessor",)),
+            ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
-            ("pvt", ("PvtImageProcessor",)),
-            ("pvt_v2", ("PvtImageProcessor",)),
+            ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
+            ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
@@ -326,7 +327,7 @@ def _warning_fast_image_processor_available(fast_class):
     )
 
 
-@requires(backends=("vision", "torchvision"))
+@requires(backends=("vision",))
 class AutoImageProcessor:
     r"""
     This is a generic image processor class that will be instantiated as one of the image processor classes of the

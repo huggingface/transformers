@@ -79,7 +79,7 @@ class TvltImageProcessor(BaseImageProcessor):
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
         patch_size (`List[int]` *optional*, defaults to [16,16]):
             The patch size of image patch embedding.
