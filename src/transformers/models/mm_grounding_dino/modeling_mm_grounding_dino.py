@@ -2509,25 +2509,6 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         super().__init__(config)
 
         self.model = MMGroundingDinoModel(config)
-        _class_embed = MMGroundingDinoContrastiveEmbedding(config)
-
-        if config.decoder_bbox_embed_share:
-            _bbox_embed = MMGroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-            )
-            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
-        else:
-            for _ in range(config.decoder_layers):
-                _bbox_embed = MMGroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-                )
-                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
-        self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
-
-        # hack for box-refinement
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
 
         if config.decoder_cls_embed_share:
             _class_embed = MMGroundingDinoContrastiveEmbedding(config)
@@ -2552,6 +2533,11 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
                 )
                 module_list.append(_bbox_embed)
             self.bbox_embed = nn.ModuleList(module_list)
+
+        # hack for box-refinement
+        self.model.decoder.bbox_embed = self.bbox_embed
+        # hack implementation for two-stage
+        self.model.decoder.class_embed = self.class_embed
 
         # Initialize weights and apply final processing
         self.post_init()

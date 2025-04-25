@@ -171,7 +171,7 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
     pass
 
 
-class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection):
+class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
 
     _tied_weights_keys = [
         r"bbox_embed\.[1-9]\d*", r"model\.decoder\.bbox_embed\.[0-9]\d*",
@@ -179,7 +179,7 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection):
     ]
 
     def __init__(self, config: MMGroundingDinoConfig):
-        super().__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(config)
 
         self.model = MMGroundingDinoModel(config)
 
