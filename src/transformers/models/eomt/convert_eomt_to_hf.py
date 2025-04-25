@@ -25,6 +25,7 @@ from huggingface_hub import snapshot_download
 
 from transformers import EoMTConfig, EoMTForUniversalSegmentation
 
+
 # fmt: off
 MAPPINGS = {
     # Embeddings
@@ -54,6 +55,7 @@ MAPPINGS = {
     r"network.encoder.backbone.norm"                     : r"model.layernorm",
 }
 # fmt: on
+
 
 def convert_old_keys_to_new_keys(state_dict):
     keys_as_text = "\n".join(state_dict.keys())
