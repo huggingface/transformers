@@ -23,10 +23,7 @@ from tokenizers import processors
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
@@ -198,8 +195,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -406,7 +403,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             conversation (Union[List[Dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
-                generation on. A document is a semistructured dict, wiht a string to string mapping. Common fields are
+                generation on. A document is a semistructured dict, with a string to string mapping. Common fields are
                 `url`, `title`, `snippet` etc but should be descriptive of the key. They will get rendered into the prompt.
             citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation
                 spans in) or "fast", where the prompt instructs the model to generate an answer with citations in directly.
@@ -510,3 +507,6 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+
+__all__ = ["CohereTokenizerFast"]

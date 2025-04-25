@@ -87,11 +87,14 @@ class EsmConfig(PretrainedConfig):
     ```python
     >>> from transformers import EsmModel, EsmConfig
 
-    >>> # Initializing a ESM facebook/esm-1b style configuration >>> configuration = EsmConfig()
+    >>> # Initializing a ESM facebook/esm-1b style configuration
+    >>> configuration = EsmConfig(vocab_size=33)
 
-    >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = EsmModel(configuration)
 
-    >>> # Accessing the model configuration >>> configuration = model.config
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "esm"
@@ -169,7 +172,7 @@ class EsmConfig(PretrainedConfig):
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: str = None
+    esm_type: Optional[str] = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False
@@ -357,3 +360,6 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
+
+
+__all__ = ["EsmConfig"]

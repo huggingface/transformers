@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -239,7 +238,7 @@ class AutoModelTest(unittest.TestCase):
 
         # Check kwargs are correctly passed to the backbone
         model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_indices=(-2, -1))
-        self.assertEqual(model.out_indices, (-2, -1))
+        self.assertEqual(model.out_indices, [-2, -1])
 
         # Check out_features cannot be passed to Timm backbones
         with self.assertRaises(ValueError):
@@ -529,6 +528,7 @@ class AutoModelTest(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
+    @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")

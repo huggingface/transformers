@@ -13,14 +13,14 @@
 # limitations under the License.
 
 import unittest
-from typing import Dict
 
 import numpy as np
 from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_MASK_GENERATION_MAPPING,
-    TF_MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_tf_available,
+    is_torch_available,
     is_vision_available,
     pipeline,
 )
@@ -33,6 +33,17 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
+
+
+if is_tf_available():
+    from transformers import TF_MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    TF_MODEL_FOR_MASK_GENERATION_MAPPING = None
+
+if is_torch_available():
+    from transformers import MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
 if is_vision_available():
@@ -50,7 +61,7 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"hash": hashimage(mask), "shape": shape}
@@ -60,15 +71,28 @@ def mask_to_test_readable(mask: Image) -> Dict:
 @require_vision
 @require_torch
 class MaskGenerationPipelineTests(unittest.TestCase):
-    model_mapping = dict(
-        (list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
-    )
+    model_mapping = dict(list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
     tf_model_mapping = dict(
-        (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
+        list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else []
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        image_segmenter = MaskGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

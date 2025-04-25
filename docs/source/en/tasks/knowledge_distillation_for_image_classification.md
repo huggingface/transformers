@@ -17,11 +17,11 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). To distill knowledge from one model to another, we take a pre-trained teacher model trained on a certain task (image classification for this case) and randomly initialize a student model to be trained on image classification. Next, we train the student model to minimize the difference between it's outputs and the teacher's outputs, thus making it mimic the behavior. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this guide, we will do task-specific knowledge distillation. We will use the [beans dataset](https://huggingface.co/datasets/beans) for this.
+Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). To distill knowledge from one model to another, we take a pre-trained teacher model trained on a certain task (image classification for this case) and randomly initialize a student model to be trained on image classification. Next, we train the student model to minimize the difference between its outputs and the teacher's outputs, thus making it mimic the behavior. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this guide, we will do task-specific knowledge distillation. We will use the [beans dataset](https://huggingface.co/datasets/beans) for this.
 
-This guide demonstrates how you can distill a [fine-tuned ViT model](https://huggingface.co/merve/vit-mobilenet-beans-224) (teacher model) to a [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using the [Trainer API](https://huggingface.co/docs/transformers/en/main_classes/trainer#trainer) of 🤗 Transformers. 
+This guide demonstrates how you can distill a [fine-tuned ViT model](https://huggingface.co/merve/vit-mobilenet-beans-224) (teacher model) to a [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using the [Trainer API](https://huggingface.co/docs/transformers/en/main_classes/trainer#trainer) of 🤗 Transformers.
 
-Let's install the libraries needed for distillation and evaluating the process. 
+Let's install the libraries needed for distillation and evaluating the process.
 
 ```bash
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
@@ -29,7 +29,7 @@ pip install transformers datasets accelerate tensorboard evaluate --upgrade
 
 In this example, we are using the `merve/beans-vit-224` model as teacher model. It's an image classification model, based on `google/vit-base-patch16-224-in21k` fine-tuned on beans dataset. We will distill this model to a randomly initialized MobileNetV2.
 
-We will now load the dataset. 
+We will now load the dataset.
 
 ```python
 from datasets import load_dataset
@@ -37,7 +37,7 @@ from datasets import load_dataset
 dataset = load_dataset("beans")
 ```
 
-We can use an image processor from either of the models, as in this case they return the same output with same resolution. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset. 
+We can use an image processor from either of the models, as in this case they return the same output with same resolution. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
 
 ```python
 from transformers import AutoImageProcessor
@@ -58,7 +58,7 @@ from transformers import TrainingArguments, Trainer
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from accelerate.test_utils.testing import get_backend
 
 class ImageDistilTrainer(Trainer):
     def __init__(self, teacher_model=None, student_model=None, temperature=None, lambda_param=None,  *args, **kwargs):
@@ -66,7 +66,7 @@ class ImageDistilTrainer(Trainer):
         self.teacher = teacher_model
         self.student = student_model
         self.loss_function = nn.KLDivLoss(reduction="batchmean")
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
         self.teacher.to(device)
         self.teacher.eval()
         self.temperature = temperature
@@ -93,7 +93,7 @@ class ImageDistilTrainer(Trainer):
         return (loss, student_output) if return_outputs else loss
 ```
 
-We will now login to Hugging Face Hub so we can push our model to the Hugging Face Hub through the `Trainer`. 
+We will now login to Hugging Face Hub so we can push our model to the Hugging Face Hub through the `Trainer`.
 
 ```python
 from huggingface_hub import notebook_login
@@ -101,7 +101,7 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-Let's set the `TrainingArguments`, the teacher model and the student model. 
+Let's set the `TrainingArguments`, the teacher model and the student model.
 
 ```python
 from transformers import AutoModelForImageClassification, MobileNetV2Config, MobileNetV2ForImageClassification
@@ -164,7 +164,7 @@ trainer = ImageDistilTrainer(
     train_dataset=processed_datasets["train"],
     eval_dataset=processed_datasets["validation"],
     data_collator=data_collator,
-    tokenizer=teacher_processor,
+    processing_class=teacher_processor,
     compute_metrics=compute_metrics,
     temperature=5,
     lambda_param=0.5

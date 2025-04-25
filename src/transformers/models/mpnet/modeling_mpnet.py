@@ -63,6 +63,8 @@ class MPNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MPNetLMHead):
+            module.bias.data.zero_()
 
 
 class MPNetEmbeddings(nn.Module):
@@ -1050,3 +1052,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "MPNetForMaskedLM",
+    "MPNetForMultipleChoice",
+    "MPNetForQuestionAnswering",
+    "MPNetForSequenceClassification",
+    "MPNetForTokenClassification",
+    "MPNetLayer",
+    "MPNetModel",
+    "MPNetPreTrainedModel",
+]

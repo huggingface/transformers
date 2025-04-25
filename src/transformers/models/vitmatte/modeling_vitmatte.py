@@ -58,7 +58,7 @@ class ImageMattingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    alphas: torch.FloatTensor = None
+    alphas: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -336,3 +336,6 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VitMattePreTrainedModel", "VitMatteForImageMatting"]

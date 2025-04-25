@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import GemmaTokenizer
+from transformers import GemmaTokenizer, PaliGemmaProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -24,11 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import (
-        PaliGemmaProcessor,
-        SiglipImageProcessor,
-        is_vision_available,
-    )
+    from transformers import SiglipImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -37,16 +33,20 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PaliGemmaProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.image_seq_length = 0
+        image_processor.image_seq_length = 0  # TODO: raushan fix me in #37342
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     @require_vision
@@ -60,4 +60,38 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
-        self.assertEqual(len(inputs["input_ids"][0]), 112 + 14)
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
+
+    def test_text_with_image_tokens(self):
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        text_multi_images = "<image><image>Dummy text!"
+        text_single_image = "<image>Dummy text!"
+        text_no_image = "Dummy text!"
+
+        image = self.prepare_image_inputs()
+
+        out_noimage = processor(text=text_no_image, images=image, return_tensors="np")
+        out_singlimage = processor(text=text_single_image, images=image, return_tensors="np")
+        for k in out_noimage:
+            self.assertTrue(out_noimage[k].tolist() == out_singlimage[k].tolist())
+
+        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
+        out_noimage = processor(text=text_no_image, images=[[image, image]], return_tensors="np")
+
+        # We can't be sure what is users intention, whether user want "one text + two images" or user forgot to add the second text
+        with self.assertRaises(ValueError):
+            out_noimage = processor(text=text_no_image, images=[image, image], return_tensors="np")
+
+        for k in out_noimage:
+            self.assertTrue(out_noimage[k].tolist() == out_multiimages[k].tolist())
+
+        text_batched = ["Dummy text!", "Dummy text!"]
+        text_batched_with_image = ["<image>Dummy text!", "<image>Dummy text!"]
+        out_images = processor(text=text_batched_with_image, images=[image, image], return_tensors="np")
+        out_noimage_nested = processor(text=text_batched, images=[[image], [image]], return_tensors="np")
+        out_noimage = processor(text=text_batched, images=[image, image], return_tensors="np")
+        for k in out_noimage:
+            self.assertTrue(out_noimage[k].tolist() == out_images[k].tolist() == out_noimage_nested[k].tolist())

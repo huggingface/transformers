@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics2ImageProcessingTester(unittest.TestCase):
+class Idefics2ImageProcessingTester:
     def __init__(
         self,
         parent,

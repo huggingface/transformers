@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +43,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
+class Wav2Vec2FeatureExtractionTester:
     def __init__(
         self,
         parent,

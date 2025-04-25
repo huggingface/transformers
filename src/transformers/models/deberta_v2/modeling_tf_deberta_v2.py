@@ -192,9 +192,9 @@ class TFDebertaV2Attention(keras.layers.Layer):
         self,
         input_tensor: tf.Tensor,
         attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
+        query_states: Optional[tf.Tensor] = None,
+        relative_pos: Optional[tf.Tensor] = None,
+        rel_embeddings: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -306,9 +306,9 @@ class TFDebertaV2Layer(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
+        query_states: Optional[tf.Tensor] = None,
+        relative_pos: Optional[tf.Tensor] = None,
+        rel_embeddings: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -485,8 +485,8 @@ class TFDebertaV2Encoder(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
+        query_states: Optional[tf.Tensor] = None,
+        relative_pos: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -718,9 +718,9 @@ class TFDebertaV2DisentangledSelfAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
+        query_states: Optional[tf.Tensor] = None,
+        relative_pos: Optional[tf.Tensor] = None,
+        rel_embeddings: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -985,11 +985,11 @@ class TFDebertaV2Embeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
-        mask: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        mask: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -1868,3 +1868,14 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.output_dim])
+
+
+__all__ = [
+    "TFDebertaV2ForMaskedLM",
+    "TFDebertaV2ForQuestionAnswering",
+    "TFDebertaV2ForMultipleChoice",
+    "TFDebertaV2ForSequenceClassification",
+    "TFDebertaV2ForTokenClassification",
+    "TFDebertaV2Model",
+    "TFDebertaV2PreTrainedModel",
+]

@@ -18,6 +18,7 @@ import warnings
 
 from ...image_transforms import rgb_to_id as _rgb_to_id
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_detr import DetrImageProcessor
 
 
@@ -33,6 +34,7 @@ def rgb_to_id(x):
     return _rgb_to_id(x)
 
 
+@requires(backends=("vision",))
 class DetrFeatureExtractor(DetrImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -41,3 +43,6 @@ class DetrFeatureExtractor(DetrImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["DetrFeatureExtractor"]

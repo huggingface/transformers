@@ -77,8 +77,8 @@ class PerceiverModelOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -98,7 +98,7 @@ class PerceiverDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -127,7 +127,7 @@ class PerceiverMaskedLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -159,7 +159,7 @@ class PerceiverClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -2862,7 +2862,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         batch_size: int,
         device: torch.device,
         dtype: torch.dtype,
-        pos: torch.FloatTensor = None,
+        pos: Optional[torch.FloatTensor] = None,
     ) -> torch.FloatTensor:
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
         fourier_pos_enc = generate_fourier_features(
@@ -3499,3 +3499,17 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         final_inputs = torch.cat(padded_ls, dim=1)
 
         return final_inputs, modality_sizes, inputs_without_pos
+
+
+__all__ = [
+    "PerceiverForImageClassificationConvProcessing",
+    "PerceiverForImageClassificationFourier",
+    "PerceiverForImageClassificationLearned",
+    "PerceiverForMaskedLM",
+    "PerceiverForMultimodalAutoencoding",
+    "PerceiverForOpticalFlow",
+    "PerceiverForSequenceClassification",
+    "PerceiverLayer",
+    "PerceiverModel",
+    "PerceiverPreTrainedModel",
+]

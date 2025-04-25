@@ -18,6 +18,7 @@ import warnings
 
 from ...image_transforms import rgb_to_id as _rgb_to_id
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_deformable_detr import DeformableDetrImageProcessor
 
 
@@ -33,6 +34,7 @@ def rgb_to_id(x):
     return _rgb_to_id(x)
 
 
+@requires(backends=("vision",))
 class DeformableDetrFeatureExtractor(DeformableDetrImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -41,3 +43,6 @@ class DeformableDetrFeatureExtractor(DeformableDetrImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["DeformableDetrFeatureExtractor"]

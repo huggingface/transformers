@@ -346,7 +346,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -586,7 +586,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         palette_tensor = None
         palette = self.get_palette(num_labels) if num_labels is not None else None
         if palette is not None:
-            palette_tensor = torch.tensor(palette).float().to(masks.device)
+            palette_tensor = torch.tensor(palette).to(device=masks.device, dtype=torch.float)
             _, num_channels, _, _ = masks.shape
             palette_tensor = palette_tensor.view(1, 1, num_labels + 1, num_channels)
 
@@ -613,3 +613,6 @@ class SegGptImageProcessor(BaseImageProcessor):
             semantic_segmentation.append(pred)
 
         return semantic_segmentation
+
+
+__all__ = ["SegGptImageProcessor"]

@@ -60,8 +60,8 @@ class BaseModelOutputWithCLSToken(ModelOutput):
             plus the initial embedding outputs.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    cls_token_value: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cls_token_value: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -449,7 +449,9 @@ class CvtStage(nn.Module):
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        drop_path_rates = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage], device="cpu")
+        ]
 
         self.layers = nn.Sequential(
             *[
@@ -544,7 +546,7 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
                 module.cls_token.data = nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                    module.cls_token.data, mean=0.0, std=self.config.initializer_range
                 )
 
 
@@ -720,3 +722,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["CvtForImageClassification", "CvtModel", "CvtPreTrainedModel"]

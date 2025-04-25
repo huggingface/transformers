@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Deformable DETR
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Deformable DETR model was proposed in [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) by Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, Jifeng Dai.
@@ -51,6 +55,12 @@ If you're interested in submitting a resource to be included here, please feel f
 ## DeformableDetrImageProcessor
 
 [[autodoc]] DeformableDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+
+## DeformableDetrImageProcessorFast
+
+[[autodoc]] DeformableDetrImageProcessorFast
     - preprocess
     - post_process_object_detection
 

@@ -635,6 +635,8 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
         elif isinstance(module, LayoutLMLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LayoutLMLMPredictionHead):
+            module.bias.data.zero_()
 
 
 LAYOUTLM_START_DOCSTRING = r"""
@@ -1373,3 +1375,13 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LayoutLMForMaskedLM",
+    "LayoutLMForSequenceClassification",
+    "LayoutLMForTokenClassification",
+    "LayoutLMForQuestionAnswering",
+    "LayoutLMModel",
+    "LayoutLMPreTrainedModel",
+]

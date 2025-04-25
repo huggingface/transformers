@@ -24,7 +24,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -141,7 +143,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -430,7 +432,7 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
 
     def forward(self, hidden_states):
         seq_len = hidden_states.shape[1]
-        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
+        pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
         pos_seq[pos_seq < -self.max_length] = -self.max_length
@@ -1318,7 +1320,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
         position_bias = self.embed_positions(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1341,8 +1343,8 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
 
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
@@ -1603,7 +1605,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1]
             )
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1636,7 +1638,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             if self.training:
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
-            if skip_the_layer and not deepspeed_zero3_is_enabled:
+            if skip_the_layer and not synced_gpus:
                 continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
@@ -2113,7 +2115,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             return self.encoder.get_input_embeddings()
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             return self.decoder.get_input_embeddings()
-        return None
+        raise NotImplementedError
 
     def set_input_embeddings(self, value):
         if isinstance(self.encoder, SpeechT5EncoderWithTextPrenet):
@@ -2241,7 +2243,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     """SpeechT5 Model with a speech encoder and a text decoder.""",
     SPEECHT5_START_DOCSTRING,
 )
-class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
+class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
 
     def __init__(self, config: SpeechT5Config):
@@ -2411,42 +2413,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -2627,6 +2593,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @classmethod
+    def can_generate(cls) -> bool:
+        # Speecht5 has a unique model structure, where the external class (`SpeechT5ForTextToSpeech`) doesn't need to inherit from
+        # `GenerationMixin` (it has a non-standard generation method). This means that the base `can_generate()` will return `False`,
+        # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
+        return True
 
     def get_encoder(self):
         return self.speecht5.get_encoder()
@@ -3379,3 +3352,13 @@ class SpeechT5HifiGan(PreTrainedModel):
             waveform = hidden_states.squeeze(1)
 
         return waveform
+
+
+__all__ = [
+    "SpeechT5ForSpeechToText",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5Model",
+    "SpeechT5PreTrainedModel",
+    "SpeechT5HifiGan",
+]

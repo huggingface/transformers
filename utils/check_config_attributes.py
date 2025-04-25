@@ -33,7 +33,10 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
-    # periods and offsers are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
+    # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
+    "BambaConfig": [
+        "attn_layer_indices",
+    ],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -47,6 +50,9 @@ SPECIAL_CASES_TO_ALLOW = {
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
+    "Cohere2Config": ["cache_implementation"],
+    # Dropout with this value was declared but never used
+    "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -132,6 +138,11 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
     "MllamaTextConfig": [
         "initializer_range",
     ],
@@ -139,6 +150,103 @@ SPECIAL_CASES_TO_ALLOW = {
         "initializer_range",
         "supported_aspect_ratios",
     ],
+    "ConditionalDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "dice_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "DabDetrConfig": [
+        "dilation",
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "DetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "GroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "RTDetrConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
+    "RTDetrV2Config": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
+    "YolosConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "GPTNeoXConfig": ["rotary_emb_base"],
+    "Gemma3Config": ["boi_token_index", "eoi_token_index"],
+    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "ShieldGemma2Config": [
+        "boi_token_index",
+        "eoi_token_index",
+        "initializer_range",
+        "mm_tokens_per_image",
+        "text_config",
+        "vision_config",
+    ],
+    "Llama4Config": ["boi_token_index", "eoi_token_index"],
+    "Llama4TextConfig": [
+        "interleave_moe_layer_step",
+        "no_rope_layer_interval",
+        "no_rope_layers",
+        "output_router_logits",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+        "cache_implementation",
+    ],
+    "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
 
 
@@ -204,6 +312,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
                 or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
             ):
                 attribute_used = True
             # Deal with multi-line cases
@@ -215,17 +327,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 is not None
             ):
                 attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
             if attribute_used:
                 break
         if attribute_used:
@@ -233,12 +334,18 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
+        "image_seq_length",
+        "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",
@@ -249,6 +356,12 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "backbone_config",
         "use_timm_backbone",
         "backbone_kwargs",
+        # rope attributes may not appear directly in the modeling but are used
+        "rope_theta",
+        "partial_rotary_factor",
+        "pretraining_tp",
+        "boi_token_index",
+        "eoi_token_index",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
@@ -324,7 +437,7 @@ def check_config_attributes_being_used(config_class):
 
 
 def check_config_attributes():
-    """Check the arguments in `__init__` of all configuration classes are used in  python files"""
+    """Check the arguments in `__init__` of all configuration classes are used in python files"""
     configs_with_unused_attributes = {}
     for _config_class in list(CONFIG_MAPPING.values()):
         # Skip deprecated models

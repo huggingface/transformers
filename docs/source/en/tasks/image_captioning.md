@@ -256,8 +256,9 @@ image
 Prepare image for the model.
 
 ```python
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
+from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+device, _, _ = get_backend()
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```

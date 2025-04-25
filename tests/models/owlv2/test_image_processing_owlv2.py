@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,7 @@ if is_torch_available():
     import torch
 
 
-class Owlv2ImageProcessingTester(unittest.TestCase):
+class Owlv2ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -47,7 +46,6 @@ class Owlv2ImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

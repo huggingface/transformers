@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ if is_vision_available():
     from transformers import BeitImageProcessor
 
 
-class BeitImageProcessingTester(unittest.TestCase):
+class BeitImageProcessingTester:
     def __init__(
         self,
         parent,

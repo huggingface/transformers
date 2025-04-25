@@ -14,8 +14,7 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-import os
-from typing import Any, Dict, Union
+from typing import Any, Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -86,6 +85,7 @@ class FlavaImageConfig(PretrainedConfig):
     ```"""
 
     model_type = "flava_image_model"
+    base_config_key = "image_config"
 
     def __init__(
         self,
@@ -123,24 +123,6 @@ class FlavaImageConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.mask_token = mask_token
         self.vocab_size = vocab_size
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the image config dict if we are loading from FlavaConfig
-        if config_dict.get("model_type") == "flava":
-            config_dict = config_dict["image_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class FlavaTextConfig(PretrainedConfig):
@@ -216,6 +198,7 @@ class FlavaTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "flava_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -253,24 +236,6 @@ class FlavaTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.pad_token_id = pad_token_id
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from FlavaConfig
-        if config_dict.get("model_type") == "flava":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class FlavaMultimodalConfig(PretrainedConfig):
@@ -327,6 +292,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
     ```"""
 
     model_type = "flava_multimodal_model"
+    base_config_key = "multimodal_config"
 
     def __init__(
         self,
@@ -357,27 +323,10 @@ class FlavaMultimodalConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.use_cls_token = use_cls_token
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the multimodal config dict if we are loading from FlavaConfig
-        if config_dict.get("model_type") == "flava":
-            config_dict = config_dict["multimodal_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class FlavaImageCodebookConfig(PretrainedConfig):
     model_type = "flava_image_codebook"
+    base_config_key = "image_codebook_config"
 
     r"""
     [`FlavaImageCodebookConfig`] is the configuration class to store the configuration of a [`FlavaImageCodebook`]. It
@@ -441,24 +390,6 @@ class FlavaImageCodebookConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.freeze = freeze
         self.initializer_range = initializer_range
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the image codebook config dict if we are loading from FlavaConfig
-        if config_dict.get("model_type") == "flava":
-            config_dict = config_dict["image_codebook_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class FlavaConfig(PretrainedConfig):
@@ -532,6 +463,12 @@ class FlavaConfig(PretrainedConfig):
     """
 
     model_type = "flava"
+    sub_configs = {
+        "text_config": FlavaTextConfig,
+        "image_config": FlavaImageConfig,
+        "multimodal_config": FlavaMultimodalConfig,
+        "image_codebook_config": FlavaImageCodebookConfig,
+    }
 
     def __init__(
         self,
@@ -759,3 +696,6 @@ class FlavaConfig(PretrainedConfig):
             image_codebook_config=image_codebook_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]

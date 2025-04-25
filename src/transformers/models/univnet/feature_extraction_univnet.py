@@ -276,7 +276,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             `List[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
-        waveforms = [waveform.detach().clone().cpu().numpy() for waveform in waveforms]
+        waveforms = [waveform.detach().to(device="cpu", copy=True).numpy() for waveform in waveforms]
 
         if waveform_lengths is not None:
             waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
@@ -370,7 +370,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -454,3 +454,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 del output[name]
 
         return output
+
+
+__all__ = ["UnivNetFeatureExtractor"]

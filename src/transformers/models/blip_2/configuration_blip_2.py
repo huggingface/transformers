@@ -14,13 +14,12 @@
 # limitations under the License.
 """BLIP-2 model configuration"""
 
-import os
-from typing import Optional, Union
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -76,6 +75,7 @@ class Blip2VisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip_2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -105,24 +105,6 @@ class Blip2VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.qkv_bias = qkv_bias
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip-2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Blip2QFormerConfig(PretrainedConfig):
@@ -162,6 +144,8 @@ class Blip2QFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Index to be used for padding token.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -190,6 +174,7 @@ class Blip2QFormerConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip_2_qformer"
+    base_config_key = "qformer_config"
 
     def __init__(
         self,
@@ -228,24 +213,6 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
         self.use_qformer_text_input = use_qformer_text_input
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the qformer config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip-2":
-            config_dict = config_dict["qformer_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Blip2Config(PretrainedConfig):
@@ -306,6 +273,10 @@ class Blip2Config(PretrainedConfig):
     ```"""
 
     model_type = "blip-2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
+    sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     def __init__(
         self,
@@ -335,9 +306,6 @@ class Blip2Config(PretrainedConfig):
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
-
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
         self.image_text_hidden_size = image_text_hidden_size
@@ -377,3 +345,6 @@ class Blip2Config(PretrainedConfig):
             text_config=text_config.to_dict() if text_config is not None else None,
             **kwargs,
         )
+
+
+__all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

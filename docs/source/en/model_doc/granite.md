@@ -14,10 +14,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 # Granite
 
 [Granite](https://huggingface.co/ibm-granite) model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://arxiv.org/abs/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox, and Rameswar Panda.
-
 Granite model is a series of AI language models built for businesses, not just for general use. It is a super-focused tool for enterprise tasks like summarizing reports, answering questions, or generating code. It is trained on curated datasets (think finance, legal, code, and academic stuff) and filters out junk like duplicates or harmful content with their HAP detector. It comes in different sizes, from super lightweight (sub-billion parameters) up to 34 billion, so you can pick what fits your needs.
 
 You can find all the original Granite checkpoints under the [Granite](https://huggingface.co/ibm-granite) collection.

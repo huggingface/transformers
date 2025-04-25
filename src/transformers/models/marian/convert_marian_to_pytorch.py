@@ -68,7 +68,7 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     model_ids = [x.id for x in model_list if x.id.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
-    ]  # + cant be loaded.
+    ]  # + can't be loaded.
     matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
     return matching
 
@@ -701,7 +701,12 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model sub dir", default="en-de")
+    parser.add_argument(
+        "--src",
+        type=str,
+        help="path to marian model sub dir. yaml.load will be used to load the configuration file, please be wary of which file you're loading.",
+        default="en-de",
+    )
     parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 

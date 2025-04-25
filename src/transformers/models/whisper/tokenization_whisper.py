@@ -377,7 +377,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def set_prefix_tokens(self, language: str = None, task: str = None, predict_timestamps: bool = None):
+    def set_prefix_tokens(
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+    ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
         update the prefix tokens as required when fine-tuning. Example:
@@ -513,7 +515,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -522,13 +524,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @staticmethod
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
+    def _decode_with_timestamps(
+        self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500
+    ) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -538,15 +542,25 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
+        penultimate_timestamp = 0.0
 
-        for token in token_ids:
+        for i, token in enumerate(token_ids):
             if token >= timestamp_begin:
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    last_was_single_ending = i >= 2 and not (
+                        token_ids[i - 1] >= timestamp_begin and token_ids[i - 2] >= timestamp_begin
+                    )
+                    if last_was_single_ending:
+                        prev_segments_len += time_precision * segment_size
+                    else:
+                        cur_max_timestamp = penultimate_timestamp
+                        prev_segments_len += penultimate_timestamp
+                        outputs = outputs[:-2]
 
+                penultimate_timestamp = cur_max_timestamp
                 cur_max_timestamp = timestamp
 
                 outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
@@ -558,7 +572,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
         return "".join(outputs)
 
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):
         """
         Compute offsets for a given tokenized input
 
@@ -567,6 +581,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
+            segment_size (`int`, *optional*, defaults to 1500):
+                The number of features in the input mel spectrogram.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -597,7 +613,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
                 if start_timestamp_position < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    is_single_ending = last_slice >= 2 and not (
+                        token_ids[last_slice - 2] >= timestamp_begin and token_ids[last_slice - 1] >= timestamp_begin
+                    )
+                    if is_single_ending:
+                        prev_segments_len += segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
 
                 cur_max_timestamp = end_timestamp_position
 
@@ -609,8 +631,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     {
                         "text": text,
                         "timestamp": (
-                            (start_timestamp_position + prev_segments_len) * time_precision,
-                            (end_timestamp_position + prev_segments_len) * time_precision,
+                            start_timestamp_position * time_precision + prev_segments_len * time_precision,
+                            end_timestamp_position * time_precision + prev_segments_len * time_precision,
                         ),
                     }
                 )
@@ -654,7 +676,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -1023,7 +1045,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         # as a stop where it should be a start.
                         # This is an issue in the underlying model output
                         # Let's just skip it so it becomes de-factor
-                        # a start agin
+                        # a start again
                         pass
                     else:
                         chunk["timestamp"][1] = time
@@ -1256,7 +1278,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, retu
 def _combine_tokens_into_words(
     tokenizer,
     tokens: List[int],
-    language: str = None,
+    language: Optional[str] = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):
@@ -1370,3 +1392,6 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
     words[:] = [word for word in words if word]
     tokens[:] = [token for token in tokens if token]
     indices[:] = [idx for idx in indices if idx]
+
+
+__all__ = ["WhisperTokenizer"]

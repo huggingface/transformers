@@ -21,10 +21,12 @@ import sys
 import types
 
 import torch
+from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 
 from transformers import AutoTokenizer, GPT2Config
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
+from transformers.utils import check_torch_load_is_safe
 
 
 def add_checkpointing_args(parser):
@@ -274,7 +276,8 @@ def merge_transformers_sharded_states(path, num_checkpoints):
     state_dict = {}
     for i in range(1, num_checkpoints + 1):
         checkpoint_path = os.path.join(path, f"pytorch_model-{i:05d}-of-{num_checkpoints:05d}.bin")
-        current_chunk = torch.load(checkpoint_path, map_location="cpu")
+        check_torch_load_is_safe()
+        current_chunk = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         state_dict.update(current_chunk)
     return state_dict
 
@@ -297,7 +300,8 @@ def get_megatron_sharded_states(args, tp_size, pp_size, pp_rank):
             checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
             if os.path.isfile(checkpoint_path):
                 break
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
+        check_torch_load_is_safe()
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         tp_state_dicts.append(state_dict)
     return tp_state_dicts
 
@@ -337,7 +341,8 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             rank0_checkpoint_path = os.path.join(args.load_path, sub_dir, rank0_checkpoint_name)
             break
     print(f"Loading Megatron-LM checkpoint arguments from: {rank0_checkpoint_path}")
-    state_dict = torch.load(rank0_checkpoint_path, map_location="cpu")
+    check_torch_load_is_safe()
+    state_dict = torch.load(rank0_checkpoint_path, map_location="cpu", weights_only=True)
     megatron_args = state_dict.get("args", None)
     if megatron_args is None:
         raise ValueError(
@@ -571,7 +576,15 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
     # Store the state_dict to file.
     max_shard_size = int(args.max_shard_size) if args.max_shard_size.isdigit() else args.max_shard_size
-    shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size)
+    state_dict_split = split_torch_state_dict_into_shards(output_state_dict, max_shard_size=max_shard_size)
+    shards = index = None
+    for tensors in state_dict_split.filename_to_tensors.values():
+        shards = {tensor: state_dict[tensor] for tensor in tensors}
+    if state_dict_split.is_sharded:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
 
     # Save the model
     for shard_file, shard in shards.items():
@@ -625,7 +638,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     sub_dirs = [x for x in os.listdir(args.load_path) if x.startswith("pytorch_model")]
     if len(sub_dirs) == 1:
         checkpoint_name = "pytorch_model.bin"
-        state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu")
+        check_torch_load_is_safe()
+        state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu", weights_only=True)
     else:
         num_checkpoints = len(sub_dirs) - 1
         state_dict = merge_transformers_sharded_states(args.load_path, num_checkpoints)

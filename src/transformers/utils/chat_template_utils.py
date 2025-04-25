@@ -15,10 +15,11 @@
 import inspect
 import json
 import re
+import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
 
 from packaging import version
 
@@ -70,20 +71,23 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> Dict[str, str]:
+def _get_json_schema_type(param_type: str) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
-        Image: {"type": "image"},
-        Tensor: {"type": "audio"},
+        type(None): {"type": "null"},
         Any: {},
     }
+    if is_vision_available():
+        type_mapping[Image] = {"type": "image"}
+    if is_torch_available():
+        type_mapping[Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
-def _parse_type_hint(hint: str) -> Dict:
+def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
@@ -95,7 +99,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
         subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
@@ -148,7 +152,7 @@ def _parse_type_hint(hint: str) -> Dict:
     raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
-def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
+def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
     required = []
@@ -169,7 +173,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -202,7 +206,7 @@ def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Option
     return description, args_dict, returns
 
 
-def get_json_schema(func: Callable) -> Dict:
+def get_json_schema(func: Callable) -> dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
@@ -359,6 +363,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}
@@ -389,7 +398,7 @@ def _compile_jinja_template(chat_template):
             return self._rendered_blocks or self._generation_indices
 
         @contextmanager
-        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+        def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
             try:
                 if self.is_active():
                     raise ValueError("AssistantTracker should not be reused before closed")
@@ -403,7 +412,7 @@ def _compile_jinja_template(chat_template):
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
-            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
         )
 
     def raise_exception(message):

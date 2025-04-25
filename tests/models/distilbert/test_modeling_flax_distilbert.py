@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxDistilBertModelTester(unittest.TestCase):
+class FlaxDistilBertModelTester:
     def __init__(
         self,
         parent,

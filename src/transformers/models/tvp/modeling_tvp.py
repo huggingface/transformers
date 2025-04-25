@@ -54,7 +54,7 @@ class TvpVideoGroundingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -251,7 +251,7 @@ class TvpVisualInputEmbedding(nn.Module):
         # (batch_size, height, width, hidden_dim)
         positional_embeddings = row_position_embeddings + col_position_embeddings
 
-        # This interpolation gets triggered ONLY when the input image dim is larger in any dimenstion than the original position embeddings
+        # This interpolation gets triggered ONLY when the input image dim is larger in any dimension than the original position embeddings
         if interpolate_pos_encoding and (
             height > self.max_grid_row_position_embeddings or width > self.max_grid_col_position_embeddings
         ):
@@ -773,7 +773,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):
@@ -980,3 +980,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["TvpModel", "TvpPreTrainedModel", "TvpForVideoGrounding"]

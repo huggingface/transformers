@@ -340,7 +340,7 @@ with `pixel_values`, a tensor with `pixel_mask`, and `labels`.
           [ 0.0741,  0.0741,  0.0741,  ...,  0.0741,  0.0741,  0.0741],
           [ 0.0741,  0.0741,  0.0741,  ...,  0.0741,  0.0741,  0.0741],
           [ 0.0741,  0.0741,  0.0741,  ...,  0.0741,  0.0741,  0.0741]],
-  
+
           [[ 1.6232,  1.6408,  1.6583,  ...,  0.8704,  1.0105,  1.1331],
           [ 1.6408,  1.6583,  1.6758,  ...,  0.8529,  0.9930,  1.0980],
           [ 1.6933,  1.6933,  1.7108,  ...,  0.8179,  0.9580,  1.0630],
@@ -348,7 +348,7 @@ with `pixel_values`, a tensor with `pixel_mask`, and `labels`.
           [ 0.2052,  0.2052,  0.2052,  ...,  0.2052,  0.2052,  0.2052],
           [ 0.2052,  0.2052,  0.2052,  ...,  0.2052,  0.2052,  0.2052],
           [ 0.2052,  0.2052,  0.2052,  ...,  0.2052,  0.2052,  0.2052]],
-  
+
           [[ 1.8905,  1.9080,  1.9428,  ..., -0.1487, -0.0964, -0.0615],
           [ 1.9254,  1.9428,  1.9603,  ..., -0.1661, -0.1138, -0.0790],
           [ 1.9777,  1.9777,  1.9951,  ..., -0.2010, -0.1138, -0.0790],
@@ -569,7 +569,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 ...     args=training_args,
 ...     train_dataset=cppe5["train"],
 ...     eval_dataset=cppe5["validation"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     data_collator=collate_fn,
 ...     compute_metrics=eval_compute_metrics_fn,
 ... )
@@ -1488,7 +1488,9 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
 ```py
->>> device = "cuda"
+>>> from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+>>> device, _, _ = get_backend()
 >>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)

@@ -1,4 +1,0 @@
-numpy
-datasets
-pandas
-nltk

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ if is_vision_available():
     from transformers import VitMatteImageProcessor
 
 
-class VitMatteImageProcessingTester(unittest.TestCase):
+class VitMatteImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -52,7 +51,6 @@ class VitMatteImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

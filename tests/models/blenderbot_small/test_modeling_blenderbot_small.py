@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -217,7 +216,6 @@ class BlenderbotSmallModelTester:
 @require_torch
 class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BlenderbotSmallModel,
@@ -236,9 +234,16 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        return pipeline_test_casse_name == "TextGenerationPipelineTests"
+        return pipeline_test_case_name == "TextGenerationPipelineTests"
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
@@ -535,7 +540,6 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 @require_torch
 class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallDecoder, BlenderbotSmallForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

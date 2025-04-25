@@ -651,6 +651,8 @@ class IBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, IBertLMHead):
+            module.bias.data.zero_()
 
     def resize_token_embeddings(self, new_num_tokens=None):
         raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")
@@ -1353,3 +1355,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "IBertForMaskedLM",
+    "IBertForMultipleChoice",
+    "IBertForQuestionAnswering",
+    "IBertForSequenceClassification",
+    "IBertForTokenClassification",
+    "IBertModel",
+    "IBertPreTrainedModel",
+]

@@ -323,7 +323,7 @@ class PvtV2EncoderLayer(nn.Module):
         )
         # Transformer block
         # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").tolist()
         block_layers = []
         for block_idx in range(config.depths[layer_idx]):
             block_layers.append(
@@ -698,3 +698,6 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["PvtV2ForImageClassification", "PvtV2Model", "PvtV2PreTrainedModel", "PvtV2Backbone"]

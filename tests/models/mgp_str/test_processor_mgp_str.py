@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,7 +69,7 @@ class MgpstrProcessorTest(unittest.TestCase):
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
-    # We copy here rather than use the ProcessorTesterMixin as this processor has a `char_tokenizer` instad of a
+    # We copy here rather than use the ProcessorTesterMixin as this processor has a `char_tokenizer` instead of a
     # tokenizer attribute, which means all the tests would need to be overridden.
     @require_vision
     def prepare_image_inputs(self):

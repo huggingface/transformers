@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -285,7 +284,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = () if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
         if is_torch_available()
@@ -295,7 +293,14 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # BROS requires `bbox` in the inputs which doesn't fit into the above 2 pipelines' input formats.
     # see https://github.com/huggingface/transformers/pull/26294
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -445,4 +450,4 @@ class BrosModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.set_printoptions(sci_mode=False)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

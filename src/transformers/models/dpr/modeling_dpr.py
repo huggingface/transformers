@@ -127,8 +127,8 @@ class DPRReaderOutput(ModelOutput):
     """
 
     start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor = None
-    relevance_logits: torch.FloatTensor = None
+    end_logits: Optional[torch.FloatTensor] = None
+    relevance_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -655,3 +655,14 @@ class DPRReader(DPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+__all__ = [
+    "DPRContextEncoder",
+    "DPRPretrainedContextEncoder",
+    "DPRPreTrainedModel",
+    "DPRPretrainedQuestionEncoder",
+    "DPRPretrainedReader",
+    "DPRQuestionEncoder",
+    "DPRReader",
+]

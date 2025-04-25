@@ -192,7 +192,7 @@ class DynamicPad2d(nn.Module):
 
         self.compute_padding = compute_padding
 
-    def __call__(self, input):
+    def forward(self, input):
         # Get width and height
         input_height, input_width = input.size()[-2:]
 
@@ -901,3 +901,6 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["BitForImageClassification", "BitModel", "BitPreTrainedModel", "BitBackbone"]

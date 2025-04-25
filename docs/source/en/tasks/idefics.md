@@ -386,9 +386,9 @@ The use and prompting for the conversational use is very similar to using the ba
 ```py
 >>> import torch
 >>> from transformers import IdeficsForVisionText2Text, AutoProcessor
+>>> from accelerate.test_utils.testing import get_backend
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
 >>> processor = AutoProcessor.from_pretrained(checkpoint)

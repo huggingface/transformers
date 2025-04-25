@@ -38,7 +38,7 @@ class EncodecConfig(PretrainedConfig):
 
     Args:
         target_bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
-            The range of diffent bandwiths the model can encode audio with.
+            The range of different bandwidths the model can encode audio with.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         audio_channels (`int`, *optional*, defaults to 1):
@@ -187,3 +187,6 @@ class EncodecConfig(PretrainedConfig):
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+
+
+__all__ = ["EncodecConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,30 +16,26 @@
 import tempfile
 import unittest
 
-from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from transformers import AltCLIPProcessor, CLIPImageProcessor, XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import AltCLIPProcessor, CLIPImageProcessor
 
 
 @require_vision
 class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AltCLIPProcessor
 
-    def setUp(self):
-        self.model_id = "BAAI/AltCLIP"
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.model_id = "BAAI/AltCLIP"
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = CLIPImageProcessor()
-        tokenizer = XLMRobertaTokenizer.from_pretrained(self.model_id)
+        tokenizer = XLMRobertaTokenizer.from_pretrained(cls.model_id)
 
-        processor = self.processor_class(image_processor, tokenizer)
+        processor = cls.processor_class(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizer.from_pretrained(self.model_id, **kwargs)

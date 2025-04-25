@@ -40,13 +40,12 @@ env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
-  RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
   NUM_SLICES: 2
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_quantization_torch_gpu"]'), inputs.job)
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
@@ -78,12 +77,17 @@ jobs:
         run: pip freeze
 
       - id: set-matrix
-        if: ${{ inputs.job == 'run_models_gpu' }}
+        if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+          if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
+            echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
+            echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
+          fi
 
       - id: set-matrix-quantization
         if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
@@ -112,6 +116,25 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
       runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
+    secrets: inherit
+
+  run_trainer_and_fsdp_gpu:
+    if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' }}
+    name: " "
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        slice_id: [0, 1]
+    uses: ./.github/workflows/model_jobs.yml
+    with:
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      machine_type: ${{ matrix.machine_type }}
+      slice_id: ${{ matrix.slice_id }}
+      runner: ${{ inputs.runner }}
+      docker: ${{ inputs.docker }}
+      report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit
 
   run_pipelines_torch_gpu:
@@ -366,7 +389,7 @@ jobs:
         run: |
           python3 -m pip uninstall -y deepspeed
           rm -rf DeepSpeed
-          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          git clone https://github.com/deepspeedai/DeepSpeed && cd DeepSpeed && rm -rf build
           DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
@@ -383,7 +406,7 @@ jobs:
         run: pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         shell: bash
         run: |
           echo "${{ matrix.machine_type }}"
@@ -542,6 +565,7 @@ jobs:
     needs: [
       setup,
       run_models_gpu,
+      run_trainer_and_fsdp_gpu,
       run_pipelines_torch_gpu,
       run_pipelines_tf_gpu,
       run_examples_gpu,
@@ -561,4 +585,14 @@ jobs:
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
 
+    secrets: inherit
+
+  check_new_model_failures:
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job == 'run_models_gpu' && needs.send_results.result == 'success' }}
+    name: Check new model failures
+    needs: send_results
+    uses: ./.github/workflows/check_failed_model_tests.yml
+    with:
+      docker: ${{ inputs.docker }}
+      start_sha: ${{ github.sha }}
     secrets: inherit

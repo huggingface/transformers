@@ -231,7 +231,7 @@ class TFLayoutLMv3TextEmbeddings(keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor | None = None,
-        bbox: tf.Tensor = None,
+        bbox: Optional[tf.Tensor] = None,
         token_type_ids: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -1772,3 +1772,12 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build(None)
+
+
+__all__ = [
+    "TFLayoutLMv3ForQuestionAnswering",
+    "TFLayoutLMv3ForSequenceClassification",
+    "TFLayoutLMv3ForTokenClassification",
+    "TFLayoutLMv3Model",
+    "TFLayoutLMv3PreTrainedModel",
+]

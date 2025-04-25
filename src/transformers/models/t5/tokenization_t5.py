@@ -30,6 +30,7 @@ from ...tokenization_utils_base import AddedToken
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -37,11 +38,10 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
-# TODO(PVP) - this should be removed in Transformers v5
-
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class T5Tokenizer(PreTrainedTokenizer):
     """
     Construct a T5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -445,3 +445,6 @@ class T5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["T5Tokenizer"]

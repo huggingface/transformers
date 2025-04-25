@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # MobileNet V2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The MobileNet model was proposed in [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381) by Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen.
@@ -79,6 +83,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## MobileNetV2ImageProcessor
 
 [[autodoc]] MobileNetV2ImageProcessor
+    - preprocess
+
+## MobileNetV2ImageProcessorFast
+
+[[autodoc]] MobileNetV2ImageProcessorFast
     - preprocess
     - post_process_semantic_segmentation
 

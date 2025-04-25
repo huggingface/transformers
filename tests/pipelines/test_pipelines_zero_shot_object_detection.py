@@ -14,7 +14,12 @@
 
 import unittest
 
-from transformers import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING, is_vision_available, pipeline
+from transformers import (
+    MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
+    ZeroShotObjectDetectionPipeline,
+    is_vision_available,
+    pipeline,
+)
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -43,10 +48,20 @@ else:
 class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        object_detector = pipeline(
-            "zero-shot-object-detection",
-            model="hf-internal-testing/tiny-random-owlvit-object-detection",
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        object_detector = ZeroShotObjectDetectionPipeline(
+            model=model,
+            processor=processor,
+            tokenizer=tokenizer,
+            image_processor=image_processor,
             torch_dtype=torch_dtype,
         )
 
@@ -59,7 +74,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         return object_detector, examples
 
     def run_pipeline_test(self, object_detector, examples):
-        outputs = object_detector(examples[0], threshold=0.0)
+        outputs = object_detector(examples[0].get("image"), examples[0].get("candidate_labels"), threshold=0.0)
 
         n = len(outputs)
         self.assertGreater(n, 0)
