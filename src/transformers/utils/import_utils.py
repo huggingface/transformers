@@ -1392,6 +1392,7 @@ def check_torch_load_is_safe():
         raise ValueError(
             "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require to "
             "upgrade torch to at least v2.6 in order to use the function: `pip install torch --upgrade`"
+            "\nSee the vulnerability report here https://nvd.nist.gov/vuln/detail/CVE-2025-32434"
         )
 
 
