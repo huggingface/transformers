@@ -151,6 +151,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
         ("hindi_causal_lm", "HindiCausalLMConfig"),
+        # --- !!! END ADDITION !!! ---
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -376,7 +377,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
-        # Add full (and cased) model names here
+  
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),

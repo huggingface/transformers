@@ -376,7 +376,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
-        # Add full (and cased) model names here
+  
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),

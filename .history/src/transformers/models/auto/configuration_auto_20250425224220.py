@@ -150,7 +150,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
-        ("hindi_causal_lm", "HindiCausalLMConfig"),
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -509,7 +508,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("helium", "Helium"),
-        ("hindi_causal_lm", "Hindi Causal LM"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),
@@ -1003,16 +1001,11 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             lines[i] = _list_model_options(indent, config_to_class=config_to_class, use_model_types=use_model_types)
             docstrings = "\n".join(lines)
         else:
-            # The docstring should contain `List options` anyway.
-            if fn.__doc__ is not None:
-                existing_docstings = fn.__doc__ + "\n\n"
-            else:
-                existing_docstings = ""
-            fn.__doc__ = (
-                f"{existing_docstings}List options\n"
-                + _list_model_options("\t", config_to_class=config_to_class, use_model_types=use_model_types)
+            raise ValueError(
+                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current"
+                f" docstring is:\n{docstrings}"
             )
-
+        fn.__doc__ = docstrings
         return fn
 
     return docstring_decorator

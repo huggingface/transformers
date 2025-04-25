@@ -150,7 +150,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
+        # --- !!! ADD YOUR CONFIG MAPPING HERE !!! ---
         ("hindi_causal_lm", "HindiCausalLMConfig"),
+        # --- !!! END ADDITION !!! ---
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -376,7 +378,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
-        # Add full (and cased) model names here
+  
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
