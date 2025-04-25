@@ -465,6 +465,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         (
+            "perception_lm", 
+            (
+                "PerceptionLMTokenizer", "PerceptionLMTokenizerFast" if is_tokenizers_available() else None
+            )
+        ),
+        (
             "persimmon",
             (
                 "LlamaTokenizer" if is_sentencepiece_available() else None,

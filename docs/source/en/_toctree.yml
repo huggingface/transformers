@@ -1035,6 +1035,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
