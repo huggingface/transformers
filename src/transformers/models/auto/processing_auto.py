@@ -87,6 +87,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
+        ("perception_lm", "PerceptionLMProcessor"),
         ("llava_next", "LlavaNextProcessor"),
         ("llava_next_video", "LlavaNextVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionProcessor"),
