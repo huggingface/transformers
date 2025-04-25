@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ...utils import is_torch_available
 
@@ -22,9 +22,13 @@ from ...utils import is_torch_available
 if is_torch_available():
     import torch
 
-from ...audio_utils import make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import (
+    PreTokenizedInput,
+    TextInput,
+)
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
@@ -53,6 +57,36 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class CsmProcessor(ProcessorMixin):
+    r"""
+    Constructs a Csm processor which wraps [`EncodecFeatureExtractor`] and
+    [`PretrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    tokenizer functionalities. See the [`~CsmProcessor.__call__`] for more
+    information.
+    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
+        ```python
+        from transformers import CsmProcessor
+
+        processor = CsmProcessor.from_pretrained("eustlb/csm-1b")
+
+        processor(
+            images=your_pil_image,
+            text=["<|image|>If I had to write a haiku for this one"],
+            images_kwargs = {"size": {"height": 448, "width": 448}},
+            text_kwargs = {"padding": "right"},
+            common_kwargs = {"return_tensors": "pt"},
+        )
+        ```
+
+    Args:
+        feature_extractor ([`EncodecFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+
+    """
+
     attributes = ["feature_extractor", "tokenizer"]
     valid_kwargs = ["chat_template"]
     feature_extractor_class = "EncodecFeatureExtractor"
@@ -82,6 +116,15 @@ class CsmProcessor(ProcessorMixin):
 
     @staticmethod
     def _get_encoded_length(audio_length, kernel_sizes=None, strides=None, dilations=None, use_causal_conv=None):
+        """
+        Compute the length of the encoded audio sequence.
+
+        Args:
+            audio_length (int): The length of the audio sequence.
+            kernel_sizes (List[int]): The kernel sizes for the convolutional layers.
+            strides (List[int]): The strides for the convolutional layers.
+            use_causal_conv (bool): Whether to use causal convolutions.
+        """
         cur_length = audio_length
 
         if kernel_sizes is None or strides is None or dilations is None or use_causal_conv is None:
@@ -112,12 +155,51 @@ class CsmProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text,
-        audio=None,
-        output_labels=False,
-        depth_decoder_labels_ratio=1.0,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]],
+        audio: Optional[Union[AudioInput, List[AudioInput]]] = None,
+        output_labels: Optional[bool] = False,
+        depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
+        """
+        Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
+        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
+        the text. To prepare the audio, this method forwards the `audio` arguments to
+        EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
+        to the docstring of the above two methods for more information.
+
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
+                tensor.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
+                - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
+                - `-100` will be ignored in the loss computation
+                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
+            depth_decoder_labels_ratio (float, *optional*, default=1.0):
+                The ratio of audio frames to keep for the depth decoder labels.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **input_values** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **labels** -- List of labels for the audio frames. Returned when `output_labels=True`.
+        """
+
         output_kwargs = self._merge_kwargs(
             CsmProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
