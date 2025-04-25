@@ -134,7 +134,9 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
+    # --- !!! ADD YOUR MODEL IMPORT HERE (for type checking) !!! ---
     from .hindi_causal_lm import *
+    # --- !!! END ADDITION !!! ---
     from .hubert import *
     from .ibert import *
     from .idefics import *
