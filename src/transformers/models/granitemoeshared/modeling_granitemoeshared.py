@@ -105,11 +105,12 @@ class GraniteMoeSharedParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
         """
         Initialize the GraniteMoeSharedParallelExperts module.
-        The experts weights are stored in [num_experts, output_size, input_size] format. Such that it's comptible with
+        The experts weights are stored in [num_experts, output_size, input_size] format. Such that it's compatible with
         many MoE libraries, such as [Megablock](https://github.com/databricks/megablocks) and
         [ScatterMoE](https://github.com/shawntan/scattermoe), as well as the
         [MoE kernel](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/fused_moe/fused_moe.py)
         used in vllm.
+
         Args:
             num_experts (int):
                 Number of experts.
@@ -127,11 +128,13 @@ class GraniteMoeSharedParallelExperts(nn.Module):
     def forward(self, inputs, expert_size):
         """
         Forward pass of the GraniteMoeSharedParallelExperts module.
+
         Args:
             inputs (Tensor):
                 Input tensor.
             expert_size:
                 Expert size information.
+
         Returns:
             Tensor: Output tensor.
         """

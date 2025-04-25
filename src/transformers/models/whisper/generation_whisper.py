@@ -253,7 +253,7 @@ class WhisperGenerationMixin(GenerationMixin):
             # beam search takes `decoder_input_ids` into account in the `beam_indices` length
             # but forgot to shift the beam_indices by the number of `decoder_input_ids`
             beam_indices = torch.zeros_like(generate_outputs.beam_indices[:, :weight_length])
-            # we actually shif the beam indices here
+            # we actually shift the beam indices here
             beam_indices[:, num_input_ids:] = generate_outputs.beam_indices[:, : weight_length - num_input_ids]
 
             weights = weights[:, :, :weight_length]
@@ -294,7 +294,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 weights = weights[..., : num_frames[0] // 2]
 
             else:
-                # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
+                # num_frames is of shape (batch_size,) whereas batch_size is truly batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
                 num_frames = num_frames.cpu() if isinstance(num_frames, (torch.Tensor)) else num_frames
                 num_frames = np.repeat(num_frames, repeat_time)
@@ -865,7 +865,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if return_dict_in_generate and generation_config.return_dict_in_generate:
             logger.warning_once(
-                "You have passed `return_dict_in_generate=True` and `return_timestamps=True`, this automatically sets `return_segments=True` to access the resuls of the underlying calls to GenerationMixin's generate in the returned `segments`."
+                "You have passed `return_dict_in_generate=True` and `return_timestamps=True`, this automatically sets `return_segments=True` to access the results of the underlying calls to GenerationMixin's generate in the returned `segments`."
             )
             return_segments = True
         elif not return_segments and not return_token_timestamps:
@@ -1466,7 +1466,7 @@ class WhisperGenerationMixin(GenerationMixin):
         if language is not None:
             lang_ids = [language_to_id(l) for l in languages]
         elif hasattr(generation_config, "lang_to_id") and is_lang_id_undefined:
-            # language is not defined or intentially set to `None` to trigger language detection
+            # language is not defined or intentionally set to `None` to trigger language detection
             lang_ids = self.detect_language(
                 input_features=input_features,
                 encoder_outputs=kwargs.get("encoder_outputs", None),
@@ -1554,7 +1554,7 @@ class WhisperGenerationMixin(GenerationMixin):
         if input_features is None and encoder_outputs is None:
             raise ValueError("You have to specify either `input_features` or `encoder_outputs`")
         elif input_features is not None and encoder_outputs is not None:
-            raise ValueError("Make sure to specificy only one of `input_features` or `encoder_outputs` - not both!")
+            raise ValueError("Make sure to specify only one of `input_features` or `encoder_outputs` - not both!")
         elif input_features is not None:
             inputs = {"input_features": input_features[:, :, :num_segment_frames]}
             batch_size = input_features.shape[0]
