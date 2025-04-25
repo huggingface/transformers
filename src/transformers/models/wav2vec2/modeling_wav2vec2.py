@@ -1630,7 +1630,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
 
-        # set target language corectly
+        # set target language correctly
         self.target_lang = target_lang
 
 
@@ -1993,7 +1993,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         extract_features = self.dropout_features(outputs[1])
 
         if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
+            # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
                 extract_features.shape[1], attention_mask, add_adapter=False
             )

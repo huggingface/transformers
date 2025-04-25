@@ -424,7 +424,7 @@ class GGUFLlamaConverter(LlamaConverter):
         if post_processor:
             tokenizer.post_processor = post_processor
 
-        # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
+        # HACK: patch the llama-3 tokenizer to use the corresponding pre-tokenizer
         # and normalizer
         if self.is_llama_3_tokenizer:
             tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
