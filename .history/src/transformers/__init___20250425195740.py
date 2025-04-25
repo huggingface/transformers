@@ -141,16 +141,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.hindi_causal_lm": [],
-    "models.hindi_causal_lm.configuration_hindi_causal_lm": [
-        "HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "HindiCausalLMConfig",
-    ],
-    "models.hindi_causal_lm.modeling_hindi_causal_lm": [
-        "HindiCausalLMModel",
-        "HindiCausalLMHeadModel",
-    ],
-    "models.hindi_causal_lm.tokenization_hindi_causal_lm": ["HindiCausalLMTokenizer"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -625,17 +615,6 @@ if TYPE_CHECKING:
         is_tensorboard_available,
         is_wandb_available,
     )
-
-    # Hindi Causal LM Model Types
-    from .models.hindi_causal_lm.configuration_hindi_causal_lm import (
-        HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        HindiCausalLMConfig,
-    )
-    from .models.hindi_causal_lm.modeling_hindi_causal_lm import (
-        HindiCausalLMModel,
-        HindiCausalLMHeadModel,
-    )
-    from .models.hindi_causal_lm.tokenization_hindi_causal_lm import HindiCausalLMTokenizer
 
     # Model Cards
     from .modelcard import ModelCard

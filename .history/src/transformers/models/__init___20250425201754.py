@@ -133,6 +133,7 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
+    # Add Hindi Causal LM import here (alphabetical order)
     from .hindi_causal_lm import *
     from .hubert import *
     from .ibert import *
