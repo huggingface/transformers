@@ -141,7 +141,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.hindi_causal_lm": [],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -550,19 +549,6 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .configuration_utils import PretrainedConfig
-    
-    # Hindi Causal LM imports
-    from .models.hindi_causal_lm.configuration_hindi_causal_lm import (
-        HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        HindiCausalLMConfig,
-    )
-    from .models.hindi_causal_lm.modeling_hindi_causal_lm import (
-        HindiCausalLMModel,
-        HindiCausalLMHeadModel,
-    )
-    from .models.hindi_causal_lm.tokenization_hindi_causal_lm import (
-        HindiCausalLMTokenizer,
-    )
 
     # Data
     from .data import (

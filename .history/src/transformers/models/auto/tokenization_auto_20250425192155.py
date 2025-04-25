@@ -255,7 +255,7 @@ else:
                 "HindiCausalLMTokenizer" if is_sentencepiece_available() else None,
                 "HindiCausalLMTokenizerFast" if is_tokenizers_available() else None,
             )
-            ),
+        ),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),

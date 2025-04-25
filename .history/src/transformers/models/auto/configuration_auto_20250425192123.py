@@ -509,7 +509,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("helium", "Helium"),
-        ("hindi_causal_lm", "Hindi Causal LM"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),

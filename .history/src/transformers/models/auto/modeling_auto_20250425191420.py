@@ -141,7 +141,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
-        ("hindi_causal_lm", "HindiCausalLMModel"),
         ("hiera", "HieraModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
