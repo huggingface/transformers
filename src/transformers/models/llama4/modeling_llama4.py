@@ -742,6 +742,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         sequence_length = input_tensor.shape[1]
         cache_position = cache_position.to(self.device)
         attention_chunk_size = self.config.attention_chunk_size
+        using_chunked_attention = attention_chunk_size is not None
 
         first_cache_position = cache_position[0]
 
@@ -750,9 +751,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        if attention_chunk_size is None:
-            key_length = full_cache_length
-        else:
+        if using_chunked_attention:
             cond1 = first_cache_position >= attention_chunk_size
             cond2 = (first_cache_position < attention_chunk_size) & (
                 first_cache_position + sequence_length > attention_chunk_size
@@ -769,7 +768,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                if attention_chunk_size is not None:
+                if using_chunked_attention:
                     offsets = (first_cache_position, max(first_cache_position - attention_chunk_size + 1, 0))
                     chunked_attention_mask = make_flex_block_causal_mask(
                         attention_mask, attention_chunk_size, sequence_length, key_length, offsets=offsets
@@ -786,7 +785,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         dtype, device = input_tensor.dtype, input_tensor.device
-        target_length = max(full_cache_length, attention_chunk_size) if attention_chunk_size is not None else full_cache_length
+        target_length = max(full_cache_length, attention_chunk_size) if using_chunked_attention else full_cache_length
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
@@ -796,7 +795,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        if attention_chunk_size is not None and full_cache_length > attention_chunk_size:
+        if using_chunked_attention and full_cache_length > attention_chunk_size:
             start_idx = max(first_cache_position - attention_chunk_size + 1, 0)
             end_idx = start_idx + key_length
             chunked_attention_mask = self.create_chunked_attention_mask(
