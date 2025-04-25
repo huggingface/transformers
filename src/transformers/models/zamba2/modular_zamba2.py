@@ -341,7 +341,7 @@ class Zamba2MambaMixer(nn.Module):
             projection_size,
             bias=config.add_bias_linear,
         )
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel

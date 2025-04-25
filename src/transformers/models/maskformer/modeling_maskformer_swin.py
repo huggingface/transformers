@@ -935,7 +935,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             zip(hidden_states, self.stage_names[1:], spatial_dimensions)
         ):
             norm = self.hidden_states_norms[i]
-            # the last element corespond to the layer's last block output but before patch merging
+            # the last element correspond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
             # the pixel decoder (FPN) expects 3D tensors (features)
