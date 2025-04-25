@@ -27,7 +27,7 @@ from transformers.testing_utils import (
 
 # Import testing utilities and base classes
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, GenerationTestersMixin, ids_tensor
 from ...test_modeling_common import ModelTesterMixin, ids_tensor # Keep random_attention_mask removed if not needed
 
 
