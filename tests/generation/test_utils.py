@@ -4020,6 +4020,34 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    def test_generate_multi_gpu_causal_mask(self):
+        """
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
+        The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
+        being `None`.
+        """
+        # need to split manually as auto doesn't work well with unbalanced model
+        device_map = {
+            "visual": 0,
+            "model.embed_tokens": 1,
+            "model.layers.0": 1,
+            "model.layers.1": 1,
+            "model.rotary_emb": 1,
+            "model.norm.weight": 1,
+            "lm_head": 1,
+        }
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration", device_map=device_map
+        )
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
+
+        text = ["Hello world", "Today I went to the supermarket to buy"]
+        inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @pytest.mark.generate
+    @require_torch_multi_gpu
     def test_init_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
