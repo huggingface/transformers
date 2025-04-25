@@ -251,7 +251,7 @@ def write_model(
             "original_max_position_embeddings": 8192,
         }
         config_kwargs.update({"rope_scaling": rope_scaling})
-    
+
     if attention_chunk_size is None:
         config_kwargs.update({"cache_implementation": "static"})
 
