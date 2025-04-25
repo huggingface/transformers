@@ -3452,7 +3452,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None or getattr(self.config, "auto_map", None) is not None:
+        if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
@@ -5121,6 +5121,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
                 f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
                 " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
