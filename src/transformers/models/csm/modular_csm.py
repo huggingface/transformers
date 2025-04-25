@@ -862,7 +862,6 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
