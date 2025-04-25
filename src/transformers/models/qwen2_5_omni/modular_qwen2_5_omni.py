@@ -4080,7 +4080,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
     def load_speakers(self, path):
         check_torch_load_is_safe()
-        for key, value in torch.load(path).items():
+        for key, value in torch.load(path, weights_only=True).items():
             self.speaker_map[key] = value
         logger.info("Speaker {} loaded".format(list(self.speaker_map.keys())))
 
