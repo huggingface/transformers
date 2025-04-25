@@ -323,7 +323,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_multi_accelerator
     @slow
-    @require_fsdp
     @require_fsdp_v2_version
     @require_accelerate_fsdp2
     def test_accelerate_fsdp2_integration(self):

@@ -332,7 +332,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertEqual(len(inputs["input_ids"][0]), 6)
+        self.assertEqual(len(inputs["input_ids"][0]), 7)
 
 
 @require_torch

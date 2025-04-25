@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -98,6 +99,7 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
+@requires(backends=("vision",))
 class LayoutLMv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv2 image processor.

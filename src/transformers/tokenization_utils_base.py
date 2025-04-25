@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import isfunction
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -36,6 +37,8 @@ from packaging import version
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
@@ -61,6 +64,7 @@ from .utils import (
     is_torch_available,
     is_torch_device,
     is_torch_tensor,
+    list_repo_templates,
     logging,
     requires_backends,
     to_py_obj,
@@ -145,7 +149,6 @@ AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-CHAT_TEMPLATE_FILE = "chat_template.jinja"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -899,7 +902,9 @@ class SpecialTokensMixin:
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
     def add_special_tokens(
-        self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
+        self,
+        special_tokens_dict: Dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
+        replace_additional_special_tokens=True,
     ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
@@ -923,7 +928,7 @@ class SpecialTokensMixin:
         `'</s>'`).
 
         Args:
-            special_tokens_dict (dictionary *str* to *str* or `tokenizers.AddedToken`):
+            special_tokens_dict (dictionary *str* to *str*, `tokenizers.AddedToken`, or `Sequence[Union[str, AddedToken]]`):
                 Keys should be in the list of predefined special attributes: [`bos_token`, `eos_token`, `unk_token`,
                 `sep_token`, `pad_token`, `cls_token`, `mask_token`, `additional_special_tokens`].
 
@@ -1001,7 +1006,7 @@ class SpecialTokensMixin:
         return added_tokens
 
     def add_tokens(
-        self, new_tokens: Union[str, AddedToken, List[Union[str, AddedToken]]], special_tokens: bool = False
+        self, new_tokens: Union[str, AddedToken, Sequence[Union[str, AddedToken]]], special_tokens: bool = False
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
@@ -1015,7 +1020,7 @@ class SpecialTokensMixin:
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
         Args:
-            new_tokens (`str`, `tokenizers.AddedToken` or a list of *str* or `tokenizers.AddedToken`):
+            new_tokens (`str`, `tokenizers.AddedToken` or a sequence of *str* or `tokenizers.AddedToken`):
                 Tokens are only added if they are not already in the vocabulary. `tokenizers.AddedToken` wraps a string
                 token to let you personalize its behavior: whether this token should only match against a single word,
                 whether this token should strip all potential whitespaces on the left side, whether this token should
@@ -1981,27 +1986,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_file": FULL_TOKENIZER_FILE,
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
+
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
                     fast_tokenizer_file = FULL_TOKENIZER_FILE
-                    resolved_config_file = cached_file(
-                        pretrained_model_name_or_path,
-                        TOKENIZER_CONFIG_FILE,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        resume_download=resume_download,
-                        proxies=proxies,
-                        token=token,
-                        revision=revision,
-                        local_files_only=local_files_only,
-                        subfolder=subfolder,
-                        user_agent=user_agent,
-                        _raise_exceptions_for_gated_repo=False,
-                        _raise_exceptions_for_missing_entries=False,
-                        _raise_exceptions_for_connection_errors=False,
-                        _commit_hash=commit_hash,
-                    )
+
+                    try:
+                        resolved_config_file = cached_file(
+                            pretrained_model_name_or_path,
+                            TOKENIZER_CONFIG_FILE,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            resume_download=resume_download,
+                            proxies=proxies,
+                            token=token,
+                            revision=revision,
+                            local_files_only=local_files_only,
+                            subfolder=subfolder,
+                            user_agent=user_agent,
+                            _raise_exceptions_for_missing_entries=False,
+                            _commit_hash=commit_hash,
+                        )
+                    except OSError:
+                        # Re-raise any error raised by cached_file in order to get a helpful error message
+                        raise
+                    except Exception:
+                        # For any other exception, we throw a generic error.
+                        raise OSError(
+                            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                            f"containing all relevant files for a {cls.__name__} tokenizer."
+                        )
+
                     commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                     if resolved_config_file is not None:
                         with open(resolved_config_file, encoding="utf-8") as reader:
@@ -2009,6 +2027,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if "fast_tokenizer_files" in tokenizer_config:
                                 fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
                     vocab_files["tokenizer_file"] = fast_tokenizer_file
+
+                    # This block looks for any extra chat template files
+                    if is_local:
+                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                        if template_dir.is_dir():
+                            for template_file in template_dir.glob("*.jinja"):
+                                template_name = template_file.name.removesuffix(".jinja")
+                                vocab_files[f"chat_template_{template_name}"] = (
+                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                                )
+                    else:
+                        for template in list_repo_templates(
+                            pretrained_model_name_or_path,
+                            local_files_only=local_files_only,
+                            revision=revision,
+                            cache_dir=cache_dir,
+                        ):
+                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -2021,34 +2057,34 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 elif is_remote_url(file_path):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
-                resolved_vocab_files[file_id] = cached_file(
-                    pretrained_model_name_or_path,
-                    file_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                    _commit_hash=commit_hash,
-                )
+                try:
+                    resolved_vocab_files[file_id] = cached_file(
+                        pretrained_model_name_or_path,
+                        file_path,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                except OSError:
+                    # Re-raise any error raised by cached_file in order to get a helpful error message
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+                    raise OSError(
+                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                        f"containing all relevant files for a {cls.__name__} tokenizer."
+                    )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not gguf_file:
-            raise EnvironmentError(
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing all relevant files for a {cls.__name__} tokenizer."
-            )
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -2129,11 +2165,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             config_tokenizer_class = None
             init_kwargs = init_configuration
 
-        # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
+        # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
+        chat_templates = {}
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
+        extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
         if chat_template_file is not None:
             with open(chat_template_file) as chat_template_handle:
-                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
+                chat_templates["default"] = chat_template_handle.read()
+        for extra_chat_template in extra_chat_templates:
+            template_file = resolved_vocab_files.pop(extra_chat_template, None)
+            if template_file is None:
+                continue  # I think this should never happen, but just in case
+            template_name = extra_chat_template.removeprefix("chat_template_")
+            with open(template_file) as chat_template_handle:
+                chat_templates[template_name] = chat_template_handle.read()
+        if len(chat_templates) == 1 and "default" in chat_templates:
+            init_kwargs["chat_template"] = chat_templates["default"]
+        elif chat_templates:
+            init_kwargs["chat_template"] = chat_templates
 
         if not _is_local:
             if "auto_map" in init_kwargs:
@@ -2353,6 +2402,61 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return {k: cls.convert_added_tokens(v, save=save, add_type_field=add_type_field) for k, v in obj.items()}
         return obj
 
+    def save_chat_templates(
+        self,
+        save_directory: Union[str, os.PathLike],
+        tokenizer_config: dict,
+        filename_prefix: Optional[str],
+        save_jinja_files: bool,
+    ):
+        """
+        Writes chat templates out to the save directory if we're using the new format, and removes them from
+        the tokenizer config if present. If we're using the legacy format, it doesn't write any files, and instead
+        writes the templates to the tokenizer config in the correct format.
+        """
+        chat_template_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
+        )
+        chat_template_dir = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_DIR
+        )
+
+        saved_raw_chat_template_files = []
+        if save_jinja_files and isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(chat_template_file, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {chat_template_file}")
+            saved_raw_chat_template_files.append(chat_template_file)
+            if "chat_template" in tokenizer_config:
+                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+        elif save_jinja_files and isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(chat_template_file, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {chat_template_file}")
+                    saved_raw_chat_template_files.append(chat_template_file)
+                else:
+                    Path(chat_template_dir).mkdir(exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
+                    saved_raw_chat_template_files.append(template_filepath)
+            if "chat_template" in tokenizer_config:
+                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+        elif isinstance(self.chat_template, dict):
+            # Legacy format for multiple templates:
+            # chat template dicts are saved to the config as lists of dicts with fixed key names.
+            tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+        elif self.chat_template is not None:
+            # Legacy format for single templates: Just make them a key in tokenizer_config.json
+            tokenizer_config["chat_template"] = self.chat_template
+        return tokenizer_config, saved_raw_chat_template_files
+
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -2427,9 +2531,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
-        chat_template_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
-        )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
@@ -2448,23 +2549,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        saved_raw_chat_template = False
-        if self.chat_template is not None:
-            if isinstance(self.chat_template, dict):
-                # Chat template dicts are saved to the config as lists of dicts with fixed key names.
-                # They will be reconstructed as a single dict during loading.
-                # We're trying to discourage chat template dicts, and they are always
-                # saved in the config, never as single files.
-                tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-            elif kwargs.get("save_raw_chat_template", False):
-                with open(chat_template_file, "w", encoding="utf-8") as f:
-                    f.write(self.chat_template)
-                saved_raw_chat_template = True
-                logger.info(f"chat template saved in {chat_template_file}")
-                if "chat_template" in tokenizer_config:
-                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-            else:
-                tokenizer_config["chat_template"] = self.chat_template
+        save_jinja_files = kwargs.get("save_jinja_files", True)
+        tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
+            save_directory, tokenizer_config, filename_prefix, save_jinja_files
+        )
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -2518,9 +2606,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f.write(out_str)
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
-        file_names = (tokenizer_config_file, special_tokens_map_file)
-        if saved_raw_chat_template:
-            file_names += (chat_template_file,)
+        file_names = (tokenizer_config_file, special_tokens_map_file, *saved_raw_chat_template_files)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,

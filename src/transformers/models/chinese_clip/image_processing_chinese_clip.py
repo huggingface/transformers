@@ -41,13 +41,17 @@ from ...image_utils import (
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
-logger = logging.get_logger(__name__)
-
-
 if is_vision_available():
     import PIL
 
 
+from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
+
+
+@requires(backends=("vision",))
 class ChineseCLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Chinese-CLIP image processor.

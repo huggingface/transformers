@@ -23,8 +23,6 @@
     title: 🤗 PEFT로 어댑터 로드 및 학습하기
   - local: model_sharing
     title: 만든 모델 공유하기
-  - local: transformers_agents
-    title: 에이전트
   - local: llm_tutorial
     title: 대규모 언어 모델로 생성하기
   - local: conversations
@@ -248,8 +246,6 @@
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: main_classes/agent
-      title: 에이전트와 도구
     - local: model_doc/auto
       title: 자동 클래스
     - local: in_translation
@@ -484,8 +480,8 @@
         title: (번역중) RemBERT
       - local: in_translation
         title: (번역중) RetriBERT
-      - local: in_translation
-        title: (번역중) RoBERTa
+      - local: model_doc/roberta
+        title: RoBERTa
       - local: in_translation
         title: (번역중) RoBERTa-PreLayerNorm
       - local: in_translation
@@ -724,6 +720,8 @@
         title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
+      - local: model_doc/siglip
+        title: SigLIP
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation
