@@ -54,7 +54,7 @@ pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
-<hfoption id="AutoModel - FixRes">
+<hfoption id="AutoModel (FixRes)">
 
 ```py
 import torch
