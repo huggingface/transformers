@@ -557,10 +557,8 @@ class GenerationMixin:
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape
-                device = model_inputs[input_ids_key].device
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class) or in its decoder.
@@ -586,7 +584,6 @@ class GenerationMixin:
                     sequence_length=sequence_length,
                     target_length=past_key_values.get_max_cache_shape(),
                     dtype=self.dtype,
-                    device=device,
                     cache_position=cache_position,
                     batch_size=batch_size,
                     config=self.config,
