@@ -46,6 +46,8 @@ if is_vision_available():
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 
+dynamic_image_processor_classes = {}
+
 
 logger = logging.get_logger(__name__)
 
