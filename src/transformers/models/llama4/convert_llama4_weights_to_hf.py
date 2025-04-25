@@ -265,11 +265,11 @@ def write_model(
     if hasattr(params, "moe_args"):
         num_experts = params["moe_args"]["num_experts"]
         interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
-        moe_layers = None
     else:
+        # Dense model (possibly Llama Guard) - disable all moe layers
         num_experts = 0
         interleave_moe_layer_step = 0
-        moe_layers = []
+        config_kwargs.update({"moe_layers": []})
 
     # Ensure all layers are rope if `nope_layer_interval` is None
     no_rope_layer_interval = params["nope_layer_interval"]
@@ -290,7 +290,6 @@ def write_model(
         intermediate_size_mlp=intermediate_size_mlp,
         max_position_embeddings=max_context_length(input_base_path, instruct),
         num_local_experts=num_experts,
-        moe_layers=moe_layers,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
         no_rope_layer_interval=no_rope_layer_interval,
@@ -534,11 +533,7 @@ def write_model(
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
-        # out = model.generate(**inputs, max_new_tokens=4)
-
-        inputs = torch.tensor([[200000, 200005, 1556, 200006, 368, 198, 6802, 38, 7116, 563, 1609, 373, 38647, 3664, 310, 481, 24980, 19, 12485, 310, 49484, 7289, 1753, 12248, 9050, 517, 290, 3649, 17719, 27983, 40, 61612, 59088, 105849, 99286, 354, 152859, 2305, 63, 29, 38, 62808, 302, 199400, 26, 1102, 63, 30, 38, 9635, 13166, 57740, 302, 199400, 26, 1102, 63, 31, 38, 36999, 199400, 26, 1102, 63, 32, 38, 15393, 181975, 7640, 26, 1102, 63, 33, 38, 5366, 316, 365, 26, 7283, 63, 34, 38, 14996, 2158, 109296, 26, 1102, 63, 35, 38, 39903, 26, 1102, 63, 36, 38, 157957, 16707, 26, 1102, 63, 37, 38, 3374, 105289, 379, 143147, 26, 7283, 63, 580, 38, 166492, 26, 1102, 63, 825, 38, 17321, 8767, 3009, 26, 1102, 63, 738, 38, 86883, 15777, 26, 1102, 63, 974, 38, 144152, 26, 1102, 40, 7045, 59088, 105849, 99286, 354, 152859, 2305, 40, 61612, 6838, 153351, 5359, 2305, 2152, 38, 220, 11217, 641, 372, 2170, 262, 24871, 17285, 24980, 38, 372, 7038, 2520, 650, 517, 511, 1574, 40, 7045, 6838, 153351, 5359, 19700, 73594, 913, 12248, 17590, 393, 57159, 8039, 101380, 33980, 3623, 310, 290, 4195, 25622, 4568, 430, 8280, 1978, 3066, 2395, 481, 60411, 19, 537, 481, 72110, 172809, 430, 1862, 38647, 24, 262, 2432, 1978, 3066, 4440, 262, 31575, 102141, 1750, 323, 82786, 17719, 26, 200008, 200005, 140680, 200006, 368]])
-        inputs = inputs.to(model.device)
-        out = model.generate(inputs, do_sample=False, max_new_tokens=4, use_cache=False)
+        out = model.generate(**inputs, max_new_tokens=4)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
@@ -640,15 +635,6 @@ class Llama4Converter(TikTokenConverter):
             **kwargs,
         )
 
-        # to check
-        # import tiktoken
-        # model = tiktoken.Encoding(
-        #     name=Path(model_path).name,
-        #     pat_str=self.O200K_PATTERN,
-        #     mergeable_ranks=mergeable_ranks,
-        #     special_tokens=self.special_tokens,
-        # )
-
         instruct = chat_template is not None
         self.update_post_processor(self.converted_tokenizer)
         # finer special_tokens_map.json
@@ -706,12 +692,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input_dir",
         type=str,
-        default="/fsx/arthur/Llama-4-17B-Omni-Instruct-Original",
         help="Location of the local folder copied from the Hub.",
     )
     parser.add_argument(
         "--output_dir",
-        default="llama4_hf_vision",
         type=str,
         help="Location to write HF model and tokenizer",
     )
