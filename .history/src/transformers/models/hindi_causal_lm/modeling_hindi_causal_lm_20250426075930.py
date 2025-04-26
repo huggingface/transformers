@@ -17,7 +17,7 @@
 import math
 from typing import List, Optional, Tuple, Union
 
-# --- Import HF utilities and base classes FIRST ---
+# Import HF utilities and base classes FIRST
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.generation import GenerationMixin
@@ -37,12 +37,12 @@ if _torch_available:
     import torch.utils.checkpoint
     from torch import nn
     from torch.nn import CrossEntropyLoss, functional as F
-    _MODEL_BASE_CLASS = nn.Module # Base for custom modules if torch available
+    _MODEL_BASE_CLASS = nn.Module
 else:
     _MODEL_BASE_CLASS = object
 
 logger = logging.get_logger(__name__)
-# print("--- EXECUTING modeling_hindi_causal_lm.py (v_pos_id_fix) ---") # Optional debug print
+# print("--- EXECUTING modeling_hindi_causal_lm.py (v_pos_emb_fix) ---") # Optional debug print
 
 _CHECKPOINT_FOR_DOC = "convaiinnovations/hindi-foundational-model-base"
 _CONFIG_FOR_DOC = "HindiCausalLMConfig"
@@ -88,27 +88,36 @@ class CausalSelfAttention(_MODEL_BASE_CLASS):
 
 # --- TransformerBlock ---
 class TransformerBlock(_MODEL_BASE_CLASS):
-    """ Transformer block adapted from hindi_language_model.py. """
+    """
+    Transformer block adapted from hindi_language_model.py.
+    Uses Post-LN, hardcoded GELU FFN, and exact layer names.
+    Conditional PyTorch usage.
+    """
     def __init__(self, config: HindiCausalLMConfig):
         if not _torch_available: self.config = config; return
         super().__init__()
         self.config = config
         self.attention = CausalSelfAttention(config)
         self.attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.ffn = nn.Sequential(nn.Linear(config.hidden_size, config.intermediate_size), nn.GELU(), nn.Linear(config.intermediate_size, config.hidden_size), nn.Dropout(config.hidden_dropout_prob))
+        self.ffn = nn.Sequential(
+            nn.Linear(config.hidden_size, config.intermediate_size),
+            nn.GELU(),
+            nn.Linear(config.intermediate_size, config.hidden_size),
+            nn.Dropout(config.hidden_dropout_prob)
+        )
         self.ffn_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward( self, hidden_states: "torch.Tensor", attention_mask: Optional["torch.Tensor"]=None, output_attentions: bool=False ) -> Union[Tuple["torch.Tensor"], Tuple["torch.Tensor", Optional["torch.Tensor"]]]:
-         if not _torch_available: raise ImportError("PyTorch not available")
-         residual = hidden_states; attn_outputs = self.attention(hidden_states, attention_mask=attention_mask, output_attentions=output_attentions); attn_output = attn_outputs[0]; hidden_states = self.attention_layernorm(residual + attn_output); residual = hidden_states; ffn_output = self.ffn(hidden_states); hidden_states = self.ffn_layernorm(residual + ffn_output); outputs = (hidden_states,);
-         if output_attentions:
-             if len(attn_outputs) > 1: outputs += (attn_outputs[1],)
-             else: outputs += (None,);
-         return outputs
+        if not _torch_available: raise ImportError("PyTorch not available")
+        residual = hidden_states; attn_outputs = self.attention(hidden_states, attention_mask=attention_mask, output_attentions=output_attentions); attn_output = attn_outputs[0]; hidden_states = self.attention_layernorm(residual + attn_output); residual = hidden_states; ffn_output = self.ffn(hidden_states); hidden_states = self.ffn_layernorm(residual + ffn_output); outputs = (hidden_states,);
+        if output_attentions:
+            if len(attn_outputs) > 1: outputs += (attn_outputs[1],)
+            else: outputs += (None,);
+        return outputs
 
 
 # --- Head Model (FLATTENED STRUCTURE) ---
-@add_start_docstrings( /* ... */ _CONFIG_FOR_DOC )
+@add_start_docstrings( /* ... docstring ... */ _CONFIG_FOR_DOC )
 class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
     config_class = HindiCausalLMConfig
     supports_gradient_checkpointing = True
@@ -119,7 +128,8 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config) # MUST BE FIRST
         self.config = config
-        # Conditionally define PyTorch layers
+
+        # --- Conditionally define PyTorch layers ---
         if _torch_available:
             self.padding_idx = config.pad_token_id
             self.vocab_size = config.vocab_size
@@ -128,15 +138,11 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
             self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
             self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.num_hidden_layers)])
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        else:
-             # Avoid errors if __init__ is called without torch
-             self.padding_idx = 0
-             self.vocab_size = 0
-
+        # --- End conditional layer definition ---
         self.post_init()
 
     def get_input_embeddings(self):
-        if not hasattr(self, 'token_embeddings'): raise ImportError("Model not fully initialized (PyTorch unavailable?).")
+        if not hasattr(self, 'token_embeddings'): raise ImportError("PyTorch not available or model not fully initialized.")
         return self.token_embeddings
     def set_input_embeddings(self, value):
         if not _torch_available: raise ImportError("PyTorch not available")
@@ -151,10 +157,9 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
         if not _torch_available: return
         output_embeddings=self.get_output_embeddings()
         if output_embeddings is not None and self.config.tie_word_embeddings:
-            if hasattr(self, 'token_embeddings'): input_embeddings=self.get_input_embeddings(); output_embeddings.weight=input_embeddings.weight
-            else: logger.warning("Could not tie weights: input embeddings ('token_embeddings') not found.");
+            if hasattr(self, 'token_embeddings'): input_embeddings=self.get_input_embeddings(); output_embeddings.weight=input_embeddings.weight;
+            else: logger.warning("Could not tie weights: input embeddings not found.")
         super().tie_weights()
-
 
     @add_start_docstrings_to_model_forward(_CONFIG_FOR_DOC)
     # ... (other decorators)
@@ -163,7 +168,7 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
         input_ids: Optional["torch.LongTensor"] = None,
         attention_mask: Optional["torch.Tensor"] = None,
         position_ids: Optional["torch.LongTensor"] = None,
-        token_type_ids: Optional["torch.LongTensor"] = None, # Accept token_type_ids
+        token_type_ids: Optional["torch.LongTensor"] = None,
         past_key_values: Optional[List["torch.FloatTensor"]] = None,
         inputs_embeds: Optional["torch.FloatTensor"] = None,
         labels: Optional["torch.LongTensor"] = None,
@@ -173,65 +178,54 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r""" Forward pass """
-        if not _torch_available: raise ImportError("PyTorch not available.")
+        if not _torch_available: raise ImportError("PyTorch not available to run forward pass")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         use_cache = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # KV cache not implemented, force use_cache to False
-        if past_key_values is not None: use_cache = False
-        if use_cache: logger.warning_once("KV Caching is not implemented. Setting use_cache=False."); use_cache = False
+        if past_key_values is not None or use_cache: use_cache = False
         if labels is not None and use_cache: use_cache = False
 
-        # --- Input Processing ---
+        # --- Input Processing & Get Batch Size/Seq Length ---
         if input_ids is not None and inputs_embeds is not None: raise ValueError("Specify either input_ids or inputs_embeds")
-        elif input_ids is not None: batch_size, seq_length = input_ids.shape; device = input_ids.device
-        elif inputs_embeds is not None: batch_size, seq_length, _ = inputs_embeds.shape; device = inputs_embeds.device
+        elif input_ids is not None: batch_size, seq_length = input_ids.shape; self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+        elif inputs_embeds is not None: batch_size, seq_length, _ = inputs_embeds.shape
         else: raise ValueError("Specify either input_ids or inputs_embeds")
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # --- Corrected Positional IDs Handling ---
-        past_key_values_length = 0 # KV cache not implemented
-        if position_ids is None:
-            # Create position IDs matching the *current* input sequence length
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0) # Shape [1, seq_len]
+        # --- Prepare Positional IDs ---
+        if position_ids is None: position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
+        # Note: position_ids created here start with shape [1, seq_length]
 
-        # position_ids are now guaranteed to have shape [1, seq_length] or [batch_size, seq_length]
-        # No further expansion needed before embedding lookup, as nn.Embedding handles broadcasting
-        # from [1, seq_length] to [batch_size, seq_length] if batch_size > 1.
+        # --- Get Token Embeddings ---
+        if inputs_embeds is None: inputs_embeds = self.token_embeddings(input_ids) # Shape: [batch_size, seq_length, hidden_size]
 
-        # --- Get Embeddings ---
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embeddings(input_ids)
-
-        # --- Calculate Position Embeddings ---
+        # --- Get & Add Positional Embeddings ---
         if self.config.positional_encoding_type in ["absolute", "learned"]:
-            # Clamp IDs before lookup
-            position_ids_to_use = torch.clamp(position_ids, 0, self.config.max_position_embeddings - 1)
-            position_embeds = self.position_embeddings(position_ids_to_use)
+            # Always use position_ids starting from 0 up to seq_length-1 for lookup
+            # Clamp to max_position_embeddings - 1
+            effective_seq_length = min(seq_length, self.config.max_position_embeddings)
+            lookup_position_ids = torch.arange(effective_seq_length, dtype=torch.long, device=device).unsqueeze(0) # Shape [1, effective_seq_length]
 
-            # --- Perform Addition ---
-            # Ensure dimensions match *before* adding.
-            # inputs_embeds is [batch_size, seq_length, hidden_size]
-            # position_embeds is potentially [1, seq_length, hidden_size] or [batch_size, seq_length, hidden_size]
-            # Broadcasting handles the [1, ...] -> [batch_size, ...] case.
-            # The RuntimeError indicated batch_size mismatch (dim 0) or seq_len mismatch (dim 1).
-            # The corrected position_id generation should fix seq_len mismatch.
-            # Broadcasting handles batch_size mismatch if position_ids was [1, seq_len].
-            if inputs_embeds.shape[0] != position_embeds.shape[0] and position_embeds.shape[0] != 1:
-                 raise RuntimeError(f"Batch dimension mismatch between input embeds ({inputs_embeds.shape[0]}) and position embeds ({position_embeds.shape[0]})")
-            if inputs_embeds.shape[1] != position_embeds.shape[1]:
-                 raise RuntimeError(f"Sequence length mismatch between input embeds ({inputs_embeds.shape[1]}) and position embeds ({position_embeds.shape[1]})")
+            # Retrieve base position embeddings
+            position_embeds_base = self.position_embeddings(lookup_position_ids) # Shape [1, effective_seq_length, hidden_size]
 
+            # If sequence is longer than max, pad the base embeddings
+            if seq_length > effective_seq_length:
+                 padding_needed = seq_length - effective_seq_length
+                 padding_tensor = torch.zeros((1, padding_needed, self.config.hidden_size), dtype=position_embeds_base.dtype, device=device)
+                 position_embeds_base = torch.cat([position_embeds_base, padding_tensor], dim=1) # Shape [1, seq_length, hidden_size]
+                 logger.warning_once(f"Input seq len {seq_length} > max pos emb {self.config.max_position_embeddings}. Using embeddings up to max length and padding.")
+
+            # --- !!! Expand base embeddings to match the runtime batch size !!! ---
+            position_embeds = position_embeds_base.expand(batch_size, -1, -1) # Shape [batch_size, seq_length, hidden_size]
+
+            # Now add the embeddings (shapes should match)
             hidden_states = inputs_embeds + position_embeds
-        else:
-            hidden_states = inputs_embeds # Only token embeddings
-        # --- End Corrected Positional IDs Handling ---
-
+        else: # If no positional encoding is specified
+             hidden_states = inputs_embeds
 
         hidden_states = self.embedding_dropout(hidden_states)
 
@@ -242,6 +236,7 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
 
         for i, layer_module in enumerate(self.layers):
             if output_hidden_states: all_hidden_states = all_hidden_states + (hidden_states,)
+            # --- Use self.is_gradient_checkpointing to check ---
             if self.is_gradient_checkpointing and self.training:
                  layer_outputs = self._gradient_checkpointing_func(layer_module.__call__, hidden_states, prepared_attention_mask, output_attentions,)
             else: layer_outputs = layer_module(hidden_states, attention_mask=prepared_attention_mask, output_attentions=output_attentions,)
@@ -260,24 +255,46 @@ class HindiCausalLMHeadModel(PreTrainedModel, GenerationMixin):
 
         # --- Prepare Output ---
         if not return_dict:
-            outputs_list = [lm_logits, None]; # logits, past_key_values (None)
+            outputs_list = [lm_logits, None];
             if output_hidden_states: outputs_list.append(all_hidden_states);
             if output_attentions: outputs_list.append(all_self_attns);
             output = tuple(outputs_list); return ((loss,) + output) if loss is not None else output;
         return CausalLMOutputWithPast(loss=loss, logits=lm_logits, past_key_values=None, hidden_states=all_hidden_states, attentions=all_self_attns,)
 
-
-    # prepare_inputs_for_generation remains the same
+    # Keep prepare_inputs_for_generation as it is needed by .generate()
     def prepare_inputs_for_generation(
         self, input_ids: torch.LongTensor, past_key_values: Optional[List[torch.Tensor]] = None, attention_mask: Optional[torch.Tensor] = None, **kwargs
     ) -> dict:
-        # ... (Implementation from previous correct version) ...
-        if past_key_values is not None: input_ids=input_ids[:, -1:];
-        position_ids=kwargs.get("position_ids", None);
-        if attention_mask is not None and position_ids is None: position_ids=attention_mask.long().cumsum(-1) - 1; position_ids.masked_fill_(attention_mask==0, 1);
-        if past_key_values is not None: position_ids=position_ids[:, -1].unsqueeze(-1);
-        inputs_embeds=kwargs.get("inputs_embeds");
-        if inputs_embeds is not None and past_key_values is None: model_inputs={"inputs_embeds": inputs_embeds}
-        else: model_inputs={"input_ids": input_ids}
-        model_inputs.update({"attention_mask": attention_mask, "position_ids": position_ids, "use_cache": kwargs.get("use_cache"),})
+        # This method is called by `.generate()` and needs to prepare the `model_inputs` dict
+        # used in the first iteration of the generation loop. Subsequent iterations often
+        # handle `position_ids` internally based on the cache.
+
+        # Get the current sequence length from input_ids
+        batch_size, seq_length = input_ids.shape
+
+        # Prepare position_ids. Start from 0 for the initial pass.
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # Create position_ids on the fly for batch generation, respecting padding
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            # Ensure padding positions get a valid index (e.g., 0 or 1, depends on embedding table)
+            # Using 0 is safer if pad_token_id is 0 and might be looked up.
+            # Using 1 is safe if embedding[0] is padding. Check your specific setup.
+            # Let's default to using 0 for padding positions.
+            position_ids.masked_fill_(attention_mask == 0, 0) # Fill padding with 0
+
+        # If `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        inputs_embeds = kwargs.get("inputs_embeds")
+        if inputs_embeds is not None and past_key_values is None:
+             model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+             model_inputs = {"input_ids": input_ids}
+
+        # Add other necessary inputs, ensuring they have the correct batch size
+        model_inputs.update({
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "use_cache": kwargs.get("use_cache"),
+            # Do not add token_type_ids if model.forward doesn't use them
+        })
         return model_inputs
