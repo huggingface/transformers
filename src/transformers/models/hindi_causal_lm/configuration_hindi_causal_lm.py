@@ -92,7 +92,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         normalization_layer="rmsnorm",
         positional_encoding_type="rope",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -113,5 +113,5 @@ class HindiCausalLMConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            **kwargs
+            **kwargs,
         )
