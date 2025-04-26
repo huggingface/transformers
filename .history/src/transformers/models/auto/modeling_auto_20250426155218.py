@@ -145,7 +145,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         ("hiera", "HieraModel"),
-        ("hindi_causal_lm", "HindiCausalLMModel")
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),

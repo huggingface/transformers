@@ -27,7 +27,7 @@ from .auto_factory import (
 from .configuration_auto import CONFIG_MAPPING_NAMES
 from ..hindi_causal_lm.modeling_hindi_causal_lm import (
     HindiCausalLM,
-    HindiCausalLMModel,
+    HindiCausalLMModel, # Base model class
 )
 
 logger = logging.get_logger(__name__)
@@ -35,6 +35,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("HindiCausalLMConfig", "HindiCausalLMModel"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -145,7 +146,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         ("hiera", "HieraModel"),
-        ("hindi_causal_lm", "HindiCausalLMModel")
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
@@ -511,6 +511,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("HindiCausalLMConfig", "HindiCausalLMForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
@@ -558,7 +559,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granitemoe", "GraniteMoeForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
-        ("hindi_causal_lm", "HindiCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),
