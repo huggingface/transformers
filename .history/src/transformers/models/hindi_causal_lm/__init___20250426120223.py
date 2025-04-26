@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
     is_sentencepiece_available,
+    is_torch_available,
 )
+
 
 __all__ = [
     "HindiCausalLMConfig",
@@ -40,10 +41,11 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import (
-        HindiCausalLMPreTrainedModel,
-        HindiCausalLMModel,
         HindiCausalLMForCausalLM,
+        HindiCausalLMModel,
+        HindiCausalLMPreTrainedModel,
     )
+
     HindiCausalLMHeadModel = HindiCausalLMForCausalLM
 else:
     _import_structure["modeling_hindi_causal_lm"] = [
@@ -69,17 +71,18 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,
         )
+
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
             HindiCausalLMHeadModel,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,
         )
 
 else:

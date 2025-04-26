@@ -38,13 +38,13 @@ if is_torch_available():
     # Import only the classes that exist
     from transformers.models.hindi_causal_lm import (
         HindiCausalLMConfig,
-        HindiCausalLMHeadModel, # Use the head model
+        HindiCausalLMHeadModel,  # Use the head model
         # HindiCausalLMModel, # DO NOT IMPORT - Removed class
     )
 else:
     # Define dummy classes or skip tests if torch not available
-    ModelTesterMixin = object # type: ignore
-    GenerationTesterMixin = object # type: ignore
+    ModelTesterMixin = object  # type: ignore
+    GenerationTesterMixin = object  # type: ignore
 
 
 # --- Model Tester Class ---
@@ -56,32 +56,32 @@ class HindiCausalLMModelTester:
         batch_size=13,
         seq_length=7,
         is_training=True,
-        use_token_type_ids=False, # Usually false for decoder-only models
+        use_token_type_ids=False,  # Usually false for decoder-only models
         use_input_mask=True,
         use_labels=True,
-        use_mc_token_ids=False, # Multiple choice not relevant
-        vocab_size=99, # Small vocab for testing
-        hidden_size=32, # Small hidden size
-        num_hidden_layers=2, # Few layers
-        num_attention_heads=4, # Needs to divide hidden_size
-        intermediate_size=37, # Standard FFN intermediate size not strictly needed if hardcoded GELU
-        hidden_act="gelu", # Matches model implementation
+        use_mc_token_ids=False,  # Multiple choice not relevant
+        vocab_size=99,  # Small vocab for testing
+        hidden_size=32,  # Small hidden size
+        num_hidden_layers=2,  # Few layers
+        num_attention_heads=4,  # Needs to divide hidden_size
+        intermediate_size=37,  # Standard FFN intermediate size not strictly needed if hardcoded GELU
+        hidden_act="gelu",  # Matches model implementation
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=16, # Often unused in decoder-only
-        type_sequence_label_size=2, # Num classes for sequence classification head (if added later)
+        type_vocab_size=16,  # Often unused in decoder-only
+        type_sequence_label_size=2,  # Num classes for sequence classification head (if added later)
         initializer_range=0.02,
-        num_labels=3, # Num classes for token classification head (if added later)
-        num_choices=4, # Num choices for multiple choice head (if added later)
+        num_labels=3,  # Num classes for token classification head (if added later)
+        num_choices=4,  # Num choices for multiple choice head (if added later)
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         scope=None,
         # Specific config values for HindiCausalLM
         layer_norm_eps=1e-12,
-        normalization_layer="layernorm", # Matches model implementation
-        positional_encoding_type="absolute", # Matches model implementation
+        normalization_layer="layernorm",  # Matches model implementation
+        positional_encoding_type="absolute",  # Matches model implementation
         tie_word_embeddings=True,
     ):
         self.parent = parent
@@ -118,7 +118,6 @@ class HindiCausalLMModelTester:
         # Used by GenerationTesterMixin
         self.decoder_start_token_id = self.bos_token_id
 
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -126,9 +125,9 @@ class HindiCausalLMModelTester:
         if self.use_input_mask:
             input_mask = torch.tril(ids_tensor([self.batch_size, self.seq_length], vocab_size=2))
 
-        token_type_ids = None # Not used by this model
+        token_type_ids = None  # Not used by this model
 
-        mc_token_ids = None # Not used
+        mc_token_ids = None  # Not used
 
         sequence_labels = None
         token_labels = None
@@ -142,7 +141,6 @@ class HindiCausalLMModelTester:
             # token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             # choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-
         config = self.get_config()
 
         return (
@@ -152,7 +150,7 @@ class HindiCausalLMModelTester:
             # token_type_ids, # Don't return if not used by model forward
             # sequence_labels,
             # token_labels,
-            lm_labels, # Causal LM labels
+            lm_labels,  # Causal LM labels
             # choice_labels,
             # mc_token_ids,
         )
@@ -170,7 +168,7 @@ class HindiCausalLMModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False, # Should be False for CausalLM (acts like decoder but isn't cross-attending)
+            is_decoder=False,  # Should be False for CausalLM (acts like decoder but isn't cross-attending)
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
@@ -221,7 +219,6 @@ class HindiCausalLMModelTester:
         # Loss should be a scalar tensor
         self.parent.assertTrue(result.loss is not None and result.loss.ndim == 0)
 
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -243,23 +240,27 @@ class HindiCausalLMModelTester:
 
 @require_torch
 class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else () # Only test head model
-    all_generative_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else () # Head model is generative
+    all_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else ()  # Only test head model
+    all_generative_model_classes = (
+        (HindiCausalLMHeadModel,) if is_torch_available() else ()
+    )  # Head model is generative
     pipeline_model_mapping = (
         {"feature-extraction": HindiCausalLMHeadModel, "text-generation": HindiCausalLMHeadModel}
         if is_torch_available()
         else {}
     )
-    test_pruning = False # Pruning tests might need adaptation
-    test_resize_embeddings = True # Should work
-    test_head_masking = False # Head masking might not be implemented
-    test_missing_keys = False # Adapted model might have different key handling
-    test_model_parallel = False # Needs specific setup
-    is_encoder_decoder = False # This is a decoder-only (causal LM) model
+    test_pruning = False  # Pruning tests might need adaptation
+    test_resize_embeddings = True  # Should work
+    test_head_masking = False  # Head masking might not be implemented
+    test_missing_keys = False  # Adapted model might have different key handling
+    test_model_parallel = False  # Needs specific setup
+    is_encoder_decoder = False  # This is a decoder-only (causal LM) model
 
     def setUp(self):
         self.model_tester = HindiCausalLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HindiCausalLMConfig, hidden_size=37) # Use non-standard hidden size
+        self.config_tester = ConfigTester(
+            self, config_class=HindiCausalLMConfig, hidden_size=37
+        )  # Use non-standard hidden size
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -287,10 +288,9 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             input_ids = inputs["input_ids"]
             # Ensure position_ids are generated if needed by embedding layer
             if config.positional_encoding_type in ["absolute", "learned"]:
-                 seq_length = input_ids.shape[-1]
-                 position_ids = torch.arange(seq_length, dtype=torch.long, device=torch_device).unsqueeze(0)
-                 inputs["position_ids"] = position_ids.expand(input_ids.shape[0], -1)
-
+                seq_length = input_ids.shape[-1]
+                position_ids = torch.arange(seq_length, dtype=torch.long, device=torch_device).unsqueeze(0)
+                inputs["position_ids"] = position_ids.expand(input_ids.shape[0], -1)
 
             if not hasattr(model, "get_input_embeddings"):
                 continue
@@ -298,34 +298,33 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             input_embeds = model.get_input_embeddings()(input_ids)
 
             # Add backward hook to embeddings module
-            if hasattr(model.get_input_embeddings(), "weight"): # Check if weight exists
-                 hook_handle = None
-                 try:
-                     embedding_module = model.get_input_embeddings()
-                     if hasattr(embedding_module, "weight"):
-                         hook_handle = embedding_module.weight.register_hook(lambda grad: grad.mul_(2))
-                 except Exception: # Gracefully handle if hook fails
-                     pass
+            if hasattr(model.get_input_embeddings(), "weight"):  # Check if weight exists
+                hook_handle = None
+                try:
+                    embedding_module = model.get_input_embeddings()
+                    if hasattr(embedding_module, "weight"):
+                        hook_handle = embedding_module.weight.register_hook(lambda grad: grad.mul_(2))
+                except Exception:  # Gracefully handle if hook fails
+                    pass
 
             # Remove input_ids and potentially other args not needed when inputs_embeds is passed
             inputs.pop("input_ids", None)
 
             outputs = model(**inputs, inputs_embeds=input_embeds)
 
-            if isinstance(outputs, dict): # Handle dict output
+            if isinstance(outputs, dict):  # Handle dict output
                 output_logits = outputs.get("logits")
-            elif isinstance(outputs, tuple): # Handle tuple output
+            elif isinstance(outputs, tuple):  # Handle tuple output
                 output_logits = outputs[0]
             else:
-                 output_logits = None # Cannot determine output
+                output_logits = None  # Cannot determine output
 
             if output_logits is not None:
-                 self.assertTrue(torch.is_tensor(output_logits))
+                self.assertTrue(torch.is_tensor(output_logits))
 
             # Remove hook if added
             if hook_handle is not None:
-                 hook_handle.remove()
-
+                hook_handle.remove()
 
     # Add any other specific tests for HindiCausalLMHeadModel here
 
@@ -347,7 +346,7 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
         config = HindiCausalLMConfig.from_pretrained(self.model_id, trust_remote_code=True)
         config.hidden_act = "gelu"
         config.normalization_layer = "layernorm"
-        if getattr(config, 'positional_encoding_type', '') == "rope":
+        if getattr(config, "positional_encoding_type", "") == "rope":
             config.positional_encoding_type = "absolute"
 
         model = HindiCausalLMHeadModel.from_pretrained(self.model_id, config=config, trust_remote_code=True)
@@ -356,17 +355,18 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
 
         # Tokenizer loading might require specific class if AutoTokenizer fails due to config mismatch
         from transformers import AutoTokenizer
+
         try:
             tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         except ValueError as e:
-             if "SentencePieceTokenizerWrapper" in str(e):
-                 logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
-                 # Assuming the tokenizer file exists in the correct relative path
-                 from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
-                 tokenizer = HindiCausalLMTokenizer.from_pretrained(self.model_id)
-             else:
-                  raise e
+            if "SentencePieceTokenizerWrapper" in str(e):
+                logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
+                # Assuming the tokenizer file exists in the correct relative path
+                from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
 
+                tokenizer = HindiCausalLMTokenizer.from_pretrained(self.model_id)
+            else:
+                raise e
 
         prompt = "भारत की राजधानी क्या है?"
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
@@ -376,16 +376,16 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
 
         # Check output type and shape
         self.assertTrue(hasattr(outputs, "logits"))
-        self.assertEqual(outputs.logits.shape[0], 1) # Batch size 1
-        self.assertEqual(outputs.logits.shape[1], inputs["input_ids"].shape[1]) # Sequence length
-        self.assertEqual(outputs.logits.shape[2], model.config.vocab_size) # Vocab size
+        self.assertEqual(outputs.logits.shape[0], 1)  # Batch size 1
+        self.assertEqual(outputs.logits.shape[1], inputs["input_ids"].shape[1])  # Sequence length
+        self.assertEqual(outputs.logits.shape[2], model.config.vocab_size)  # Vocab size
 
     def test_generation(self):
         # Load model and tokenizer (similar to above)
         config = HindiCausalLMConfig.from_pretrained(self.model_id, trust_remote_code=True)
         config.hidden_act = "gelu"
         config.normalization_layer = "layernorm"
-        if getattr(config, 'positional_encoding_type', '') == "rope":
+        if getattr(config, "positional_encoding_type", "") == "rope":
             config.positional_encoding_type = "absolute"
 
         model = HindiCausalLMHeadModel.from_pretrained(self.model_id, config=config, trust_remote_code=True)
@@ -393,15 +393,17 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
         model.eval()
 
         from transformers import AutoTokenizer
+
         try:
             tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         except ValueError as e:
-             if "SentencePieceTokenizerWrapper" in str(e):
-                 logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
-                 from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
-                 tokenizer = HindiCausalLMTokenizer.from_pretrained(self.model_id)
-             else:
-                  raise e
+            if "SentencePieceTokenizerWrapper" in str(e):
+                logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
+                from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
+
+                tokenizer = HindiCausalLMTokenizer.from_pretrained(self.model_id)
+            else:
+                raise e
 
         prompt = "आज का मौसम"
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
@@ -412,16 +414,16 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
             max_new_tokens=20,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            do_sample=False # Use greedy for reproducibility in tests
+            do_sample=False,  # Use greedy for reproducibility in tests
         )
 
         # Check output is tensor
         self.assertTrue(torch.is_tensor(output_sequences))
         # Check output shape (batch_size, generated_sequence_length)
         self.assertEqual(output_sequences.shape[0], 1)
-        self.assertGreater(output_sequences.shape[1], inputs["input_ids"].shape[1]) # Should be longer than input
+        self.assertGreater(output_sequences.shape[1], inputs["input_ids"].shape[1])  # Should be longer than input
 
         # Decode and check if it's a string
         text = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
         self.assertIsInstance(text, str)
-        print(f"\nIntegration Test Generation: {text}") # Print generated text for inspection
+        print(f"\nIntegration Test Generation: {text}")  # Print generated text for inspection

@@ -14,10 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch HindiCausalLM model."""
 
-import inspect # For checking signatures
 import unittest
 
-from transformers import HindiCausalLMConfig, is_torch_available # Import config
+from transformers import HindiCausalLMConfig, is_torch_available  # Import config
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -28,8 +27,9 @@ from transformers.testing_utils import (
 
 # Import testing utilities and base classes
 from ...test_configuration_common import ConfigTester
+
 # Import correct mixins
-from ...test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor
+from ...test_modeling_common import GenerationTesterMixin, ModelTesterMixin, ids_tensor
 
 
 # Conditional import of model parts based on PyTorch availability
@@ -40,13 +40,14 @@ if is_torch_available():
     from transformers.models.hindi_causal_lm import (
         HindiCausalLMHeadModel,
     )
-    from transformers.utils import logging # Import logging for warnings/skips
+    from transformers.utils import logging  # Import logging for warnings/skips
+
     logger = logging.get_logger(__name__)
 
 else:
     # Define dummy classes or skip tests if torch not available
-    ModelTesterMixin = object # type: ignore
-    GenerationTesterMixin = object # type: ignore
+    ModelTesterMixin = object  # type: ignore
+    GenerationTesterMixin = object  # type: ignore
 
 
 # --- Model Tester Class ---
@@ -59,7 +60,7 @@ class HindiCausalLMModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False, # Ignored by model but can be passed by tests
+        use_token_type_ids=False,  # Ignored by model but can be passed by tests
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
@@ -118,7 +119,6 @@ class HindiCausalLMModelTester:
         self.num_choices = num_choices
         self.decoder_start_token_id = self.bos_token_id
 
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = torch.clamp(input_ids, min=max(self.pad_token_id, self.bos_token_id, self.eos_token_id) + 1)
@@ -157,7 +157,7 @@ class HindiCausalLMModelTester:
             eos_token_id=self.eos_token_id,
             unk_token_id=self.unk_token_id,
             tie_word_embeddings=self.tie_word_embeddings,
-            type_vocab_size = self.type_vocab_size,
+            type_vocab_size=self.type_vocab_size,
             is_decoder=False,
         )
 
@@ -177,7 +177,6 @@ class HindiCausalLMModelTester:
         self.parent.assertTrue(result_with_labels.loss is not None)
         self.parent.assertEqual(result_with_labels.loss.ndim, 0)
 
-
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, lm_labels = self.prepare_config_and_inputs()
         inputs_dict = {
@@ -192,21 +191,19 @@ class HindiCausalLMModelTester:
 class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else ()
     all_generative_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"text-generation": HindiCausalLMHeadModel} if is_torch_available() else {}
-    )
+    pipeline_model_mapping = {"text-generation": HindiCausalLMHeadModel} if is_torch_available() else {}
     # --- Set base_model_class to None ---
     base_model_class = None
     # --- End Set ---
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
-    test_missing_keys = False # Can set to True after confirming strict loading works
+    test_missing_keys = False  # Can set to True after confirming strict loading works
     test_model_parallel = False
     is_encoder_decoder = False
     test_torchscript = False
     test_inputs_embeds = True
-    test_gradient_checkpointing = True # Enable if you want to test this
+    test_gradient_checkpointing = True  # Enable if you want to test this
     test_inplace_modification = False
 
     def setUp(self):
@@ -241,17 +238,16 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         from transformers import AutoConfig, AutoTokenizer
+
         cls.config = AutoConfig.from_pretrained(cls.model_id, trust_remote_code=True)
         # Apply overrides
         cls.config.hidden_act = "gelu"
         cls.config.normalization_layer = "layernorm"
-        if getattr(cls.config, 'positional_encoding_type', '') == "rope":
+        if getattr(cls.config, "positional_encoding_type", "") == "rope":
             cls.config.positional_encoding_type = "absolute"
 
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id, trust_remote_code=True)
-        cls.model = HindiCausalLMHeadModel.from_pretrained(
-            cls.model_id, config=cls.config, trust_remote_code=True
-        )
+        cls.model = HindiCausalLMHeadModel.from_pretrained(cls.model_id, config=cls.config, trust_remote_code=True)
         cls.model.to(torch_device)
         cls.model.eval()
 

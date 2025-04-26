@@ -27,8 +27,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HindiCausalLMModel,
         HindiCausalLMHeadModel,
+        HindiCausalLMModel,
     )
 
 

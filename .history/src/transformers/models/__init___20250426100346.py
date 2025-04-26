@@ -133,11 +133,6 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
-    from .hindi_causal_lm import (
-        HindiCausalLMConfig,
-        HindiCausalLM,
-        HindiCausalLMTokenizer,
-    )
     from .hubert import *
     from .ibert import *
     from .idefics import *

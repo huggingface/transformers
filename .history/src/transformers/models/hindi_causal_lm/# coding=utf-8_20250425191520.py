@@ -28,13 +28,13 @@ HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class HindiCausalLMConfig(PretrainedConfig):
     """
     Configuration class for HindiCausalLM model.
-    
+
     This is the configuration class to store the configuration of a [`HindiCausalLMModel`].
     It is used to instantiate a Hindi causal language model according to the specified arguments.
-    
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
     Read the documentation from [`PretrainedConfig`] for more information.
-    
+
     Args:
         vocab_size (`int`, *optional*, defaults to 16000):
             Vocabulary size of the HindiCausalLM model.
@@ -61,9 +61,9 @@ class HindiCausalLMConfig(PretrainedConfig):
         positional_encoding_type (`str`, *optional*, defaults to "rope"):
             The positional encoding to use. Supports "absolute", "learned", and "rope".
     """
-    
+
     model_type = "hindi_causal_lm"
-    
+
     def __init__(
         self,
         vocab_size=16000,
@@ -83,7 +83,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         activation_function="swiglu",
         normalization_layer="rmsnorm",
         positional_encoding_type="rope",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -92,7 +92,7 @@ class HindiCausalLMConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

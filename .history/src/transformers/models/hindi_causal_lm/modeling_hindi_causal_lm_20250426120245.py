@@ -4,6 +4,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,19 +15,23 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
+
 _CHECKPOINT_FOR_DOC = "convaiinnovations/hindi-foundational-model-base"
 _CONFIG_FOR_DOC = "HindiCausalLMConfig"
 HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "convaiinnovations/hindi-foundational-model-base",
 ]
 
+
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
     sinusoid_inp = torch.einsum("i,j->ij", torch.arange(num_pos, dtype=torch.float), inv_freq)
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
+
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization."""
+
     def __init__(self, hidden_size: int, eps: float = 1e-12):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -37,14 +42,18 @@ class RMSNorm(nn.Module):
         x = x * torch.rsqrt(var + self.eps)
         return self.weight * x
 
+
 class SwiGLU(nn.Module):
     """SwiGLU activation function."""
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1, x2 = x.chunk(2, dim=-1)
         return F.silu(x1) * x2
 
+
 class CausalSelfAttention(nn.Module):
     """Causal self-attention layer."""
+
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         assert config.hidden_size % config.num_attention_heads == 0
@@ -92,8 +101,10 @@ class CausalSelfAttention(nn.Module):
         out = self.proj(context)
         return (out, probs) if output_attentions else (out,)
 
+
 class TransformerBlock(nn.Module):
     """Single transformer block."""
+
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         self.ln1 = RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -127,6 +138,7 @@ class TransformerBlock(nn.Module):
         h = x + self.attn(self.ln1(x), attention_mask, use_cache, output_attentions)[0]
         return h + self.ff(self.ln2(h))
 
+
 class HindiCausalLMPreTrainedModel(PreTrainedModel):
     config_class = HindiCausalLMConfig
     base_model_prefix = "transformer"
@@ -138,8 +150,10 @@ class HindiCausalLMPreTrainedModel(PreTrainedModel):
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
 
+
 class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     """Transformer decoder."""
+
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config)
         self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -180,8 +194,10 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             return (x,)
         return BaseModelOutputWithPast(last_hidden_state=x, past_key_values=None)
 
+
 class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     """Language modeling head."""
+
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attention\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config: HindiCausalLMConfig):
@@ -204,16 +220,15 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         if labels is not None:
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            loss = CrossEntropyLoss()(shift_logits.view(-1, shift_logits.size(-1)),
-                                     shift_labels.view(-1))
+            loss = CrossEntropyLoss()(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             return (logits,) if loss is None else (loss, logits)
 
-        return CausalLMOutputWithPast(loss=loss, logits=logits,
-                                     past_key_values=None,
-                                     hidden_states=None,
-                                     attentions=None)
+        return CausalLMOutputWithPast(
+            loss=loss, logits=logits, past_key_values=None, hidden_states=None, attentions=None
+        )
+
 
 # Alias for AutoModel fallback
 HindiCausalLMHeadModel = HindiCausalLMForCausalLM

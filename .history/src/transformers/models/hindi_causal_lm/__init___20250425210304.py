@@ -23,18 +23,13 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
-
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
-            HindiCausalLMHeadModel,
-        )
+        pass
 
 
 else:

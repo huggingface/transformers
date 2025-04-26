@@ -15,10 +15,10 @@
 """Tokenization classes for HindiCausalLM."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging, is_sentencepiece_available
+from ...utils import is_sentencepiece_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -90,7 +90,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -125,11 +125,9 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         """Lazy-loads the SentencePiece model"""
         if not hasattr(self, "_sp_model"):
             if not is_sentencepiece_available():
-                raise ImportError(
-                    "SentencePiece is not installed. "
-                    "You can install it with: pip install sentencepiece"
-                )
+                raise ImportError("SentencePiece is not installed. You can install it with: pip install sentencepiece")
             import sentencepiece as spm
+
             self._sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
             self._sp_model.Load(self.vocab_file)
         return self._sp_model
@@ -171,6 +169,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             import shutil
+
             shutil.copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)

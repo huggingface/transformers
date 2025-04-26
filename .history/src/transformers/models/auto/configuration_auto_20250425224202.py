@@ -376,7 +376,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
-  
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -1008,9 +1007,8 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
                 existing_docstings = fn.__doc__ + "\n\n"
             else:
                 existing_docstings = ""
-            fn.__doc__ = (
-                f"{existing_docstings}List options\n"
-                + _list_model_options("\t", config_to_class=config_to_class, use_model_types=use_model_types)
+            fn.__doc__ = f"{existing_docstings}List options\n" + _list_model_options(
+                "\t", config_to_class=config_to_class, use_model_types=use_model_types
             )
 
         return fn

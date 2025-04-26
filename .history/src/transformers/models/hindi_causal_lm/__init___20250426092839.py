@@ -14,7 +14,8 @@
 from typing import TYPE_CHECKING
 
 # --- Utility Imports ---
-from ...utils import _LazyModule, is_torch_available, is_sentencepiece_available, OptionalDependencyNotAvailable
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
+
 
 # --- Explicit Structure Definition ---
 # Define exactly which classes are in which files.
@@ -41,14 +42,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_hindi_causal_lm"] = [
-        "HindiCausalLMHeadModel", # Only list the existing head model class
+        "HindiCausalLMHeadModel",  # Only list the existing head model class
     ]
 
 # --- Type Checking Block ---
 # Still useful for static analysis and IDEs
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
-
     # Conditionally import tokenizer based on SentencePiece availability
     try:
         if not is_sentencepiece_available():
@@ -56,16 +55,16 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     # Conditionally import modeling classes based on PyTorch availability
     try:
         if not is_torch_available():
-             raise OptionalDependencyNotAvailable()
+            raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_hindi_causal_lm import HindiCausalLMHeadModel
+        pass
 
 # --- Lazy Loading Setup ---
 else:
@@ -75,6 +74,6 @@ else:
     sys.modules[__name__] = _LazyModule(
         __name__,
         globals()["__file__"],
-        _import_structure, # Pass the manually defined structure
-        module_spec=__spec__
+        _import_structure,  # Pass the manually defined structure
+        module_spec=__spec__,
     )

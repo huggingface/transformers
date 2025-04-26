@@ -16,8 +16,8 @@
 
 # **** ADD THIS IMPORT ****
 from ...activations import ACT2FN
-# ***********************
 
+# ***********************
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -93,8 +93,8 @@ class HindiCausalLMConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=16,
-        intermediate_size=3072, # Keep existing default, but document standard SwiGLU size
-        hidden_act="silu", # Changed from activation_function, default to "silu" for SwiGLU
+        intermediate_size=3072,  # Keep existing default, but document standard SwiGLU size
+        hidden_act="silu",  # Changed from activation_function, default to "silu" for SwiGLU
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -112,7 +112,7 @@ class HindiCausalLMConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            unk_token_id=unk_token_id, # Make sure unk_token_id is passed to parent
+            unk_token_id=unk_token_id,  # Make sure unk_token_id is passed to parent
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -124,7 +124,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act # Changed from activation_function
+        self.hidden_act = hidden_act  # Changed from activation_function
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.normalization_layer = normalization_layer
@@ -133,8 +133,8 @@ class HindiCausalLMConfig(PretrainedConfig):
 
         # Validate activation function - NOW ACT2FN IS DEFINED
         if isinstance(self.hidden_act, str) and self.hidden_act not in ACT2FN:
-             logger.warning(
-                 f"Activation function '{self.hidden_act}' not found in ACT2FN, loading may fail if model code relies on it."
-                 " Note: For GLU variants like SwiGLU, set hidden_act to the internal activation (e.g., 'silu')."
-             )
-             # Or raise error: raise KeyError(f"function {self.hidden_act} not found...")
+            logger.warning(
+                f"Activation function '{self.hidden_act}' not found in ACT2FN, loading may fail if model code relies on it."
+                " Note: For GLU variants like SwiGLU, set hidden_act to the internal activation (e.g., 'silu')."
+            )
+            # Or raise error: raise KeyError(f"function {self.hidden_act} not found...")

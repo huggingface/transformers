@@ -16,7 +16,6 @@
 
 import unittest
 
-import numpy as np
 from parameterized import parameterized
 
 from transformers import HindiCausalLMConfig, is_torch_available
@@ -26,6 +25,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
+
 if is_torch_available():
     import torch
 
@@ -33,6 +33,7 @@ if is_torch_available():
         HindiCausalLMForCausalLM,
         HindiCausalLMModel,
     )
+
 
 class HindiCausalLMModelTester:
     def __init__(
@@ -168,6 +169,7 @@ class HindiCausalLMModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+
 @require_torch
 class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (HindiCausalLMModel, HindiCausalLMForCausalLM) if is_torch_available() else ()
@@ -252,6 +254,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         model = HindiCausalLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+
 @require_torch
 @require_sentencepiece
 class HindiCausalLMIntegrationTest(unittest.TestCase):
@@ -265,6 +268,7 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
         # Test a simple input
         input_text = "गंगा नदी"
         from transformers import HindiCausalLMTokenizer
+
         tokenizer = HindiCausalLMTokenizer.from_pretrained(model_name)
 
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)

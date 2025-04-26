@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
     is_sentencepiece_available,
+    is_torch_available,
 )
+
 
 __all__ = [
     "HindiCausalLMConfig",
@@ -73,8 +74,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
             HindiCausalLMPreTrainedModel,
         )
 

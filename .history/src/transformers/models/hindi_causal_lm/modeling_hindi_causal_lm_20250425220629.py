@@ -20,12 +20,15 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, functional as F
+from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
 
 # Import HF utilities and base classes
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_outputs import CausalLMOutputWithPast
+
 # --- Ensure PreTrainedModel is imported ---
 from transformers.modeling_utils import PreTrainedModel
+
 # --- End Ensure ---
 from transformers.utils import (
     add_code_sample_docstrings,
@@ -51,11 +54,14 @@ class CausalSelfAttention(nn.Module):
     Causal self-attention layer adapted from hindi_language_model.py.
     Uses exact layer names and static causal mask buffer (persistent).
     """
+
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
-        self.config = config # Store config
+        self.config = config  # Store config
         if config.hidden_size % config.num_attention_heads != 0:
-             raise ValueError(f"hidden_size {config.hidden_size} not divisible by num_attention_heads {config.num_attention_heads}")
+            raise ValueError(
+                f"hidden_size {config.hidden_size} not divisible by num_attention_heads {config.num_attention_heads}"
+            )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = config.hidden_size // config.num_attention_heads
@@ -69,7 +75,7 @@ class CausalSelfAttention(nn.Module):
         # Use nn.Sequential for output projection to match original
         self.output = nn.Sequential(
             nn.Linear(self.all_head_size, config.hidden_size),
-            nn.Dropout(config.attention_probs_dropout_prob) # Use config dropout prob
+            nn.Dropout(config.attention_probs_dropout_prob),  # Use config dropout prob
         )
         # --- End exact layer names ---
 
@@ -77,7 +83,9 @@ class CausalSelfAttention(nn.Module):
         # persistent=True is the default
         self.register_buffer(
             "causal_mask",
-            torch.triu(torch.full((config.max_position_embeddings, config.max_position_embeddings), -float('inf')), diagonal=1)
+            torch.triu(
+                torch.full((config.max_position_embeddings, config.max_position_embeddings), -float("inf")), diagonal=1
+            ),
         )
         # --- End buffer ---
 
@@ -85,14 +93,14 @@ class CausalSelfAttention(nn.Module):
         """Transpose tensor for multi-head attention score calculation."""
         new_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_shape)
-        return x.permute(0, 2, 1, 3) # [bsz, n_heads, seq_len, head_size]
+        return x.permute(0, 2, 1, 3)  # [bsz, n_heads, seq_len, head_size]
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None, # External mask (for padding)
-        output_attentions: bool = False, # Add HF standard arg
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]: # Return type hint
+        attention_mask: Optional[torch.Tensor] = None,  # External mask (for padding)
+        output_attentions: bool = False,  # Add HF standard arg
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:  # Return type hint
         """Forward pass for causal self-attention."""
         batch_size, seq_length, _ = hidden_states.size()
 
@@ -106,24 +114,28 @@ class CausalSelfAttention(nn.Module):
 
         # Apply static causal mask
         if seq_length > self.config.max_position_embeddings:
-             raise ValueError(
-                 f"Sequence length ({seq_length}) cannot be greater than max_position_embeddings "
-                 f"({self.config.max_position_embeddings}) when using static causal mask."
-             )
-        causal_mask = self.causal_mask[None, None, :seq_length, :seq_length].to(attention_scores.device, dtype=attention_scores.dtype)
+            raise ValueError(
+                f"Sequence length ({seq_length}) cannot be greater than max_position_embeddings "
+                f"({self.config.max_position_embeddings}) when using static causal mask."
+            )
+        causal_mask = self.causal_mask[None, None, :seq_length, :seq_length].to(
+            attention_scores.device, dtype=attention_scores.dtype
+        )
         attention_scores = attention_scores + causal_mask
 
         # Apply external attention mask (for padding) if provided
         if attention_mask is not None:
             if attention_mask.dim() == 2:
-                 attention_mask = attention_mask[:, None, None, :]
+                attention_mask = attention_mask[:, None, None, :]
             attention_mask = (1.0 - attention_mask) * torch.finfo(attention_scores.dtype).min
             attention_mask = attention_mask.to(attention_scores.device, dtype=attention_scores.dtype)
             attention_scores = attention_scores + attention_mask
 
         # Normalize attention scores to probabilities
         attention_probs = F.softmax(attention_scores, dim=-1)
-        attention_probs = F.dropout(attention_probs, p=self.config.attention_probs_dropout_prob, training=self.training)
+        attention_probs = F.dropout(
+            attention_probs, p=self.config.attention_probs_dropout_prob, training=self.training
+        )
 
         # Calculate context layer
         context_layer = torch.matmul(attention_probs, value_layer)
@@ -148,6 +160,7 @@ class TransformerBlock(nn.Module):
     Transformer block adapted from hindi_language_model.py.
     Uses Post-LN, hardcoded GELU FFN, and exact layer names.
     """
+
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         self.config = config
@@ -156,9 +169,9 @@ class TransformerBlock(nn.Module):
         self.attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.ffn = nn.Sequential(
             nn.Linear(config.hidden_size, config.intermediate_size),
-            nn.GELU(), # Hardcoded GELU
+            nn.GELU(),  # Hardcoded GELU
             nn.Linear(config.intermediate_size, config.hidden_size),
-            nn.Dropout(config.hidden_dropout_prob)
+            nn.Dropout(config.hidden_dropout_prob),
         )
         self.ffn_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # --- End exact layer names and structure ---
@@ -167,15 +180,13 @@ class TransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False, # Add HF standard arg
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]]: # Type hint for output
+        output_attentions: bool = False,  # Add HF standard arg
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]]:  # Type hint for output
         """Forward pass for the transformer block using Post-LN."""
         # --- Post-LN implementation ---
         residual = hidden_states
         attn_outputs = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
         attn_output = attn_outputs[0]
         hidden_states = self.attention_layernorm(residual + attn_output)
@@ -190,7 +201,7 @@ class TransformerBlock(nn.Module):
             if len(attn_outputs) > 1:
                 outputs += (attn_outputs[1],)
             else:
-                 outputs += (None,)
+                outputs += (None,)
         return outputs
 
 
@@ -204,7 +215,7 @@ class TransformerBlock(nn.Module):
     """,
     _CONFIG_FOR_DOC,
 )
-class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
+class HindiCausalLMHeadModel(PreTrainedModel):  # <<<--- CONFIRM INHERITANCE
     config_class = HindiCausalLMConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["TransformerBlock"]
@@ -216,25 +227,16 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
         super().__init__(config)
         # --- !!! END SUPER CALL CHECK !!! ---
 
-        self.config = config # Keep config reference
+        self.config = config  # Keep config reference
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         # --- Define layers directly under self, matching original script ---
-        self.token_embeddings = nn.Embedding(
-            config.vocab_size,
-            config.hidden_size,
-            padding_idx=self.padding_idx
-        )
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size
-        )
+        self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.layers = nn.ModuleList([
-            TransformerBlock(config) for _ in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.num_hidden_layers)])
         # No final LayerNorm before lm_head in original script
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -243,6 +245,7 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
         # Initialize weights and apply final processing
         # This implicitly calls tie_weights via PreTrainedModel's post_init
         self.post_init()
+
     # --- END ENSURE __init__ IS CORRECT ---
 
     # --- Implement embedding getters/setters required by HF ---
@@ -257,6 +260,7 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
 
     def set_output_embeddings(self, new_embeddings: nn.Linear):
         self.lm_head = new_embeddings
+
     # --- End required getters/setters ---
 
     def tie_weights(self):
@@ -266,7 +270,6 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
             input_embeddings = self.get_input_embeddings()
             output_embeddings.weight = input_embeddings.weight
         super().tie_weights()
-
 
     @add_start_docstrings_to_model_forward(_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
@@ -320,8 +323,8 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
         if position_ids is None:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
-        elif position_ids.shape[0] == 1 and batch_size > 1 :
-             position_ids = position_ids.expand(batch_size, -1)
+        elif position_ids.shape[0] == 1 and batch_size > 1:
+            position_ids = position_ids.expand(batch_size, -1)
 
         # --- Get Embeddings ---
         if inputs_embeds is None:
@@ -330,23 +333,31 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
         # Add standard positional embeddings
         if self.config.positional_encoding_type in ["absolute", "learned"]:
             if seq_length > self.position_embeddings.num_embeddings:
-                 position_ids_to_use = torch.arange(self.position_embeddings.num_embeddings, dtype=torch.long, device=device).unsqueeze(0)
-                 position_embeds = self.position_embeddings(position_ids_to_use)
-                 # Pad embeddings if needed
-                 padding_needed = seq_length - position_embeds.shape[1]
-                 if padding_needed > 0:
-                     padding_tensor = torch.zeros((batch_size, padding_needed, self.config.hidden_size), dtype=position_embeds.dtype, device=device)
-                     position_embeds = torch.cat([position_embeds.expand(batch_size, -1, -1), padding_tensor], dim=1)
-                 else:
-                      position_embeds = position_embeds.expand(batch_size, -1, -1) # Expand batch dim if needed
-                 logger.warning_once(f"Input seq length {seq_length} > max pos embeddings {self.position_embeddings.num_embeddings}. Using embeddings up to max length.")
+                position_ids_to_use = torch.arange(
+                    self.position_embeddings.num_embeddings, dtype=torch.long, device=device
+                ).unsqueeze(0)
+                position_embeds = self.position_embeddings(position_ids_to_use)
+                # Pad embeddings if needed
+                padding_needed = seq_length - position_embeds.shape[1]
+                if padding_needed > 0:
+                    padding_tensor = torch.zeros(
+                        (batch_size, padding_needed, self.config.hidden_size),
+                        dtype=position_embeds.dtype,
+                        device=device,
+                    )
+                    position_embeds = torch.cat([position_embeds.expand(batch_size, -1, -1), padding_tensor], dim=1)
+                else:
+                    position_embeds = position_embeds.expand(batch_size, -1, -1)  # Expand batch dim if needed
+                logger.warning_once(
+                    f"Input seq length {seq_length} > max pos embeddings {self.position_embeddings.num_embeddings}. Using embeddings up to max length."
+                )
             else:
-                 position_ids_to_use = torch.clamp(position_ids, 0, self.position_embeddings.num_embeddings - 1)
-                 position_embeds = self.position_embeddings(position_ids_to_use)
+                position_ids_to_use = torch.clamp(position_ids, 0, self.position_embeddings.num_embeddings - 1)
+                position_embeds = self.position_embeddings(position_ids_to_use)
 
             hidden_states = inputs_embeds + position_embeds
         else:
-             hidden_states = inputs_embeds
+            hidden_states = inputs_embeds
 
         hidden_states = self.embedding_dropout(hidden_states)
 
@@ -362,12 +373,12 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                 layer_outputs = self._gradient_checkpointing_func(
-                     layer_module.__call__,
-                     hidden_states,
-                     prepared_attention_mask,
-                     output_attentions,
-                 )
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
+                    hidden_states,
+                    prepared_attention_mask,
+                    output_attentions,
+                )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
@@ -397,44 +408,52 @@ class HindiCausalLMHeadModel(PreTrainedModel): # <<<--- CONFIRM INHERITANCE
 
         # --- Prepare Output ---
         if not return_dict:
-            outputs_list = [lm_logits, None] # logits, past_key_values (None)
-            if output_hidden_states: outputs_list.append(all_hidden_states)
-            if output_attentions: outputs_list.append(all_self_attns)
+            outputs_list = [lm_logits, None]  # logits, past_key_values (None)
+            if output_hidden_states:
+                outputs_list.append(all_hidden_states)
+            if output_attentions:
+                outputs_list.append(all_self_attns)
             output = tuple(outputs_list)
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
-            past_key_values=None, # No KV cache implemented
+            past_key_values=None,  # No KV cache implemented
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
 
     # Keep prepare_inputs_for_generation as it is needed by .generate()
     def prepare_inputs_for_generation(
-        self, input_ids: torch.LongTensor, past_key_values: Optional[List[torch.Tensor]] = None, attention_mask: Optional[torch.Tensor] = None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[List[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> dict:
         """Prepares inputs for generation. Basic version without KV caching."""
         if past_key_values is not None:
-             input_ids = input_ids[:, -1:]
+            input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
-             position_ids = attention_mask.long().cumsum(-1) - 1
-             position_ids.masked_fill_(attention_mask == 0, 1)
-             if past_key_values is not None:
-                  position_ids = position_ids[:, -1].unsqueeze(-1)
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values is not None:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
 
         inputs_embeds = kwargs.get("inputs_embeds")
         if inputs_embeds is not None and past_key_values is None:
-             model_inputs = {"inputs_embeds": inputs_embeds}
+            model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-             model_inputs = {"input_ids": input_ids}
+            model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update({
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "use_cache": kwargs.get("use_cache"),
-        })
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "position_ids": position_ids,
+                "use_cache": kwargs.get("use_cache"),
+            }
+        )
         return model_inputs

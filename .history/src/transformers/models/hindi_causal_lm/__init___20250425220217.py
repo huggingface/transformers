@@ -24,7 +24,6 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
     # from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer # If exists
 
     try:
@@ -34,10 +33,7 @@ if TYPE_CHECKING:
         pass
     else:
         # Only list classes that actually exist
-        from .modeling_hindi_causal_lm import (
-            # HindiCausalLMModel, # REMOVED
-            HindiCausalLMHeadModel,
-        )
+        pass
 
 
 else:

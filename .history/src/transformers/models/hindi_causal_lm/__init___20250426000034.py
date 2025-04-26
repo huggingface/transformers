@@ -1,4 +1,3 @@
-
 from typing import TYPE_CHECKING
 
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
@@ -34,10 +33,7 @@ if TYPE_CHECKING:
         pass
     else:
         # Only list classes that actually exist
-        from .modeling_hindi_causal_lm import (
-            # HindiCausalLMModel, # REMOVED
-            HindiCausalLMHeadModel,
-        )
+        pass
 
 
 else:

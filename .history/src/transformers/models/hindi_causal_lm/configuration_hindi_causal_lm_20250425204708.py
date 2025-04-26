@@ -89,7 +89,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=16,
-        intermediate_size=3072, 
+        intermediate_size=3072,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -108,7 +108,7 @@ class HindiCausalLMConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            unk_token_id=unk_token_id, # Make sure unk_token_id is passed to parent
+            unk_token_id=unk_token_id,  # Make sure unk_token_id is passed to parent
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -120,7 +120,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act # Changed from activation_function
+        self.hidden_act = hidden_act  # Changed from activation_function
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.normalization_layer = normalization_layer
@@ -129,8 +129,7 @@ class HindiCausalLMConfig(PretrainedConfig):
 
         # Validate activation function
         if isinstance(self.hidden_act, str) and self.hidden_act not in ACT2FN:
-             logger.warning(
-                 f"Activation function '{self.hidden_act}' not found in ACT2FN, using default GELU."
-                 " Note: For GLU variants like SwiGLU, set hidden_act to the internal activation (e.g., 'silu')."
-             )
-          
+            logger.warning(
+                f"Activation function '{self.hidden_act}' not found in ACT2FN, using default GELU."
+                " Note: For GLU variants like SwiGLU, set hidden_act to the internal activation (e.g., 'silu')."
+            )

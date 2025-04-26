@@ -14,16 +14,9 @@
 # limitations under the License.
 """Auto Config class."""
 
-import importlib
-import os
-import re
-import warnings
 from collections import OrderedDict
-from typing import List, Union
 
-from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

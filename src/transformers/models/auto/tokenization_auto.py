@@ -29,7 +29,7 @@ from ...utils import (
     cached_file,
     extract_commit_hash,
     is_g2p_en_available,
-    is_sentencepiece_available, # Ensure this is imported
+    is_sentencepiece_available,  # Ensure this is imported
     is_tokenizers_available,
     logging,
 )
@@ -249,12 +249,7 @@ else:
             ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-            ("hindi_causal_lm",
-            (
-                "HindiCausalLMTokenizer" if is_sentencepiece_available() else None,
-                 None
-            )
-            ),
+            ("hindi_causal_lm", ("HindiCausalLMTokenizer" if is_sentencepiece_available() else None, None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -973,7 +968,10 @@ class AutoTokenizer:
                     config = AutoConfig.for_model(**config_dict)
                 else:
                     config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, code_revision=code_revision, **kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        code_revision=code_revision,
+                        **kwargs,
                     )
             config_tokenizer_class = config.tokenizer_class
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
@@ -1041,7 +1039,9 @@ class AutoTokenizer:
                     return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 except (OSError, ValueError):
                     if tokenizer_class_py is not None:
-                        logger.warning("Could not load the fast tokenizer class, falling back on the slow tokenizer class.")
+                        logger.warning(
+                            "Could not load the fast tokenizer class, falling back on the slow tokenizer class."
+                        )
                         return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                     else:
                         raise

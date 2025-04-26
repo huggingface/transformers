@@ -69,6 +69,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         positional_encoding_type (`str`, *optional*, defaults to `"rope"`):
             Type of positional encoding to use in the model.
     """
+
     model_type = "hindi_causal_lm"
 
     def __init__(
@@ -91,7 +92,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         normalization_layer="rmsnorm",
         positional_encoding_type="rope",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -107,11 +108,11 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.normalization_layer = normalization_layer
         self.positional_encoding_type = positional_encoding_type
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            **kwargs
+            **kwargs,
         )

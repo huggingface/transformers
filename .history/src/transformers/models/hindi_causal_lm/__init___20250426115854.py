@@ -45,33 +45,23 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
-
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+        pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         # Import dummy objects for type checking
-        from .dummy_pt_objects import (
-            HindiCausalLMForCausalLM,
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
     else:
         # Import actual objects for type checking
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMForCausalLM,
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
 
 else:
     import sys

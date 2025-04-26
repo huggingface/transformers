@@ -608,15 +608,6 @@ if TYPE_CHECKING:
     )
     from .hf_argparser import HfArgumentParser
 
-    # Hindi Causal LM imports
-    from .models.hindi_causal_lm import (
-        HindiCausalLMConfig,
-        HindiCausalLMForCausalLM,
-        HindiCausalLMModel,
-        HindiCausalLMPreTrainedModel,
-        HindiCausalLMTokenizer,
-    )
-
     # Integrations
     from .integrations import (
         is_clearml_available,
@@ -646,6 +637,15 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models import *
+
+    # Hindi Causal LM imports
+    from .models.hindi_causal_lm import (
+        HindiCausalLMConfig,
+        HindiCausalLMForCausalLM,
+        HindiCausalLMModel,
+        HindiCausalLMPreTrainedModel,
+        HindiCausalLMTokenizer,
+    )
 
     # Pipelines
     from .pipelines import (

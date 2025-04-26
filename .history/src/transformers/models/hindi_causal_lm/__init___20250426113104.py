@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
     is_sentencepiece_available,
+    is_torch_available,
 )
+
 
 _import_structure = {
     "configuration_hindi_causal_lm": ["HindiCausalLMConfig"],
@@ -33,6 +34,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from . import dummy_tokenizer_objects as _dummy_tokenizer_objects
+
     HindiCausalLMTokenizer = _dummy_tokenizer_objects.HindiCausalLMTokenizer
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
@@ -43,6 +45,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from . import dummy_pt_auto_objects as _dummy_pt_auto_objects
+
     HindiCausalLMModel = _dummy_pt_auto_objects.HindiCausalLMModel
     HindiCausalLMForCausalLM = _dummy_pt_auto_objects.HindiCausalLMForCausalLM
     HindiCausalLMPreTrainedModel = _dummy_pt_auto_objects.HindiCausalLMPreTrainedModel
@@ -54,31 +57,21 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
-
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+        pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .dummy_pt_auto_objects import (
-            HindiCausalLMModel,
-            HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
     else:
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
-            HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
 
 else:
     import sys

@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import HindiCausalLMConfig, is_torch_available # Import config
+from transformers import HindiCausalLMConfig, is_torch_available  # Import config
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -27,8 +27,7 @@ from transformers.testing_utils import (
 
 # Import testing utilities and base classes
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor
-from ...test_modeling_common import ModelTesterMixin, ids_tensor # Keep random_attention_mask removed if not needed
+from ...test_modeling_common import GenerationTesterMixin, ModelTesterMixin, ids_tensor
 
 
 # Conditional import of model parts based on PyTorch availability
@@ -43,8 +42,8 @@ if is_torch_available():
     # Set is_pt_flax_cross_test = False # Not needed unless testing cross-framework
 else:
     # Define dummy classes or skip tests if torch not available
-    ModelTesterMixin = object # type: ignore
-    GenerationTesterMixin = object # type: ignore
+    ModelTesterMixin = object  # type: ignore
+    GenerationTesterMixin = object  # type: ignore
     # is_pt_flax_cross_test = False # Not needed
 
 
@@ -58,29 +57,29 @@ class HindiCausalLMModelTester:
         batch_size=13,
         seq_length=7,
         is_training=True,
-        use_input_mask=True, # Attention mask is usually expected
-        use_token_type_ids=False, # Generally False for Causal LM
-        use_labels=True, # For testing loss calculation in head model
+        use_input_mask=True,  # Attention mask is usually expected
+        use_token_type_ids=False,  # Generally False for Causal LM
+        use_labels=True,  # For testing loss calculation in head model
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=2, # Use fewer layers for faster tests
-        num_attention_heads=4, # Must divide hidden_size
-        intermediate_size=64, # FFN intermediate size
-        hidden_act="gelu", # Matches implemented model
+        num_hidden_layers=2,  # Use fewer layers for faster tests
+        num_attention_heads=4,  # Must divide hidden_size
+        intermediate_size=64,  # FFN intermediate size
+        hidden_act="gelu",  # Matches implemented model
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=64, # Smaller max length for testing
+        max_position_embeddings=64,  # Smaller max length for testing
         initializer_range=0.02,
         # --- HindiCausalLM specific config values ---
         layer_norm_eps=1e-12,
-        normalization_layer="layernorm", # Matches implemented model
-        positional_encoding_type="absolute", # Matches implemented model
+        normalization_layer="layernorm",  # Matches implemented model
+        positional_encoding_type="absolute",  # Matches implemented model
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         unk_token_id=3,
         tie_word_embeddings=True,
-        scope=None, # For nested configs, not usually needed here
+        scope=None,  # For nested configs, not usually needed here
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -112,11 +111,13 @@ class HindiCausalLMModelTester:
         # Used by GenerationTesterMixin - needs decoder_start_token_id
         self.decoder_start_token_id = self.bos_token_id
 
-
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size, extra_dims=()) # Ensure correct shape
-        input_ids = input_ids.clamp(min=max(self.pad_token_id, self.bos_token_id, self.eos_token_id)+1) # Avoid special tokens within input
-
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size, extra_dims=()
+        )  # Ensure correct shape
+        input_ids = input_ids.clamp(
+            min=max(self.pad_token_id, self.bos_token_id, self.eos_token_id) + 1
+        )  # Avoid special tokens within input
 
         attention_mask = None
         if self.use_input_mask:
@@ -129,7 +130,7 @@ class HindiCausalLMModelTester:
         if self.use_labels:
             # Labels are usually shifted in the model's forward pass
             # Here, we provide the full sequence; the model handles shifting
-            lm_labels = input_ids.clone() # Use clone for labels
+            lm_labels = input_ids.clone()  # Use clone for labels
 
         config = self.get_config()
 
@@ -155,7 +156,7 @@ class HindiCausalLMModelTester:
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
-            unk_token_id=self.unk_token_id, # Ensure unk token id is passed
+            unk_token_id=self.unk_token_id,  # Ensure unk token id is passed
             tie_word_embeddings=self.tie_word_embeddings,
             # Add is_decoder=False for CausalLM models for some internal checks
             is_decoder=False,
@@ -181,10 +182,9 @@ class HindiCausalLMModelTester:
         # Ensure loss is scalar
         self.parent.assertEqual(result_with_labels.loss.ndim, 0)
 
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, lm_labels = config_and_inputs # Unpack correctly
+        config, input_ids, attention_mask, lm_labels = config_and_inputs  # Unpack correctly
         # Prepare dict for ModelTesterMixin common tests
         inputs_dict = {
             "input_ids": input_ids,
@@ -203,17 +203,15 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     all_generative_model_classes = (HindiCausalLMHeadModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         # Map tasks to the HeadModel class
-        {"text-generation": HindiCausalLMHeadModel}
-        if is_torch_available()
-        else {}
+        {"text-generation": HindiCausalLMHeadModel} if is_torch_available() else {}
     )
     # Update flags based on model capabilities and test setup
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
-    test_missing_keys = False # Set to False initially, can enable if strict loading works
+    test_missing_keys = False  # Set to False initially, can enable if strict loading works
     test_model_parallel = False
-    is_encoder_decoder = False # Causal LM is decoder-only architecture
+    is_encoder_decoder = False  # Causal LM is decoder-only architecture
 
     # Set this to True if you want to skip tests that modify weights inplace
     test_inplace_modification = False
@@ -233,28 +231,28 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
     # Override or skip tests if they are not applicable or fail due to model specifics
     def test_forward_signature(self):
-         # Override if token_type_ids is accepted but unused
-         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-         model = self.model_tester.create_and_check_lm_head_model[0](config=config) # Get model instance
-         signature = inspect.signature(model.forward)
-         # Check if token_type_ids is in the signature
-         self.assertIn("token_type_ids", signature.parameters)
+        # Override if token_type_ids is accepted but unused
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = self.model_tester.create_and_check_lm_head_model[0](config=config)  # Get model instance
+        signature = inspect.signature(model.forward)
+        # Check if token_type_ids is in the signature
+        self.assertIn("token_type_ids", signature.parameters)
 
     def test_training(self):
-         # Override if Post-LN causes issues with standard training tests
-         # Often requires custom checks or skipping
-         self.skipTest(reason="Post-LN and specific structure might interfere with standard training test.")
+        # Override if Post-LN causes issues with standard training tests
+        # Often requires custom checks or skipping
+        self.skipTest(reason="Post-LN and specific structure might interfere with standard training test.")
 
     def test_gradient_checkpointing(self):
         # Test generation with gradient checkpointing enabled
         if not self.test_training:
-             self.skipTest(reason="Skipping gradient checkpointing test as training test is skipped.")
+            self.skipTest(reason="Skipping gradient checkpointing test as training test is skipped.")
         super().test_gradient_checkpointing()
 
 
 @require_torch
-@require_sentencepiece # Add if tokenizer uses sentencepiece
-@require_tokenizers # Add if tokenizer uses tokenizers library
+@require_sentencepiece  # Add if tokenizer uses sentencepiece
+@require_tokenizers  # Add if tokenizer uses tokenizers library
 @slow
 class HindiCausalLMModelIntegrationTest(unittest.TestCase):
     # Use the actual model ID where weights and tokenizer are hosted
@@ -268,28 +266,28 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
         cls.config = HindiCausalLMConfig.from_pretrained(cls.model_id, trust_remote_code=True)
         cls.config.hidden_act = "gelu"
         cls.config.normalization_layer = "layernorm"
-        if getattr(cls.config, 'positional_encoding_type', '') == "rope":
+        if getattr(cls.config, "positional_encoding_type", "") == "rope":
             cls.config.positional_encoding_type = "absolute"
 
         # Load tokenizer (handle potential class name issue)
         from transformers import AutoTokenizer
+
         try:
             cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id, trust_remote_code=True)
         except ValueError as e:
-             if "SentencePieceTokenizerWrapper" in str(e):
-                 logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
-                 try:
-                     from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
-                     cls.tokenizer = HindiCausalLMTokenizer.from_pretrained(cls.model_id)
-                 except ImportError:
-                      raise ValueError("Could not load tokenizer via AutoClass or direct import.") from e
-             else:
-                  raise e
+            if "SentencePieceTokenizerWrapper" in str(e):
+                logger.warning("AutoTokenizer failed due to class name mismatch. Trying direct import...")
+                try:
+                    from transformers.models.hindi_causal_lm import HindiCausalLMTokenizer
+
+                    cls.tokenizer = HindiCausalLMTokenizer.from_pretrained(cls.model_id)
+                except ImportError:
+                    raise ValueError("Could not load tokenizer via AutoClass or direct import.") from e
+            else:
+                raise e
 
         # Load model
-        cls.model = HindiCausalLMHeadModel.from_pretrained(
-            cls.model_id, config=cls.config, trust_remote_code=True
-        )
+        cls.model = HindiCausalLMHeadModel.from_pretrained(cls.model_id, config=cls.config, trust_remote_code=True)
         cls.model.to(torch_device)
         cls.model.eval()
 
@@ -302,9 +300,9 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
 
         # Check output type and shape
         self.assertTrue(hasattr(outputs, "logits"))
-        self.assertEqual(outputs.logits.shape[0], 1) # Batch size 1
-        self.assertEqual(outputs.logits.shape[1], inputs["input_ids"].shape[1]) # Sequence length
-        self.assertEqual(outputs.logits.shape[2], self.config.vocab_size) # Vocab size
+        self.assertEqual(outputs.logits.shape[0], 1)  # Batch size 1
+        self.assertEqual(outputs.logits.shape[1], inputs["input_ids"].shape[1])  # Sequence length
+        self.assertEqual(outputs.logits.shape[2], self.config.vocab_size)  # Vocab size
 
     def test_generation_greedy(self):
         """Test greedy text generation."""
@@ -313,8 +311,8 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
 
         output_sequences = self.model.generate(
             **inputs,
-            max_new_tokens=10, # Generate only a few tokens for test speed
-            do_sample=False, # Use greedy search
+            max_new_tokens=10,  # Generate only a few tokens for test speed
+            do_sample=False,  # Use greedy search
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
         )
@@ -330,7 +328,7 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
         prompt = "हिमालय पर्वत"
         inputs = self.tokenizer(prompt, return_tensors="pt").to(torch_device)
 
-        torch.manual_seed(0) # For reproducible sampling in tests
+        torch.manual_seed(0)  # For reproducible sampling in tests
         output_sequences = self.model.generate(
             **inputs,
             max_new_tokens=15,

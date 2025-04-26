@@ -17,16 +17,14 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available
 from ...utils.import_utils import define_import_structure
 
+
 # --- Structure Definition ---
 # Define what modules exist and what classes they contain for TYPE_CHECKING
 # This helps linters and IDEs, even if imports seem "unused" at runtime.
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
-    from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer # Assuming this file exists
-
     # Conditionally import modeling classes based on PyTorch availability
     if is_torch_available():
-        from .modeling_hindi_causal_lm import HindiCausalLMHeadModel
+        pass
     # Note: No separate HindiCausalLMModel in the final flattened version
 
 
@@ -41,9 +39,4 @@ else:
     _import_structure = define_import_structure(_file)
 
     # Set up the lazy module loading for this package
-    sys.modules[__name__] = _LazyModule(
-        __name__,
-        _file,
-        _import_structure,
-        module_spec=__spec__
-    )
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

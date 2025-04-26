@@ -133,8 +133,10 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
+
     # --- !!! ADD YOUR MODEL IMPORT HERE (for type checking) !!! ---
     from .hindi_causal_lm import *
+
     # --- !!! END ADDITION !!! ---
     from .hubert import *
     from .ibert import *
@@ -334,7 +336,7 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    _SUBMODELS = { # This dictionary links model_type to the module directory name
+    _SUBMODELS = {  # This dictionary links model_type to the module directory name
         "albert": "albert",
         "align": "align",
         "altclip": "altclip",
@@ -367,7 +369,7 @@ else:
         "clip": "clip",
         "clipseg": "clipseg",
         "clvp": "clvp",
-        "code_llama": "llama", # Uses llama module
+        "code_llama": "llama",  # Uses llama module
         "codegen": "codegen",
         "cohere": "cohere",
         "cohere2": "cohere2",
@@ -381,9 +383,9 @@ else:
         "cvt": "cvt",
         "dab-detr": "dab_detr",
         "dac": "dac",
-        "data2vec-audio": "data2vec", # Uses data2vec module
+        "data2vec-audio": "data2vec",  # Uses data2vec module
         "data2vec-text": "data2vec",  # Uses data2vec module
-        "data2vec-vision": "data2vec",# Uses data2vec module
+        "data2vec-vision": "data2vec",  # Uses data2vec module
         "dbrx": "dbrx",
         "deberta": "deberta",
         "deberta-v2": "deberta_v2",
@@ -400,7 +402,7 @@ else:
         "dinov2": "dinov2",
         "dinov2_with_registers": "dinov2_with_registers",
         "distilbert": "distilbert",
-        "donut": "donut", # Special case handled below
+        "donut": "donut",  # Special case handled below
         "dpr": "dpr",
         "dpt": "dpt",
         "efficientformer": "efficientformer",
@@ -410,7 +412,7 @@ else:
         "encodec": "encodec",
         "encoder-decoder": "encoder_decoder",
         "ernie": "ernie",
-        "ernie_m": "ernie_m", # In deprecated
+        "ernie_m": "ernie_m",  # In deprecated
         "esm": "esm",
         "falcon": "falcon",
         "falcon_mamba": "falcon_mamba",
@@ -437,12 +439,12 @@ else:
         "gpt_neox": "gpt_neox",
         "gpt_neox_japanese": "gpt_neox_japanese",
         "gptj": "gptj",
-        "gptsan-japanese": "gptsan_japanese", # In deprecated
+        "gptsan-japanese": "gptsan_japanese",  # In deprecated
         "granite": "granite",
         "granite_speech": "granite_speech",
         "granitemoe": "granitemoe",
         "granitemoeshared": "granitemoeshared",
-        "graphormer": "graphormer", # In deprecated
+        "graphormer": "graphormer",  # In deprecated
         "grounding-dino": "grounding_dino",
         "groupvit": "groupvit",
         "helium": "helium",
@@ -465,8 +467,8 @@ else:
         "jamba": "jamba",
         "janus": "janus",
         "jetmoe": "jetmoe",
-        "jukebox": "jukebox", # In deprecated
-        "kosmos-2": "kosmos2", # Special case handled below
+        "jukebox": "jukebox",  # In deprecated
+        "kosmos-2": "kosmos2",  # Special case handled below
         "layoutlm": "layoutlm",
         "layoutlmv2": "layoutlmv2",
         "layoutlmv3": "layoutlmv3",
@@ -491,8 +493,8 @@ else:
         "mask2former": "mask2former",
         "maskformer": "maskformer",
         "mbart": "mbart",
-        "mctct": "mctct", # In deprecated
-        "mega": "mega", # In deprecated
+        "mctct": "mctct",  # In deprecated
+        "mega": "mega",  # In deprecated
         "megatron-bert": "megatron_bert",
         "mgp-str": "mgp_str",
         "mimi": "mimi",
@@ -517,10 +519,10 @@ else:
         "musicgen": "musicgen",
         "musicgen_melody": "musicgen_melody",
         "mvp": "mvp",
-        "nat": "nat", # In deprecated
+        "nat": "nat",  # In deprecated
         "nemotron": "nemotron",
-        "nezha": "nezha", # In deprecated
-        "nllb": "nllb", # Special case handled below
+        "nezha": "nezha",  # In deprecated
+        "nllb": "nllb",  # Special case handled below
         "nllb-moe": "nllb_moe",
         "nougat": "nougat",
         "nystromformer": "nystromformer",
@@ -529,7 +531,7 @@ else:
         "olmoe": "olmoe",
         "omdet-turbo": "omdet_turbo",
         "oneformer": "oneformer",
-        "openai-gpt": "openai", # Special case handled below
+        "openai-gpt": "openai",  # Special case handled below
         "opt": "opt",
         "owlv2": "owlv2",
         "owlvit": "owlvit",
@@ -553,45 +555,45 @@ else:
         "prophetnet": "prophetnet",
         "pvt": "pvt",
         "pvt_v2": "pvt_v2",
-        "qdqbert": "qdqbert", # In deprecated
+        "qdqbert": "qdqbert",  # In deprecated
         "qwen2": "qwen2",
         "qwen2_5_vl": "qwen2_5_vl",
         "qwen2_audio": "qwen2_audio",
-        "qwen2_moe": "qwen2_moe", # Special case handled below
-        "qwen2_vl": "qwen2_vl", # Special case handled below
+        "qwen2_moe": "qwen2_moe",  # Special case handled below
+        "qwen2_vl": "qwen2_vl",  # Special case handled below
         "rag": "rag",
-        "realm": "realm", # In deprecated
-        "recurrent_gemma": "recurrent_gemma", # Special case handled below
+        "realm": "realm",  # In deprecated
+        "recurrent_gemma": "recurrent_gemma",  # Special case handled below
         "reformer": "reformer",
         "regnet": "regnet",
         "rembert": "rembert",
         "resnet": "resnet",
-        "retribert": "retribert", # In deprecated
+        "retribert": "retribert",  # In deprecated
         "roberta": "roberta",
         "roberta-prelayernorm": "roberta_prelayernorm",
         "roc_bert": "roc_bert",
         "roformer": "roformer",
-        "rt-detr": "rt_detr", # Special case handled below
+        "rt-detr": "rt_detr",  # Special case handled below
         "rt_detr_v2": "rt_detr_v2",
         "rwkv": "rwkv",
         "sam": "sam",
         "seamless_m4t": "seamless_m4t",
         "seamless_m4t_v2": "seamless_m4t_v2",
-        "segformer": "segformer", # Special case handled below
-        "seggpt": "seggpt", # Special case handled below
+        "segformer": "segformer",  # Special case handled below
+        "seggpt": "seggpt",  # Special case handled below
         "sew": "sew",
         "sew-d": "sew_d",
         "shieldgemma2": "shieldgemma2",
         "siglip": "siglip",
-        "siglip2": "siglip2", # Special case handled below
+        "siglip2": "siglip2",  # Special case handled below
         "smolvlm": "smolvlm",
         "speech-encoder-decoder": "speech_encoder_decoder",
         "speech_to_text": "speech_to_text",
-        "speech_to_text_2": "speech_to_text_2", # In deprecated
-        "speecht5": "speecht5", # Special case handled below
+        "speech_to_text_2": "speech_to_text_2",  # In deprecated
+        "speecht5": "speecht5",  # Special case handled below
         "splinter": "splinter",
         "squeezebert": "squeezebert",
-        "stablelm": "stablelm", # Special case handled below
+        "stablelm": "stablelm",  # Special case handled below
         "starcoder2": "starcoder2",
         "superglue": "superglue",
         "superpoint": "superpoint",
@@ -603,25 +605,25 @@ else:
         "t5": "t5",
         "table-transformer": "table_transformer",
         "tapas": "tapas",
-        "tapex": "tapex", # In deprecated
+        "tapex": "tapex",  # In deprecated
         "textnet": "textnet",
         "time_series_transformer": "time_series_transformer",
-        "timesfm": "timesfm", # Special case handled below
+        "timesfm": "timesfm",  # Special case handled below
         "timesformer": "timesformer",
         "timm_backbone": "timm_backbone",
-        "timm_wrapper": "timm_wrapper", # Special case handled below
-        "trajectory_transformer": "trajectory_transformer", # In deprecated
-        "transfo-xl": "transfo_xl", # Special case handled below & in deprecated
+        "timm_wrapper": "timm_wrapper",  # Special case handled below
+        "trajectory_transformer": "trajectory_transformer",  # In deprecated
+        "transfo-xl": "transfo_xl",  # Special case handled below & in deprecated
         "trocr": "trocr",
-        "tvlt": "tvlt", # In deprecated
+        "tvlt": "tvlt",  # In deprecated
         "tvp": "tvp",
-        "udop": "udop", # Special case handled below
+        "udop": "udop",  # Special case handled below
         "umt5": "umt5",
         "unispeech": "unispeech",
         "unispeech-sat": "unispeech_sat",
         "univnet": "univnet",
         "upernet": "upernet",
-        "van": "van", # In deprecated
+        "van": "van",  # In deprecated
         "video_llava": "video_llava",
         "videomae": "videomae",
         "vilt": "vilt",
@@ -630,7 +632,7 @@ else:
         "vision-text-dual-encoder": "vision_text_dual_encoder",
         "visual_bert": "visual_bert",
         "vit": "vit",
-        "vit_hybrid": "vit_hybrid", # In deprecated
+        "vit_hybrid": "vit_hybrid",  # In deprecated
         "vit_mae": "vit_mae",
         "vit_msn": "vit_msn",
         "vitdet": "vitdet",
@@ -644,17 +646,17 @@ else:
         "wav2vec2-conformer": "wav2vec2_conformer",
         "wavlm": "wavlm",
         "whisper": "whisper",
-        "x-clip": "x_clip", # Special case handled below
+        "x-clip": "x_clip",  # Special case handled below
         "xglm": "xglm",
         "xlm": "xlm",
-        "xlm-prophetnet": "xlm_prophetnet", # In deprecated
+        "xlm-prophetnet": "xlm_prophetnet",  # In deprecated
         "xlm-roberta": "xlm_roberta",
         "xlm-roberta-xl": "xlm_roberta_xl",
         "xlnet": "xlnet",
         "yolos": "yolos",
         "yoso": "yoso",
-        "zamba": "zamba", # Special case handled below
-        "zamba2": "zamba2", # Special case handled below
+        "zamba": "zamba",  # Special case handled below
+        "zamba2": "zamba2",  # Special case handled below
         "zoedepth": "zoedepth",
     }
     # This dictionary is intentionally incomplete. Existing entries are those where the model_type differs

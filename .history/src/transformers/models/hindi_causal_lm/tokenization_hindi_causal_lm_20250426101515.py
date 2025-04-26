@@ -15,7 +15,7 @@
 """Tokenization classes for HindiCausalLM."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, requires_sentencepiece
@@ -90,10 +90,10 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        
+
         # Set special token ids
         self.pad_token_id = 0
         self.bos_token_id = 1
@@ -102,7 +102,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
 
         # Store the vocab file locally
         self.vocab_file = vocab_file
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -112,41 +112,42 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        
+
         # Set model_max_length from max_model_input_sizes if not already set
         if hasattr(self, "model_max_length") and self.model_max_length == 512:
             self.model_max_length = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.get(kwargs.get("name_or_path", ""), 512)
 
         # Don't load the SentencePiece model at initialization
         # It will be loaded when needed
-    
+
     @property
     @requires_sentencepiece
     def sp_model(self):
         """Lazy-loads the SentencePiece model only when needed"""
         if not hasattr(self, "_sp_model"):
             import sentencepiece as spm
+
             self._sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
             self._sp_model.Load(self.vocab_file)
         return self._sp_model
-    
+
     @property
     def vocab_size(self) -> int:
         return self.sp_model.GetPieceSize()
-    
+
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         return vocab
-    
+
     @requires_sentencepiece
     def _tokenize(self, text: str) -> List[str]:
         return self.sp_model.EncodeAsPieces(text)
-    
+
     @requires_sentencepiece
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
         return self.sp_model.PieceToId(token)
-    
+
     @requires_sentencepiece
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
@@ -155,12 +156,12 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         else:
             token = self.unk_token
         return token
-    
+
     @requires_sentencepiece
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string."""
         return self.sp_model.DecodePieces(tokens)
-    
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -168,13 +169,14 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
-        
+
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             import shutil
+
             shutil.copyfile(self.vocab_file, out_vocab_file)
-        
+
         return (out_vocab_file,)
-    
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -196,12 +198,12 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         """
         bos_token_id = [self.bos_token_id] if self.bos_token_id is not None else []
         eos_token_id = [self.eos_token_id] if self.eos_token_id is not None else []
-        
+
         if token_ids_1 is None:
             return bos_token_id + token_ids_0 + eos_token_id
         # We create a separate sequence for token_ids_1 with its own eos token
         return bos_token_id + token_ids_0 + eos_token_id + token_ids_1 + eos_token_id
-    
+
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -224,10 +226,10 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             return super().get_special_tokens_mask(
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
-        
+
         bos_token_id = [1] if self.bos_token_id is not None else []
         eos_token_id = [1] if self.eos_token_id is not None else []
-        
+
         if token_ids_1 is None:
             return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id
         return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id + ([0] * len(token_ids_1)) + eos_token_id

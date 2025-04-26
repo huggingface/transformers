@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
@@ -27,8 +26,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HindiCausalLMModel,
         HindiCausalLMHeadModel,
+        HindiCausalLMModel,
     )
 
 

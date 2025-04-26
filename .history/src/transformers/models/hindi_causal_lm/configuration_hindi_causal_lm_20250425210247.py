@@ -67,19 +67,19 @@ class HindiCausalLMConfig(PretrainedConfig):
     """
 
     model_type = "hindi_causal_lm"
-    keys_to_ignore_at_inference = ["past_key_values"] # Standard key to ignore
+    keys_to_ignore_at_inference = ["past_key_values"]  # Standard key to ignore
 
     def __init__(
         self,
-        vocab_size=16000, # Match your trained tokenizer vocab size if different
+        vocab_size=16000,  # Match your trained tokenizer vocab size if different
         hidden_size=768,
         num_hidden_layers=12,
-        num_attention_heads=12, # Default from original notebook code (12) might differ from training script arg (None -> auto)
+        num_attention_heads=12,  # Default from original notebook code (12) might differ from training script arg (None -> auto)
         intermediate_size=3072,
         # --- Set defaults based on original script's implementation ---
-        hidden_act="gelu",             # GELU was hardcoded in original FFN
-        normalization_layer="layernorm", # Only LayerNorm used in original
-        positional_encoding_type="absolute", # Or "learned"; RoPE not implemented in original
+        hidden_act="gelu",  # GELU was hardcoded in original FFN
+        normalization_layer="layernorm",  # Only LayerNorm used in original
+        positional_encoding_type="absolute",  # Or "learned"; RoPE not implemented in original
         # --- End implementation-based defaults ---
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -138,19 +138,19 @@ class HindiCausalLMConfig(PretrainedConfig):
 
         # Validate hardcoded implementation choices
         if self.hidden_act != "gelu":
-             logger.warning(
-                 f"Config hidden_act is '{self.hidden_act}', but the adapted modeling code uses hardcoded GELU "
-                 f"to match the original training script. This config value will be ignored by the model structure."
-             )
+            logger.warning(
+                f"Config hidden_act is '{self.hidden_act}', but the adapted modeling code uses hardcoded GELU "
+                f"to match the original training script. This config value will be ignored by the model structure."
+            )
         if self.normalization_layer != "layernorm":
-             logger.warning(
-                 f"Config normalization_layer is '{self.normalization_layer}', but the adapted modeling code uses nn.LayerNorm "
-                 f"to match the original training script. This config value will be ignored by the model structure."
-             )
+            logger.warning(
+                f"Config normalization_layer is '{self.normalization_layer}', but the adapted modeling code uses nn.LayerNorm "
+                f"to match the original training script. This config value will be ignored by the model structure."
+            )
         if self.positional_encoding_type == "rope":
-             logger.warning(
-                 f"Config positional_encoding_type is 'rope', but the adapted modeling code uses standard embeddings "
-                 f"to match the original training script. RoPE is not implemented."
-             )
-             # Force to absolute/learned to match implementation
-             self.positional_encoding_type = "absolute"
+            logger.warning(
+                "Config positional_encoding_type is 'rope', but the adapted modeling code uses standard embeddings "
+                "to match the original training script. RoPE is not implemented."
+            )
+            # Force to absolute/learned to match implementation
+            self.positional_encoding_type = "absolute"

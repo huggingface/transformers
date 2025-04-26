@@ -142,7 +142,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         # --- HINDI CAUSAL LM ADDED HERE ---
-        ("hindi_causal_lm", "HindiCausalLMHeadModel"), # This line uses the Head model as the base when flattened
+        ("hindi_causal_lm", "HindiCausalLMHeadModel"),  # This line uses the Head model as the base when flattened
         # --- END HINDI CAUSAL LM ---
         ("hiera", "HieraModel"),
         ("hubert", "HubertModel"),
@@ -679,7 +679,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
-        ("vitdet", "VitDetBackbone"), # Correction: VitDetBackbone is often used
+        ("vitdet", "VitDetBackbone"),  # Correction: VitDetBackbone is often used
         ("vivit", "VivitModel"),
         ("yolos", "YolosModel"),
     ]
