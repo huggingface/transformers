@@ -39,6 +39,8 @@ if is_torchao_available():
         TensorCoreTiledLayout,
     )
     from torchao.quantization.autoquant import AQMixin
+    from torchao.quantization import Int8WeightOnlyConfig, AOPerModuleConfig, \
+        PerAxis, MappingType, IntxWeightOnlyConfig
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
         from torchao.dtypes import Int4CPULayout
@@ -106,6 +108,7 @@ class TorchAoConfigTest(unittest.TestCase):
         self.assertIsInstance(d["quant_type_kwargs"]["layout"], list)
         self.assertTrue("inner_k_tiles" in d["quant_type_kwargs"]["layout"][1])
         quantization_config.to_json_string(use_diff=False)
+
 
 
 @require_torchao
@@ -193,6 +196,59 @@ class TorchAoTest(unittest.TestCase):
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
+    @require_torchao_version_greater_or_equal("0.11.0")
+    def test_include_embedding(self):
+        weight_dtype = torch.int8
+        granularity = PerAxis(0)
+        mapping_type = MappingType.ASYMMETRIC
+        embedding_config = IntxWeightOnlyConfig(
+            weight_dtype=weight_dtype,
+            granularity=granularity,
+            mapping_type=mapping_type,
+        )
+        config = AOPerModuleConfig({"_default": None, "model.embed_tokens": embedding_config})
+        # need set include_embedding to True, and also set modules_to_not_convert to empty list
+        quant_config = TorchAoConfig(quant_type=config, include_embedding=True, modules_to_not_convert=[])
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        # making sure embedding is quantized
+        self.assertTrue(isinstance(quantized_model.model.embed_tokens.weight, AffineQuantizedTensor))
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
+    @require_torchao_version_greater_or_equal("0.11.0")
+    def test_per_module_config_skip(self):
+        linear_config = Int8WeightOnlyConfig()
+        config = AOPerModuleConfig({"_default": linear_config, "model.layers.0.self_attn.q_proj": None})
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        # making sure `model.layers.0.self_attn.q_proj` is skipped
+        self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
 @require_torch_gpu
 class TorchAoGPUTest(TorchAoTest):
