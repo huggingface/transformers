@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 [Granite](https://huggingface.co/papers/2408.13359) is a 3B parameter language model trained with the Power scheduler. Discovering a good learning rate for pretraining large language models is difficult because it depends on so many variables (batch size, number of training tokens, etc.) and it is expensive to perform a hyperparameter search. The Power scheduler is based on a power-law relationship between the variables and their transferability to larger models. Combining the Power scheduler with Maximum Update Parameterization (MUP) allows a model to be pretrained with one set of hyperparameters regardless of all the variables.
 Granite model is a series of AI language models built for businesses, not just for general use. It is a super-focused tool for enterprise tasks like summarizing reports, answering questions, or generating code. It is trained on curated datasets (think finance, legal, code, and academic stuff) and filters out junk like duplicates or harmful content with their HAP detector. It comes in different sizes, from super lightweight (sub-billion parameters) up to 34 billion, so you can pick what fits your needs.
 
-You can find all the original Granite checkpoints under the [Granite](https://huggingface.co/ibm-granite) collection.
+You can find all the original Granite checkpoints under the [IBM-Granite](https://huggingface.co/ibm-granite) organization.
 
 > [!TIP]
 > Click on the Granite models in the right sidebar for more examples of how to apply Granite to different language tasks.
