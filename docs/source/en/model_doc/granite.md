@@ -37,6 +37,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
 pipe = pipeline(
