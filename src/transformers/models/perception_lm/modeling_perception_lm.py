@@ -17,9 +17,12 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
+import math
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -85,27 +88,77 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->PerceptionLM
+# # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->PerceptionLM
+# class PerceptionLMMultiModalProjector(nn.Module):
+#     def __init__(self, config: PerceptionLMConfig):
+#         super().__init__()
+#         # We have hidden_size * the number of vision feature layers
+#         num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+#         self.linear_1 = nn.Linear(
+#             config.vision_config.hidden_size * num_feature_layers,
+#             config.text_config.hidden_size,
+#             bias=config.multimodal_projector_bias,
+#         )
+#         self.act = ACT2FN[config.projector_hidden_act]
+#         self.linear_2 = nn.Linear(
+#             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+#         )
+
+#     def forward(self, image_features):
+#         hidden_states = self.linear_1(image_features)
+#         hidden_states = self.act(hidden_states)
+#         hidden_states = self.linear_2(hidden_states)
+#         return hidden_states
+
+
+class AdaptiveAvgPooling(nn.Module):
+    def __init__(self, pooling_ratio=2):
+        super(AdaptiveAvgPooling, self).__init__()
+        self.pooling_ratio = pooling_ratio
+
+    def forward(self, x):
+        b, num_tokens, c = x.shape
+        h = int(math.sqrt(num_tokens))
+        assert h * h == num_tokens
+
+        shape = (h // self.pooling_ratio, h // self.pooling_ratio)
+        x = x.permute(0, 2, 1).reshape(b, -1, h, h)
+        x = F.adaptive_avg_pool2d(x, shape)
+        x = x.flatten(2).transpose(1, 2)
+
+        return x
+
+
 class PerceptionLMMultiModalProjector(nn.Module):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__()
-        # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
-            config.text_config.hidden_size,
-            bias=config.multimodal_projector_bias,
+        input_size = config.vision_config.hidden_size
+        output_size = config.text_config.hidden_size
+        self.projector = nn.Sequential(
+            nn.Linear(
+                in_features=input_size,
+                out_features=output_size,
+                bias=True,
+            ),
+            nn.GELU(),
+            nn.Linear(
+                in_features=output_size,
+                out_features=output_size,
+                bias=True,
+            ),
         )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        self.pooling = (
+            AdaptiveAvgPooling(config.projector_pooling_ratio)
+            if config.projector_pooling_ratio > 1
+            else nn.Identity()
         )
 
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+    def forward(self, x):
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = self.projector(x)
+        x = x.permute(1, 0, 2)  # LND -> NLD
+        x = self.pooling(x)
+        return x
 
 
 PERCEPTION_LM_START_DOCSTRING = r"""
@@ -146,7 +199,11 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
         # important: this ported version of PerceptionLM isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
         # https://github.com/haotian-liu/LLaVA/tree/main/perception_lm should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+        std = getattr(
+            self.config,
+            "initializer_range",
+            self.config.get_text_config().initializer_range,
+        )
 
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -236,7 +293,9 @@ PERCEPTION_LM_INPUTS_DOCSTRING = r"""
     PERCEPTION_LM_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->PERCEPTION_LM,Llava->PerceptionLM,llava-hf/llava-1.5-7b-hf->facebook/Perception-LM-1B
-class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+class PerceptionLMForConditionalGeneration(
+    PerceptionLMPreTrainedModel, GenerationMixin
+):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -246,9 +305,13 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
 
         self.post_init()
 
@@ -294,11 +357,15 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+            raise ValueError(
+                f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
+            )
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        image_outputs = self.vision_tower(
+            pixel_values, output_hidden_states=True, **kwargs
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -307,17 +374,24 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             if vision_feature_select_strategy == "default":
                 selected_image_feature = selected_image_feature[:, 1:]
         else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [
+                image_outputs.hidden_states[layer_idx]
+                for layer_idx in vision_feature_layer
+            ]
             # For default; crop CLS from each hidden state in the hidden state pool
             if vision_feature_select_strategy == "default":
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = torch.load(
+            "/checkpoint/vision_encoder/smhu/debug/0/h_img_dump_0.pt"
+        ).to(selected_image_feature)
+        image_features = self.multi_modal_projector(image_features)
         return image_features
 
     @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PerceptionLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=PerceptionLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -376,13 +450,23 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+            vision_feature_layer
+            if vision_feature_layer is not None
+            else self.config.vision_feature_layer
         )
         vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -391,7 +475,9 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -410,15 +496,27 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             )
 
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            # if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            #     n_image_tokens = (input_ids == self.config.image_token_id).sum()
+            #     n_image_features = image_features.shape[0] * image_features.shape[1]
+            #     raise ValueError(
+            #         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            #     )
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
+            # print(inputs_embeds.shape)
+            # occhi_embeds = torch.load(
+            #     "/checkpoint/vision_encoder/smhu/debug/0/h_post_stitching_dump_0.pt"
+            # )
+            # print(occhi_embeds.shape)
+            # inputs_embeds = occhi_embeds
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -442,16 +540,23 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:
