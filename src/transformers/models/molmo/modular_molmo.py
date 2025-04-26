@@ -273,6 +273,8 @@ class MolmoTextConfig(CohereConfig):
         vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
+        additional_embedding_size (`int`, *optional*, defaults to 0):
+            Optional size of extra embeddings in molmo models. Weights are not tied in Molmo models and the word embeddings are larger than the lm_head.
         intermediate_size (`int`, *optional*, defaults to 37888):
             Dimension of the MLP representations.
         hidden_act (`str` or `function`, *optional*, defaults to `"swiglu"`):
@@ -365,6 +367,7 @@ class MolmoTextConfig(CohereConfig):
         num_hidden_layers=28,
         head_dim=128,
         vocab_size=152192,
+        additional_embedding_size=128,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
@@ -385,6 +388,7 @@ class MolmoTextConfig(CohereConfig):
         **kwargs,
     ):
         self.head_dim = head_dim
+        self.additional_embedding_size = additional_embedding_size
         self.attention_bias = attention_bias
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
@@ -803,7 +807,9 @@ class MolmoTextPreTrainedModel(PreTrainedModel):
 class MolmoTextModel(CohereModel):
     def __init__(self, config):
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
+        self.embed_tokens_size = config.vocab_size + config.additional_embedding_size
         super().__init__(config)
+        self.embed_tokens = nn.Embedding(self.embed_tokens_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -812,6 +818,7 @@ class MolmoTextModel(CohereModel):
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
+    _tied_weights_keys = []  # Weights are not tied
     _tp_plan = {"lm_head": "colwise_rep"}
 
     def forward(
@@ -1321,9 +1328,6 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
         return image_features
 
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        pass
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1408,6 +1412,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
+            # if input_
             batch_size, num_crops, height, width = pixel_values.shape
             seq_len = inputs_embeds.size(1)
             hidden_size = inputs_embeds.size(2)

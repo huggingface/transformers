@@ -24,6 +24,7 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
+    GenerationConfig,
     GPT2TokenizerFast,
     MolmoImageProcessor,
     MolmoImageProcessorFast,
@@ -44,14 +45,19 @@ CHAT_TEMPLATE = (
     "{%- if (loop.index % 2 == 1 and message['role'] != 'user') or (loop.index % 2 == 0 and message['role'].lower() != 'assistant') -%}"
     "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
     "{%- endif -%}"
-    "{{ message['role'].capitalize() + ': '}}"
+    "{% if message['content'] is not string %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' %}"
+    "{{ '<image> ' }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{{ message['role'].capitalize() + ': ' }}"
     "{% if message['content'] is string %}"
     "{{ message['content'] + ' ' }}"
     "{% else %}"
     "{% for content in message['content'] %}"
-    "{% if content['type'] == 'image' %}"
-    "{{ '<image> ' }}"
-    "{% elif content['type'] == 'text' %}"
+    "{% if content['type'] == 'text' %}"
     "{{ content['text'] + ' ' }}"
     "{% endif %}"
     "{% endfor %}"
@@ -169,9 +175,8 @@ def write_model(
         max_position_embeddings=original_config["max_position_embeddings"],
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
-        vocab_size=original_config["vocab_size"] + 128
-        if variant != "7B-O"
-        else original_config["vocab_size"] + 74,  # 202,
+        vocab_size=original_config["vocab_size"],
+        additional_embedding_size=74 if variant == "7B-O" else 128,
         tie_word_embeddings=original_config["tie_word_embeddings"],
         use_qk_norm=True if variant == "7B-O" else False,
     )
@@ -248,32 +253,22 @@ def write_model(
             state_dict[new_key] = state_dict[new_key]  # .reshape(config.text_config.num_key_value_heads, -1)
 
     gc.collect()
-    print("Loading the checkpoint in a Molmo model.")
+
     with torch.device("meta"):
         model = MolmoForConditionalGeneration(config)
 
     # convert word embeddings. They exist separately in the Molmo custom Embedding layer.
     initial_word_embeddings = state_dict.pop("language_model.model.word_embeddings.weight")
-
-    state_dict["language_model.model.embed_tokens.weight"] = initial_word_embeddings
-
+    new_word_embeddings = state_dict.pop("language_model.model.new_embeddings.weight")
+    state_dict["language_model.model.embed_tokens.weight"] = torch.cat([initial_word_embeddings, new_word_embeddings])
+    print("Loading the checkpoint in a Molmo model.")
     model.load_state_dict(state_dict, strict=True, assign=True)
 
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
-    print("Saving the model.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    del state_dict, model
-
-    # Safety check: reload the converted model
-    gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
-    MolmoForConditionalGeneration.from_pretrained(model_path, device_map="auto")
-    print("Model reloaded successfully.")
-
     # ------------------------------------------------------------
-    # Convert processor
+    # Convert processor, add special tokens, etc etc
     # ------------------------------------------------------------
     extra_special_tokens = {
         "image_token": "<image>",
@@ -284,19 +279,48 @@ def write_model(
     }
     if variant in ["7B-D", "72B"]:
         tokenizer = Qwen2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
-        tokenizer.bos_token = tokenizer.eos_token
-        tokenizer.bos_token_id = tokenizer.eos_token_id
     elif variant == "7B-O":
         tokenizer = GPT2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
+    if not tokenizer.bos_token:
         tokenizer.bos_token = tokenizer.eos_token
         tokenizer.bos_token_id = tokenizer.eos_token_id
-        tokenizer.save_pretrained(model_path)
+    tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+    tokenizer.pad_token = "<|pad|>"
+    tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids("<|pad|>")
+    model.config.text_config.pad_token_id = tokenizer.pad_token_id
+    tokenizer.save_pretrained(model_path)
+    model.config.text_config.pad_token_id = tokenizer.pad_token_id
+    model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.vocab_size = len(tokenizer)
+    model.config.text_config.vocab_size = len(tokenizer)
+    model.config.text_config.additional_embedding_size = 0
+
+    model.resize_token_embeddings(len(tokenizer))
+    print("Resizing embeddings and saving the model.")
+
+    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    print("Model saved successfully.")
+
+    del state_dict, model
+    # Safety check: reload the converted model
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    MolmoForConditionalGeneration.from_pretrained(model_path, device_map="auto")
+    print("Model reloaded successfully.")
 
     image_processor_class = MolmoImageProcessor if MolmoImageProcessorFast is None else MolmoImageProcessorFast
     image_processor = image_processor_class.from_pretrained(input_base_path)
     processor = MolmoProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
+
+    generation_config = GenerationConfig(
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id,
+    )
+    generation_config.save_pretrained(model_path)
+    print("Generation config saved successfully.")
 
 
 def main():

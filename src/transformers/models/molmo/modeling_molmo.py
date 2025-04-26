@@ -695,10 +695,10 @@ class MolmoTextModel(MolmoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
+        self.embed_tokens_size = config.vocab_size + config.additional_embedding_size
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(self.embed_tokens_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1010,7 +1010,7 @@ MOLMO_TEXT_INPUTS_DOCSTRING = r"""
 
 
 class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = []  # Weights are not tied
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -1905,6 +1905,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
+            # if input_
             batch_size, num_crops, height, width = pixel_values.shape
             seq_len = inputs_embeds.size(1)
             hidden_size = inputs_embeds.size(2)
@@ -2013,9 +2014,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             model_inputs["image_masks"] = image_masks
 
         return model_inputs
-
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        pass
 
 
 __all__ = [
