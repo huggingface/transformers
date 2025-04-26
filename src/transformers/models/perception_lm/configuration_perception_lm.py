@@ -84,6 +84,7 @@ class PerceptionLMConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        projector_pooling_ratio=1,
         image_token_index=32000,
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
@@ -131,8 +132,7 @@ class PerceptionLMConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-        self.multimodal_projector_bias = multimodal_projector_bias
-
+        self.projector_pooling_ratio = projector_pooling_ratio
         super().__init__(**kwargs)
 
 
