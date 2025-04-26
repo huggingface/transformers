@@ -26,7 +26,6 @@ from .auto_factory import (
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
-
 logger = logging.get_logger(__name__)
 
 MODEL_MAPPING_NAMES = OrderedDict(
@@ -39,6 +38,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("autoformer", "AutoformerModel"),
+        ("ava", "AvaModel"),
         ("bamba", "BambaModel"),
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
@@ -508,6 +508,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("aria_text", "AriaTextForCausalLM"),
+        ("ava", "AvaForCausalLM"),
         ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
