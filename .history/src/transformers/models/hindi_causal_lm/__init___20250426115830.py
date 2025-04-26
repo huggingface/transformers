@@ -1,57 +1,48 @@
 # coding=utf-8
 # Copyright 2025 ConvAI Innovations and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0.
 
 from typing import TYPE_CHECKING
 
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
     is_sentencepiece_available,
+    is_torch_available,
 )
 
-__all__ = [
-    "HindiCausalLMConfig",
-    "HindiCausalLMTokenizer",
-    "HindiCausalLMModel",
-    "HindiCausalLMForCausalLM",
-    "HindiCausalLMPreTrainedModel",
-    "HindiCausalLMHeadModel",
-]
 
 _import_structure = {
     "configuration_hindi_causal_lm": ["HindiCausalLMConfig"],
 }
 
-# Tokenizer: real or dummy
+# SentencePiece tokenizer
 try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+    _import_structure["dummy_tokenizer_objects"] = ["HindiCausalLMTokenizer"]
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
 
-# Model: real or dummy
+# PyTorch model
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .dummy_pt_objects import (
-        HindiCausalLMPreTrainedModel,
-        HindiCausalLMModel,
-        HindiCausalLMForCausalLM,
-    )
-    HindiCausalLMHeadModel = HindiCausalLMForCausalLM
+    # Ensure dummy objects are available for type checking and lazy loading
+    _import_structure["dummy_pt_objects"] = [
+        "HindiCausalLMPreTrainedModel",
+        "HindiCausalLMModel",
+        "HindiCausalLMForCausalLM",
+    ]
 else:
     _import_structure["modeling_hindi_causal_lm"] = [
         "HindiCausalLMPreTrainedModel",
         "HindiCausalLMModel",
         "HindiCausalLMForCausalLM",
-        "HindiCausalLMHeadModel",
     ]
+
 
 if TYPE_CHECKING:
     from .configuration_hindi_causal_lm import HindiCausalLMConfig
@@ -68,26 +59,21 @@ if TYPE_CHECKING:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
+        # Import dummy objects for type checking
         from .dummy_pt_objects import (
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,
         )
-        HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
+        # Import actual objects for type checking
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
-            HindiCausalLMHeadModel,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,
         )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(
-        __name__,
-        globals()["__file__"],
-        _import_structure,
-        module_spec=__spec__,
-    )
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
