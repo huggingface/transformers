@@ -220,30 +220,4 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-             copyfile(self.vocab_file, out_vocab_file)
-             logger.info(f"Copying {self.vocab_file} to {out_vocab_file}")
-        elif not os.path.isfile(self.vocab_file):
-             logger.error(f"Cannot copy {self.vocab_file} to {out_vocab_file}: File not found.")
-
-
-        return (out_vocab_file,)
-
-    # Override build_inputs_with_special_tokens if needed (defaults might be ok)
-    # def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None): ...
-
-    # Override get_special_tokens_mask if needed (defaults might be ok)
-    # def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False): ...
-
-    # Override create_token_type_ids_from_sequences if needed (usually 0s for single sequence)
-    # def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None): ...
-
-    # --- Add direct access to underlying SentencePiece model if needed ---
-    @property
-    def sp_model(self):
-        """Direct access to the SentencePieceProcessor instance."""
-        return self._tokenizer
-
+            save_directory, (filename_prefix +
