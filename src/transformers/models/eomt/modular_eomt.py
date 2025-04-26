@@ -42,7 +42,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
 )
 from ..llama.modeling_llama import eager_attention_forward
-from ..mask2former.modeling_mask2former import Mask2FormerHungarianMatcher
 from .configuration_eomt import EoMTConfig
 
 
@@ -53,6 +52,7 @@ if is_accelerate_available():
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 logger = logging.get_logger(__name__)
+
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
 def sample_point(
