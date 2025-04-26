@@ -127,7 +127,7 @@ def get_resize_output_image_size(
     ratio = max(height / max_height, width / max_width)
 
     if ratio > 1:
-        # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
+        # Original implementation uses `round` which utilises bankers rounding, which can lead to surprising results
         # Here we use floor to ensure the image is always smaller than the given "longest_edge"
         height = int(math.floor(height / ratio))
         width = int(math.floor(width / ratio))
