@@ -35,18 +35,25 @@ HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Define classes at module level
+# Define empty classes that will be overridden when torch is available
+
 class HindiCausalLMPreTrainedModel:
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-    config_class = HindiCausalLMConfig
     base_model_prefix = "hindi_causal_lm"
+    config_class = HindiCausalLMConfig
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = []
     
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    def _init_weights(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+        
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -54,7 +61,10 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     """
     The Hindi Causal LM base model.
     """
-    def __init__(self, config=None):
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -64,7 +74,13 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     """
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
     
-    def __init__(self, config=None):
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 

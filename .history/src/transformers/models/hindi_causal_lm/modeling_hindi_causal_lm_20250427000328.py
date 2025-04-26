@@ -35,40 +35,12 @@ HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Define classes at module level
-class HindiCausalLMPreTrainedModel:
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-    config_class = HindiCausalLMConfig
-    base_model_prefix = "hindi_causal_lm"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = []
-    
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+# Define empty classes at module level
+HindiCausalLMPreTrainedModel = None
+HindiCausalLMModel = None
+HindiCausalLMForCausalLM = None
 
 
-class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
-    """
-    The Hindi Causal LM base model.
-    """
-    def __init__(self, config=None):
-        requires_backends(self, ["torch"])
-
-
-class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
-    """
-    Hindi Causal LM model with a language modeling head.
-    """
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
-    
-    def __init__(self, config=None):
-        requires_backends(self, ["torch"])
-
-
-# Override with actual implementations when torch is available
 if is_torch_available():
     import torch
     import torch.utils.checkpoint
@@ -409,7 +381,7 @@ if is_torch_available():
             )
 
 
-    class HindiCausalLMPreTrainedModel(PreTrainedModel):
+    class _HindiCausalLMPreTrainedModel(PreTrainedModel):
         """
         An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
         models.
@@ -440,7 +412,7 @@ if is_torch_available():
                 module.gradient_checkpointing = value
 
 
-    class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
+    class _HindiCausalLMModel(_HindiCausalLMPreTrainedModel):
         """
         The Hindi Causal LM base model.
         """
@@ -561,7 +533,7 @@ if is_torch_available():
             )
 
 
-    class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
+    class _HindiCausalLMForCausalLM(_HindiCausalLMPreTrainedModel):
         _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
 
         def __init__(self, config):
@@ -569,7 +541,7 @@ if is_torch_available():
             self.config = config
             
             # Initialize the base model
-            self.hindi_causal_lm = HindiCausalLMModel(config)
+            self.hindi_causal_lm = _HindiCausalLMModel(config)
             
             # LM head
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -668,3 +640,31 @@ if is_torch_available():
                 attentions=outputs.attentions,
                 cross_attentions=outputs.cross_attentions,
             )
+            
+    # Assign the concrete implementations to the module-level variables
+    HindiCausalLMPreTrainedModel = _HindiCausalLMPreTrainedModel
+    HindiCausalLMModel = _HindiCausalLMModel
+    HindiCausalLMForCausalLM = _HindiCausalLMForCausalLM
+    
+else:
+    # Define stub classes at module level
+    class HindiCausalLMPreTrainedModel:
+        """Stub class for when PyTorch is not available."""
+        base_model_prefix = "hindi_causal_lm"
+        config_class = HindiCausalLMConfig
+        supports_gradient_checkpointing = True
+        
+        def __init__(self, *args, **kwargs):
+            requires_backends(self, ["torch"])
+
+    class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
+        """Stub class for when PyTorch is not available."""
+        def __init__(self, *args, **kwargs):
+            requires_backends(self, ["torch"])
+
+    class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
+        """Stub class for when PyTorch is not available."""
+        _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
+        
+        def __init__(self, *args, **kwargs):
+            requires_backends(self, ["torch"])
