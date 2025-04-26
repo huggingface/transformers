@@ -150,8 +150,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
+        ( "hindi_causal_lm": "HindiCausalLMConfig"),
         ("hiera", "HieraConfig"),
-        ("hindi_causal_lm", "HindiCausalLMConfig"),  # Added entry for Hindi Causal LM
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
@@ -509,9 +509,9 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("helium", "Helium"),
+        ("hindi_causal_lm", "Hindi Causal LM"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
-        ("hindi_causal_lm", "Hindi Causal LM"),  # Added entry for Hindi Causal LM
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),

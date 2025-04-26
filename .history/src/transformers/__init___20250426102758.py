@@ -141,13 +141,16 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.hindi_causal_lm": [
+    "models.hindi_causal_lm": [],
+    "models.hindi_causal_lm.configuration_hindi_causal_lm": [
+        "HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "HindiCausalLMConfig",
-        "HindiCausalLMTokenizer",
-        "HindiCausalLMModel",
-        "HindiCausalLMForCausalLM",
-        "HindiCausalLMPreTrainedModel",
     ],
+    "models.hindi_causal_lm.modeling_hindi_causal_lm": [
+        "HindiCausalLMModel",
+        "HindiCausalLMHeadModel",
+    ],
+    "models.hindi_causal_lm.tokenization_hindi_causal_lm": ["HindiCausalLMTokenizer"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -608,15 +611,6 @@ if TYPE_CHECKING:
     )
     from .hf_argparser import HfArgumentParser
 
-    # Hindi Causal LM imports
-    from .models.hindi_causal_lm import (
-        HindiCausalLMConfig,
-        HindiCausalLMForCausalLM,
-        HindiCausalLMModel,
-        HindiCausalLMPreTrainedModel,
-        HindiCausalLMTokenizer,
-    )
-
     # Integrations
     from .integrations import (
         is_clearml_available,
@@ -631,6 +625,17 @@ if TYPE_CHECKING:
         is_tensorboard_available,
         is_wandb_available,
     )
+
+    # Hindi Causal LM Model Types
+    from .models.hindi_causal_lm.configuration_hindi_causal_lm import (
+        HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        HindiCausalLMConfig,
+    )
+    from .models.hindi_causal_lm.modeling_hindi_causal_lm import (
+        HindiCausalLMModel,
+        HindiCausalLMHeadModel,
+    )
+    from .models.hindi_causal_lm.tokenization_hindi_causal_lm import HindiCausalLMTokenizer
 
     # Model Cards
     from .modelcard import ModelCard
@@ -801,7 +806,7 @@ if TYPE_CHECKING:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.dummy_sentencepiece_and_tokenizers_objects import *
+        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
     else:
         from .convert_slow_tokenizer import (
             SLOW_TO_FAST_CONVERTERS,
