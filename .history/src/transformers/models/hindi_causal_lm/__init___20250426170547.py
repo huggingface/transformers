@@ -21,6 +21,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
 
+# Remove this entire block for now
+# try:
+#     if not is_tokenizers_available():
+#         raise OptionalDependencyNotAvailable()
+# except OptionalDependencyNotAvailable:
+#     pass
+# else:
+#     _import_structure["tokenization_hindi_causal_lm_fast"] = ["HindiCausalLMTokenizerFast"]
+
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -43,6 +52,15 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+
+    # Also remove this block
+    # try:
+    #     if not is_tokenizers_available():
+    #         raise OptionalDependencyNotAvailable()
+    # except OptionalDependencyNotAvailable:
+    #     pass
+    # else:
+    #     from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
 
     try:
         if not is_torch_available():
