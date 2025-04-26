@@ -19,6 +19,7 @@ from typing import List, Optional, Tuple, Union
 
 from ...utils import is_torch_available, logging
 from ...utils.import_utils import requires_backends
+from ...modeling_utils import PreTrainedModel
 from ...configuration_utils import PretrainedConfig
 from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
@@ -51,9 +52,36 @@ if is_torch_available():
         BaseModelOutputWithPastAndCrossAttentions,
         CausalLMOutputWithCrossAttentions,
     )
-    from ...modeling_utils import PreTrainedModel
 
 
+from ...activations import ACT2FN
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
+)
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from .configuration_hindi_causal_lm import HindiCausalLMConfig
+
+
+logger = logging.get_logger(__name__)
+
+# Set constants
+_CHECKPOINT_FOR_DOC = "convaiinnovations/hindi-foundational-model-base"
+_CONFIG_FOR_DOC = "HindiCausalLMConfig"
+
+HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "convaiinnovations/hindi-foundational-model-base",
+    # See all Hindi Causal LM models at https://huggingface.co/models?filter=hindi_causal_lm
+]
+
+# This function requires backends to be used for directly interacting with the model
+def requires_torch(obj):
+    requires_backends(obj, ["torch"])
+
+
+if is_torch_available():
     class RMSNorm(nn.Module):
         """
         Root Mean Square Layer Normalization, variant of LayerNorm.
@@ -89,6 +117,7 @@ if is_torch_available():
             return self.weight * hidden_states
 
 
+if is_torch_available():
     class HindiCausalLMAttention(nn.Module):
         """Multi-headed attention with causal mask specifically for Hindi Causal LM."""
 
@@ -245,6 +274,7 @@ if is_torch_available():
             return outputs
 
 
+if is_torch_available():
     class HindiCausalLMLayer(nn.Module):
         """Transformer layer for Hindi Causal LM with attention and feed-forward networks."""
 
@@ -307,6 +337,7 @@ if is_torch_available():
             return outputs
 
 
+if is_torch_available():
     class HindiCausalLMEncoder(nn.Module):
         """
         Transformer encoder consisting of `config.num_hidden_layers` self attention layers.
@@ -380,6 +411,7 @@ if is_torch_available():
             )
 
 
+if is_torch_available():
     @requires_torch
     class HindiCausalLMPreTrainedModel(PreTrainedModel):
         """
@@ -412,6 +444,7 @@ if is_torch_available():
                 module.gradient_checkpointing = value
 
 
+if is_torch_available():
     @requires_torch
     class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         """
@@ -534,6 +567,7 @@ if is_torch_available():
             )
 
 
+if is_torch_available():
     @requires_torch
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
