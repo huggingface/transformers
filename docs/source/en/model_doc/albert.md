@@ -71,25 +71,22 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.", top_
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-# Load ALBERT (v2) and its tokenizer
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+    torch_dtype=torch.float16,
+    attn_implementation="sdpa",
     device_map="auto"
 )
 
-# Masked language modeling prompt
 prompt = "Plants create energy through a process known as [MASK]."
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device) 
 
-# Predict the masked token
 with torch.no_grad():
     outputs = model(**inputs)
     mask_token_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
-    predictions = outputs.logits[0, mask_token_index]  # Get logits for [MASK] token
+    predictions = outputs.logits[0, mask_token_index]
 
-# Decode top predictions (k=5)
 top_k = torch.topk(predictions, k=5).indices.tolist()
 for token_id in top_k[0]:
     print(f"Prediction: {tokenizer.decode([token_id])}")
@@ -106,38 +103,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/quantization/overview) overview for more available quantization backends.
-
-The example below uses [torch.quantization](https://pytorch.org/docs/stable/generated/torch.ao.quantization.quantize_dynamic.html) to only quantize the weights to int8. In te example quantization was applied only on Linear layers
-
-
-```py
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-import torch
-
-# Load model ---loaded v1 version as it was answering good
-model = AutoModelForMaskedLM.from_pretrained("albert/albert-base-v1")
-tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v1")
-
-# Quantize the model (PyTorch native)
-quantized_model = torch.quantization.quantize_dynamic(
-    model,
-    {torch.nn.Linear},  # Quantize only linear layers
-    dtype=torch.qint8
-)
-
-# Verify
-print(f"Size before: {model.get_memory_footprint()/1e6:.1f}MB")
-print(f"Size after: {quantized_model.get_memory_footprint()/1e6:.1f}MB")
-
-# Usage example
-inputs = tokenizer("Albert Einstein was born in [MASK].", return_tensors="pt")
-with torch.no_grad():
-    outputs = quantized_model(**inputs)
-    print(tokenizer.decode(outputs.logits[0].argmax(-1)))
-```
-
-> ALBERT is not compatible with `AttentionMaskVisualizer` as it uses masked self-attention rather than causal attention. So don't have `_update_causal_mask` method.
 
 ## Notes
 
