@@ -149,8 +149,8 @@ class HindiCausalLMConfig(PretrainedConfig):
              )
         if self.positional_encoding_type == "rope":
              logger.warning(
-                 f"Config positional_encoding_type is 'rope', but the adapted modeling code uses standard embeddings "
-                 f"to match the original training script. RoPE is not implemented."
+                 "Config positional_encoding_type is 'rope', but the adapted modeling code uses standard embeddings "
+                 "to match the original training script. RoPE is not implemented."
              )
              # Force to absolute/learned to match implementation
              self.positional_encoding_type = "absolute"

@@ -31,14 +31,13 @@ from ...test_configuration_common import ConfigTester
 # Import correct mixins and helpers
 from ...test_modeling_common import ModelTesterMixin, GenerationTesterMixin, ids_tensor
 
-
 # Conditional import of model parts based on PyTorch availability
 if is_torch_available():
     import torch
 
     # Add the missing swiglu activation function to ACT2FN
     from transformers.activations import ACT2FN
-    
+
     # Register swiglu activation function if not already defined
     if "swiglu" not in ACT2FN:
         def swiglu(x):
@@ -47,7 +46,7 @@ if is_torch_available():
                 raise ValueError(f"Input dimension must be divisible by 2, got {x.shape[-1]}")
             x, gate = x.chunk(2, dim=-1)
             return x * torch.sigmoid(gate)
-        
+
         # Add to ACT2FN
         ACT2FN["swiglu"] = swiglu
 
@@ -62,7 +61,6 @@ else:
     # Define dummy classes or skip tests if torch not available
     ModelTesterMixin = object # type: ignore
     GenerationTesterMixin = object # type: ignore
-
 
 # --- Model Tester Class ---
 # Defines the configuration and generates dummy inputs/outputs for HindiCausalLMHeadModel
@@ -138,7 +136,6 @@ class HindiCausalLMModelTester:
         # Used by GenerationTesterMixin - needs decoder_start_token_id
         self.decoder_start_token_id = self.bos_token_id
 
-
     def prepare_config_and_inputs(self):
         # Corrected: Pass shape as tuple to ids_tensor
         input_ids = ids_tensor((self.batch_size, self.seq_length), self.vocab_size)
@@ -202,7 +199,6 @@ class HindiCausalLMModelTester:
         # Ensure loss is scalar (0 dimensions)
         self.parent.assertEqual(result_with_labels.loss.ndim, 0)
 
-
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, lm_labels = self.prepare_config_and_inputs()
         # Prepare dict for ModelTesterMixin common tests
@@ -211,7 +207,7 @@ class HindiCausalLMModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
-        
+
         # Add position_ids explicitly for padding compatibility
         if attention_mask is not None:
             # Create position IDs that account for padding correctly
@@ -221,12 +217,11 @@ class HindiCausalLMModelTester:
         else:
             # Standard position ids
             inputs_dict["position_ids"] = torch.arange(self.seq_length, device=torch_device).unsqueeze(0).expand(self.batch_size, -1)
-            
+
         # Add token_type_ids if forward accepts it, even if unused
         inputs_dict["token_type_ids"] = torch.zeros_like(input_ids)
-        
-        return config, inputs_dict
 
+        return config, inputs_dict
 
 @require_torch
 class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -293,38 +288,38 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     def test_left_padding_compatibility(self):
         if not is_torch_available():
             self.skipTest(reason="PyTorch not available, skipping left padding test.")
-        
+
         # If no generative models, skip
         if len(self.all_generative_model_classes) == 0:
             self.skipTest(reason="No generative architecture available for this model.")
-        
+
         # If the model doesn't support padding, skip
         if not self.has_attentions:
             self.skipTest(reason="This model doesn't support padding.")
-        
+
         # Get the config and model
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = self.all_generative_model_classes[0](config).to(torch_device).eval()
-        
+
         # Force the model to NOT use cache for this test
         model.generation_config.use_cache = False
-        
+
         # Prepare inputs for standard forward pass
         input_ids = torch.randint(100, 200, (1, 4), device=torch_device)
         attention_mask = torch.ones_like(input_ids)
-        
+
         # Position IDs with padding consideration
         position_ids_standard = torch.arange(4, device=torch_device).unsqueeze(0)
-        
+
         # Standard forward pass
         with torch.no_grad():
             outputs_standard = model(
-                input_ids=input_ids, 
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids_standard
             )
             next_token_logits_standard = outputs_standard.logits[:, -1, :]
-        
+
         # Left-padded inputs
         pad_token_id = config.pad_token_id if config.pad_token_id is not None else 0
         padded_input_ids = torch.cat([
@@ -335,14 +330,14 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             torch.zeros(1, 2, device=torch_device),
             attention_mask
         ], dim=1)
-        
+
         # Create position IDs that handle padding properly (important for left-padding)
         # These should start from 0 for the first non-pad token
         position_ids_padded = torch.cat([
             torch.zeros(1, 2, device=torch_device),  # Positions for pad tokens
             position_ids_standard  # Original positions
         ], dim=1)
-        
+
         # Left-padded forward pass
         with torch.no_grad():
             outputs_padded = model(
@@ -351,7 +346,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
                 position_ids=position_ids_padded
             )
             next_token_logits_padded = outputs_padded.logits[:, -1, :]
-        
+
         # Compare with higher tolerance for numerical stability
         torch.testing.assert_close(
             next_token_logits_standard,
@@ -364,15 +359,14 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     @unittest.skip(reason="Gradient checkpointing tests skipped.")
     def test_gradient_checkpointing(self):
         pass
-        
+
     @unittest.skip(reason="Gradient checkpointing tests skipped.")
     def test_gradient_checkpointing_backward_compatibility(self):
         pass
-        
+
     @unittest.skip(reason="Gradient checkpointing tests skipped.")
     def test_gradient_checkpointing_enable_disable(self):
         pass
-
 
 @require_torch
 @require_sentencepiece
