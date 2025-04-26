@@ -18,10 +18,8 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import (
-    ImageProcessingTestMixin,
-    prepare_image_inputs,
-)
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -37,16 +35,16 @@ if is_vision_available():
 
 class SuperPointImageProcessingTester:
     def __init__(
-            self,
-            parent,
-            batch_size=7,
-            num_channels=3,
-            image_size=18,
-            min_resolution=30,
-            max_resolution=400,
-            do_resize=True,
-            size=None,
-            do_grayscale=True,
+        self,
+        parent,
+        batch_size=7,
+        num_channels=3,
+        image_size=18,
+        min_resolution=30,
+        max_resolution=400,
+        do_resize=True,
+        size=None,
+        do_grayscale=True,
     ):
         size = size if size is not None else {"height": 480, "width": 640}
         self.parent = parent
@@ -170,6 +168,8 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             check_post_processed_output(tuple_post_processed_outputs, tuple_image_sizes)
 
             tensor_image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
-            tensor_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tensor_image_sizes)
+            tensor_post_processed_outputs = image_processor.post_process_keypoint_detection(
+                outputs, tensor_image_sizes
+            )
 
             check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)

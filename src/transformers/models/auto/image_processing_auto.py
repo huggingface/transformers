@@ -45,6 +45,7 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 
+
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
@@ -145,7 +146,13 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("superglue", ("SuperGlueImageProcessor",)),
-            ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast",)),
+            (
+                "superpoint",
+                (
+                    "SuperPointImageProcessor",
+                    "SuperPointImageProcessorFast",
+                ),
+            ),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin2sr", ("Swin2SRImageProcessor",)),
@@ -217,15 +224,15 @@ def get_image_processor_class_from_name(class_name: str):
 
 
 def get_image_processor_config(
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        force_download: bool = False,
-        resume_download: Optional[bool] = None,
-        proxies: Optional[Dict[str, str]] = None,
-        token: Optional[Union[bool, str]] = None,
-        revision: Optional[str] = None,
-        local_files_only: bool = False,
-        **kwargs,
+    pretrained_model_name_or_path: Union[str, os.PathLike],
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: Optional[bool] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    **kwargs,
 ):
     """
     Loads the image processor configuration from a pretrained model image processor configuration.
@@ -587,11 +594,11 @@ class AutoImageProcessor:
 
     @staticmethod
     def register(
-            config_class,
-            image_processor_class=None,
-            slow_image_processor_class=None,
-            fast_image_processor_class=None,
-            exist_ok=False,
+        config_class,
+        image_processor_class=None,
+        slow_image_processor_class=None,
+        fast_image_processor_class=None,
+        exist_ok=False,
     ):
         """
         Register a new image processor for this class.
@@ -615,15 +622,15 @@ class AutoImageProcessor:
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
         if fast_image_processor_class is not None and not issubclass(
-                fast_image_processor_class, BaseImageProcessorFast
+            fast_image_processor_class, BaseImageProcessorFast
         ):
             raise ValueError("The `fast_image_processor_class` should inherit from `BaseImageProcessorFast`.")
 
         if (
-                slow_image_processor_class is not None
-                and fast_image_processor_class is not None
-                and issubclass(fast_image_processor_class, BaseImageProcessorFast)
-                and fast_image_processor_class.slow_image_processor_class != slow_image_processor_class
+            slow_image_processor_class is not None
+            and fast_image_processor_class is not None
+            and issubclass(fast_image_processor_class, BaseImageProcessorFast)
+            and fast_image_processor_class.slow_image_processor_class != slow_image_processor_class
         ):
             raise ValueError(
                 "The fast processor class you are passing has a `slow_image_processor_class` attribute that is not "
