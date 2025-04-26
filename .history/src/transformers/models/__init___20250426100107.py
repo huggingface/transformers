@@ -18,7 +18,6 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    # Existing imports alphabetically...
     from .albert import *
     from .align import *
     from .altclip import *
@@ -134,7 +133,6 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
-    from .hindi_causal_lm import *
     from .hubert import *
     from .ibert import *
     from .idefics import *
@@ -330,14 +328,8 @@ if TYPE_CHECKING:
     from .zamba import *
     from .zamba2 import *
     from .zoedepth import *
-
 else:
     import sys
 
     _file = globals()["__file__"]
-    # -- This uses the function defined in ../utils/import_utils.py --
-    # It scans the current directory (models/) and subdirectories
-    # It expects models to have their own __init__.py where classes are listed
-    # in _import_structure
-    _import_structure = define_import_structure(_file)
-    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
