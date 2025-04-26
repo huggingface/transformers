@@ -115,7 +115,6 @@ class TorchAoConfigTest(unittest.TestCase):
         quantization_config.to_json_string(use_diff=False)
 
 
-
 @require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
 class TorchAoTest(unittest.TestCase):
@@ -254,6 +253,7 @@ class TorchAoTest(unittest.TestCase):
             "What are we having for dinner?\n\nJess: (smiling) I",
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
 
 @require_torch_gpu
 class TorchAoGPUTest(TorchAoTest):

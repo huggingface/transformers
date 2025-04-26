@@ -246,6 +246,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             # handle AOPerModuleConfig, introduced in torchao 0.11.0+
             if self.quantization_config._get_ao_version() > version.Version("0.10.0"):
                 from torchao.quantization import AOPerModuleConfig
+
                 config = self.quantization_config.get_apply_tensor_subclass()
                 if isinstance(config, AOPerModuleConfig):
                     module_fqn, _ = param_name.rsplit(".", 1)
