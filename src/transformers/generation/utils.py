@@ -1285,7 +1285,7 @@ class GenerationMixin:
         Merge user-defined processors/criteria with the ones instantiated inside `generate`. In case the same
         processor/criteria is present on both lists, use the user-defined one.
 
-        (Note: up to v4.49.0, this funtion threw an exception is the same logit processor was found twice.)
+        (Note: up to v4.49.0, this function threw an exception is the same logit processor was found twice.)
         """
         if len(custom_list) == 0:
             return default_list
@@ -3852,7 +3852,7 @@ class GenerationMixin:
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        # (joao) feature lost in the refactor. Probably won't implement, hurts readbility with minimal gains (there
+        # (joao) feature lost in the refactor. Probably won't implement, hurts readability with minimal gains (there
         # are newer low-memory alternatives like the offloaded cache)
         sequential = generation_config.low_memory
         if sequential:

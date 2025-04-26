@@ -1237,7 +1237,7 @@ class FlaxElectraSequenceSummary(nn.Module):
         Returns:
             `jnp.ndarray`: The summary of the sequence hidden states.
         """
-        # NOTE: this doest "first" type summary always
+        # NOTE: this does "first" type summary always
         output = hidden_states[:, 0]
         output = self.first_dropout(output, deterministic=deterministic)
         output = self.summary(output)
