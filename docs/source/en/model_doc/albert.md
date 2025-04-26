@@ -113,7 +113,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 - ALBERT requires absolute positional embeddings, and it expects right-padding (i.e., pad tokens should be added at the end, not the beginning).
 - ALBERT uses token_type_ids, just like BERT. So you should indicate which token belongs to which segment (e.g., sentence A vs. sentence B) when doing tasks like question answering or sentence-pair classification.
 - ALBERT uses a different pretraining objective called Sentence Order Prediction (SOP) instead of Next Sentence Prediction (NSP), so fine-tuned models might behave slightly differently from BERT when modeling inter-sentence relationships.
-- ALBERT uses absolute position embeddings (like BERT) so padding is applied at right. Size of embeddings is 128 While BERT uses 768. ALBERT can processes maximum 512 token at a time. 
+
 
 ## Resources
 
