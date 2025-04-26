@@ -25,10 +25,9 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_hindi_causal_lm": ["HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP", "HindiCausalLMConfig"],
+    "configuration_hindi_causal_lm": ["HindiCausalLMConfig", "HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP"],
 }
 
-# Tokenizer
 try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
@@ -37,7 +36,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
 
-# Fast tokenizer
 try:
     if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
@@ -46,7 +44,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_hindi_causal_lm_fast"] = ["HindiCausalLMTokenizerFast"]
 
-# Model
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()

@@ -77,7 +77,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
+        from .tokenizer_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
 
     try:
         if not is_torch_available():
