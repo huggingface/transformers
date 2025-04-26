@@ -105,9 +105,19 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] MolmoProcessor
 
+## MolmoAdapterModel
+
+[[autodoc]] MolmoAdapterModel
+    - forward
+
 ## MolmoTextModel
 
 [[autodoc]] MolmoTextModel
+    - forward
+
+## MolmoVisionModel
+
+[[autodoc]] MolmoVisionModel
     - forward
 
 ## MolmoForCausalLM
