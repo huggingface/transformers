@@ -38,9 +38,14 @@ if is_torchao_available():
         AffineQuantizedTensor,
         TensorCoreTiledLayout,
     )
+    from torchao.quantization import (
+        AOPerModuleConfig,
+        Int8WeightOnlyConfig,
+        IntxWeightOnlyConfig,
+        MappingType,
+        PerAxis,
+    )
     from torchao.quantization.autoquant import AQMixin
-    from torchao.quantization import Int8WeightOnlyConfig, AOPerModuleConfig, \
-        PerAxis, MappingType, IntxWeightOnlyConfig
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
         from torchao.dtypes import Int4CPULayout
