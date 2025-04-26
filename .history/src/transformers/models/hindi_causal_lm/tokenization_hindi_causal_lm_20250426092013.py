@@ -15,21 +15,16 @@
 """Tokenization classes for HindiCausalLM."""
 
 import os
+import sentencepiece as spm
 from typing import Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging, is_sentencepiece_available
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
-
-# Check if sentencepiece is available
-if is_sentencepiece_available():
-    import sentencepiece as spm
-else:
-    spm = None
 
 
 class HindiCausalLMTokenizer(PreTrainedTokenizer):
@@ -65,20 +60,13 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict] = None,
         **kwargs
     ):
-        if not is_sentencepiece_available():
-            raise ImportError(
-                "You need to install SentencePiece to use HindiCausalLMTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         
         # Load SentencePiece model
         if not os.path.exists(vocab_file):
             raise ValueError(f"SentencePiece model file {vocab_file} not found")
             
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
         
         # Set token IDs
@@ -92,7 +80,6 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
         
