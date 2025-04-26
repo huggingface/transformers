@@ -234,6 +234,9 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__)))
+
 
 class Gemma3Config(PretrainedConfig):
     r"""
