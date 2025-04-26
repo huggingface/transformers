@@ -145,7 +145,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         ("hiera", "HieraModel"),
-        (HindiCausalLMConfig, "HindiCausalLMModel"),
+        ("hindi_causal_lm", "HindiCausalLMModel")
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
@@ -558,7 +558,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granitemoe", "GraniteMoeForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
-        (HindiCausalLMConfig, "HindiCausalLMForCausalLM"),
+        ("hindi_causal_lm", "HindiCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),

@@ -1,3 +1,4 @@
+#C:\Users\user\Desktop\transformers\src\transformers\models\auto\modeling_auto.py
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #

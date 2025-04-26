@@ -26,6 +26,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ..hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
+from ..hindi_causal_lm.tokenization_hindi_causal_lm import HindiCausalLMTokenizer
 from ...utils import (
     cached_file,
     extract_commit_hash,
@@ -252,13 +253,7 @@ else:
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
-            (
-                "hindi_causal_lm",
-                (
-                    "HindiCausalLMTokenizer" if is_sentencepiece_available() else None,
-                    None,
-                ),
-            ),
+            
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),

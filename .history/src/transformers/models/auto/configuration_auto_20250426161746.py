@@ -511,7 +511,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("helium", "Helium"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
-        ("hindi_causal_lm", "HindiCausalLM"),
+        ("hindi_causal_lm", "HindiCausalLMConfig"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),

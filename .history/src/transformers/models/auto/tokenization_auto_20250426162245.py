@@ -252,13 +252,7 @@ else:
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
-            (
-                "hindi_causal_lm",
-                (
-                    "HindiCausalLMTokenizer" if is_sentencepiece_available() else None,
-                    None,
-                ),
-            ),
+            (HindiCausalLMConfig, ("HindiCausalLMTokenizer", None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
