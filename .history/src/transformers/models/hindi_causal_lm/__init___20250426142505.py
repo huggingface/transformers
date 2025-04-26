@@ -15,7 +15,6 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_tokenizer_objects import HindiCausalLMTokenizer
-
     HindiCausalLMTokenizer = HindiCausalLMTokenizer  # Expose as module attribute
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
@@ -30,7 +29,6 @@ except OptionalDependencyNotAvailable:
         HindiCausalLMForCausalLM,
         HindiCausalLMPreTrainedModel,
     )
-
     HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     HindiCausalLMModel = HindiCausalLMModel  # Expose as module attribute
     HindiCausalLMForCausalLM = HindiCausalLMForCausalLM
@@ -63,7 +61,6 @@ if TYPE_CHECKING:
             HindiCausalLMForCausalLM,
             HindiCausalLMPreTrainedModel,
         )
-
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
@@ -75,5 +72,6 @@ if TYPE_CHECKING:
 
 else:
     import sys
-
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )
