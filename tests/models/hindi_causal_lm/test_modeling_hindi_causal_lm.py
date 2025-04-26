@@ -26,7 +26,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
-
 if is_torch_available():
     import torch
 
@@ -34,7 +33,6 @@ if is_torch_available():
         HindiCausalLMForCausalLM,
         HindiCausalLMModel,
     )
-
 
 class HindiCausalLMModelTester:
     def __init__(
@@ -170,7 +168,6 @@ class HindiCausalLMModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-
 @require_torch
 class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (HindiCausalLMModel, HindiCausalLMForCausalLM) if is_torch_available() else ()
@@ -202,7 +199,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         model.to(torch_device)
         model.eval()
         self.assertTrue(model.config.pad_token_id is not None)
-        
+
         # This is to ensure that left padding doesn't complain about the causal mask & past key values
         # Only test with causal lm + left padding + no past cache
         if padding_side == "left":
@@ -215,7 +212,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
                 "eos_token_id": None,
                 "use_cache": False,
             }
-            
+
             # Test with left padding
             tokenizer_padding_side = "left"
             encoded_prompt = batch_size * [[0, 31, 33, 1, 1] + [model.config.pad_token_id] * 4]
@@ -238,7 +235,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
                 "eos_token_id": None,
                 "use_cache": False,
             }
-            
+
             # Test with right padding (default in tokenizers)
             tokenizer_padding_side = "right"
             encoded_prompt = batch_size * [[31, 33, 1, 1, 0] + [model.config.pad_token_id] * 4]
@@ -255,7 +252,6 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         model = HindiCausalLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-
 @require_torch
 @require_sentencepiece
 class HindiCausalLMIntegrationTest(unittest.TestCase):
@@ -265,19 +261,19 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
         model = HindiCausalLMForCausalLM.from_pretrained(model_name)
         model.to(torch_device)
         model.eval()
-        
+
         # Test a simple input
         input_text = "गंगा नदी"
         from transformers import HindiCausalLMTokenizer
         tokenizer = HindiCausalLMTokenizer.from_pretrained(model_name)
-        
+
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         self.assertEqual(outputs.logits.shape[0], 1)  # Batch size
         self.assertEqual(outputs.logits.shape[2], model.config.vocab_size)  # Vocab size
-        
+
         # Test generation
         generated_text = tokenizer.decode(
             model.generate(
@@ -288,6 +284,6 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
             )[0],
             skip_special_tokens=True,
         )
-        
+
         # Just check that we get some output, not testing the exact text
         self.assertGreater(len(generated_text), len(input_text))

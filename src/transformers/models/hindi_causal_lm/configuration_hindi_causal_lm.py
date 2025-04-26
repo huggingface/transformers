@@ -107,7 +107,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.normalization_layer = normalization_layer
         self.positional_encoding_type = positional_encoding_type
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
