@@ -445,10 +445,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         target_height, target_width = target_resolution
         new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
 
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
+        paste_x, r_x = divmod(target_width - new_width, 2)
+        paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = self.pad(image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+        padded_image = self.pad(image, padding=((paste_y, paste_y + r_y), (paste_x, paste_x + r_x)))
 
         return padded_image
 
