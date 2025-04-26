@@ -21,4 +21,5 @@ class HindiCausalLMTokenizer(metaclass=DummyObject):
     This is a placeholder for the HindiCausalLMTokenizer class that requires SentencePiece.
     It is used to avoid import errors when SentencePiece is not available.
     """
+
     _backends = ["sentencepiece"]

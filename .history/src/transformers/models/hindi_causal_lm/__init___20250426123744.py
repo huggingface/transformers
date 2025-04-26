@@ -45,6 +45,7 @@ except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import (
         HindiCausalLMForCausalLM,
     )
+
     # Alias for auto-factory fallback
     HindiCausalLMHeadModel = HindiCausalLMForCausalLM
 else:
@@ -56,7 +57,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
@@ -72,6 +72,7 @@ if TYPE_CHECKING:
         from .dummy_pt_objects import (
             HindiCausalLMForCausalLM,
         )
+
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
@@ -81,6 +82,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(
-        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
-    )
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
