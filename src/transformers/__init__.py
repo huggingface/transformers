@@ -332,8 +332,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-    _import_structure["models.superpoint"].append("SuperPointImageProcessorFast")
-    # _import_structure["models.superpoint"].append("SuperPointImageProcessorFast")
 
 # PyTorch-backed objects
 try:
