@@ -3758,6 +3758,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(self.n_epochs))
 
+    def test_num_batches_in_training_with_gradient_accumulation(self):
+        num_gpus = max(1, backend_device_count(torch_device))
+        if num_gpus > 2:
+            self.skipTest(reason="More than 2 GPUs available")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for num_train_epochs in [1, 2]:
+                for train_len in [123, 120]:
+                    trainer = get_regression_trainer(
+                        train_len=train_len,
+                        per_device_train_batch_size=4,
+                        gradient_accumulation_steps=5,
+                        num_train_epochs=num_train_epochs,
+                        output_dir=tmp_dir,
+                    )
+
+                    total_batch_samples = []
+
+                    def wrap_get_batch_samples(fn):
+                        def wrapped_fn(epoch_iterator, num_batches, device):
+                            self.assertGreater(num_batches, 0)
+                            batch_samples, num_items_in_batch = fn(epoch_iterator, num_batches, device)
+                            self.assertEqual(len(batch_samples), num_batches)
+                            total_batch_samples.append(num_batches)
+                            return batch_samples, num_items_in_batch
+
+                        return wrapped_fn
+
+                    trainer.get_batch_samples = wrap_get_batch_samples(trainer.get_batch_samples)
+
+                    trainer.train()
+
+                    self.assertEqual(len(trainer.get_train_dataloader()) * num_train_epochs, sum(total_batch_samples))
+
     def test_early_stopping_callback(self):
         # early stopping stops training before num_training_epochs
         with tempfile.TemporaryDirectory() as tmp_dir:
