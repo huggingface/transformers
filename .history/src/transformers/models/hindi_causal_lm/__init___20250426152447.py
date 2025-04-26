@@ -55,7 +55,7 @@ except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import (
         HindiCausalLMModel,
         HindiCausalLMForCausalLM,
-     
+        HindiCausalLMPreTrainedModel,
     )
     # ...and EXPLICITLY assign them to the module attribute names.
     # This ensures the attributes ALWAYS exist.
@@ -69,6 +69,7 @@ else:
     _import_structure["modeling_hindi_causal_lm"] = [
         "HindiCausalLMModel",
         "HindiCausalLMForCausalLM", # Real class for lazy load
+        "HindiCausalLMPreTrainedModel",
         "HindiCausalLMHeadModel", # Real alias for lazy load
     ]
 
@@ -97,7 +98,8 @@ if TYPE_CHECKING:
         # Use dummies for type checking if missing
         from .dummy_pt_objects import (
             HindiCausalLMModel,
-            HindiCausalLMForCausalLM
+            HindiCausalLMForCausalLM,
+            HindiCausalLMPreTrainedModel,
         )
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM # Alias points to dummy
     else:
@@ -105,6 +107,7 @@ if TYPE_CHECKING:
         from .modeling_hindi_causal_lm import (
             HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMPreTrainedModel,
             HindiCausalLMHeadModel, # Import real alias
         )
 
@@ -129,6 +132,7 @@ if not is_torch_available():
     __all__.extend([
         "HindiCausalLMModel",
         "HindiCausalLMForCausalLM",
+        "HindiCausalLMPreTrainedModel",
         "HindiCausalLMHeadModel",
     ])
 # Ensure no duplicates if added both ways (though structure prevents this)

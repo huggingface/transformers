@@ -129,6 +129,7 @@ if not is_torch_available():
     __all__.extend([
         "HindiCausalLMModel",
         "HindiCausalLMForCausalLM",
+        "HindiCausalLMPreTrainedModel",
         "HindiCausalLMHeadModel",
     ])
 # Ensure no duplicates if added both ways (though structure prevents this)
