@@ -503,7 +503,7 @@ ENCODEC_START_DOCSTRING = r"""
 ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
-            Raw audio input converted to Float and padded to the approriate length in order to be encoded using chunks
+            Raw audio input converted to Float and padded to the appropriate length in order to be encoded using chunks
             of length self.chunk_length and a stride of `config.chunk_stride`.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Mask to avoid computing scaling factors on padding token indices (can we avoid computing conv on these+).

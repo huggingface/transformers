@@ -938,6 +938,8 @@ class HQQQuantizedCache(QuantizedCache):
         )
         meta["compute_dtype"] = self.compute_dtype
         self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        meta["scale"] = meta["scale"].to(qtensor.device)
+        meta["zero"] = meta["zero"].to(qtensor.device)
         return qtensor, meta
 
     def _dequantize(self, qtensor):
@@ -1652,9 +1654,7 @@ class HybridCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
-    # is_compileable = True
+    is_compileable = True
 
     def __init__(
         self,
@@ -1697,7 +1697,7 @@ class HybridCache(Cache):
             min(config.sliding_window, max_cache_len),
             self.head_dim,
         )
-        device = torch.device(device) if device is not None and isinstance(device, str) else None
+        device = torch.device(device) if device is not None else None
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[i]
@@ -1856,8 +1856,6 @@ class HybridChunkedCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
-    # ALL changes from the PR that commented the line below when reactivating it.
     is_compileable = True
 
     def __init__(
@@ -1921,7 +1919,7 @@ class HybridChunkedCache(Cache):
             full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
             full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
             # Fast decoding path -> here as the effective size is still sliding window, it is extremely important
-            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed adress
+            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed address
             # in memory (the values are the same as the full states, but not the address!!)
             if key_states.shape[-2] == 1:
                 self.key_cache[layer_idx].copy_(full_key_states)
@@ -2033,7 +2031,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         self.active_device_layer = 0
 
     def initialise_cache_layer(self, layer_idx, key_states):
-        """Overriden to use the correct device if offloaded layer (and pin memory)."""
+        """Overridden to use the correct device if offloaded layer (and pin memory)."""
         if len(self.key_cache) > layer_idx:
             return
 
@@ -2245,7 +2243,7 @@ class OffloadedStaticCache(StaticCache):
             The device to offload to. Defaults to CPU.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is splitted between differents gpus. You can know which layers mapped to which device by
+            and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
 
     Example:

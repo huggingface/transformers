@@ -829,7 +829,7 @@ class ClapAudioEncoder(nn.Module):
 
         self.num_features = int(config.patch_embeds_hidden_size * 2 ** (self.num_layers - 1))
 
-        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
 
         grid_size = self.patch_embed.grid_size
         self.input_resolutions = [(grid_size[0] // (2**i), grid_size[1] // (2**i)) for i in range(self.num_layers)]
@@ -864,9 +864,9 @@ class ClapAudioEncoder(nn.Module):
         _, _, time_length, freq_length = normalized_input_features.shape
 
         spec_width = int(self.spec_size * self.freq_ratio)
-        spec_heigth = self.spec_size // self.freq_ratio
+        spec_height = self.spec_size // self.freq_ratio
 
-        if time_length > spec_width or freq_length > spec_heigth:
+        if time_length > spec_width or freq_length > spec_height:
             raise ValueError("the wav size should be less than or equal to the swin input size")
 
         # to avoid bicubic zero error
@@ -874,14 +874,14 @@ class ClapAudioEncoder(nn.Module):
             normalized_input_features = nn.functional.interpolate(
                 normalized_input_features, (spec_width, freq_length), mode="bicubic", align_corners=True
             )
-        if freq_length < spec_heigth:
+        if freq_length < spec_height:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features, (time_length, spec_heigth), mode="bicubic", align_corners=True
+                normalized_input_features, (time_length, spec_height), mode="bicubic", align_corners=True
             )
 
         batch, channels, time, freq = normalized_input_features.shape
 
-        # batch_size, channels, spec_width, spec_heigth --> batch_size, channels, spec_heigth * freq_ratio, spec_width // freq_ratio
+        # batch_size, channels, spec_width, spec_height --> batch_size, channels, spec_height * freq_ratio, spec_width // freq_ratio
         normalized_input_features = normalized_input_features.reshape(
             batch, channels * self.freq_ratio, time // self.freq_ratio, freq
         )
