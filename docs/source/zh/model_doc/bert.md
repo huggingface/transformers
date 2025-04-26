@@ -26,9 +26,9 @@ rendered properly in your Markdown viewer.
 
 # BERT
 
-[BERT](https://huggingface.co/papers/1810.04805) 是一个在无标签的文本数据上预训练的双向 transformer，用于预测句子中被掩码（mask）的 token，以及预测一个句子是否跟随在另一个句子之后。其主要思想是，在预训练过程中，通过随机掩码一些 token，让模型利用左右上下文的信息预测它们，从而获得更全面深入的理解。此外，BERT 具有很强的通用性，其学习到的语言表示可以通过额外的层或头进行微调，从而适应其他 NLP 任务。
+[BERT](https://huggingface.co/papers/1810.04805) 是一个在无标签的文本数据上预训练的双向 transformer，用于预测句子中被掩码的（masked） token，以及预测一个句子是否跟随在另一个句子之后。其主要思想是，在预训练过程中，通过随机掩码一些 token，让模型利用左右上下文的信息预测它们，从而获得更全面深入的理解。此外，BERT 具有很强的通用性，其学习到的语言表示可以通过额外的层或头进行微调，从而适配其他下游 NLP 任务。
 
-你可以在 [BERT](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) 合集下找到 BERT 的所有 checkpoint。
+你可以在 [BERT](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) 集合下找到 BERT 的所有原始 checkpoint。
 
 > [!TIP]
 > 点击右侧边栏中的 BERT 模型，以查看将 BERT 应用于不同语言任务的更多示例。
