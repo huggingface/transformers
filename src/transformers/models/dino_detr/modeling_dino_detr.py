@@ -1076,7 +1076,7 @@ def _get_activation_fn(activation, d_model=256, batch_dim=0):
     if activation == "selu":
         return F.selu
 
-    raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
+    raise RuntimeError(f"activation should be relu/gelu/glu/prelu/selu, not {activation}.")
 
 
 def gen_sineembed_for_position(pos_tensor, d_model):
@@ -1314,8 +1314,6 @@ class DinoDetrDecoderLayer(nn.Module):
         num_feature_levels=4,
         num_heads=8,
         n_points=4,
-        use_deformable_box_attn=False,
-        box_attn_type="roi_align",
         key_aware_type=None,
         decoder_sa_type="ca",
         module_seq=["sa", "ca", "ffn"],
@@ -1552,7 +1550,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         norm=None,
         d_model=256,
         num_queries=300,
-        deformable_encoder=False,
         enc_layer_share=False,
         enc_layer_dropout_prob=None,
         two_stage_type="no",  # ['no', 'standard', 'early', 'combine', 'enceachlayer', 'enclayer1']
@@ -1569,9 +1566,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             self.layers = []
             del encoder_layer
 
-        self.query_scale = None
         self.num_queries = config.num_queries
-        self.deformable_encoder = config.deformable_encoder
         self.num_encoder_layers = config.num_encoder_layers
         self.norm = norm
         self.d_model = config.d_model
@@ -1648,8 +1643,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         output = src
         # preparation and reshape
         if self.num_encoder_layers > 0:
-            if self.deformable_encoder:
-                reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+            reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
 
         intermediate_output = []
         intermediate_ref = []
@@ -1669,23 +1663,16 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                     dropflag = True
 
             if not dropflag:
-                if self.deformable_encoder:
-                    output_layer = layer(
-                        hidden_states=output,
-                        position_embeddings=pos,
-                        reference_points=reference_points,
-                        spatial_shapes=spatial_shapes,
-                        spatial_shapes_list=spatial_shapes_list,
-                        level_start_index=level_start_index,
-                        attention_mask=key_padding_mask,
-                        output_attentions=output_attentions,
-                    )
-                else:
-                    output_layer = layer(
-                        src=output.transpose(0, 1),
-                        pos=pos.transpose(0, 1),
-                        key_padding_mask=key_padding_mask,
-                    ).transpose(0, 1)
+                output_layer = layer(
+                    hidden_states=output,
+                    position_embeddings=pos,
+                    reference_points=reference_points,
+                    spatial_shapes=spatial_shapes,
+                    spatial_shapes_list=spatial_shapes_list,
+                    level_start_index=level_start_index,
+                    attention_mask=key_padding_mask,
+                    output_attentions=output_attentions,
+                )
 
             output = output_layer[0]
             if output_attentions:
@@ -1753,12 +1740,9 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         norm=None,
         d_model=256,
         query_dim=4,
-        modulate_hw_attn=False,
         num_feature_levels=1,
-        deformable_decoder=False,
         decoder_query_perturber=None,
         dec_layer_number=None,  # number of queries each layer in decoder
-        rm_dec_query_scale=False,
         dec_layer_share=False,
         dec_layer_dropout_prob=None,
         use_detached_boxes_dec_out=False,
@@ -1778,36 +1762,21 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
 
         self.ref_point_head = DinoDetrMLP(config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2)
-        if not config.deformable_decoder:
-            self.query_pos_sine_scale = DinoDetrMLP(config.d_model, config.d_model, config.d_model, 2)
-        else:
-            self.query_pos_sine_scale = None
+        self.query_pos_sine_scale = None
 
-        if config.rm_dec_query_scale:
-            self.query_scale = None
-        else:
-            raise NotImplementedError
-            self.query_scale = DinoDetrMLP(config.d_model, config.d_model, config.d_model, 2)
         self.bbox_embed = None
         self.class_embed = None
 
         self.d_model = config.d_model
-        self.modulate_hw_attn = config.modulate_hw_attn
-        self.deformable_decoder = config.deformable_decoder
-
-        if not config.deformable_decoder and config.modulate_hw_attn:
-            self.ref_anchor_head = DinoDetrMLP(config.d_model, config.d_model, 2, 2)
-        else:
-            self.ref_anchor_head = None
+        self.ref_anchor_head = None
 
         self.decoder_query_perturber = decoder_query_perturber
-        self.box_pred_damping = None
 
         self.dec_layer_number = config.dec_layer_number
 
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
 
-        self.rm_detach = None
+        self.rm_detach = config.rm_detach
 
         self.post_init()
 
@@ -1852,36 +1821,20 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             if self.training and self.decoder_query_perturber is not None and layer_id != 0:
                 reference_points = self.decoder_query_perturber(reference_points)
 
-            if self.deformable_decoder:
-                if reference_points.shape[-1] == 4:
-                    reference_points_input = (
-                        reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
-                    )  # nq, bs, nlevel, 4
-                elif reference_points.shape[-1] == 2:
-                    reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
-                query_sine_embed = gen_sineembed_for_position(
-                    reference_points_input[:, :, 0, :], d_model=self.d_model
-                )  # nq, bs, 256*2
-            else:
-                query_sine_embed = gen_sineembed_for_position(reference_points, d_model=self.d_model)  # nq, bs, 256*2
-                reference_points_input = None
+            if reference_points.shape[-1] == 4:
+                reference_points_input = (
+                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
+                )  # nq, bs, nlevel, 4
+            elif reference_points.shape[-1] == 2:
+                reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
+            query_sine_embed = gen_sineembed_for_position(
+                reference_points_input[:, :, 0, :], d_model=self.d_model
+            )  # nq, bs, 256*2
 
             # conditional query
             raw_query_pos = self.ref_point_head(query_sine_embed)  # nq, bs, 256
-            pos_scale = self.query_scale(output) if self.query_scale is not None else 1
+            pos_scale = 1
             query_pos = pos_scale * raw_query_pos
-            if not self.deformable_decoder:
-                query_sine_embed = query_sine_embed[..., : self.d_model] * self.query_pos_sine_scale(output)
-
-            # modulated HW attentions
-            if not self.deformable_decoder and self.modulate_hw_attn:
-                refHW_cond = self.ref_anchor_head(output).sigmoid()  # nq, bs, 2
-                query_sine_embed[..., self.d_model // 2 :] *= (
-                    refHW_cond[..., 0] / reference_points[..., 2]
-                ).unsqueeze(-1)
-                query_sine_embed[..., : self.d_model // 2] *= (
-                    refHW_cond[..., 1] / reference_points[..., 3]
-                ).unsqueeze(-1)
 
             # random drop some layers if needed
             dropflag = False
@@ -1976,15 +1929,10 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         normalize_before=False,
         query_dim=4,
         num_patterns=0,
-        modulate_hw_attn=False,
         # for deformable encoder
-        deformable_encoder=False,
-        deformable_decoder=False,
         num_feature_levels=1,
         enc_n_points=4,
         dec_n_points=4,
-        use_deformable_box_attn=False,
-        box_attn_type="roi_align",
         # init query
         learnable_tgt_init=False,
         decoder_query_perturber=None,
@@ -2000,7 +1948,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         # evo of #anchors
         dec_layer_number=None,
         rm_enc_query_scale=True,
-        rm_dec_query_scale=True,
         rm_self_attn_layers=None,
         key_aware_type=None,
         # layer share
@@ -2027,28 +1974,17 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self.num_encoder_layers = config.num_encoder_layers
         self.num_unicoder_layers = config.num_unicoder_layers
         self.num_decoder_layers = config.num_decoder_layers
-        self.deformable_encoder = config.deformable_encoder
-        self.deformable_decoder = config.deformable_decoder
         self.two_stage_keep_all_tokens = config.two_stage_keep_all_tokens
         self.num_queries = config.num_queries
         self.random_refpoints_xy = config.random_refpoints_xy
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
         self.decoder_sa_type = config.decoder_sa_type
 
-        # choose encoder layer type
-        if config.deformable_encoder:
-            encoder_layer = DinoDetrEncoderLayer(config)
-        else:
-            raise NotImplementedError
+        encoder_layer = DinoDetrEncoderLayer(config)
         encoder_norm = nn.LayerNorm(config.d_model) if config.normalize_before else None
         self.encoder = DinoDetrEncoder(encoder_layer, encoder_norm, config)
 
-        # choose decoder layer type
-        if config.deformable_decoder:
-            decoder_layer = DinoDetrDecoderLayer(config)
-
-        else:
-            raise NotImplementedError
+        decoder_layer = DinoDetrDecoderLayer(config)
 
         decoder_norm = nn.LayerNorm(config.d_model)
         self.decoder = DinoDetrDecoder(
@@ -2063,9 +1999,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self.dec_layers = config.num_decoder_layers
         self.num_queries = config.num_queries  # useful for single stage model only
         self.num_patterns = config.num_patterns
-        if not isinstance(config.num_patterns, int):
-            Warning("num_patterns should be int but {}".format(type(config.num_patterns)))
-            self.num_patterns = 0
 
         if config.num_feature_levels > 1:
             if self.num_encoder_layers > 0:
@@ -2120,9 +2053,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             for lid, dec_layer in enumerate(self.decoder.layers):
                 if lid in config.rm_self_attn_layers:
                     dec_layer.rm_self_attn_modules()
-
-        self.rm_detach = config.rm_detach
-        self.decoder.rm_detach = config.rm_detach
 
         self.post_init()
 
@@ -2603,7 +2533,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             )
 
         self.aux_loss = config.auxiliary_loss
-        self.box_pred_damping = None
 
         # prepare pred layers
         self.dec_pred_class_embed_share = config.dec_pred_class_embed_share

@@ -158,11 +158,7 @@ class DinoDetrConfig(PretrainedConfig):
         use_pretrained_backbone=True,
         activation_dropout=0.0,
         key_aware_type=None,
-        deformable_encoder=True,
         enc_layer_dropout_prob=None,
-        deformable_decoder=True,
-        rm_dec_query_scale=True,
-        modulate_hw_attn=True,
         dec_layer_dropout_prob=None,
         learnable_tgt_init=True,
         rm_self_attn_layers=None,
@@ -195,8 +191,6 @@ class DinoDetrConfig(PretrainedConfig):
         num_decoder_layers=6,
         two_stage_keep_all_tokens=False,
         random_refpoints_xy=False,
-        use_deformable_box_attn=False,
-        box_attn_type="roi_align",
         normalize_before=False,
         num_patterns=0,
         embed_init_tgt=True,
@@ -226,7 +220,6 @@ class DinoDetrConfig(PretrainedConfig):
         no_interm_box_loss=False,
         use_dn=True,
         use_masks=True,
-        match_unstable_error=True,
         focal_alpha=0.25,
         enc_layer_share=False,
         dec_layer_share=False,
@@ -254,6 +247,9 @@ class DinoDetrConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+        if not isinstance(num_patterns, int):
+            Warning("num_patterns should be int but {}".format(type(num_patterns)))
+            num_patterns = 0
 
         verify_backbone_config_arguments(
             use_timm_backbone=use_timm_backbone,
@@ -279,10 +275,6 @@ class DinoDetrConfig(PretrainedConfig):
             assert len(dec_layer_dropout_prob) == num_decoder_layers
             for i in dec_layer_dropout_prob:
                 assert 0.0 <= i <= 1.0
-        if num_feature_levels > 1:
-            assert deformable_encoder, "Only support deformable_encoder for num_feature_levels > 1"
-        if use_deformable_box_attn:
-            assert deformable_encoder or deformable_encoder
 
         assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
         assert learnable_tgt_init, "learnable_tgt_init should be True"
@@ -355,7 +347,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.decoder_sa_type = decoder_sa_type
 
         self.num_queries = num_queries
-        self.deformable_encoder = deformable_encoder
         self.d_model = d_model
         self.enc_layer_dropout_prob = enc_layer_dropout_prob
         self.two_stage_type = two_stage_type
@@ -365,11 +356,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
         self.query_dim = query_dim
         self.d_model = d_model
-        self.deformable_decoder = deformable_decoder
-        self.rm_dec_query_scale = rm_dec_query_scale
-        self.modulate_hw_attn = modulate_hw_attn
-        self.deformable_decoder = deformable_decoder
-        self.modulate_hw_attn = modulate_hw_attn
         self.dec_layer_number = dec_layer_number
         self.dec_layer_dropout_prob = dec_layer_dropout_prob
 
@@ -380,14 +366,11 @@ class DinoDetrConfig(PretrainedConfig):
         self.num_encoder_layers = num_encoder_layers
         self.num_unicoder_layers = num_unicoder_layers
         self.num_decoder_layers = num_decoder_layers
-        self.deformable_encoder = deformable_encoder
-        self.deformable_decoder = deformable_decoder
         self.two_stage_keep_all_tokens = two_stage_keep_all_tokens
         self.num_queries = num_queries
         self.random_refpoints_xy = random_refpoints_xy
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
         self.query_dim = query_dim
-        self.use_deformable_box_attn = use_deformable_box_attn
         self.decoder_sa_type = decoder_sa_type
         self.d_model = d_model
         self.normalize_before = normalize_before
@@ -427,7 +410,6 @@ class DinoDetrConfig(PretrainedConfig):
 
         self.use_dn = use_dn
         self.use_masks = use_masks
-        self.match_unstable_error = match_unstable_error
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
