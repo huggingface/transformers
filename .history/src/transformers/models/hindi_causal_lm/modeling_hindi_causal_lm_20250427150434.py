@@ -117,14 +117,14 @@ def _prepare_4d_causal_attention_mask(
 
     # Always create a base causal mask first
     mask = torch.full((tgt_len, src_len), torch.finfo(dtype).min, dtype=dtype, device=device)
-
+    
     # Create proper condition mask for masked_fill_
     # Instead of using the approach that causes broadcasting issues, use a direct approach
     # For each position i, allow attention to positions j where j <= i + past_key_values_length
     rows = torch.arange(tgt_len, device=device).unsqueeze(1)  # Shape: [tgt_len, 1]
     cols = torch.arange(src_len, device=device).unsqueeze(0)  # Shape: [1, src_len]
     mask_condition = cols <= rows + past_key_values_length  # Shape: [tgt_len, src_len]
-
+    
     # Fill the mask - masks will have 0.0 where attention is allowed
     mask.masked_fill_(mask_condition, 0.0)
 
@@ -706,9 +706,9 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             # This is an unexpected case - create a dummy hidden state with sequence length of 1
             logger.warning("Empty sequence dimension in hidden states. Creating dummy hidden state.")
             hidden_states = torch.zeros(
-                (hidden_states.size(0), 1, hidden_states.size(-1)),
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
+                (hidden_states.size(0), 1, hidden_states.size(-1)), 
+                dtype=hidden_states.dtype, 
+                device=hidden_states.device
             )
 
         # Apply language model head
@@ -777,20 +777,24 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
     def safe_extract_next_token_logits(self, outputs, input_ids):
         """Safely extract next token logits from model outputs with error handling"""
         # Check if logits exist and have expected dimensions
-        if not hasattr(outputs, "logits"):
+        if not hasattr(outputs, 'logits'):
             logger.error("Model outputs do not contain 'logits' attribute")
             # Create dummy logits as fallback
             return torch.zeros(
-                (input_ids.shape[0], self.config.vocab_size), dtype=torch.float32, device=input_ids.device
+                (input_ids.shape[0], self.config.vocab_size),
+                dtype=torch.float32,
+                device=input_ids.device
             )
-
+        
         # Handle empty sequence dimension case
         if outputs.logits.size(1) == 0:
             logger.warning("Empty logits sequence dimension. Creating dummy logits.")
             return torch.zeros(
-                (outputs.logits.size(0), self.config.vocab_size), dtype=torch.float32, device=input_ids.device
+                (outputs.logits.size(0), self.config.vocab_size),
+                dtype=torch.float32,
+                device=input_ids.device
             )
-
+        
         # Normal case - extract last position logits
         return outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
@@ -799,22 +803,21 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         """Safely process new logits with bounds checking"""
         # Create a copy of new_logits to modify
         processed_logits = new_logits.clone()
-
+        
         # Get the number of candidate tokens to process
         num_steps = min(new_logits.size(1), candidate_input_ids.size(1) - cur_len)
-
+        
         # Process each position safely
         for i in range(num_steps):
             if i < new_logits.size(1):
                 # Use the logits processor to update the logits at this position
                 processed_logits[:, i, :] = logits_processor(
-                    candidate_input_ids[:, : cur_len + i], new_logits[:, i, :]
+                    candidate_input_ids[:, :cur_len + i], 
+                    new_logits[:, i, :]
                 )
             else:
-                logger.warning(
-                    f"Index {i} is out of bounds for logits dimension with size {new_logits.size(1)}. Skipping."
-                )
-
+                logger.warning(f"Index {i} is out of bounds for logits dimension with size {new_logits.size(1)}. Skipping.")
+                
         return processed_logits
 
     @staticmethod
