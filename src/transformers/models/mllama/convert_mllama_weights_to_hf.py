@@ -234,7 +234,7 @@ def write_model(
     text_rope_theta = params["rope_theta"]
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
-    # some constans from original code
+    # some constants from original code
     rope_scaling = {
         "rope_type": "llama3",
         "factor": 8.0,
