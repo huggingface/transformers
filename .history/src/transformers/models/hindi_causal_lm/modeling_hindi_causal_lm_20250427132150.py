@@ -74,10 +74,14 @@ class HindiCausalLMRotaryEmbedding(nn.Module):
     def forward(self, x, seq_len=None):
         if seq_len is None:
             seq_len = x.shape[1]
-
-        if seq_len > self.max_seq_len_cached or self.cos_cached.device != x.device or self.cos_cached.dtype != x.dtype:
+            
+        if (
+            seq_len > self.max_seq_len_cached
+            or self.cos_cached.device != x.device
+            or self.cos_cached.dtype != x.dtype
+        ):
             self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
-
+            
         return (
             self.cos_cached[:seq_len],
             self.sin_cached[:seq_len],
@@ -375,13 +379,13 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         # Remove token_type_ids if present
-        if "token_type_ids" in kwargs:
-            kwargs.pop("token_type_ids")
-
+        if 'token_type_ids' in kwargs:
+            kwargs.pop('token_type_ids')
+        
         # Remove cache_position if present
-        if "cache_position" in kwargs:
-            kwargs.pop("cache_position")
-
+        if 'cache_position' in kwargs:
+            kwargs.pop('cache_position')
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -427,17 +431,13 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
+                
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(
-                            *inputs, past_key_value=None, output_attentions=output_attentions, use_cache=False
-                        )
-
+                        return module(*inputs, past_key_value=None, output_attentions=output_attentions, use_cache=False)
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
@@ -458,15 +458,15 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-
+            
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-
+                
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-
+        
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -528,11 +528,11 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         # Remove unsupported arguments
-        if "token_type_ids" in kwargs:
-            kwargs.pop("token_type_ids")
-
-        if "cache_position" in kwargs:
-            kwargs.pop("cache_position")
+        if 'token_type_ids' in kwargs:
+            kwargs.pop('token_type_ids')
+        
+        if 'cache_position' in kwargs:
+            kwargs.pop('cache_position')
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -596,11 +596,11 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
                 "attention_mask": attention_mask,
             }
         )
-
+        
         # Include position_ids if provided
         if "position_ids" in kwargs:
             model_inputs["position_ids"] = kwargs["position_ids"]
-
+            
         return model_inputs
 
     def generate(self, **kwargs):
@@ -609,7 +609,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             kwargs["max_length"] = 50
         # Custom generation handling if needed
         return super().generate(**kwargs)
-
+        
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
