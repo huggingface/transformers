@@ -14,7 +14,6 @@
 """Tokenization classes for Hindi Causal LM."""
 
 import os
-
 # Import Any from typing
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -122,11 +121,11 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         # We might need to adjust vocab_size calculation based on how special tokens interact with sp_model.
         if is_sentencepiece_available() and self.sp_model:
             # Standard SentencePiece model vocab size
-            self.sp_model.GetPieceSize()
+            spm_vocab_size = self.sp_model.GetPieceSize()
 
             # Calculate the effective vocab size considering added special tokens
             # `self.added_tokens_decoder` maps assigned IDs to token strings (added via super().__init__)
-            len(self.added_tokens_decoder)
+            num_added_tokens = len(self.added_tokens_decoder)
 
             # Check if special tokens are already part of the SentencePiece model vocab
             special_tokens_in_spm = 0
