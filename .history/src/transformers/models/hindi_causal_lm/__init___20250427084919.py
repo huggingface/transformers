@@ -23,11 +23,7 @@ from ...utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .dummy_pt_objects import *
+
 # --- ALWAYS declare the full import structure, regardless of backend ---
 _import_structure = {
     "configuration_hindi_causal_lm": [
