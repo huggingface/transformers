@@ -18,8 +18,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-
 # Import the config class
+from ..hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
 from .auto_factory import (
     _BaseAutoBackboneClass,
     _BaseAutoModelClass,
@@ -144,7 +144,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         ("hiera", "HieraModel"),
-        ("hindi_causal_lm", "HindiCausalLMModel"),  # Added
+        ("hindi_causal_lm", "HindiCausalLMModel"), # Added
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
@@ -557,7 +557,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("granitemoe", "GraniteMoeForCausalLM"),
         ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
-        ("hindi_causal_lm", "HindiCausalLMForCausalLM"),  # Added
+        ("hindi_causal_lm", "HindiCausalLMForCausalLM"), # Added
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),

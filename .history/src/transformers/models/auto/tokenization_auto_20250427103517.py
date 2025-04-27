@@ -251,7 +251,7 @@ else:
             ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "hindi_causal_lm",  # Added
+                "hindi_causal_lm", # Added
                 (
                     "HindiCausalLMTokenizer" if is_sentencepiece_available() else None,
                     "HindiCausalLMTokenizerFast" if is_tokenizers_available() else None,

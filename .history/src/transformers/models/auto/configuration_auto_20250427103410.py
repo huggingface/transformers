@@ -151,7 +151,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
         ("hiera", "HieraConfig"),
-        ("hindi_causal_lm", "HindiCausalLMConfig"),  # Added
+        ("hindi_causal_lm", "HindiCausalLMConfig"), # Added
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
@@ -511,7 +511,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("helium", "Helium"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
-        ("hindi_causal_lm", "HindiCausalLM"),  # Added
+        ("hindi_causal_lm", "HindiCausalLM"), # Added
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),

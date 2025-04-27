@@ -149,7 +149,7 @@ if is_torch_available():
                 torch.triu(
                     torch.ones(config.max_position_embeddings, config.max_position_embeddings) * -1e10, diagonal=1
                 ),
-                persistent=False,  # Avoid saving the mask in state_dict
+                persistent=False # Avoid saving the mask in state_dict
             )
 
             self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -163,18 +163,14 @@ if is_torch_available():
                 )
                 # Ensure rotary_dim is even
                 if self.rotary_dim % 2 != 0:
-                    self.rotary_dim = max(2, self.rotary_dim - 1)  # Adjust if odd
+                    self.rotary_dim = max(2, self.rotary_dim - 1) # Adjust if odd
 
                 # Cache frequency - use float() for compatibility
-                inv_freq = 1.0 / (
-                    10000 ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float32) / self.rotary_dim)
-                )
-                self.register_buffer("inv_freq", inv_freq, persistent=False)  # Avoid saving in state_dict
+                inv_freq = 1.0 / (10000 ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float32) / self.rotary_dim))
+                self.register_buffer("inv_freq", inv_freq, persistent=False) # Avoid saving in state_dict
 
                 # Precompute rotary embeddings if needed (or compute on the fly)
-                self._set_cos_sin_cache(
-                    seq_len=config.max_position_embeddings, device="cpu", dtype=torch.float32
-                )  # Initialize cache
+                self._set_cos_sin_cache(seq_len=config.max_position_embeddings, device="cpu", dtype=torch.float32) # Initialize cache
 
         def _set_cos_sin_cache(self, seq_len, device, dtype):
             """Helper to compute rotary embeddings."""
@@ -220,8 +216,8 @@ if is_torch_available():
             k_rot1, k_rot2 = torch.chunk(k_rot, 2, dim=-1)
 
             # Also split cos and sin
-            cos1, cos2 = torch.chunk(cos, 2, dim=-1)  # cos1 applies to rot1, cos2 to rot2
-            sin1, sin2 = torch.chunk(sin, 2, dim=-1)  # sin1 applies to rot1, sin2 to rot2
+            cos1, cos2 = torch.chunk(cos, 2, dim=-1) # cos1 applies to rot1, cos2 to rot2
+            sin1, sin2 = torch.chunk(sin, 2, dim=-1) # sin1 applies to rot1, sin2 to rot2
 
             # Apply the rotation:
             # q_rotated = [q1*cos - q2*sin, q1*sin + q2*cos]
@@ -231,13 +227,18 @@ if is_torch_available():
             # So, q_rot_result = q_rot * cos + torch.cat([-q_rot2, q_rot1], dim=-1) * sin
 
             # Using the standard implementation approach:
-            q_rot_result = torch.cat([q_rot1 * cos1 - q_rot2 * sin1, q_rot2 * cos1 + q_rot1 * sin1], dim=-1)
-            k_rot_result = torch.cat([k_rot1 * cos1 - k_rot2 * sin1, k_rot2 * cos1 + k_rot1 * sin1], dim=-1)
+            q_rot_result = torch.cat(
+                [q_rot1 * cos1 - q_rot2 * sin1, q_rot2 * cos1 + q_rot1 * sin1], dim=-1
+            )
+            k_rot_result = torch.cat(
+                [k_rot1 * cos1 - k_rot2 * sin1, k_rot2 * cos1 + k_rot1 * sin1], dim=-1
+            )
+
 
             # If only rotating a subset of dimensions, concatenate back the unrotated part
             if self.rotary_dim < self.attention_head_size:
-                q_out = torch.cat([q_rot_result, q[..., self.rotary_dim :]], dim=-1)
-                k_out = torch.cat([k_rot_result, k[..., self.rotary_dim :]], dim=-1)
+                q_out = torch.cat([q_rot_result, q[..., self.rotary_dim:]], dim=-1)
+                k_out = torch.cat([k_rot_result, k[..., self.rotary_dim:]], dim=-1)
             else:
                 q_out = q_rot_result
                 k_out = k_rot_result
@@ -248,7 +249,7 @@ if is_torch_available():
             self,
             hidden_states,
             attention_mask=None,
-            position_ids=None,  # Add position_ids for RoPE
+            position_ids=None, # Add position_ids for RoPE
             head_mask=None,
             past_key_value=None,
             output_attentions=False,
@@ -279,6 +280,7 @@ if is_torch_available():
                 # Apply RoPE based on position_ids
                 query_layer, key_layer = self._apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
+
             # Handle past_key_value for efficient generation
             if past_key_value is not None:
                 # Reuse k, v, self_attention
@@ -300,20 +302,21 @@ if is_torch_available():
 
             # Apply attention mask if provided
             if attention_mask is not None:
-                # Format should be [bs, 1, query_len, key_len]
-                # We might need to expand the mask from [bs, seq_len] or [bs, key_len]
-                if attention_mask.dim() == 2:  # [bs, key_len]
-                    attention_mask = attention_mask[:, None, None, :].expand(batch_size, 1, seq_length, kv_seq_len)
-                elif attention_mask.dim() == 3:  # [bs, query_len, key_len] -> should be rare for causal
-                    attention_mask = attention_mask[:, None, :, :]
-                elif attention_mask.dim() != 4:
-                    raise ValueError(f"Unexpected attention mask shape: {attention_mask.shape}")
+                 # Format should be [bs, 1, query_len, key_len]
+                 # We might need to expand the mask from [bs, seq_len] or [bs, key_len]
+                 if attention_mask.dim() == 2: # [bs, key_len]
+                     attention_mask = attention_mask[:, None, None, :].expand(batch_size, 1, seq_length, kv_seq_len)
+                 elif attention_mask.dim() == 3: # [bs, query_len, key_len] -> should be rare for causal
+                     attention_mask = attention_mask[:, None, :, :]
+                 elif attention_mask.dim() != 4:
+                     raise ValueError(f"Unexpected attention mask shape: {attention_mask.shape}")
 
-                # Apply the mask (usually 0 for allowed, 1 for masked)
-                # PyTorch needs -inf or large negative number for masked positions
-                # Invert mask: 0 -> 1, 1 -> 0; then multiply by large negative
-                inverted_mask = (1.0 - attention_mask) * torch.finfo(attention_scores.dtype).min
-                attention_scores = attention_scores + inverted_mask
+                 # Apply the mask (usually 0 for allowed, 1 for masked)
+                 # PyTorch needs -inf or large negative number for masked positions
+                 # Invert mask: 0 -> 1, 1 -> 0; then multiply by large negative
+                 inverted_mask = (1.0 - attention_mask) * torch.finfo(attention_scores.dtype).min
+                 attention_scores = attention_scores + inverted_mask
+
 
             # Normalize the attention scores to probabilities.
             attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -370,7 +373,7 @@ if is_torch_available():
             self,
             hidden_states,
             attention_mask=None,
-            position_ids=None,  # Pass position_ids for RoPE
+            position_ids=None, # Pass position_ids for RoPE
             head_mask=None,
             past_key_value=None,
             output_attentions=False,
@@ -383,14 +386,14 @@ if is_torch_available():
             attention_outputs = self.attention(
                 norm_hidden_states,
                 attention_mask=attention_mask,
-                position_ids=position_ids,  # Pass to attention
+                position_ids=position_ids, # Pass to attention
                 head_mask=head_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
             attention_output = attention_outputs[0]
-            present_key_value = attention_outputs[-1] if use_cache else None  # Get kv cache if returned
+            present_key_value = attention_outputs[-1] if use_cache else None # Get kv cache if returned
 
             # Residual connection for Attention
             hidden_states = hidden_states + attention_output
@@ -409,10 +412,10 @@ if is_torch_available():
 
             outputs = (layer_output,)
             if output_attentions:
-                outputs += (attention_outputs[1],)  # Add attention probabilities
+                outputs += (attention_outputs[1],) # Add attention probabilities
 
             if use_cache:
-                outputs += (present_key_value,)  # Add kv cache
+                outputs += (present_key_value,) # Add kv cache
 
             return outputs
 
@@ -426,7 +429,7 @@ if is_torch_available():
             super().__init__()
             self.config = config
             self.layers = nn.ModuleList([HindiCausalLMLayer(config) for _ in range(config.num_hidden_layers)])
-            self.gradient_checkpointing = False  # Initialize gradient checkpointing flag
+            self.gradient_checkpointing = False # Initialize gradient checkpointing flag
 
             # Use RMSNorm or LayerNorm based on config for the final norm
             norm_class = RMSNorm if getattr(config, "normalization_layer", "layernorm") == "rmsnorm" else nn.LayerNorm
@@ -436,7 +439,7 @@ if is_torch_available():
             self,
             hidden_states,
             attention_mask=None,
-            position_ids=None,  # Pass position_ids for RoPE
+            position_ids=None, # Pass position_ids for RoPE
             head_mask=None,
             past_key_values=None,
             use_cache=None,
@@ -471,13 +474,13 @@ if is_torch_available():
                         attention_mask,
                         position_ids,
                         layer_head_mask,
-                        use_cache=use_cache,  # Pass use_cache here
+                        use_cache=use_cache, # Pass use_cache here
                     )
                 else:
                     layer_outputs = layer_module(
                         hidden_states,
                         attention_mask=attention_mask,
-                        position_ids=position_ids,  # Pass position_ids
+                        position_ids=position_ids, # Pass position_ids
                         head_mask=layer_head_mask,
                         past_key_value=past_key_value,
                         output_attentions=output_attentions,
@@ -487,9 +490,7 @@ if is_torch_available():
                 hidden_states = layer_outputs[0]
 
                 if use_cache:
-                    next_decoder_cache += (
-                        layer_outputs[-1],
-                    )  # KV cache is always the last element when use_cache=True
+                    next_decoder_cache += (layer_outputs[-1],) # KV cache is always the last element when use_cache=True
 
                 if output_attentions:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -513,7 +514,7 @@ if is_torch_available():
                 past_key_values=next_decoder_cache,
                 hidden_states=all_hidden_states,
                 attentions=all_self_attentions,
-                cross_attentions=None,  # This model does not use cross-attention
+                cross_attentions=None, # This model does not use cross-attention
             )
 
     class HindiCausalLMPreTrainedModel(PreTrainedModel):
@@ -525,10 +526,10 @@ if is_torch_available():
         config_class = HindiCausalLMConfig
         base_model_prefix = "hindi_causal_lm"
         supports_gradient_checkpointing = True
-        _no_split_modules = ["HindiCausalLMLayer"]  # Modules that shouldn't be split for model parallelism
+        _no_split_modules = ["HindiCausalLMLayer"] # Modules that shouldn't be split for model parallelism
 
         # Keys to ignore when loading weights with missing keys (useful for fine-tuning)
-        _keys_to_ignore_on_load_missing = [r"position_ids"]  # position_ids usually not saved
+        _keys_to_ignore_on_load_missing = [r"position_ids"] # position_ids usually not saved
 
         # Keys to ignore when loading weights with unexpected keys (useful when removing heads)
         _keys_to_ignore_on_load_unexpected = [r"decoder\.final_layer_norm\.weight"]
@@ -573,18 +574,19 @@ if is_torch_available():
             self.vocab_size = config.vocab_size
 
             # Initialize token embeddings
-            self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+            self.token_embeddings = nn.Embedding(
+                config.vocab_size, config.hidden_size, padding_idx=self.padding_idx
+            )
 
             # Use position embeddings based on config
             self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
             if (
                 self.position_embedding_type == "absolute"
-                or getattr(config, "positional_encoding_type", "absolute")
-                == "learned"  # Treat 'learned' as 'absolute' here
+                or getattr(config, "positional_encoding_type", "absolute") == "learned" # Treat 'learned' as 'absolute' here
             ):
                 self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
             else:
-                self.position_embeddings = None  # RoPE is handled in attention layer
+                self.position_embeddings = None # RoPE is handled in attention layer
 
             self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -652,6 +654,7 @@ if is_torch_available():
                 # Ensure position_ids are the correct shape and type
                 position_ids = position_ids.view(-1, seq_length).long()
 
+
             # Get token embeddings
             if inputs_embeds is None:
                 inputs_embeds = self.token_embeddings(input_ids)
@@ -667,7 +670,7 @@ if is_torch_available():
             if attention_mask is None:
                 attention_mask = torch.ones(
                     (batch_size, seq_length + past_key_values_length), dtype=torch.bool, device=hidden_states.device
-                )
+                 )
 
             # Expand attention mask [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             # This is needed for the attention layer's masking mechanism
@@ -681,7 +684,7 @@ if is_torch_available():
             encoder_outputs = self.encoder(
                 hidden_states,
                 attention_mask=attention_mask,
-                position_ids=position_ids,  # Pass position_ids for RoPE
+                position_ids=position_ids, # Pass position_ids for RoPE
                 head_mask=head_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -704,7 +707,7 @@ if is_torch_available():
             )
 
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
-        _keys_to_ignore_on_load_missing = [r"lm_head.weight"]  # Often tied, might be missing if only base is saved
+        _keys_to_ignore_on_load_missing = [r"lm_head.weight"] # Often tied, might be missing if only base is saved
         _tied_weights_keys = ["lm_head.weight"]
 
         def __init__(self, config: HindiCausalLMConfig):
@@ -722,7 +725,7 @@ if is_torch_available():
 
             # Tie weights if configured (done after post_init)
             if config.tie_word_embeddings:
-                self.tie_weights()  # Use the built-in method
+                self.tie_weights() # Use the built-in method
 
         def get_input_embeddings(self):
             return self.hindi_causal_lm.get_input_embeddings()
@@ -746,7 +749,7 @@ if is_torch_available():
                 input_embeddings = self.get_input_embeddings()
                 if output_embeddings is not None and input_embeddings is not None:
                     output_embeddings.weight = input_embeddings.weight
-            super().tie_weights()  # Call parent method if needed
+            super().tie_weights() # Call parent method if needed
 
         def _untie_weights(self):
             """
@@ -762,16 +765,17 @@ if is_torch_available():
                         # Clone the weight to create a separate parameter
                         output_embeddings.weight = nn.Parameter(output_embeddings.weight.clone())
 
+
         # Override save_pretrained to handle untying/retying for safetensors
         def save_pretrained(
             self,
             save_directory,
             is_main_process=True,
             state_dict=None,
-            save_function=None,  # Let parent handle save_function
+            save_function=None, # Let parent handle save_function
             push_to_hub=False,
-            max_shard_size="5GB",  # Adjust default if needed
-            safe_serialization=True,  # Default to True
+            max_shard_size="5GB", # Adjust default if needed
+            safe_serialization=True, # Default to True
             variant=None,
             save_peft_format=False,
             **kwargs,
@@ -796,7 +800,7 @@ if is_torch_available():
                 save_directory=save_directory,
                 is_main_process=is_main_process,
                 state_dict=state_dict,
-                save_function=save_function,  # Pass it along
+                save_function=save_function, # Pass it along
                 push_to_hub=push_to_hub,
                 max_shard_size=max_shard_size,
                 safe_serialization=safe_serialization,
@@ -824,9 +828,9 @@ if is_torch_available():
                 # We only need the attention mask for the *new* token.
                 # However, the position_ids need to be incremented correctly.
                 past_length = past_key_values[0][0].shape[2]
-                attention_mask = attention_mask[:, -1:]  # Mask for the new token
+                attention_mask = attention_mask[:, -1:] # Mask for the new token
             else:
-                past_length = 0
+                 past_length = 0
 
             # Calculate position_ids dynamically based on past length
             position_ids = torch.arange(
@@ -862,8 +866,8 @@ if is_torch_available():
             config.pad_token_id = self.config.pad_token_id
             config.bos_token_id = self.config.bos_token_id
             config.eos_token_id = self.config.eos_token_id
-            config.max_length = getattr(self.config, "max_length", 20)  # Default max_length if not set
-            config.do_sample = getattr(self.config, "do_sample", True)  # Default do_sample if not set
+            config.max_length = getattr(self.config, "max_length", 20) # Default max_length if not set
+            config.do_sample = getattr(self.config, "do_sample", True) # Default do_sample if not set
 
             return config
 
@@ -931,7 +935,7 @@ if is_torch_available():
                 past_key_values=outputs.past_key_values,
                 hidden_states=outputs.hidden_states,
                 attentions=outputs.attentions,
-                cross_attentions=outputs.cross_attentions,  # Keep even if None
+                cross_attentions=outputs.cross_attentions, # Keep even if None
             )
 
         @staticmethod
@@ -945,6 +949,6 @@ if is_torch_available():
                 # Ensure both key and value tensors are indexed
                 reordered_layer_past = tuple(
                     past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
-                )
+                 )
                 reordered_past += (reordered_layer_past,)
             return reordered_past
