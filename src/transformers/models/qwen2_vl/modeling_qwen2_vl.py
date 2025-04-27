@@ -1572,7 +1572,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
                 max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
-            else:
+            elif input_ids is not None:
                 position_ids = (
                     torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
