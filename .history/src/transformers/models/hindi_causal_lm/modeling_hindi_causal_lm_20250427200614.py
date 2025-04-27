@@ -300,6 +300,7 @@ class HindiCausalLMAttention(nn.Module):
         if self.positional_encoding_type == "rope":
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        kv_seq_len = q_len
         if past_key_value is not None:
             past_k, past_v = past_key_value
             if past_k.device != key_states.device:
@@ -308,7 +309,7 @@ class HindiCausalLMAttention(nn.Module):
                 past_v = past_v.to(value_states.device)
             key_states = torch.cat([past_k, key_states], dim=2)
             value_states = torch.cat([past_v, value_states], dim=2)
-            key_states.shape[2]  # Update KV sequence length
+            kv_seq_len = key_states.shape[2]  # Update KV sequence length
 
         present_key_value = (key_states, value_states) if use_cache else None
         key_states_rep = repeat_kv(key_states, self.num_key_value_groups)
@@ -354,7 +355,7 @@ class HindiCausalLMAttention(nn.Module):
         if output_attentions:
             # For standard output (non-generation), we keep full attention matrix
             returned_attn_weights = attn_weights_softmax
-
+            
             # For generation tests, we need to adapt the shape:
             # - During generation (use_cache=True and q_len=1), return slice for just the new token
             # - In test cases, this matches expectation of shape [batch, heads, 1, kv_seq_len]
@@ -514,7 +515,10 @@ HINDI_CAUSAL_LM_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings("The Hindi causal language model.", HindiCausalLMPreTrainedModel.__doc__)
+@add_start_docstrings(
+    "The Hindi causal language model.", 
+    HindiCausalLMPreTrainedModel.__doc__
+)
 class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config)
@@ -689,7 +693,10 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
 
 
 # Causal LM Head Model
-@add_start_docstrings("Hindi causal language model for text generation.", HindiCausalLMPreTrainedModel.__doc__)
+@add_start_docstrings(
+    "Hindi causal language model for text generation.", 
+    HindiCausalLMPreTrainedModel.__doc__
+)
 class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight", "model.embed_tokens.weight"]
 
