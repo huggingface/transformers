@@ -16,7 +16,7 @@
 Image/Text processor class for OneFormer
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -117,18 +117,12 @@ class OneFormerProcessor(ProcessorMixin):
     @staticmethod
     def _validate_input_types(
         images: Optional[ImageInput] = None,
-        task_inputs: Optional[PreTokenizedInput] = None,
+        task_inputs: Optional[List[Literal["semantic", "instance", "panoptic"]]] = None,
     ) -> None:
-        if task_inputs is None:
-            raise ValueError("You have to specify the task_inputs. Found None.")
-        elif images is None:
-            raise ValueError("You have to specify the images. Found None.")
-
-        if not isinstance(task_inputs, List) or not task_inputs:
-            raise TypeError("task_inputs should be a string or a list of strings.")
-
-        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
-            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
+        if task_inputs is None or images is None:
+            raise ValueError(
+                f"You have to specify both images and task_inputs. Found {images} and {task_inputs}."
+            )
 
     def __call__(
         self,
@@ -140,7 +134,9 @@ class OneFormerProcessor(ProcessorMixin):
         # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
         *args,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OneFormerProcessorKwargs],
@@ -183,12 +179,16 @@ class OneFormerProcessor(ProcessorMixin):
             **self.prepare_and_validate_optional_call_args(*args),
         )
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
-        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
+        segmentation_maps = output_kwargs["images_kwargs"].pop(
+            "segmentation_maps", None
+        )
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
         self._validate_input_types(images, task_inputs)
 
-        encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"])
+        encoded_inputs = self.image_processor(
+            images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"]
+        )
 
         task_token_inputs = []
         for task in task_inputs:
@@ -230,7 +230,9 @@ class OneFormerProcessor(ProcessorMixin):
             task_inputs = [task_inputs]
         self._validate_input_types(images, task_inputs)
 
-        encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
+        encoded_inputs = self.image_processor.encode_inputs(
+            images, task_inputs, segmentation_maps, **kwargs
+        )
 
         task_token_inputs = []
         for task in task_inputs:
