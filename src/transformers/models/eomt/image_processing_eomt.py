@@ -93,15 +93,10 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
 
     mask_exists = mask_k_area > 0 and original_area > 0 and final_mask_area > 0
 
-    # Eliminate disconnected tiny segments
     if mask_exists:
         area_ratio = mask_k_area / original_area
         if not area_ratio.item() > overlap_mask_area_threshold:
             mask_exists = False
-
-    print(
-        f"Mask sum {mask_k_area}, original area {original_area}, final mask sum {final_mask.sum()}, mask exists {mask_exists}"
-    )
 
     return mask_exists, final_mask
 
@@ -121,10 +116,8 @@ def compute_segments(
     segments: List[Dict] = []
 
     # Compute per-pixel assignment based on weighted mask scores
-    mask_probs_item = mask_probs.sigmoid()
-    # Weigh each mask by its prediction score
-    mask_probs *= pred_scores.view(-1, 1, 1)
-    mask_labels = mask_probs.argmax(0)  # [height, width]
+    mask_probs = mask_probs.sigmoid()
+    mask_labels = (pred_scores[:, None, None] * mask_probs).argmax(0)
 
     # Keep track of instances of each class
     current_segment_id = 0
@@ -135,25 +128,26 @@ def compute_segments(
 
         # Check if mask exists and large enough to be a segment
         mask_exists, final_mask = check_segment_validity(
-            mask_labels, mask_probs_item, k, mask_threshold, overlap_mask_area_threshold
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
         )
 
-        if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
-            else:
-                current_segment_id += 1
+        if not mask_exists:
+            continue
 
-            segmentation[final_mask] = current_segment_id
-            torch.save(final_mask, f"/Users/espm5508/personal/transformers/delete/segments_pr_{k}.pt")
-            segment_score = round(pred_scores[k].item(), 6)
-            segments.append(
-                {
-                    "id": current_segment_id,
-                    "label_id": pred_class,
-                    "score": segment_score,
-                }
-            )
+        if pred_class in stuff_memory_list:
+            current_segment_id = stuff_memory_list[pred_class]
+        else:
+            current_segment_id += 1
+
+        segmentation[final_mask] = current_segment_id
+        segment_score = round(pred_scores[k].item(), 6)
+        segments.append(
+            {
+                "id": current_segment_id,
+                "label_id": pred_class,
+                "score": segment_score,
+            }
+        )
     return segmentation, segments
 
 
@@ -349,7 +343,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             image_std = np.array(image_std).reshape(1, -1, 1, 1)
             images = (images - image_mean) / image_std
 
-        # # Normalize not working properly fix later
+        # Normalize not working properly fix later
         # if do_normalize:
         #     images = [self.normalize(image, mean=image_mean, std=image_std, input_data_format=ChannelDimension.FIRST) for image in crops_list]
 
@@ -444,26 +438,24 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         pred_scores, pred_labels = class_queries_logits.softmax(dim=-1).max(-1)
 
-        results = []
+        results: List = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+            mask_probs, pred_scores, pred_labels = remove_low_and_no_objects(
                 mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
             # No mask found
-            if mask_probs_item.shape[0] <= 0:
-                height, width = (
-                    original_image_sizes[i] if original_image_sizes is not None else mask_probs_item.shape[1:]
-                )
+            if mask_probs.shape[0] <= 0:
+                height, width = original_image_sizes[i] if original_image_sizes is not None else mask_probs.shape[1:]
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
             segmentation, segments = compute_segments(
-                mask_probs=mask_probs_item,
-                pred_scores=pred_scores_item,
-                pred_labels=pred_labels_item,
+                mask_probs=mask_probs,
+                pred_scores=pred_scores,
+                pred_labels=pred_labels,
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 target_size=original_image_sizes[i] if original_image_sizes is not None else None,
