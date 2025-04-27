@@ -986,7 +986,6 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
         self.scale = scale
 
     def forward(self, x, mask):
-        assert mask is not None
         not_mask = mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
@@ -1323,7 +1322,6 @@ class DinoDetrDecoderLayer(nn.Module):
         """
         super().__init__()
         self.module_seq = config.module_seq
-        assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
         # cross attention
         self.cross_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
         self.dropout1 = nn.Dropout(config.dropout)
@@ -1345,7 +1343,6 @@ class DinoDetrDecoderLayer(nn.Module):
         self.key_aware_type = config.key_aware_type
         self.key_aware_proj = None
         self.decoder_sa_type = config.decoder_sa_type
-        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
 
         if config.decoder_sa_type == "ca_content":
             self.self_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
@@ -1580,11 +1577,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         self.d_model = config.d_model
 
         self.enc_layer_dropout_prob = config.enc_layer_dropout_prob
-        if config.enc_layer_dropout_prob is not None:
-            assert isinstance(config.enc_layer_dropout_prob, list)
-            assert len(config.enc_layer_dropout_prob) == config.num_encoder_layers
-            for i in config.enc_layer_dropout_prob:
-                assert 0.0 <= i <= 1.0
 
         self.two_stage_type = config.two_stage_type
         if config.two_stage_type in ["enceachlayer", "enclayer1"]:
@@ -1652,8 +1644,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         all_self_attns = () if output_attentions else None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if self.two_stage_type in ["no", "standard", "enceachlayer", "enclayer1"]:
-            assert ref_token_index is None
 
         output = src
         # preparation and reshape
@@ -1786,9 +1776,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.num_decoder_layers = config.num_decoder_layers
         self.norm = norm
         self.return_intermediate = config.return_intermediate
-        assert config.return_intermediate, "support return_intermediate only"
         self.query_dim = config.query_dim
-        assert config.query_dim in [2, 4], "query_dim should be 2/4 but {}".format(config.query_dim)
         self.num_feature_levels = config.num_feature_levels
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
 
@@ -1819,16 +1807,8 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.box_pred_damping = None
 
         self.dec_layer_number = config.dec_layer_number
-        if config.dec_layer_number is not None:
-            assert isinstance(config.dec_layer_number, list)
-            assert len(config.dec_layer_number) == config.num_decoder_layers
 
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
-        if config.dec_layer_dropout_prob is not None:
-            assert isinstance(config.dec_layer_dropout_prob, list)
-            assert len(config.dec_layer_dropout_prob) == config.num_decoder_layers
-            for i in config.dec_layer_dropout_prob:
-                assert 0.0 <= i <= 1.0
 
         self.rm_detach = None
 
@@ -1880,8 +1860,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                     reference_points_input = (
                         reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
                     )  # nq, bs, nlevel, 4
-                else:
-                    assert reference_points.shape[-1] == 2
+                elif reference_points.shape[-1] == 2:
                     reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
                 query_sine_embed = gen_sineembed_for_position(
                     reference_points_input[:, :, 0, :], d_model=self.d_model
@@ -2059,14 +2038,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self.num_queries = config.num_queries
         self.random_refpoints_xy = config.random_refpoints_xy
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
-        assert config.query_dim == 4
 
-        if config.num_feature_levels > 1:
-            assert config.deformable_encoder, "only support deformable_encoder for num_feature_levels > 1"
-        if config.use_deformable_box_attn:
-            assert config.deformable_encoder or config.deformable_encoder
-
-        assert config.layer_share_type in [None, "encoder", "decoder", "both"]
         if config.layer_share_type in ["encoder", "both"]:
             config.enc_layer_share = True
         else:
@@ -2075,10 +2047,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             config.dec_layer_share = True
         else:
             config.dec_layer_share = False
-        assert config.layer_share_type is None
 
         self.decoder_sa_type = config.decoder_sa_type
-        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
 
         # choose encoder layer type
         if config.deformable_encoder:
@@ -2119,7 +2089,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 self.level_embed = None
 
         self.learnable_tgt_init = config.learnable_tgt_init
-        assert config.learnable_tgt_init, "why not learnable_tgt_init"
         self.embed_init_tgt = config.embed_init_tgt
         if (config.two_stage_type != "no" and config.embed_init_tgt) or (config.two_stage_type == "no"):
             self.tgt_embed = nn.Embedding(self.num_queries, config.d_model)
@@ -2132,10 +2101,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self.two_stage_pat_embed = config.two_stage_pat_embed
         self.two_stage_add_query_num = config.two_stage_add_query_num
         self.two_stage_learn_wh = config.two_stage_learn_wh
-        assert config.two_stage_type in [
-            "no",
-            "standard",
-        ], "unknown param {} of two_stage_type".format(config.two_stage_type)
         if config.two_stage_type == "standard":
             # anchor selection at the output of encoder
             self.enc_output = nn.Linear(config.d_model, config.d_model)
@@ -2161,15 +2126,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
 
         # evolution of anchors
         self.dec_layer_number = config.dec_layer_number
-        if config.dec_layer_number is not None:
-            if self.two_stage_type != "no" or config.num_patterns == 0:
-                assert (
-                    config.dec_layer_number[0] == config.num_queries
-                ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries})"
-            else:
-                assert (
-                    config.dec_layer_number[0] == config.num_queries * config.num_patterns
-                ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries}) * num_patterns({config.num_patterns})"
 
         # self._reset_parameters()
 
@@ -2181,9 +2137,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                     dec_layer.rm_self_attn_modules()
 
         self.rm_detach = config.rm_detach
-        if self.rm_detach:
-            assert isinstance(config.rm_detach, list)
-            assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in config.rm_detach)
         self.decoder.rm_detach = config.rm_detach
 
         self.post_init()
@@ -2346,7 +2299,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 output_proposals = output_proposals.repeat(1, self.two_stage_pat_embed, 1)
 
             if self.two_stage_add_query_num > 0:
-                assert refpoint_embed is not None
                 output_memory = torch.cat((output_memory, tgt), dim=1)
                 output_proposals = torch.cat((output_proposals, refpoint_embed), dim=1)
 
@@ -2613,7 +2565,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         # setting query dim
         self.query_dim = config.query_dim
-        assert config.query_dim == 4
         self.random_refpoints_xy = config.random_refpoints_xy
         self.fix_refpoints_hw = config.fix_refpoints_hw
 
@@ -2658,7 +2609,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 in_channels = d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            assert config.two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1 !!!"
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
@@ -2672,7 +2622,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.box_pred_damping = None
 
         self.iter_update = config.iter_update
-        assert config.iter_update, "Why not iter_update?"
 
         # prepare pred layers
         self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
@@ -2701,19 +2650,13 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         # two stage
         self.two_stage_type = config.two_stage_type
         self.two_stage_add_query_num = config.two_stage_add_query_num
-        assert config.two_stage_type in [
-            "no",
-            "standard",
-        ], "unknown param {} of two_stage_type".format(config.two_stage_type)
         if config.two_stage_type != "no":
             if config.two_stage_bbox_embed_share:
-                assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
                 self.transformer.enc_out_bbox_embed = self.bbox_embed[0]
             else:
                 self.transformer.enc_out_bbox_embed = copy.deepcopy(self.bbox_embed[0])
 
             if config.two_stage_class_embed_share:
-                assert config.dec_pred_class_embed_share and config.dec_pred_bbox_embed_share
                 self.transformer.enc_out_class_embed = self.class_embed[0]
             else:
                 self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
@@ -2723,7 +2666,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 self.init_ref_points(config.two_stage_add_query_num)
 
         self.decoder_sa_type = config.decoder_sa_type
-        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
         if config.decoder_sa_type == "ca_label":
             self.label_embedding = nn.Embedding(config.num_classes, d_model)
             for layer in self.transformer.decoder.layers:
@@ -2751,7 +2693,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         if self.fix_refpoints_hw > 0:
             print("fix_refpoints_hw: {}".format(self.fix_refpoints_hw))
-            assert self.random_refpoints_xy
             self.refpoint_embed.weight.data[:, 2:] = self.fix_refpoints_hw
             self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(self.refpoint_embed.weight.data[:, 2:])
             self.refpoint_embed.weight.data[:, 2:].requires_grad = False
@@ -2759,7 +2700,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             pass
         elif int(self.fix_refpoints_hw) == -2:
             print("learn a shared h and w")
-            assert self.random_refpoints_xy
             self.refpoint_embed = nn.Embedding(use_num_queries, 2)
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
@@ -2822,7 +2762,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         for l, (src, mask) in enumerate(features):
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
-            assert mask is not None
         if self.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
             for l in range(_len_srcs, self.num_feature_levels):
@@ -2853,8 +2792,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 device=device,
             )
         else:
-            assert labels is None
             input_query_bbox = input_query_label = attn_mask = dn_meta = None
+
         outputs_transformer_part = self.transformer(
             srcs,
             masks,
