@@ -13,8 +13,6 @@
 # limitations under the License.
 """Hindi Causal Language Model by ConvAI Innovations"""
 
-# Need OrderedDict for the sorting logic below
-from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from ...utils import (
