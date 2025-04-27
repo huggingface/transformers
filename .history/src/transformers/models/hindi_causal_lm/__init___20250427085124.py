@@ -23,11 +23,7 @@ from ...utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .dummy_pt_objects import *
+
 # --- ALWAYS declare the full import structure, regardless of backend ---
 _import_structure = {
     "configuration_hindi_causal_lm": [
@@ -60,11 +56,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_hindi_causal_lm_fast"] = ["HindiCausalLMTokenizerFast"]
 
-
-
-
 # Model (dummy import only for direct import safety; import structure is always present)
-
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .dummy_pt_objects import *
 
 if TYPE_CHECKING:
     from .configuration_hindi_causal_lm import (

@@ -28,19 +28,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import *
-# --- ALWAYS declare the full import structure, regardless of backend ---
-_import_structure = {
-    "configuration_hindi_causal_lm": [
-        "HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "HindiCausalLMConfig"
-    ],
-    "modeling_hindi_causal_lm": [
-        "HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "HindiCausalLMPreTrainedModel",
-        "HindiCausalLMModel",
-        "HindiCausalLMForCausalLM",
-    ],
-}
+
 
 # Tokenizer
 try:

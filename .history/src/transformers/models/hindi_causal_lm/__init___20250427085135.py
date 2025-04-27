@@ -42,26 +42,6 @@ _import_structure = {
     ],
 }
 
-# Tokenizer
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .dummy_tokenizer_objects import *
-else:
-    _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
-
-# Fast tokenizer
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_hindi_causal_lm_fast"] = ["HindiCausalLMTokenizerFast"]
-
-
-
 
 # Model (dummy import only for direct import safety; import structure is always present)
 
