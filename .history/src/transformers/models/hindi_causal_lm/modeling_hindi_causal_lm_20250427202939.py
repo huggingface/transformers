@@ -281,83 +281,84 @@ class HindiCausalLMAttention(nn.Module):
         return tensor.view(bsz, seq_len, num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
-        query_states = self._shape(self.q_proj(hidden_states), q_len, bsz, self.num_heads)
-        key_states = self._shape(self.k_proj(hidden_states), q_len, bsz, self.num_key_value_heads)
-        value_states = self._shape(self.v_proj(hidden_states), q_len, bsz, self.num_key_value_heads)
+    self,
+    hidden_states: torch.Tensor,
+    position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids: Optional[torch.LongTensor] = None,
+    past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    output_attentions: bool = False,
+    use_cache: bool = False,
+    **kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    bsz, q_len, _ = hidden_states.size()
+    query_states = self._shape(self.q_proj(hidden_states), q_len, bsz, self.num_heads)
+    key_states = self._shape(self.k_proj(hidden_states), q_len, bsz, self.num_key_value_heads)
+    value_states = self._shape(self.v_proj(hidden_states), q_len, bsz, self.num_key_value_heads)
 
-        cos, sin = position_embeddings
-        if self.positional_encoding_type == "rope":
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+    cos, sin = position_embeddings
+    if self.positional_encoding_type == "rope":
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        if past_key_value is not None:
-            past_k, past_v = past_key_value
-            if past_k.device != key_states.device:
-                past_k = past_k.to(key_states.device)
-            if past_v.device != value_states.device:
-                past_v = past_v.to(value_states.device)
-            key_states = torch.cat([past_k, key_states], dim=2)
-            value_states = torch.cat([past_v, value_states], dim=2)
-            key_states.shape[2]  # Update KV sequence length
+    kv_seq_len = q_len
+    if past_key_value is not None:
+        past_k, past_v = past_key_value
+        if past_k.device != key_states.device:
+            past_k = past_k.to(key_states.device)
+        if past_v.device != value_states.device:
+            past_v = past_v.to(value_states.device)
+        key_states = torch.cat([past_k, key_states], dim=2)
+        value_states = torch.cat([past_v, value_states], dim=2)
+        kv_seq_len = key_states.shape[2]  # Update KV sequence length
 
-        present_key_value = (key_states, value_states) if use_cache else None
-        key_states_rep = repeat_kv(key_states, self.num_key_value_groups)
-        value_states_rep = repeat_kv(value_states, self.num_key_value_groups)
-        attn_weights = torch.matmul(query_states, key_states_rep.transpose(2, 3)) / math.sqrt(self.head_dim)
+    present_key_value = (key_states, value_states) if use_cache else None
+    key_states_rep = repeat_kv(key_states, self.num_key_value_groups)
+    value_states_rep = repeat_kv(value_states, self.num_key_value_groups)
+    attn_weights = torch.matmul(query_states, key_states_rep.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        final_kv_seq_len = key_states_rep.shape[-2]
-        expected_attn_shape = (bsz, self.num_heads, q_len, final_kv_seq_len)
-        if attn_weights.size() != expected_attn_shape:
-            raise ValueError(
-                f"Attention weights shape {attn_weights.size()} doesn't match expected shape {expected_attn_shape}"
-            )
-
-        if attention_mask is not None:
-            expected_mask_shape = (bsz, 1, q_len, final_kv_seq_len)
-            if attention_mask.size() != expected_mask_shape:
-                if not (
-                    attention_mask.shape[0] == bsz
-                    and attention_mask.shape[1] == 1
-                    and attention_mask.shape[2] == q_len
-                    and attention_mask.shape[3] == final_kv_seq_len
-                ):
-                    if not (q_len == 0 and attention_mask.size() == (bsz, 1, 0, final_kv_seq_len)) and not (
-                        attention_mask.shape[3] >= final_kv_seq_len
-                    ):
-                        raise ValueError(
-                            f"Attention mask shape {attention_mask.size()} doesn't match expected shape {expected_mask_shape}"
-                        )
-                    else:
-                        attention_mask = attention_mask[..., :final_kv_seq_len]
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights_softmax = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights_dropped = nn.functional.dropout(
-            attn_weights_softmax, p=self.attention_dropout, training=self.training
+    final_kv_seq_len = key_states_rep.shape[-2]
+    expected_attn_shape = (bsz, self.num_heads, q_len, final_kv_seq_len)
+    if attn_weights.size() != expected_attn_shape:
+        raise ValueError(
+            f"Attention weights shape {attn_weights.size()} doesn't match expected shape {expected_attn_shape}"
         )
-        attn_output = torch.matmul(attn_weights_dropped, value_states_rep)
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, q_len, self.hidden_size)
-        attn_output = self.o_proj(attn_output)
 
-        # TESTING FIX: Always return full attention weights for tests
-        # This is contrary to many implementations but appears to be what the tests expect
-        if output_attentions:
-            # Return the full attention matrix, do not slice
-            returned_attn_weights = attn_weights_softmax
-        else:
-            returned_attn_weights = None
+    if attention_mask is not None:
+        expected_mask_shape = (bsz, 1, q_len, final_kv_seq_len)
+        if attention_mask.size() != expected_mask_shape:
+            if not (
+                attention_mask.shape[0] == bsz
+                and attention_mask.shape[1] == 1
+                and attention_mask.shape[2] == q_len
+                and attention_mask.shape[3] == final_kv_seq_len
+            ):
+                if not (q_len == 0 and attention_mask.size() == (bsz, 1, 0, final_kv_seq_len)) and not (
+                    attention_mask.shape[3] >= final_kv_seq_len
+                ):
+                    raise ValueError(
+                        f"Attention mask shape {attention_mask.size()} doesn't match expected shape {expected_mask_shape}"
+                    )
+                else:
+                    attention_mask = attention_mask[..., :final_kv_seq_len]
+        attn_weights = attn_weights + attention_mask
 
-        return attn_output, returned_attn_weights, present_key_value
+    attn_weights_softmax = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+    attn_weights_dropped = nn.functional.dropout(
+        attn_weights_softmax, p=self.attention_dropout, training=self.training
+    )
+    attn_output = torch.matmul(attn_weights_dropped, value_states_rep)
+    attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, q_len, self.hidden_size)
+    attn_output = self.o_proj(attn_output)
+
+    # TESTING FIX: Always return full attention weights for tests
+    # This is contrary to many implementations but appears to be what the tests expect
+    if output_attentions:
+        # Return the full attention matrix, do not slice
+        returned_attn_weights = attn_weights_softmax
+    else:
+        returned_attn_weights = None
+
+    return attn_output, returned_attn_weights, present_key_value
 
 
 # MLP Layer
@@ -789,9 +790,9 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             if seq_length == 0 and past_key_values is not None:
                 # If we have empty inputs_embeds but past_key_values exist,
                 # we're in a special case that needs handling
-                logger.warning("prepare_inputs_for_generation received empty inputs_embeds with seq_length=0")
+                logger.warning(f"prepare_inputs_for_generation received empty inputs_embeds with seq_length=0")
                 device = inputs_embeds.device
-
+                
                 # Create a dummy input_ids tensor to use for the forward pass
                 # This ensures we don't hit the -1 indexing error
                 input_ids = torch.zeros((batch_size, 1), dtype=torch.long, device=device)

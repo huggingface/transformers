@@ -281,16 +281,16 @@ class HindiCausalLMAttention(nn.Module):
         return tensor.view(bsz, seq_len, num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    self,
+    hidden_states: torch.Tensor,
+    position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids: Optional[torch.LongTensor] = None,
+    past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    output_attentions: bool = False,
+    use_cache: bool = False,
+    **kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
         query_states = self._shape(self.q_proj(hidden_states), q_len, bsz, self.num_heads)
         key_states = self._shape(self.k_proj(hidden_states), q_len, bsz, self.num_key_value_heads)
@@ -300,6 +300,7 @@ class HindiCausalLMAttention(nn.Module):
         if self.positional_encoding_type == "rope":
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        kv_seq_len = q_len
         if past_key_value is not None:
             past_k, past_v = past_key_value
             if past_k.device != key_states.device:
@@ -308,7 +309,7 @@ class HindiCausalLMAttention(nn.Module):
                 past_v = past_v.to(value_states.device)
             key_states = torch.cat([past_k, key_states], dim=2)
             value_states = torch.cat([past_v, value_states], dim=2)
-            key_states.shape[2]  # Update KV sequence length
+            kv_seq_len = key_states.shape[2]  # Update KV sequence length
 
         present_key_value = (key_states, value_states) if use_cache else None
         key_states_rep = repeat_kv(key_states, self.num_key_value_groups)
@@ -789,9 +790,9 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             if seq_length == 0 and past_key_values is not None:
                 # If we have empty inputs_embeds but past_key_values exist,
                 # we're in a special case that needs handling
-                logger.warning("prepare_inputs_for_generation received empty inputs_embeds with seq_length=0")
+                logger.warning(f"prepare_inputs_for_generation received empty inputs_embeds with seq_length=0")
                 device = inputs_embeds.device
-
+                
                 # Create a dummy input_ids tensor to use for the forward pass
                 # This ensures we don't hit the -1 indexing error
                 input_ids = torch.zeros((batch_size, 1), dtype=torch.long, device=device)
