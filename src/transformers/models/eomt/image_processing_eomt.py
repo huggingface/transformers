@@ -15,7 +15,7 @@
 """Image processor class for EoMT."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -100,7 +100,62 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
         if not area_ratio.item() > overlap_mask_area_threshold:
             mask_exists = False
 
+    print(
+        f"Mask sum {mask_k_area}, original area {original_area}, final mask sum {final_mask.sum()}, mask exists {mask_exists}"
+    )
+
     return mask_exists, final_mask
+
+
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    target_size: Tuple[int, int] = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
+
+    segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device)
+    segments: List[Dict] = []
+
+    # Compute per-pixel assignment based on weighted mask scores
+    mask_probs_item = mask_probs.sigmoid()
+    # Weigh each mask by its prediction score
+    mask_probs *= pred_scores.view(-1, 1, 1)
+    mask_labels = mask_probs.argmax(0)  # [height, width]
+
+    # Keep track of instances of each class
+    current_segment_id = 0
+    stuff_memory_list: Dict[str, int] = {}
+
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+
+        # Check if mask exists and large enough to be a segment
+        mask_exists, final_mask = check_segment_validity(
+            mask_labels, mask_probs_item, k, mask_threshold, overlap_mask_area_threshold
+        )
+
+        if mask_exists:
+            if pred_class in stuff_memory_list:
+                current_segment_id = stuff_memory_list[pred_class]
+            else:
+                current_segment_id += 1
+
+            segmentation[final_mask] = current_segment_id
+            torch.save(final_mask, f"/Users/espm5508/personal/transformers/delete/segments_pr_{k}.pt")
+            segment_score = round(pred_scores[k].item(), 6)
+            segments.append(
+                {
+                    "id": current_segment_id,
+                    "label_id": pred_class,
+                    "score": segment_score,
+                }
+            )
+    return segmentation, segments
 
 
 class EoMTImageProcessor(BaseImageProcessor):
@@ -326,7 +381,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         output_logits = []
 
         for i, image_size in enumerate(original_image_sizes):
-            height, width = self.scale_image_size(image_size)
+            height, width = self.scale_image_size(image_size, segmentation_type="panoptic")
             image_seg_logits = segmentation_logits[i][:, :height, :width]
             combined = F.interpolate(image_seg_logits[None, ...], size=(height, width), mode="bilinear")[0]
             output_logits.append(combined)
@@ -334,8 +389,8 @@ class EoMTImageProcessor(BaseImageProcessor):
         return output_logits
 
     def postprocess_semnatic_segmentation(self, outputs, origins, original_image_sizes):
-        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = torch.tensor(outputs[0])  # [batch_size, num_queries, height, width]
+        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
 
         masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits,
@@ -364,8 +419,8 @@ class EoMTImageProcessor(BaseImageProcessor):
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
     ):
-        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = torch.tensor(outputs[0])  # [batch_size, num_queries, height, width]
+        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
@@ -396,63 +451,16 @@ class EoMTImageProcessor(BaseImageProcessor):
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
-            # Compute per-pixel assignment based on weighted mask scores
-            mask_probs_item = mask_probs_item.sigmoid()
-            mask_ids = (pred_scores_item[:, None, None] * mask_probs_item).argmax(0)
-
-            segments = torch.full(mask_ids.shape, -1, dtype=torch.long)
-            segmentation = torch.full((*mask_ids.shape, 2), -1, dtype=torch.long)
-            segmentation[:, :, 0] = num_labels + 1  # Initialize with Null class
-
-            stuff_segment_ids, current_segment_id = {}, 0
-            segments_info = []
-
-            for k in range(pred_labels_item.shape[0]):
-                pred_class = pred_labels_item[k].item()
-                mask_exists, final_mask = check_segment_validity(
-                    mask_ids, mask_probs_item, k, mask_threshold, overlap_mask_area_threshold
-                )
-
-                if not mask_exists:
-                    continue
-
-                if pred_class in stuff_classes:
-                    if pred_class in stuff_segment_ids:
-                        segments[final_mask] = stuff_segment_ids[pred_class]
-                        continue
-                    else:
-                        stuff_segment_ids[pred_class] = current_segment_id
-
-                segments[final_mask] = current_segment_id
-                segment_score = round(pred_scores_item[k].item(), 6)
-                segments_info.append(
-                    {
-                        "id": current_segment_id,
-                        "label_id": pred_class,
-                        "score": segment_score,
-                    }
-                )
-
-                current_segment_id += 1
-
-        for info in segments_info:
-            sid = info["id"]
-            cid = info["label_id"]
-            seg_mask = segments == sid
-            segmentation[:, :, 0] = torch.where(
-                seg_mask, torch.tensor(cid, device=segmentation.device), segmentation[:, :, 0]
-            )
-            segmentation[:, :, 1] = torch.where(
-                seg_mask, torch.tensor(sid, device=segmentation.device), segmentation[:, :, 1]
+            segmentation, segments = compute_segments(
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                target_size=original_image_sizes[i] if original_image_sizes is not None else None,
             )
 
-        results.append(
-            {
-                "segmentation": segmentation,
-                "segments_info": segments_info,
-            }
-        )
-
+            results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
 
