@@ -266,6 +266,70 @@ class DinoDetrConfig(PretrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
+        # Verify arguments
+        assert sorted(module_seq) == ["ca", "ffn", "sa"]
+        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
+        if enc_layer_dropout_prob is not None:
+            assert isinstance(enc_layer_dropout_prob, list)
+            assert len(enc_layer_dropout_prob) == num_encoder_layers
+            for i in enc_layer_dropout_prob:
+                assert 0.0 <= i <= 1.0
+        if dec_layer_number is not None:
+            assert isinstance(dec_layer_number, list)
+            assert len(dec_layer_number) == num_decoder_layers
+        if dec_layer_dropout_prob is not None:
+            assert isinstance(dec_layer_dropout_prob, list)
+            assert len(dec_layer_dropout_prob) == num_decoder_layers
+            for i in dec_layer_dropout_prob:
+                assert 0.0 <= i <= 1.0
+        if num_feature_levels > 1:
+            assert deformable_encoder, "Only support deformable_encoder for num_feature_levels > 1"
+        if use_deformable_box_attn:
+            assert deformable_encoder or deformable_encoder
+
+        assert layer_share_type in [None, "encoder", "decoder", "both"]
+        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
+        assert learnable_tgt_init, "learnable_tgt_init should be True"
+        assert two_stage_type in [
+            "no",
+            "standard",
+        ], "Unknown param {} of two_stage_type".format(two_stage_type)
+        if dec_layer_number is not None:
+            if two_stage_type != "no" or num_patterns == 0:
+                assert (
+                    dec_layer_number[0] == num_queries
+                ), f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries})"
+            else:
+                assert (
+                    dec_layer_number[0] == num_queries * num_patterns
+                ), f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries}) * num_patterns({num_patterns})"
+        if rm_detach:
+            assert isinstance(rm_detach, list)
+            assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in rm_detach)
+
+        if num_feature_levels <= 1:
+            assert two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1"
+        assert two_stage_type in [
+            "no",
+            "standard",
+        ], "unknown param {} of two_stage_type".format(two_stage_type)
+        if two_stage_type != "no":
+            if two_stage_bbox_embed_share:
+                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
+            if two_stage_class_embed_share:
+                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
+        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
+        if fix_refpoints_hw > 0:
+            assert random_refpoints_xy
+        elif int(fix_refpoints_hw) == -2:
+            assert random_refpoints_xy
+
+        assert iter_update, "iter_update should be True"
+        assert layer_share_type is None
+        assert query_dim == 4
+        assert query_dim in [2, 4], "Query_dim should be 2/4 but {}".format(query_dim)
+        assert return_intermediate, "Support return_intermediate only"
+
         self.d_model = d_model
         self.num_feature_levels = num_feature_levels
         self.num_heads = num_heads
