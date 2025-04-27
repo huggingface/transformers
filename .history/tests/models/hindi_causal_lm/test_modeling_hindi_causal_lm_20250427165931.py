@@ -30,7 +30,8 @@ if is_torch_available():
 
     from transformers.models.hindi_causal_lm.modeling_hindi_causal_lm import (
         HindiCausalLMForCausalLM,
-        HindiCausalLMModel,  # Import PreTrainedModel if needed for specific tests
+        HindiCausalLMModel,
+        HindiCausalLMPreTrainedModel, # Import PreTrainedModel if needed for specific tests
     )
     # Make sure dummy objects are correctly handled or imported if torch isn't available
 else:
@@ -38,10 +39,11 @@ else:
     # This structure assumes dummy objects are defined elsewhere if torch is missing.
     # For simplicity in this context, we'll assume torch is available for the test definitions.
     # If you have dummy_pt_objects.py, import from there.
-    from transformers.models.hindi_causal_lm.dummy_pt_objects import (  # Example import
-        HindiCausalLMForCausalLM,
-        HindiCausalLMModel,
-    )
+    from transformers.models.hindi_causal_lm.dummy_pt_objects import ( # Example import
+         HindiCausalLMForCausalLM,
+         HindiCausalLMModel,
+         HindiCausalLMPreTrainedModel,
+     )
 
 
 class HindiCausalLMModelTester:
@@ -52,12 +54,12 @@ class HindiCausalLMModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False,  # HindiCausalLM doesn't use token_type_ids
+        use_token_type_ids=False, # HindiCausalLM doesn't use token_type_ids
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=4,  # Ensure hidden_size is divisible by this
+        num_attention_heads=4, # Ensure hidden_size is divisible by this
         intermediate_size=64,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
@@ -67,20 +69,20 @@ class HindiCausalLMModelTester:
         # type_sequence_label_size=2, # Not used for Causal LM
         initializer_range=0.02,
         scope=None,
-        pad_token_id=0,  # Define pad_token_id
+        pad_token_id=0, # Define pad_token_id
         bos_token_id=1,
         eos_token_id=2,
         normalization_layer="rmsnorm",
         positional_encoding_type="rope",
-        rope_theta=10000.0,  # Add rope_theta for RoPE
-        tie_word_embeddings=True,  # Define tie_word_embeddings
+        rope_theta=10000.0, # Add rope_theta for RoPE
+        tie_word_embeddings=True, # Define tie_word_embeddings
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids  # Keep False
+        self.use_token_type_ids = use_token_type_ids # Keep False
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -105,18 +107,19 @@ class HindiCausalLMModelTester:
 
         # Ensure hidden_size is divisible by num_attention_heads
         if self.hidden_size % self.num_attention_heads != 0:
-            # Adjust hidden_size to be divisible
-            self.hidden_size = (self.hidden_size // self.num_attention_heads) * self.num_attention_heads
-            if self.hidden_size == 0:  # Prevent hidden_size 0 if heads > initial hidden_size
-                self.hidden_size = self.num_attention_heads
-            print(f"Adjusted hidden_size to {self.hidden_size} to be divisible by {self.num_attention_heads} heads.")
+             # Adjust hidden_size to be divisible
+             self.hidden_size = (self.hidden_size // self.num_attention_heads) * self.num_attention_heads
+             if self.hidden_size == 0: # Prevent hidden_size 0 if heads > initial hidden_size
+                 self.hidden_size = self.num_attention_heads
+             print(f"Adjusted hidden_size to {self.hidden_size} to be divisible by {self.num_attention_heads} heads.")
+
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-        token_type_ids = None  # Not used
+        token_type_ids = None # Not used
 
         # Labels for Causal LM
         token_labels = None
@@ -127,7 +130,7 @@ class HindiCausalLMModelTester:
         config = self.get_config()
 
         # Removed sequence_labels and choice_labels as they aren't used for Causal LM base tests
-        return config, input_ids, token_type_ids, input_mask, token_labels  # Return token_labels
+        return config, input_ids, token_type_ids, input_mask, token_labels # Return token_labels
 
     def get_config(self):
         # Returns a configuration object for the model
@@ -149,51 +152,41 @@ class HindiCausalLMModelTester:
             positional_encoding_type=self.positional_encoding_type,
             rope_theta=self.rope_theta,
             tie_word_embeddings=self.tie_word_embeddings,
-            use_cache=True,  # Enable cache for generation tests
+            use_cache=True, # Enable cache for generation tests
         )
 
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        token_labels,  # Adjusted signature
+        self, config, input_ids, token_type_ids, input_mask, token_labels # Adjusted signature
     ):
         # Test the base model (HindiCausalLMModel)
         # Need to instantiate with config only if HindiCausalLMModel is available
         if not is_torch_available():
-            return  # RUFF FIX: Moved return to next line
+             return # RUFF FIX: Moved return to next line
 
         model = HindiCausalLMModel(config=config)
         model.to(torch_device)
         model.eval()
 
         # Test forward pass with different combinations of inputs
-        result = model(input_ids, attention_mask=input_mask)  # Removed token_type_ids
-        result = model(input_ids)  # Test without attention_mask
+        result = model(input_ids, attention_mask=input_mask) # Removed token_type_ids
+        result = model(input_ids) # Test without attention_mask
 
         # Check output shape
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        token_labels,  # Adjusted signature
+        self, config, input_ids, token_type_ids, input_mask, token_labels # Adjusted signature
     ):
-        # Test the Causal LM head model (HindiCausalLMForCausalLM)
+         # Test the Causal LM head model (HindiCausalLMForCausalLM)
         if not is_torch_available():
-            return  # RUFF FIX: Moved return to next line
+             return # RUFF FIX: Moved return to next line
 
         model = HindiCausalLMForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # Test forward pass with labels
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)  # Removed token_type_ids
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels) # Removed token_type_ids
         # Check output shapes
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         # Check loss calculation (optional, but good)
@@ -202,12 +195,12 @@ class HindiCausalLMModelTester:
         # Test forward pass without labels (inference)
         result_no_labels = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result_no_labels.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertIsNone(result_no_labels.loss)  # Loss should be None
+        self.parent.assertIsNone(result_no_labels.loss) # Loss should be None
 
     def prepare_config_and_inputs_for_common(self):
         # Prepares config and a dictionary of inputs for common tests like serialization
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, _, input_mask, _ = config_and_inputs  # Adjusted unpacking
+        config, input_ids, _, input_mask, _ = config_and_inputs # Adjusted unpacking
         # Common tests often only need input_ids and attention_mask
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
@@ -221,10 +214,10 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     all_generative_model_classes = (HindiCausalLMForCausalLM,) if is_torch_available() else ()
 
     # Tests to skip or modify
-    test_pruning = False  # Skip pruning tests if not supported/implemented
-    test_head_masking = False  # Skip head masking if not supported
-    test_missing_keys = False  # Skip if expected missing keys (like position_ids) are handled
-    is_encoder_decoder = False  # This is a decoder-only model
+    test_pruning = False # Skip pruning tests if not supported/implemented
+    test_head_masking = False # Skip head masking if not supported
+    test_missing_keys = False # Skip if expected missing keys (like position_ids) are handled
+    is_encoder_decoder = False # This is a decoder-only model
 
     def setUp(self):
         # Set up the model tester and config tester
@@ -246,7 +239,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
-    @slow  # Mark as slow test
+    @slow # Mark as slow test
     def test_model_from_pretrained(self):
         # Test loading the model from a pretrained checkpoint on the Hub
         model_name = "convaiinnovations/hindi-foundational-model-base"
@@ -256,24 +249,25 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             model_lm = HindiCausalLMForCausalLM.from_pretrained(model_name)
             self.assertIsNotNone(model_lm)
         except EnvironmentError as e:
-            # Handle cases where the model might not be downloadable in restricted environments
-            self.skipTest(f"Could not download pretrained model: {e}")
+             # Handle cases where the model might not be downloadable in restricted environments
+             self.skipTest(f"Could not download pretrained model: {e}")
         except Exception as e:
-            self.fail(f"Loading pretrained model failed with an unexpected error: {e}")
+             self.fail(f"Loading pretrained model failed with an unexpected error: {e}")
+
 
     def test_generate(self):
         """Test that the model can generate text using GenerationMixin."""
         if not is_torch_available():
-            return  # RUFF FIX: Moved return to next line
+            return # RUFF FIX: Moved return to next line
 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
         # --- Ensure pad_token_id is set in the test config ---
         # Use the pad_token_id from the tester or set a default if needed
-        config.pad_token_id = self.model_tester.pad_token_id if hasattr(self.model_tester, "pad_token_id") else 0
-        config.eos_token_id = self.model_tester.eos_token_id if hasattr(self.model_tester, "eos_token_id") else 2
-        config.bos_token_id = self.model_tester.bos_token_id if hasattr(self.model_tester, "bos_token_id") else 1
-        config.use_cache = True  # Ensure cache is enabled for generation
+        config.pad_token_id = self.model_tester.pad_token_id if hasattr(self.model_tester, 'pad_token_id') else 0
+        config.eos_token_id = self.model_tester.eos_token_id if hasattr(self.model_tester, 'eos_token_id') else 2
+        config.bos_token_id = self.model_tester.bos_token_id if hasattr(self.model_tester, 'bos_token_id') else 1
+        config.use_cache = True # Ensure cache is enabled for generation
 
         # Use the Causal LM model for generation tests
         model = HindiCausalLMForCausalLM(config)
@@ -281,19 +275,17 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         model.eval()
 
         # Prepare a simple input
-        input_ids = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.vocab_size).to(
-            torch_device
-        )
-        attention_mask = torch.ones_like(input_ids).to(torch_device)  # Assume all input tokens are attended
+        input_ids = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.vocab_size).to(torch_device)
+        attention_mask = torch.ones_like(input_ids).to(torch_device) # Assume all input tokens are attended
 
         # --- Test Greedy Generation ---
         # Keep max_length short for testing speed
         max_gen_length = self.model_tester.seq_length + 5
         generated_output_greedy = model.generate(
             input_ids=input_ids,
-            attention_mask=attention_mask,  # Pass attention mask
+            attention_mask=attention_mask, # Pass attention mask
             max_length=max_gen_length,
-            do_sample=False,  # Greedy search
+            do_sample=False, # Greedy search
             pad_token_id=config.pad_token_id,
             eos_token_id=config.eos_token_id,
             bos_token_id=config.bos_token_id,
@@ -309,7 +301,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             self.fail(f"Greedy generate() returned unexpected type: {type(generated_output_greedy)}")
 
         # --- Assertions for Greedy ---
-        self.assertEqual(generated_ids_tensor_greedy.shape[0], self.model_tester.batch_size)  # Batch size should match
+        self.assertEqual(generated_ids_tensor_greedy.shape[0], self.model_tester.batch_size) # Batch size should match
         # Generated length should be <= max_length
         self.assertTrue(generated_ids_tensor_greedy.shape[1] <= max_gen_length)
         # Should generate something longer than input unless EOS is hit early
@@ -320,7 +312,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             input_ids=input_ids,
             attention_mask=attention_mask,
             max_length=max_gen_length,
-            do_sample=True,  # Enable sampling
+            do_sample=True, # Enable sampling
             top_k=50,
             top_p=0.95,
             pad_token_id=config.pad_token_id,
@@ -342,21 +334,18 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     def test_weight_initialization(self):
         """Tests weight initialization, including embedding tying."""
         if not is_torch_available():
-            return  # RUFF FIX: Moved return to next line
+             return # RUFF FIX: Moved return to next line
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = HindiCausalLMForCausalLM(config)  # Test on the LM head model
+        model = HindiCausalLMForCausalLM(config) # Test on the LM head model
 
         # Check initialization std deviation (approximate)
         # This is a basic check, more rigorous checks can be added
         for name, param in model.named_parameters():
-            if param.requires_grad and param.ndim > 1:  # Check linear/embedding weights
+            if param.requires_grad and param.ndim > 1: # Check linear/embedding weights
                 # Check std dev is close to initializer_range (allow some tolerance)
-                self.assertLess(
-                    abs(param.data.std() - config.initializer_range),
-                    0.1,
-                    msg=f"Std dev of {name} is not close to initializer_range {config.initializer_range}",
-                )
+                self.assertLess(abs(param.data.std() - config.initializer_range), 0.1,
+                                msg=f"Std dev of {name} is not close to initializer_range {config.initializer_range}")
 
         # --- Check that weights are properly tied ---
         if config.tie_word_embeddings:
@@ -366,16 +355,11 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             # Check if they point to the same memory location
             self.assertIs(input_embedding_weight, output_embedding_weight, "Word embeddings are not tied")
             # Optionally, check if values are identical (redundant if pointers match, but safe)
-            self.assertTrue(
-                torch.allclose(input_embedding_weight, output_embedding_weight), "Tied weights values differ"
-            )
+            self.assertTrue(torch.allclose(input_embedding_weight, output_embedding_weight), "Tied weights values differ")
         else:
-            # If not tied, ensure they are different objects (unless initialized identically by chance)
-            self.assertIsNot(
-                model.get_input_embeddings().weight,
-                model.get_output_embeddings().weight,
-                "Word embeddings should not be tied but are",
-            )
+             # If not tied, ensure they are different objects (unless initialized identically by chance)
+             self.assertIsNot(model.get_input_embeddings().weight, model.get_output_embeddings().weight,
+                              "Word embeddings should not be tied but are")
 
         # Check that lm_head weight has the correct shape
         self.assertEqual(model.lm_head.weight.shape, (config.vocab_size, config.hidden_size))
@@ -385,7 +369,8 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 @require_tokenizers
 @require_torch
 class HindiCausalLMIntegrationTest(unittest.TestCase):
-    @slow  # Mark as slow test
+
+    @slow # Mark as slow test
     def test_inference_causal_lm(self):
         """Tests forward pass with a pretrained model and specific input."""
         model_name = "convaiinnovations/hindi-foundational-model-base"
@@ -405,15 +390,15 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
         # E.g., if tokenizer.encode("हिंदी भाषा") -> [47, 5096, 4329, 3697, 2567, 956]
         # Need to add BOS token if model expects it
         # input_ids = torch.tensor([[1, 47, 5096, 4329, 3697, 2567, 956]], device=torch_device) # Example with BOS
-        input_ids = torch.tensor([[47, 5096, 4329, 3697, 2567, 956]], device=torch_device)  # Example without BOS
+        input_ids = torch.tensor([[47, 5096, 4329, 3697, 2567, 956]], device=torch_device) # Example without BOS
         attention_mask = torch.ones_like(input_ids)
 
         with torch.no_grad():
-            output = model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+            output = model(input_ids=input_ids, attention_mask=attention_mask) # Pass attention_mask
 
         # Check logits shape: [batch_size, seq_length, vocab_size]
         # Get vocab size from the loaded model's config
-        expected_vocab_size = model.config.vocab_size  # Should be 16000 for this model
+        expected_vocab_size = model.config.vocab_size # Should be 16000 for this model
         expected_shape = torch.Size([1, input_ids.shape[1], expected_vocab_size])
         self.assertEqual(output.logits.shape, expected_shape)
 

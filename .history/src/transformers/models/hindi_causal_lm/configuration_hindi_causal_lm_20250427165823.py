@@ -119,12 +119,12 @@ class HindiCausalLMConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        unk_token_id=3,  # Added unk_token_id
+        unk_token_id=3, # Added unk_token_id
         tie_word_embeddings=True,
         normalization_layer="rmsnorm",
-        positional_encoding_type="rope",  # Default to rope
-        rope_theta=10000.0,  # Added rope_theta
-        architectures=None,  # Set default below
+        positional_encoding_type="rope", # Default to rope
+        rope_theta=10000.0, # Added rope_theta
+        architectures=None, # Set default below
         **kwargs,
     ):
         # Set default architectures if None
@@ -137,9 +137,9 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         # Ensure hidden_size is divisible by num_attention_heads
         if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                f"hidden_size ({hidden_size}) must be divisible by num_attention_heads ({num_attention_heads})"
-            )
+             raise ValueError(
+                 f"hidden_size ({hidden_size}) must be divisible by num_attention_heads ({num_attention_heads})"
+             )
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -158,8 +158,8 @@ class HindiCausalLMConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            unk_token_id=unk_token_id,  # Pass unk token id
+            unk_token_id=unk_token_id, # Pass unk token id
             tie_word_embeddings=tie_word_embeddings,
-            architectures=architectures,  # Pass architectures
-            **kwargs,  # Pass remaining kwargs
+            architectures=architectures, # Pass architectures
+            **kwargs, # Pass remaining kwargs
         )
