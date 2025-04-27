@@ -59,7 +59,6 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
-
             (
                 "albert",
                 (

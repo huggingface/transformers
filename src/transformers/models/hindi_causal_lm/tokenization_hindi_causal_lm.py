@@ -102,8 +102,8 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         # Check the actual trained tokenizer.model for special token IDs
         # Assuming standard SPM uses <s>=1, <pad>=0, </s>=2, <unk>=3 is a common convention but verify
         # Using provided special tokens for consistency
-        self.fairseq_tokens_to_ids = {} # Start empty, will be populated by super().__init__
-        self.fairseq_offset = 0 # Set offset based on how many special tokens are *not* handled by SPM
+        self.fairseq_tokens_to_ids = {}  # Start empty, will be populated by super().__init__
+        self.fairseq_offset = 0  # Set offset based on how many special tokens are *not* handled by SPM
 
         # Set special tokens and initialize superclass
         super().__init__(
@@ -131,16 +131,16 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             # Check if special tokens are already part of the SentencePiece model vocab
             special_tokens_in_spm = 0
             for token_str in [bos_token, eos_token, unk_token, pad_token, mask_token]:
-                 if token_str and self.sp_model.PieceToId(token_str) != self.sp_model.unk_id():
-                     special_tokens_in_spm += 1
-                 # Need to also check if the assigned ID (e.g., self.pad_token_id) matches sp_model's ID
-                 # For simplicity, assume super().__init__ handles adding tokens if they aren't in spm
+                if token_str and self.sp_model.PieceToId(token_str) != self.sp_model.unk_id():
+                    special_tokens_in_spm += 1
+                # Need to also check if the assigned ID (e.g., self.pad_token_id) matches sp_model's ID
+                # For simplicity, assume super().__init__ handles adding tokens if they aren't in spm
 
             # Base vocab size on sp_model + explicitly added tokens
             # This can be tricky if sp_model already contains some special tokens.
             # Using len(self) from PreTrainedTokenizer is usually the most reliable way
             # after initialization.
-            self.vocab_size = len(self) # Let PreTrainedTokenizer determine the final size
+            self.vocab_size = len(self)  # Let PreTrainedTokenizer determine the final size
 
             # Build token<->id maps ensuring consistency
             self.tokens_to_ids = {token: idx for idx, token in self.get_vocab().items()}
@@ -191,21 +191,20 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         return len(self.get_vocab())
 
     def get_vocab(self) -> Dict[str, int]:
-        """ Returns the vocabulary as a dictionary of token to index. """
+        """Returns the vocabulary as a dictionary of token to index."""
         if not is_sentencepiece_available():
-             requires_backends(self, ["sentencepiece"])
+            requires_backends(self, ["sentencepiece"])
         if not hasattr(self, "_vocab"):
-             # Build vocab from sp_model and added tokens
-             vocab = {self.sp_model.IdToPiece(i): i for i in range(self.sp_model.GetPieceSize())}
-             # Update with added tokens (special tokens), potentially overwriting sp_model IDs if needed
-             # `self.added_tokens_encoder` stores the token -> id mapping for added tokens
-             vocab.update(self.added_tokens_encoder)
-             self._vocab = vocab # Cache it
+            # Build vocab from sp_model and added tokens
+            vocab = {self.sp_model.IdToPiece(i): i for i in range(self.sp_model.GetPieceSize())}
+            # Update with added tokens (special tokens), potentially overwriting sp_model IDs if needed
+            # `self.added_tokens_encoder` stores the token -> id mapping for added tokens
+            vocab.update(self.added_tokens_encoder)
+            self._vocab = vocab  # Cache it
         return self._vocab
 
-
     def _tokenize(self, text: str) -> List[str]:
-        """ Tokenize a string using SentencePiece. """
+        """Tokenize a string using SentencePiece."""
         if not is_sentencepiece_available():
             requires_backends(self, ["sentencepiece"])
 
@@ -214,25 +213,23 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         # Encode using SentencePiece model
         return self.sp_model.encode(text, out_type=str)
 
-
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token (str) to an id using the vocabulary. """
+        """Converts a token (str) to an id using the vocabulary."""
         # Check added tokens first (includes special tokens)
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
         # Fall back to SentencePiece model
         if is_sentencepiece_available() and self.sp_model:
-             spm_id = self.sp_model.PieceToId(token)
-             # SPM returns <unk> ID (often 0 or 3 depending on model) if token is unknown
-             # Check if the returned ID corresponds to the *model's* unk piece ID
-             if spm_id == self.sp_model.unk_id():
-                  # If SPM considers it unknown, return the tokenizer's unk_token_id
-                  return self.unk_token_id
-             return spm_id
+            spm_id = self.sp_model.PieceToId(token)
+            # SPM returns <unk> ID (often 0 or 3 depending on model) if token is unknown
+            # Check if the returned ID corresponds to the *model's* unk piece ID
+            if spm_id == self.sp_model.unk_id():
+                # If SPM considers it unknown, return the tokenizer's unk_token_id
+                return self.unk_token_id
+            return spm_id
         else:
-             # Should not happen if check at start passes, but fallback for safety
-             return self.unk_token_id
-
+            # Should not happen if check at start passes, but fallback for safety
+            return self.unk_token_id
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocabulary."""
@@ -241,18 +238,17 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             return self.added_tokens_decoder[index]
         # Fall back to SentencePiece model
         if is_sentencepiece_available() and self.sp_model:
-             # Check if index is within the valid range for the SPM model
-             if 0 <= index < self.sp_model.GetPieceSize():
-                 return self.sp_model.IdToPiece(index)
-             else:
-                 # Index out of range or corresponds to an added token already handled
-                 return self.unk_token
+            # Check if index is within the valid range for the SPM model
+            if 0 <= index < self.sp_model.GetPieceSize():
+                return self.sp_model.IdToPiece(index)
+            else:
+                # Index out of range or corresponds to an added token already handled
+                return self.unk_token
         else:
-             return self.unk_token
-
+            return self.unk_token
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens (list of str) back into a single string. """
+        """Converts a sequence of tokens (list of str) back into a single string."""
         if not is_sentencepiece_available():
             requires_backends(self, ["sentencepiece"])
 
@@ -261,40 +257,39 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         # A common approach is to decode piece by piece or use sp_model.decode if robust
         # Using sp_model.decode(tokens) might be simpler if tokens are guaranteed valid pieces
         try:
-             # Attempt direct decoding
-             current_sub_text = []
-             out_string = ""
-             for token in tokens:
-                 # Handle special tokens explicitly if they were added and not part of spm vocab
-                 if token in self.added_tokens_encoder:
-                     # If we have accumulated sub-text, decode it first
-                     if current_sub_text:
-                         out_string += self.sp_model.decode(current_sub_text)
-                         current_sub_text = []
-                     # Append the special token string itself (or handle as needed)
-                     # Usually, we just skip them for string reconstruction, or handle based on context
-                     # E.g., self.sp_model.decode might handle some special tokens if trained with them
-                     pass # Often skip special tokens in final string output
-                 else:
-                     current_sub_text.append(token)
+            # Attempt direct decoding
+            current_sub_text = []
+            out_string = ""
+            for token in tokens:
+                # Handle special tokens explicitly if they were added and not part of spm vocab
+                if token in self.added_tokens_encoder:
+                    # If we have accumulated sub-text, decode it first
+                    if current_sub_text:
+                        out_string += self.sp_model.decode(current_sub_text)
+                        current_sub_text = []
+                    # Append the special token string itself (or handle as needed)
+                    # Usually, we just skip them for string reconstruction, or handle based on context
+                    # E.g., self.sp_model.decode might handle some special tokens if trained with them
+                    pass  # Often skip special tokens in final string output
+                else:
+                    current_sub_text.append(token)
 
-             # Decode any remaining sub-text
-             if current_sub_text:
-                 out_string += self.sp_model.decode(current_sub_text)
+            # Decode any remaining sub-text
+            if current_sub_text:
+                out_string += self.sp_model.decode(current_sub_text)
 
-             # Alternative simpler approach if sp_model handles its own special tokens:
-             # text = self.sp_model.decode(tokens)
+            # Alternative simpler approach if sp_model handles its own special tokens:
+            # text = self.sp_model.decode(tokens)
 
-             # Using the more controlled piece-by-piece can be safer with added tokens
-             # Let's stick to the provided implementation's likely intent: DecodePieces
-             # Assuming DecodePieces handles underlying byte details correctly
-             return self.sp_model.decode(tokens) # Revert to simpler if robust
+            # Using the more controlled piece-by-piece can be safer with added tokens
+            # Let's stick to the provided implementation's likely intent: DecodePieces
+            # Assuming DecodePieces handles underlying byte details correctly
+            return self.sp_model.decode(tokens)  # Revert to simpler if robust
 
         except Exception as e:
-             logger.error(f"Error decoding tokens: {e}")
-             # Fallback or simplistic join
-             return " ".join(tokens) # Basic fallback
-
+            logger.error(f"Error decoding tokens: {e}")
+            # Fallback or simplistic join
+            return " ".join(tokens)  # Basic fallback
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -323,7 +318,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             # Pair of sequences: <s> A </s> B </s>  (Confirm this is the correct format for the model)
             # Some models might use <s> A </s> </s> B </s> or other separators.
             # Assuming the format described in the docstring.
-            return bos + token_ids_0 + eos + token_ids_1 + eos # Original LLaMA-like pair format
+            return bos + token_ids_0 + eos + token_ids_1 + eos  # Original LLaMA-like pair format
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -360,7 +355,6 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             # Pair of sequences: <s> A </s> B </s> -> mask [1] + [0]*len(A) + [1] + [0]*len(B) + [1]
             return bos_mask + ([0] * len(token_ids_0)) + eos_mask + ([0] * len(token_ids_1)) + eos_mask
 
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the SentencePiece vocabulary model file to a directory.
@@ -377,7 +371,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
 
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return () # Return empty tuple on error
+            return ()  # Return empty tuple on error
 
         # Determine the output file path
         vocab_file_name = VOCAB_FILES_NAMES["vocab_file"]
@@ -386,28 +380,34 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         )
 
         # Check if the source vocab file exists and copy it
-        if hasattr(self, 'vocab_file') and self.vocab_file and os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if (
+            hasattr(self, "vocab_file")
+            and self.vocab_file
+            and os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file)
+            and os.path.isfile(self.vocab_file)
+        ):
             import shutil
+
             shutil.copyfile(self.vocab_file, out_vocab_file)
             logger.info(f"Vocabulary file saved to {out_vocab_file}")
         # If source file doesn't exist or is the same, try saving from the sp_model object
         elif self.sp_model is not None:
-             try:
-                  # SentencePieceProcessor doesn't have a direct save method.
-                  # We need to save the underlying model proto.
-                  model_proto = self.sp_model.serialized_model_proto()
-                  with open(out_vocab_file, "wb") as f:
-                      f.write(model_proto)
-                  logger.info(f"Vocabulary file saved to {out_vocab_file}")
-             except AttributeError:
-                  logger.error("Could not save vocabulary: sp_model does not have serialized_model_proto method.")
-                  return ()
-             except Exception as e:
-                  logger.error(f"Could not save vocabulary: {e}")
-                  return ()
+            try:
+                # SentencePieceProcessor doesn't have a direct save method.
+                # We need to save the underlying model proto.
+                model_proto = self.sp_model.serialized_model_proto()
+                with open(out_vocab_file, "wb") as f:
+                    f.write(model_proto)
+                logger.info(f"Vocabulary file saved to {out_vocab_file}")
+            except AttributeError:
+                logger.error("Could not save vocabulary: sp_model does not have serialized_model_proto method.")
+                return ()
+            except Exception as e:
+                logger.error(f"Could not save vocabulary: {e}")
+                return ()
         else:
-             logger.error("Could not save vocabulary: No vocab_file path or sp_model available.")
-             return ()
+            logger.error("Could not save vocabulary: No vocab_file path or sp_model available.")
+            return ()
 
         # Return the path to the saved file in a tuple, as expected by the base class method.
         return (out_vocab_file,)

@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Hindi Causal Language Model."""
 
-
 import math
 
 from ...utils import is_torch_available, logging
@@ -39,6 +38,7 @@ class HindiCausalLMPreTrainedModel:
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = HindiCausalLMConfig
     base_model_prefix = "hindi_causal_lm"
     supports_gradient_checkpointing = True
@@ -52,6 +52,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     """
     The Hindi Causal LM base model.
     """
+
     def __init__(self, config=None):
         requires_backends(self, ["torch"])
 
@@ -60,6 +61,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     """
     Hindi Causal LM model with a language modeling head.
     """
+
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
 
     def __init__(self, config=None):
@@ -116,7 +118,6 @@ if is_torch_available():
                 hidden_states = hidden_states.to(self.weight.dtype)
             return self.weight * hidden_states
 
-
     class HindiCausalLMAttention(nn.Module):
         """Multi-headed attention with causal mask specifically for Hindi Causal LM."""
 
@@ -145,7 +146,9 @@ if is_torch_available():
             # Causal mask to ensure attention only attends to previous tokens
             self.register_buffer(
                 "causal_mask",
-                torch.triu(torch.ones(config.max_position_embeddings, config.max_position_embeddings) * -1e10, diagonal=1),
+                torch.triu(
+                    torch.ones(config.max_position_embeddings, config.max_position_embeddings) * -1e10, diagonal=1
+                ),
             )
 
             self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -155,7 +158,9 @@ if is_torch_available():
             # Initialize for RoPE if used
             if self.positional_encoding_type == "rope":
                 # IMPORTANT: Make sure rotary_dim is even and no larger than attention_head_size
-                self.rotary_dim = min(self.attention_head_size, getattr(config, "rotary_dim", self.attention_head_size))
+                self.rotary_dim = min(
+                    self.attention_head_size, getattr(config, "rotary_dim", self.attention_head_size)
+                )
                 # Make sure rotary_dim is even
                 if self.rotary_dim % 2 != 0:
                     self.rotary_dim -= 1
@@ -182,27 +187,21 @@ if is_torch_available():
             # Only apply rotations to a subset of dimensions if needed
             if self.rotary_dim < head_dim:
                 # Apply to first rotary_dim dimensions
-                q_rot = q[..., :self.rotary_dim]
-                k_rot = k[..., :self.rotary_dim]
+                q_rot = q[..., : self.rotary_dim]
+                k_rot = k[..., : self.rotary_dim]
 
                 # Split the rotation dimension in half (for the rotate operation)
                 d_rot = self.rotary_dim // 2
-                q_rot1, q_rot2 = q_rot[..., :d_rot], q_rot[..., d_rot:2*d_rot]
-                k_rot1, k_rot2 = k_rot[..., :d_rot], k_rot[..., d_rot:2*d_rot]
+                q_rot1, q_rot2 = q_rot[..., :d_rot], q_rot[..., d_rot : 2 * d_rot]
+                k_rot1, k_rot2 = k_rot[..., :d_rot], k_rot[..., d_rot : 2 * d_rot]
 
                 # Apply rotation using cos/sin
-                q_rot_result = torch.cat(
-                    [q_rot1 * cos - q_rot2 * sin, q_rot2 * cos + q_rot1 * sin],
-                    dim=-1
-                )
-                k_rot_result = torch.cat(
-                    [k_rot1 * cos - k_rot2 * sin, k_rot2 * cos + k_rot1 * sin],
-                    dim=-1
-                )
+                q_rot_result = torch.cat([q_rot1 * cos - q_rot2 * sin, q_rot2 * cos + q_rot1 * sin], dim=-1)
+                k_rot_result = torch.cat([k_rot1 * cos - k_rot2 * sin, k_rot2 * cos + k_rot1 * sin], dim=-1)
 
                 # Concatenate with the unrotated part
-                q_out = torch.cat([q_rot_result, q[..., self.rotary_dim:]], dim=-1)
-                k_out = torch.cat([k_rot_result, k[..., self.rotary_dim:]], dim=-1)
+                q_out = torch.cat([q_rot_result, q[..., self.rotary_dim :]], dim=-1)
+                k_out = torch.cat([k_rot_result, k[..., self.rotary_dim :]], dim=-1)
             else:
                 # If all dimensions get rotation, no need to concatenate
                 d_rot = head_dim // 2
@@ -229,9 +228,17 @@ if is_torch_available():
             # If past key value is provided, only process the new tokens
             if past_key_value is not None:
                 # Reuse k, v from past
-                key_layer = self.key(hidden_states) if past_key_value[0] is None else torch.cat([past_key_value[0], self.key(hidden_states)], dim=1)
-                value_layer = self.value(hidden_states) if past_key_value[1] is None else torch.cat([past_key_value[1], self.value(hidden_states)], dim=1)
-                mixed_query_layer = mixed_query_layer[:, -hidden_states.size(1):, :]
+                key_layer = (
+                    self.key(hidden_states)
+                    if past_key_value[0] is None
+                    else torch.cat([past_key_value[0], self.key(hidden_states)], dim=1)
+                )
+                value_layer = (
+                    self.value(hidden_states)
+                    if past_key_value[1] is None
+                    else torch.cat([past_key_value[1], self.value(hidden_states)], dim=1)
+                )
+                mixed_query_layer = mixed_query_layer[:, -hidden_states.size(1) :, :]
             else:
                 key_layer = self.key(hidden_states)
                 value_layer = self.value(hidden_states)
@@ -249,7 +256,7 @@ if is_torch_available():
                 position = torch.arange(seq_len, device=hidden_states.device)
 
                 # Calculate frequencies
-                freqs = torch.einsum('i,j->ij', position.float(), self.inv_freq)
+                freqs = torch.einsum("i,j->ij", position.float(), self.inv_freq)
 
                 # Create cos and sin embeddings
                 emb = torch.cat((freqs, freqs), dim=-1).view(seq_len, -1)
@@ -266,8 +273,6 @@ if is_torch_available():
 
                 # Apply rotary embeddings
                 query_layer, key_layer = self._apply_rotary_pos_emb(query_layer, key_layer, cos_pos, sin_pos)
-
-
 
             kv_seq_len = key_layer.shape[-2]
             if past_key_value is not None:
@@ -323,13 +328,14 @@ if is_torch_available():
 
             return outputs
 
-
     class HindiCausalLMLayer(nn.Module):
         """Transformer layer for Hindi Causal LM with attention and feed-forward networks."""
 
         def __init__(self, config):
             super().__init__()
-            self.chunk_size_feed_forward = config.chunk_size_feed_forward if hasattr(config, "chunk_size_feed_forward") else 0
+            self.chunk_size_feed_forward = (
+                config.chunk_size_feed_forward if hasattr(config, "chunk_size_feed_forward") else 0
+            )
             self.seq_len_dim = 1
 
             # Use RMSNorm or LayerNorm based on config
@@ -384,7 +390,6 @@ if is_torch_available():
             outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
             return outputs
-
 
     class HindiCausalLMEncoder(nn.Module):
         """
@@ -448,7 +453,11 @@ if is_torch_available():
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if not return_dict:
-                return tuple(v for v in [hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions] if v is not None)
+                return tuple(
+                    v
+                    for v in [hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions]
+                    if v is not None
+                )
 
             return BaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
@@ -457,7 +466,6 @@ if is_torch_available():
                 attentions=all_self_attentions,
                 cross_attentions=None,
             )
-
 
     class HindiCausalLMPreTrainedModel(PreTrainedModel):
         """
@@ -474,11 +482,15 @@ if is_torch_available():
             if isinstance(module, nn.Linear):
                 # Slightly different from the original implementation
                 # which used truncated_normal for initialization
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02)
+                module.weight.data.normal_(
+                    mean=0.0, std=self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
+                )
                 if module.bias is not None:
                     module.bias.data.zero_()
             elif isinstance(module, nn.Embedding):
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02)
+                module.weight.data.normal_(
+                    mean=0.0, std=self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
+                )
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
             elif isinstance(module, (nn.LayerNorm, RMSNorm)):
@@ -488,7 +500,6 @@ if is_torch_available():
         def _set_gradient_checkpointing(self, module, value=False):
             if isinstance(module, HindiCausalLMEncoder):
                 module.gradient_checkpointing = value
-
 
     class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         """
@@ -500,11 +511,16 @@ if is_torch_available():
             self.config = config
 
             # Initialize token and position embeddings
-            self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+            self.token_embeddings = nn.Embedding(
+                config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+            )
 
             # Use position embeddings based on config
             self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-            if self.position_embedding_type == "absolute" or getattr(config, "positional_encoding_type", "absolute") == "learned":
+            if (
+                self.position_embedding_type == "absolute"
+                or getattr(config, "positional_encoding_type", "absolute") == "learned"
+            ):
                 self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
             self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -543,7 +559,9 @@ if is_torch_available():
             return_dict=None,
         ):
             output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-            output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states = (
+                output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            )
             return_dict = return_dict if return_dict is not None else self.config.use_return_dict
             use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -573,8 +591,10 @@ if is_torch_available():
                 inputs_embeds = self.token_embeddings(input_ids)
 
             # Add position embeddings if using absolute or learned position embeddings
-            if (self.position_embedding_type == "absolute" or
-                getattr(self.config, "positional_encoding_type", "absolute") == "learned"):
+            if (
+                self.position_embedding_type == "absolute"
+                or getattr(self.config, "positional_encoding_type", "absolute") == "learned"
+            ):
                 if position_ids is None:
                     position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
                     position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
@@ -609,7 +629,6 @@ if is_torch_available():
                 attentions=encoder_outputs.attentions,
                 cross_attentions=encoder_outputs.cross_attentions,
             )
-
 
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
@@ -714,9 +733,9 @@ if is_torch_available():
                 # Extend attention mask if present
                 if "attention_mask" in inputs:
                     attention_mask = inputs["attention_mask"]
-                    one_hot_positions = torch.ones((attention_mask.shape[0], 1),
-                                                   dtype=attention_mask.dtype,
-                                                   device=attention_mask.device)
+                    one_hot_positions = torch.ones(
+                        (attention_mask.shape[0], 1), dtype=attention_mask.dtype, device=attention_mask.device
+                    )
                     inputs["attention_mask"] = torch.cat([attention_mask, one_hot_positions], dim=1)
 
             return inputs
@@ -728,7 +747,7 @@ if is_torch_available():
             return GenerationConfig(
                 pad_token_id=self.config.pad_token_id,
                 bos_token_id=self.config.bos_token_id,
-                eos_token_id=self.config.eos_token_id
+                eos_token_id=self.config.eos_token_id,
             )
 
         def forward(

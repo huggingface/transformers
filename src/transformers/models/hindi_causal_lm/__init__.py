@@ -52,6 +52,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import *
+
     # Update import structure to include dummy objects
     _import_structure["dummy_pt_objects"] = [
         "HindiCausalLMPreTrainedModel",
