@@ -4112,7 +4112,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
                         torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
 
-
                 except Exception as e:
                     raise EnvironmentError(
                         "We tried to initialize torch.distributed for you, but it failed, make"
