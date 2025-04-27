@@ -160,17 +160,14 @@ class DinoDetrConfig(PretrainedConfig):
         key_aware_type=None,
         deformable_encoder=True,
         enc_layer_dropout_prob=None,
-        return_intermediate=True,
         deformable_decoder=True,
         rm_dec_query_scale=True,
         modulate_hw_attn=True,
         dec_layer_dropout_prob=None,
-        layer_share_type=None,
         learnable_tgt_init=True,
         rm_self_attn_layers=None,
         rm_detach=None,
         init_std=0.02,
-        iter_update=True,
         backbone="resnet50",  # From here and down things are pretty clear
         num_feature_levels=4,
         num_heads=8,
@@ -231,8 +228,8 @@ class DinoDetrConfig(PretrainedConfig):
         use_masks=True,
         match_unstable_error=True,
         focal_alpha=0.25,
-        enc_layer_share=None,
-        dec_layer_share=None,
+        enc_layer_share=False,
+        dec_layer_share=False,
         backbone_config=None,
         backbone_kwargs={"out_indices": [2, 3, 4]},
         is_encoder_decoder=True,
@@ -287,7 +284,6 @@ class DinoDetrConfig(PretrainedConfig):
         if use_deformable_box_attn:
             assert deformable_encoder or deformable_encoder
 
-        assert layer_share_type in [None, "encoder", "decoder", "both"]
         assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
         assert learnable_tgt_init, "learnable_tgt_init should be True"
         assert two_stage_type in [
@@ -323,12 +319,7 @@ class DinoDetrConfig(PretrainedConfig):
             assert random_refpoints_xy
         elif int(fix_refpoints_hw) == -2:
             assert random_refpoints_xy
-
-        assert iter_update, "iter_update should be True"
-        assert layer_share_type is None
-        assert query_dim == 4
         assert query_dim in [2, 4], "Query_dim should be 2/4 but {}".format(query_dim)
-        assert return_intermediate, "Support return_intermediate only"
 
         self.d_model = d_model
         self.num_feature_levels = num_feature_levels
@@ -369,7 +360,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.enc_layer_dropout_prob = enc_layer_dropout_prob
         self.two_stage_type = two_stage_type
 
-        self.return_intermediate = return_intermediate
         self.query_dim = query_dim
         self.num_feature_levels = num_feature_levels
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
@@ -398,7 +388,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
         self.query_dim = query_dim
         self.use_deformable_box_attn = use_deformable_box_attn
-        self.layer_share_type = layer_share_type
         self.decoder_sa_type = decoder_sa_type
         self.d_model = d_model
         self.normalize_before = normalize_before
@@ -428,7 +417,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.dn_labelbook_size = dn_labelbook_size
         self.two_stage_type = two_stage_type
         self.auxiliary_loss = auxiliary_loss
-        self.iter_update = iter_update
         self.dec_pred_class_embed_share = dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
         self.num_classes = num_classes
