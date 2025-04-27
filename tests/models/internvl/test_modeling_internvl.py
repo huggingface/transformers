@@ -425,11 +425,17 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
 
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate"',
-                    ("cuda", 7): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate"',
+                (
+                    "cuda",
+                    7,
+                ): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+            }
+        )
         expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
@@ -483,11 +489,17 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground',
-                    ("cuda", 7): 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Angle',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
+                (
+                    "cuda",
+                    7,
+                ): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Angle",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
@@ -606,11 +618,17 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
-                    ("cuda", 7): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image**: This shows the Statue of Liberty on Liberty Island, with the',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
+                (
+                    "cuda",
+                    7,
+                ): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image**: This shows the Statue of Liberty on Liberty Island, with the",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
@@ -620,11 +638,17 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.',
-                    ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.",
+                (
+                    "cuda",
+                    7,
+                ): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
@@ -765,11 +789,17 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature\'s peaceful grace.',
-                    ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
+                (
+                    "cuda",
+                    7,
+                ): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
@@ -961,11 +991,17 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their',
-                    ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
+                (
+                    "cuda",
+                    7,
+                ): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
@@ -976,11 +1012,17 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
         expected_outputs = Expectations(
-                {
-                    ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
-                    ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, untouched dreams.',
-                }
-            )  # fmt: skip
+            {
+                (
+                    "xpu",
+                    3,
+                ): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
+                (
+                    "cuda",
+                    7,
+                ): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, untouched dreams.",
+            }
+        )
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
