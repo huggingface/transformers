@@ -117,14 +117,14 @@ def _prepare_4d_causal_attention_mask(
 
     # Always create a base causal mask first
     mask = torch.full((tgt_len, src_len), torch.finfo(dtype).min, dtype=dtype, device=device)
-
+    
     # Create proper condition mask for masked_fill_
     # Instead of using the approach that causes broadcasting issues, use a direct approach
     # For each position i, allow attention to positions j where j <= i + past_key_values_length
     rows = torch.arange(tgt_len, device=device).unsqueeze(1)  # Shape: [tgt_len, 1]
     cols = torch.arange(src_len, device=device).unsqueeze(0)  # Shape: [1, src_len]
     mask_condition = cols <= rows + past_key_values_length  # Shape: [tgt_len, src_len]
-
+    
     # Fill the mask - masks will have 0.0 where attention is allowed
     mask.masked_fill_(mask_condition, 0.0)
 
@@ -188,7 +188,6 @@ def _prepare_4d_causal_attention_mask(
                 causal_mask = causal_mask + attention_mask
 
     return causal_mask
-
 
 class HindiCausalLMAttention(nn.Module):
     def __init__(self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None):
