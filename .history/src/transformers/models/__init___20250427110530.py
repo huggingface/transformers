@@ -133,7 +133,7 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
-    from .hindi_causal_lm import *
+    from .hindi_causal_lm import *  # Ensure this line is present and alphabetically correct
     from .hubert import *
     from .ibert import *
     from .idefics import *
@@ -338,5 +338,5 @@ else:
     # It scans the current directory (models/) and subdirectories
     # It expects models to have their own __init__.py where classes are listed
     # in _import_structure
-    _import_structure = define_import_structure(_file)  # Use standard automatic discovery
+    _import_structure = define_import_structure(_file) # Use standard automatic discovery
     sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
