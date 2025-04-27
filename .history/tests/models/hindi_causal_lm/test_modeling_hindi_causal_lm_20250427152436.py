@@ -22,11 +22,10 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-
-
+import sys
+import os
 try:
     from .patch_hindi_model import patch_hindi_causal_lm
-
     # Apply the patch immediately
     patch_hindi_causal_lm()
     print("✅ Applied HindiCausalLM test patches")

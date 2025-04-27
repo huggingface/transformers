@@ -5,23 +5,26 @@ Use this script to patch the model before running tests.
 """
 
 import sys
-import os
-import types
+
 import torch
-from torch import nn
+
 from transformers.models.hindi_causal_lm.modeling_hindi_causal_lm import (
     HindiCausalLMForCausalLM,
-    _prepare_4d_causal_attention_mask,
-    logger
+    logger,
 )
+
 
 def patch_hindi_causal_lm():
     """Apply all necessary patches to fix the model tests"""
     print("Applying patches to HindiCausalLM model...")
-    
+
     # 1. Fix the attention mask function
     def _fixed_prepare_4d_causal_attention_mask(
-        attention_mask, input_shape, inputs_embeds, past_key_values_length, is_causal=True,
+        attention_mask,
+        input_shape,
+        inputs_embeds,
+        past_key_values_length,
+        is_causal=True,
     ):
         """
         Create a causal attention mask with proper dimensions.
@@ -34,14 +37,14 @@ def patch_hindi_causal_lm():
 
         # Always create a base causal mask first
         mask = torch.full((tgt_len, src_len), torch.finfo(dtype).min, dtype=dtype, device=device)
-        
+
         # Create proper condition mask for masked_fill_
         # Instead of using the approach that causes broadcasting issues, use a direct approach
         # For each position i, allow attention to positions j where j <= i + past_key_values_length
         rows = torch.arange(tgt_len, device=device).unsqueeze(1)  # Shape: [tgt_len, 1]
         cols = torch.arange(src_len, device=device).unsqueeze(0)  # Shape: [1, src_len]
         mask_condition = cols <= rows + past_key_values_length  # Shape: [tgt_len, src_len]
-        
+
         # Fill the mask - masks will have 0.0 where attention is allowed
         mask.masked_fill_(mask_condition, 0.0)
 
@@ -105,7 +108,7 @@ def patch_hindi_causal_lm():
                     causal_mask = causal_mask + attention_mask
 
         return causal_mask
-    
+
     # 2. Add the fixed methods to HindiCausalLMForCausalLM
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
@@ -113,12 +116,12 @@ def patch_hindi_causal_lm():
         # Handle padding by explicitly setting pad_token_id in the config
         if not hasattr(self.config, "pad_token_id") or self.config.pad_token_id is None:
             self.config.pad_token_id = 0  # Set default value for padding
-        
+
         # Adjust the attention mask for padding
         if attention_mask is None and input_ids is not None:
             # Create attention mask with 1s for all tokens except pad tokens
             attention_mask = (input_ids != self.config.pad_token_id).long()
-        
+
         if past_key_values:
             input_ids = input_ids[:, -1:]
 
@@ -145,31 +148,27 @@ def patch_hindi_causal_lm():
             model_inputs["token_type_ids"] = kwargs["token_type_ids"]
 
         return model_inputs
-    
+
     def safe_extract_next_token_logits(self, outputs, input_ids):
         """Safely extract next token logits from model outputs with error handling"""
         # Check if logits exist and have expected dimensions
-        if not hasattr(outputs, 'logits'):
+        if not hasattr(outputs, "logits"):
             logger.error("Model outputs do not contain 'logits' attribute")
             # Create dummy logits as fallback
             return torch.zeros(
-                (input_ids.shape[0], self.config.vocab_size),
-                dtype=torch.float32,
-                device=input_ids.device
+                (input_ids.shape[0], self.config.vocab_size), dtype=torch.float32, device=input_ids.device
             )
-        
+
         # Handle empty sequence dimension case
         if outputs.logits.size(1) == 0:
             logger.warning("Empty logits sequence dimension. Creating dummy logits.")
             return torch.zeros(
-                (outputs.logits.size(0), self.config.vocab_size),
-                dtype=torch.float32,
-                device=input_ids.device
+                (outputs.logits.size(0), self.config.vocab_size), dtype=torch.float32, device=input_ids.device
             )
-        
+
         # Normal case - extract last position logits
         return outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
-    
+
     # Create a patch for _sample method to use our safe extraction
     def sample_wrapper(original_method):
         def _patched_sample(self, *args, **kwargs):
@@ -177,10 +176,10 @@ def patch_hindi_causal_lm():
             original_extract = None
             if "_extract_next_token_logits" in globals():
                 original_extract = globals()["_extract_next_token_logits"]
-                
+
             # Replace the problematic line in the original function
             globals()["_extract_next_token_logits"] = self.safe_extract_next_token_logits
-            
+
             try:
                 # Call the original function with our patch in place
                 result = original_method(self, *args, **kwargs)
@@ -189,26 +188,29 @@ def patch_hindi_causal_lm():
                 # Restore original function
                 if original_extract is not None:
                     globals()["_extract_next_token_logits"] = original_extract
-        
+
         return _patched_sample
-    
+
     # 3. Apply all the patches
-    
+
     # Patch the attention mask function
-    sys.modules['transformers.models.hindi_causal_lm.modeling_hindi_causal_lm']._prepare_4d_causal_attention_mask = _fixed_prepare_4d_causal_attention_mask
-    
+    sys.modules[
+        "transformers.models.hindi_causal_lm.modeling_hindi_causal_lm"
+    ]._prepare_4d_causal_attention_mask = _fixed_prepare_4d_causal_attention_mask
+
     # Add our helper method
     HindiCausalLMForCausalLM.safe_extract_next_token_logits = safe_extract_next_token_logits
-    
+
     # Patch prepare_inputs_for_generation
     HindiCausalLMForCausalLM.prepare_inputs_for_generation = prepare_inputs_for_generation
-    
+
     # Patch the _sample method if it exists
     if hasattr(HindiCausalLMForCausalLM, "_sample"):
         original_sample = HindiCausalLMForCausalLM._sample
         HindiCausalLMForCausalLM._sample = sample_wrapper(original_sample)
-    
+
     print("All patches applied successfully!")
+
 
 if __name__ == "__main__":
     patch_hindi_causal_lm()
