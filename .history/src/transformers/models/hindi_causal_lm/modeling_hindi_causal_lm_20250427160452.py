@@ -237,8 +237,8 @@ class HindiCausalLMAttention(nn.Module):
 
         bsz, q_len, _ = hidden_states.size()
         if attention_mask is not None and attention_mask.dim() == 2:
-            # [bsz, seq_len]  →  [bsz, 1, 1, seq_len]
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
+    # [bsz, seq_len]  →  [bsz, 1, 1, seq_len]
+    attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
         elif attention_mask is not None and attention_mask.dim() == 3:
             # [bsz, 1, seq_len] → [bsz, 1, 1, seq_len]
             attention_mask = attention_mask.unsqueeze(2)

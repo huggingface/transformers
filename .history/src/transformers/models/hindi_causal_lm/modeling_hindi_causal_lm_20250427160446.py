@@ -236,12 +236,7 @@ class HindiCausalLMAttention(nn.Module):
             warnings.warn("Argument `padding_mask` is deprecated and will be removed", FutureWarning)
 
         bsz, q_len, _ = hidden_states.size()
-        if attention_mask is not None and attention_mask.dim() == 2:
-            # [bsz, seq_len]  →  [bsz, 1, 1, seq_len]
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            # [bsz, 1, seq_len] → [bsz, 1, 1, seq_len]
-            attention_mask = attention_mask.unsqueeze(2)
+        
         query_states = self._shape(self.q_proj(hidden_states), q_len, bsz)
         key_states = self._shape(self.k_proj(hidden_states), q_len, bsz)
         value_states = self._shape(self.v_proj(hidden_states), q_len, bsz)
