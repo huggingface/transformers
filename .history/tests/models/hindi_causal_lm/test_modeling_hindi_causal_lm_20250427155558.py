@@ -19,15 +19,12 @@ import unittest
 from transformers import is_torch_available
 from transformers.models.hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
-
 if is_torch_available():
     import torch
-
     from transformers.models.hindi_causal_lm.modeling_hindi_causal_lm import (
         HindiCausalLMForCausalLM,
         HindiCausalLMModel,
@@ -89,7 +86,9 @@ class HindiCausalLMModelTester:
         self.positional_encoding_type = positional_encoding_type
         # ensure hidden_size is divisible by num_attention_heads
         if hidden_size % num_attention_heads != 0:
-            self.hidden_size = hidden_size + num_attention_heads - (hidden_size % num_attention_heads)
+            self.hidden_size = (
+                hidden_size + num_attention_heads - (hidden_size % num_attention_heads)
+            )
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
