@@ -1877,7 +1877,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: Optional[Dict[str, object]] = None,
     ):
         super().__init__(name)
 
@@ -2412,7 +2412,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache()
-def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 

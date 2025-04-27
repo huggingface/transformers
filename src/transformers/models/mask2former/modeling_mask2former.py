@@ -1804,7 +1804,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         pixel_embeddings: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
-        feature_size_list: List = None,
+        feature_size_list: Optional[List] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

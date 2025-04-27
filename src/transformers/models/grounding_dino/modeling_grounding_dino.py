@@ -2554,7 +2554,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
+        labels: Optional[List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
