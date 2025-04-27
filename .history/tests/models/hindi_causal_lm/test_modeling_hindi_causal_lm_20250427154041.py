@@ -22,7 +22,15 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-
+import sys
+import os
+try:
+    from .patch_hindi_model import patch_hindi_causal_lm
+    # Apply the patch immediately
+    patch_hindi_causal_lm()
+    print("✅ Applied HindiCausalLM test patches")
+except ImportError:
+    print("⚠️ Could not import HindiCausalLM patches. Tests may fail.")
 
 if is_torch_available():
     import torch
@@ -224,18 +232,10 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
             # Check that weights are properly tied
             if config.tie_word_embeddings:
-                self.assertTrue(
-                    torch.allclose(
-                        model.hindi_causal_lm.token_embeddings.weight,
-                        model.lm_head.weight
-                    )
-                )
+                self.assertTrue(torch.allclose(model.hindi_causal_lm.token_embeddings.weight, model.lm_head.weight))
 
             # Check that lm_head weight has the correct shape
-            self.assertEqual(
-                model.lm_head.weight.shape,
-                (config.vocab_size, config.hidden_size)
-            )
+            self.assertEqual(model.lm_head.weight.shape, (config.vocab_size, config.hidden_size))
 
 
 @require_sentencepiece

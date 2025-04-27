@@ -224,18 +224,10 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
             # Check that weights are properly tied
             if config.tie_word_embeddings:
-                self.assertTrue(
-                    torch.allclose(
-                        model.hindi_causal_lm.token_embeddings.weight,
-                        model.lm_head.weight
-                    )
-                )
+                self.assertTrue(torch.allclose(model.hindi_causal_lm.token_embeddings.weight, model.lm_head.weight))
 
             # Check that lm_head weight has the correct shape
-            self.assertEqual(
-                model.lm_head.weight.shape,
-                (config.vocab_size, config.hidden_size)
-            )
+            self.assertEqual(model.lm_head.weight.shape, (config.vocab_size, config.hidden_size))
 
 
 @require_sentencepiece

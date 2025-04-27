@@ -18,10 +18,11 @@ import unittest
 from transformers import is_torch_available
 from transformers.models.hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.generation.utils import GenerationMixin
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...generation.test_utils import GenerationTesterMixin
 
 
 if is_torch_available():
@@ -137,11 +138,11 @@ class HindiCausalLMModelTester:
         model = HindiCausalLMModel(config=config)
         model.to(torch_device)
         model.eval()
-
+        
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-
+        
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
@@ -150,7 +151,7 @@ class HindiCausalLMModelTester:
         model = HindiCausalLMForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-
+        
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -195,14 +196,14 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         """Test that the model can generate text from a prompt."""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
-
+        
         model = HindiCausalLMForCausalLM(config)
         model.to(torch_device)
         model.eval()
-
+        
         # Generate using greedy decoding
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
-
+        
         # Check that generate works and produces longer output than input
         generated_ids = model.generate(
             input_ids=input_ids,
@@ -212,7 +213,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
             bos_token_id=config.bos_token_id,
             eos_token_id=config.eos_token_id,
         )
-
+        
         self.assertIsNotNone(generated_ids)
         self.assertTrue(generated_ids.shape[1] > input_ids.shape[1])
 
@@ -221,7 +222,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
         if is_torch_available():
             # Initialize model with default weights
             model = HindiCausalLMForCausalLM(config)
-
+            
             # Check that weights are properly tied
             if config.tie_word_embeddings:
                 self.assertTrue(
@@ -230,7 +231,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
                         model.lm_head.weight
                     )
                 )
-
+            
             # Check that lm_head weight has the correct shape
             self.assertEqual(
                 model.lm_head.weight.shape,
@@ -245,10 +246,10 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_causal_lm(self):
         model = HindiCausalLMForCausalLM.from_pretrained("convaiinnovations/hindi-foundational-model-base")
-
+        
         # Hindi text: "हिंदी भाषा"
         input_ids = torch.tensor([[1, 47, 5096, 4329, 3697, 2567, 956]])
-
+        
         output = model(input_ids)
         expected_shape = torch.Size([1, 7, 16000])  # [batch_size, seq_length, vocab_size]
         self.assertEqual(output.logits.shape, expected_shape)
