@@ -93,6 +93,7 @@ _CONFIG_FOR_DOC = "DinoDetrConfig"
 _CHECKPOINT_FOR_DOC = "dino_detr"
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -1158,6 +1159,7 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
     return output_memory, output_proposals
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->DinoDetr
 class DinoDetrPreTrainedModel(PreTrainedModel):
     config_class = DinoDetrConfig
     base_model_prefix = "model"
@@ -1213,6 +1215,7 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.level_embed)
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->DinoDetr
 class DinoDetrEncoderLayer(nn.Module):
     def __init__(self, config: DinoDetrConfig):
         super().__init__()
