@@ -179,37 +179,28 @@ if is_torch_available():
 
         def _apply_rotary_pos_emb(self, q, k, cos, sin):
             """Apply rotary position embeddings to query and key tensors safely."""
-            # Get dimensions
-            d_head = q.shape[-1]
-            d_rope = self.rotary_dim // 2  # Half the rotary dimension due to rotation operation
-            
-            # Extract the parts to rotate
-            q_rope = q[..., :self.rotary_dim]
-            k_rope = k[..., :self.rotary_dim]
-            
-            # Split channels for rotation
-            q1, q2 = q_rope[..., :d_rope], q_rope[..., d_rope:2*d_rope]
-            k1, k2 = k_rope[..., :d_rope], k_rope[..., d_rope:2*d_rope]
-            
-            # Apply rotation using the rotation matrix multiplication trick
-            q_rope_result = torch.cat(
-                [q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1
-            )
-            k_rope_result = torch.cat(
-                [k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1
-            )
-            
-            # Apply rotary embeddings only to a portion of the head dimensions if needed
-            if self.rotary_dim < d_head:
+            # Ensure our dimensions align - handle case where rotary_dim < attention_head_size
+            if self.rotary_dim < self.attention_head_size:
+                # Only apply rotation to subset of dimensions
+                q_rot = q[..., :self.rotary_dim]
                 q_pass = q[..., self.rotary_dim:]
+                k_rot = k[..., :self.rotary_dim]
                 k_pass = k[..., self.rotary_dim:]
-                q = torch.cat([q_rope_result, q_pass], dim=-1)
-                k = torch.cat([k_rope_result, k_pass], dim=-1)
+                
+                # Apply rotation only to the subset
+                q_rot_embed = (q_rot * cos) + (self._rotate_half(q_rot) * sin)
+                k_rot_embed = (k_rot * cos) + (self._rotate_half(k_rot) * sin)
+                
+                # Concatenate back with unchanged part
+                q_embed = torch.cat([q_rot_embed, q_pass], dim=-1)
+                k_embed = torch.cat([k_rot_embed, k_pass], dim=-1)
+                
+                return q_embed, k_embed
             else:
-                q = q_rope_result
-                k = k_rope_result
-            
-            return q, k
+                # Standard case - apply to full vectors
+                q_embed = (q * cos) + (self._rotate_half(q) * sin)
+                k_embed = (k * cos) + (self._rotate_half(k) * sin)
+                return q_embed, k_embed
 
         def forward(
             self,
@@ -240,24 +231,24 @@ if is_torch_available():
 
             # Apply RoPE if configured
             if self.positional_encoding_type == "rope":
-                # Generate position-dependent rotation
-                seq_len = key_layer.shape[2]
-                position = torch.arange(seq_len, device=hidden_states.device).unsqueeze(1)
-                # Calculate cos and sin
-                # [seq_len, rotary_dim/2]
-                freqs = torch.outer(position.float(), self.inv_freq)
-                # [seq_len, rotary_dim/2, 2]
-                emb = torch.cat((freqs, freqs), dim=-1).reshape(seq_len, -1)
-                # [seq_len, rotary_dim]
-                cos = emb.cos().unsqueeze(0).unsqueeze(0)
-                sin = emb.sin().unsqueeze(0).unsqueeze(0)
-                
-                # Expand to match batch size and heads [batch, heads, seq_len, rotary_dim/2]
-                cos = cos.expand(batch_size, self.num_attention_heads, seq_len, self.rotary_dim // 2)
-                sin = sin.expand(batch_size, self.num_attention_heads, seq_len, self.rotary_dim // 2)
-                
-                # Apply rotary embeddings - this function has been updated to handle dimension mismatches
-                query_layer, key_layer = self._apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+    # Generate position-dependent rotation
+    seq_len = key_layer.shape[2]
+    position = torch.arange(seq_len, device=hidden_states.device).unsqueeze(1)
+    # Calculate cos and sin
+    # [seq_len, rotary_dim/2]
+    freqs = torch.outer(position.float(), self.inv_freq)
+    # [seq_len, rotary_dim/2, 2]
+    emb = torch.cat((freqs, freqs), dim=-1).reshape(seq_len, -1)
+    # [seq_len, rotary_dim]
+    cos = emb.cos().unsqueeze(0).unsqueeze(0)
+    sin = emb.sin().unsqueeze(0).unsqueeze(0)
+    
+    # Expand to match batch size and heads [batch, heads, seq_len, rotary_dim/2]
+    cos = cos.expand(batch_size, self.num_attention_heads, seq_len, self.rotary_dim // 2)
+    sin = sin.expand(batch_size, self.num_attention_heads, seq_len, self.rotary_dim // 2)
+    
+    # Apply rotary embeddings - this function has been updated to handle dimension mismatches
+    query_layer, key_layer = self._apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
 
             kv_seq_len = key_layer.shape[-2]
