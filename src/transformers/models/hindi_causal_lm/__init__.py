@@ -29,7 +29,7 @@ from ...utils import (
 # Define the full import structure alphabetically by key
 _import_structure = {
     "configuration_hindi_causal_lm": ["HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP", "HindiCausalLMConfig"],
-    "modeling_hindi_causal_lm": [ # modeling comes after configuration
+    "modeling_hindi_causal_lm": [  # modeling comes after configuration
         "HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HindiCausalLMPreTrainedModel",
         "HindiCausalLMModel",
@@ -55,7 +55,7 @@ except OptionalDependencyNotAvailable:
             "HindiCausalLMModel",
             "HindiCausalLMForCausalLM",
         ],
-        **{k: v for k, v in _import_structure.items() if k != "configuration_hindi_causal_lm"}, # Add remaining items
+        **{k: v for k, v in _import_structure.items() if k != "configuration_hindi_causal_lm"},  # Add remaining items
     }
     # Re-sort just in case (though adding alphabetically should maintain order)
     _import_structure = OrderedDict(sorted(_import_structure.items()))
@@ -65,15 +65,15 @@ try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-     # Add dummy class for SentencePiece tokenizer if not available
-     # 'dummy_tokenizer_objects' comes between 'dummy_pt_objects' and 'modeling'
-     _import_structure = {
-         **{k: v for k, v in _import_structure.items() if k < "dummy_tokenizer_objects"}, # Items before
-         "dummy_tokenizer_objects": ["HindiCausalLMTokenizer"],
-         **{k: v for k, v in _import_structure.items() if k >= "dummy_tokenizer_objects"}, # Items after
-     }
-     # Re-sort just in case
-     _import_structure = OrderedDict(sorted(_import_structure.items()))
+    # Add dummy class for SentencePiece tokenizer if not available
+    # 'dummy_tokenizer_objects' comes between 'dummy_pt_objects' and 'modeling'
+    _import_structure = {
+        **{k: v for k, v in _import_structure.items() if k < "dummy_tokenizer_objects"},  # Items before
+        "dummy_tokenizer_objects": ["HindiCausalLMTokenizer"],
+        **{k: v for k, v in _import_structure.items() if k >= "dummy_tokenizer_objects"},  # Items after
+    }
+    # Re-sort just in case
+    _import_structure = OrderedDict(sorted(_import_structure.items()))
 
 
 try:
@@ -82,7 +82,7 @@ try:
 except OptionalDependencyNotAvailable:
     # No specific dummy needed for fast tokenizer if tokenizers lib is missing
     # But remove the fast tokenizer entry if it exists and tokenizers is not available
-    _import_structure.pop("tokenization_hindi_causal_lm_fast", None) # Use pop with default None
+    _import_structure.pop("tokenization_hindi_causal_lm_fast", None)  # Use pop with default None
 
 
 # Ensure final structure is sorted before passing to LazyModule
@@ -118,8 +118,8 @@ if TYPE_CHECKING:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-         # Import dummy object if sentencepiece is not available
-         from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+        # Import dummy object if sentencepiece is not available
+        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
     else:
         # Import real tokenizer class if sentencepiece is available
         from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
@@ -132,7 +132,7 @@ if TYPE_CHECKING:
         # No fast tokenizer class to import if tokenizers lib is missing
         pass
     else:
-         # Import real fast tokenizer class if tokenizers lib is available
+        # Import real fast tokenizer class if tokenizers lib is available
         from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
 
 else:
