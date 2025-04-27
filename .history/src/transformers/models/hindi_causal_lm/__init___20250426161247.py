@@ -6,7 +6,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -42,7 +48,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -50,7 +55,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_tokenizers_available():
@@ -58,7 +63,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
+        pass
 
     try:
         if not is_torch_available():
@@ -66,11 +71,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMForCausalLM,
-        )
+        pass
 
 else:
     import sys

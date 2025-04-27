@@ -142,7 +142,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
         # --- HINDI CAUSAL LM ADDED HERE ---
-        ("hindi_causal_lm", "HindiCausalLMHeadModel"),  
+        ("hindi_causal_lm", "HindiCausalLMHeadModel"),
 
         ("hiera", "HieraModel"),
         ("hubert", "HubertModel"),

@@ -20,7 +20,6 @@ from ...utils import (
     _LazyModule,
     is_sentencepiece_available,
     is_tokenizers_available,
-    is_torch_available,
 )
 
 
@@ -53,13 +52,6 @@ else:
     _import_structure["tokenization_hindi_causal_lm_fast"] = ["HindiCausalLMTokenizerFast"]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
-    from .modeling_hindi_causal_lm import (
-        HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST,
-        HindiCausalLMForCausalLM,
-        HindiCausalLMModel,
-        HindiCausalLMPreTrainedModel,
-    )
 
     try:
         if not is_sentencepiece_available():
@@ -67,7 +59,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_tokenizers_available():
@@ -75,7 +67,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
+        pass
 
 else:
     import sys

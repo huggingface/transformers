@@ -130,11 +130,11 @@ class HindiCausalLMModelTester:
         model = HindiCausalLMModel(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        
+
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
@@ -143,7 +143,7 @@ class HindiCausalLMModelTester:
         model = HindiCausalLMForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -191,10 +191,10 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_causal_lm(self):
         model = HindiCausalLMForCausalLM.from_pretrained("convaiinnovations/hindi-foundational-model-base")
-        
+
         # Hindi text: "हिंदी भाषा"
         input_ids = torch.tensor([[1, 47, 5096, 4329, 3697, 2567, 956]])
-        
+
         output = model(input_ids)
         expected_shape = torch.Size([1, 7, 16000])  # [batch_size, seq_length, vocab_size]
         self.assertEqual(output.logits.shape, expected_shape)

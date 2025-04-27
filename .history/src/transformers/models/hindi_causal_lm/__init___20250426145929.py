@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_sentencepiece_available, # Ensure this is imported
+    is_sentencepiece_available,  # Ensure this is imported
     is_torch_available,
 )
+
 
 # Define all objects that should be publicly available at the module level
 __all__ = [
@@ -60,9 +61,9 @@ try:
 except OptionalDependencyNotAvailable:
     # If PyTorch is NOT available, import the dummy classes...
     from .dummy_pt_objects import (
-        HindiCausalLMModel,
         HindiCausalLMForCausalLM,
-        HindiCausalLMPreTrainedModel, # <<< Import the dummy PreTrainedModel
+        HindiCausalLMModel,
+        HindiCausalLMPreTrainedModel,  # <<< Import the dummy PreTrainedModel
     )
     # ...and EXPLICITLY assign them to the module attribute names.
     HindiCausalLMModel = HindiCausalLMModel
@@ -99,18 +100,18 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel, # <<< Import dummy PreTrainedModel
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,  # <<< Import dummy PreTrainedModel
         )
         # Alias for TYPE_CHECKING when torch is missing
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel, # <<< Import real PreTrainedModel
             HindiCausalLMHeadModel,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,  # <<< Import real PreTrainedModel
         )
 
 # --- Lazy Module Setup ---

@@ -16,9 +16,9 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import sentencepiece as spm # Direct dependency
+import sentencepiece as spm  # Direct dependency
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging

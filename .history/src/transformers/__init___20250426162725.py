@@ -25,26 +25,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
-from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_bitsandbytes_available,
-    is_essentia_available,
     is_flax_available,
-    is_g2p_en_available,
-    is_keras_nlp_available,
-    is_librosa_available,
-    is_pretty_midi_available,
-    is_scipy_available,
     is_sentencepiece_available,
-    is_speech_available,
-    is_tensorflow_text_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torchaudio_available,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -556,239 +545,38 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
-    from .configuration_utils import PretrainedConfig
 
     # Data
-    from .data import (
-        DataProcessor,
-        InputExample,
-        InputFeatures,
-        SingleSentenceClassificationProcessor,
-        SquadExample,
-        SquadFeatures,
-        SquadV1Processor,
-        SquadV2Processor,
-        glue_compute_metrics,
-        glue_convert_examples_to_features,
-        glue_output_modes,
-        glue_processors,
-        glue_tasks_num_labels,
-        squad_convert_examples_to_features,
-        xnli_compute_metrics,
-        xnli_output_modes,
-        xnli_processors,
-        xnli_tasks_num_labels,
-    )
-    from .data.data_collator import (
-        DataCollator,
-        DataCollatorForLanguageModeling,
-        DataCollatorForMultipleChoice,
-        DataCollatorForPermutationLanguageModeling,
-        DataCollatorForSeq2Seq,
-        DataCollatorForSOP,
-        DataCollatorForTokenClassification,
-        DataCollatorForWholeWordMask,
-        DataCollatorWithFlattening,
-        DataCollatorWithPadding,
-        DefaultDataCollator,
-        default_data_collator,
-    )
-    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import (
-        AsyncTextIteratorStreamer,
-        CompileConfig,
-        GenerationConfig,
-        TextIteratorStreamer,
-        TextStreamer,
-        WatermarkingConfig,
-    )
-    from .hf_argparser import HfArgumentParser
 
     # Integrations
-    from .integrations import (
-        is_clearml_available,
-        is_comet_available,
-        is_dvclive_available,
-        is_neptune_available,
-        is_optuna_available,
-        is_ray_available,
-        is_ray_tune_available,
-        is_sigopt_available,
-        is_swanlab_available,
-        is_tensorboard_available,
-        is_wandb_available,
-    )
 
     # Model Cards
-    from .modelcard import ModelCard
 
     # TF 2.0 <=> PyTorch conversion utilities
-    from .modeling_tf_pytorch_utils import (
-        convert_tf_weight_name_to_pt_weight_name,
-        load_pytorch_checkpoint_in_tf2_model,
-        load_pytorch_model_in_tf2_model,
-        load_pytorch_weights_in_tf2_model,
-        load_tf2_checkpoint_in_pytorch_model,
-        load_tf2_model_in_pytorch_model,
-        load_tf2_weights_in_pytorch_model,
-    )
     from .models import *
 
     # Hindi Causal LM imports
-    from .models.hindi_causal_lm import (
-        HindiCausalLMConfig,
-        HindiCausalLMForCausalLM,
-        HindiCausalLMModel,
-        HindiCausalLMPreTrainedModel,
-        HindiCausalLMTokenizer,
-    )
-
     # Pipelines
-    from .pipelines import (
-        AudioClassificationPipeline,
-        AutomaticSpeechRecognitionPipeline,
-        CsvPipelineDataFormat,
-        DepthEstimationPipeline,
-        DocumentQuestionAnsweringPipeline,
-        FeatureExtractionPipeline,
-        FillMaskPipeline,
-        ImageClassificationPipeline,
-        ImageFeatureExtractionPipeline,
-        ImageSegmentationPipeline,
-        ImageTextToTextPipeline,
-        ImageToImagePipeline,
-        ImageToTextPipeline,
-        JsonPipelineDataFormat,
-        MaskGenerationPipeline,
-        NerPipeline,
-        ObjectDetectionPipeline,
-        PipedPipelineDataFormat,
-        Pipeline,
-        PipelineDataFormat,
-        QuestionAnsweringPipeline,
-        SummarizationPipeline,
-        TableQuestionAnsweringPipeline,
-        Text2TextGenerationPipeline,
-        TextClassificationPipeline,
-        TextGenerationPipeline,
-        TextToAudioPipeline,
-        TokenClassificationPipeline,
-        TranslationPipeline,
-        VideoClassificationPipeline,
-        VisualQuestionAnsweringPipeline,
-        ZeroShotAudioClassificationPipeline,
-        ZeroShotClassificationPipeline,
-        ZeroShotImageClassificationPipeline,
-        ZeroShotObjectDetectionPipeline,
-        pipeline,
-    )
-    from .processing_utils import ProcessorMixin
-
     # Tokenization
-    from .tokenization_utils import PreTrainedTokenizer
-    from .tokenization_utils_base import (
-        AddedToken,
-        BatchEncoding,
-        CharSpan,
-        PreTrainedTokenizerBase,
-        SpecialTokensMixin,
-        TokenSpan,
-    )
-
     # Trainer
-    from .trainer_callback import (
-        DefaultFlowCallback,
-        EarlyStoppingCallback,
-        PrinterCallback,
-        ProgressCallback,
-        TrainerCallback,
-        TrainerControl,
-        TrainerState,
-    )
-    from .trainer_utils import (
-        EvalPrediction,
-        IntervalStrategy,
-        SchedulerType,
-        enable_full_determinism,
-        set_seed,
-    )
-    from .training_args import TrainingArguments
-    from .training_args_seq2seq import Seq2SeqTrainingArguments
-    from .training_args_tf import TFTrainingArguments
-
     # Files and general utilities
     from .utils import (
-        CONFIG_NAME,
-        MODEL_CARD_NAME,
-        PYTORCH_PRETRAINED_BERT_CACHE,
-        PYTORCH_TRANSFORMERS_CACHE,
-        SPIECE_UNDERLINE,
-        TF2_WEIGHTS_NAME,
-        TF_WEIGHTS_NAME,
-        TRANSFORMERS_CACHE,
-        WEIGHTS_NAME,
-        TensorType,
-        add_end_docstrings,
-        add_start_docstrings,
-        is_apex_available,
-        is_av_available,
-        is_bitsandbytes_available,
-        is_datasets_available,
-        is_faiss_available,
         is_flax_available,
-        is_keras_nlp_available,
-        is_phonemizer_available,
-        is_psutil_available,
-        is_py3nvml_available,
-        is_pyctcdecode_available,
-        is_sacremoses_available,
-        is_safetensors_available,
-        is_scipy_available,
         is_sentencepiece_available,
-        is_sklearn_available,
-        is_speech_available,
-        is_tensorflow_text_available,
         is_tf_available,
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
-        is_torch_hpu_available,
-        is_torch_mlu_available,
-        is_torch_musa_available,
-        is_torch_neuroncore_available,
-        is_torch_npu_available,
-        is_torch_xla_available,
-        is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
         logging,
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import (
-        AqlmConfig,
-        AutoRoundConfig,
-        AwqConfig,
-        BitNetConfig,
-        BitsAndBytesConfig,
-        CompressedTensorsConfig,
-        EetqConfig,
-        FbgemmFp8Config,
-        FineGrainedFP8Config,
-        GPTQConfig,
-        HiggsConfig,
-        HqqConfig,
-        QuantoConfig,
-        QuarkConfig,
-        SpQRConfig,
-        TorchAoConfig,
-        VptqConfig,
-    )
 
     try:
         if not is_tokenizers_available():
@@ -796,7 +584,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_tokenizers_objects import *
     else:
-        from .tokenization_utils_fast import PreTrainedTokenizerFast
+        pass
 
     try:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
@@ -804,10 +592,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_sentencepiece_and_tokenizers_objects import *
     else:
-        from .convert_slow_tokenizer import (
-            SLOW_TO_FAST_CONVERTERS,
-            convert_slow_tokenizer,
-        )
+        pass
 
     try:
         if not is_vision_available():
@@ -815,9 +600,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
-        from .image_processing_base import ImageProcessingMixin
-        from .image_processing_utils import BaseImageProcessor
-        from .image_utils import ImageFeatureExtractionMixin
+        pass
 
     try:
         if not is_torchvision_available():
@@ -825,7 +608,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_torchvision_objects import *
     else:
-        from .image_processing_utils_fast import BaseImageProcessorFast
+        pass
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
@@ -833,7 +616,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_torchvision_objects import *
     else:
-        from .models.timm_wrapper import TimmWrapperImageProcessor
+        pass
 
     # Modeling
     try:
@@ -843,117 +626,11 @@ if TYPE_CHECKING:
         from .utils.dummy_pt_objects import *
     else:
         # Debugging
-        from .cache_utils import (
-            Cache,
-            CacheConfig,
-            DynamicCache,
-            EncoderDecoderCache,
-            HQQQuantizedCache,
-            HybridCache,
-            MambaCache,
-            OffloadedCache,
-            OffloadedStaticCache,
-            QuantizedCache,
-            QuantizedCacheConfig,
-            QuantoQuantizedCache,
-            SinkCache,
-            SlidingWindowCache,
-            StaticCache,
-        )
-        from .data.datasets import (
-            GlueDataset,
-            GlueDataTrainingArguments,
-            LineByLineTextDataset,
-            LineByLineWithRefDataset,
-            LineByLineWithSOPTextDataset,
-            SquadDataset,
-            SquadDataTrainingArguments,
-            TextDataset,
-            TextDatasetForNextSentencePrediction,
-        )
-        from .generation import (
-            AlternatingCodebooksLogitsProcessor,
-            BayesianDetectorConfig,
-            BayesianDetectorModel,
-            BeamScorer,
-            BeamSearchScorer,
-            ClassifierFreeGuidanceLogitsProcessor,
-            ConstrainedBeamSearchScorer,
-            Constraint,
-            ConstraintListState,
-            DisjunctiveConstraint,
-            EncoderNoRepeatNGramLogitsProcessor,
-            EncoderRepetitionPenaltyLogitsProcessor,
-            EosTokenCriteria,
-            EpsilonLogitsWarper,
-            EtaLogitsWarper,
-            ExponentialDecayLengthPenalty,
-            ForcedBOSTokenLogitsProcessor,
-            ForcedEOSTokenLogitsProcessor,
-            GenerationMixin,
-            HammingDiversityLogitsProcessor,
-            InfNanRemoveLogitsProcessor,
-            LogitNormalization,
-            LogitsProcessor,
-            LogitsProcessorList,
-            MaxLengthCriteria,
-            MaxTimeCriteria,
-            MinLengthLogitsProcessor,
-            MinNewTokensLengthLogitsProcessor,
-            MinPLogitsWarper,
-            NoBadWordsLogitsProcessor,
-            NoRepeatNGramLogitsProcessor,
-            PhrasalConstraint,
-            PrefixConstrainedLogitsProcessor,
-            RepetitionPenaltyLogitsProcessor,
-            SequenceBiasLogitsProcessor,
-            StoppingCriteria,
-            StoppingCriteriaList,
-            StopStringCriteria,
-            SuppressTokensAtBeginLogitsProcessor,
-            SuppressTokensLogitsProcessor,
-            SynthIDTextWatermarkDetector,
-            SynthIDTextWatermarkingConfig,
-            SynthIDTextWatermarkLogitsProcessor,
-            TemperatureLogitsWarper,
-            TopKLogitsWarper,
-            TopPLogitsWarper,
-            TypicalLogitsWarper,
-            UnbatchedClassifierFreeGuidanceLogitsProcessor,
-            WatermarkDetector,
-            WatermarkLogitsProcessor,
-            WhisperTimeStampLogitsProcessor,
-        )
-        from .integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
-        from .model_debugging_utils import (
-            model_addition_debugger_context,
-        )
-        from .modeling_layers import GradientCheckpointingLayer
-        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-        from .modeling_utils import AttentionInterface, PreTrainedModel
 
         # Optimization
-        from .optimization import (
-            Adafactor,
-            get_constant_schedule,
-            get_constant_schedule_with_warmup,
-            get_cosine_schedule_with_warmup,
-            get_cosine_with_hard_restarts_schedule_with_warmup,
-            get_inverse_sqrt_schedule,
-            get_linear_schedule_with_warmup,
-            get_polynomial_decay_schedule_with_warmup,
-            get_scheduler,
-            get_wsd_schedule,
-        )
-        from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
         # Trainer
-        from .trainer import Trainer
-        from .trainer_pt_utils import torch_distributed_zero_first
-        from .trainer_seq2seq import Seq2SeqTrainer
+        pass
 
     # TensorFlow
     try:
@@ -964,39 +641,9 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_tf_objects import *
     else:
-        from .generation import (
-            TFForcedBOSTokenLogitsProcessor,
-            TFForcedEOSTokenLogitsProcessor,
-            TFForceTokensLogitsProcessor,
-            TFGenerationMixin,
-            TFLogitsProcessor,
-            TFLogitsProcessorList,
-            TFLogitsWarper,
-            TFMinLengthLogitsProcessor,
-            TFNoBadWordsLogitsProcessor,
-            TFNoRepeatNGramLogitsProcessor,
-            TFRepetitionPenaltyLogitsProcessor,
-            TFSuppressTokensAtBeginLogitsProcessor,
-            TFSuppressTokensLogitsProcessor,
-            TFTemperatureLogitsWarper,
-            TFTopKLogitsWarper,
-            TFTopPLogitsWarper,
-        )
-        from .keras_callbacks import KerasMetricCallback, PushToHubCallback
-        from .modeling_tf_utils import (
-            TFPreTrainedModel,
-            TFSequenceSummary,
-            TFSharedEmbeddings,
-            shape_list,
-        )
 
         # Optimization
-        from .optimization_tf import (
-            AdamWeightDecay,
-            GradientAccumulator,
-            WarmUp,
-            create_optimizer,
-        )
+        pass
 
     try:
         if not is_flax_available():
@@ -1006,23 +653,7 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
     else:
-        from .generation import (
-            FlaxForcedBOSTokenLogitsProcessor,
-            FlaxForcedEOSTokenLogitsProcessor,
-            FlaxForceTokensLogitsProcessor,
-            FlaxGenerationMixin,
-            FlaxLogitsProcessor,
-            FlaxLogitsProcessorList,
-            FlaxLogitsWarper,
-            FlaxMinLengthLogitsProcessor,
-            FlaxSuppressTokensAtBeginLogitsProcessor,
-            FlaxSuppressTokensLogitsProcessor,
-            FlaxTemperatureLogitsWarper,
-            FlaxTopKLogitsWarper,
-            FlaxTopPLogitsWarper,
-            FlaxWhisperTimeStampLogitsProcessor,
-        )
-        from .modeling_flax_utils import FlaxPreTrainedModel
+        pass
 
 else:
     import sys

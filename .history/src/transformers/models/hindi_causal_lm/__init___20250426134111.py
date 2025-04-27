@@ -23,6 +23,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_hindi_causal_lm": ["HindiCausalLMConfig"],
 }
@@ -32,7 +33,7 @@ try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+    pass
 else:
     _import_structure["tokenization_hindi_causal_lm"] = ["HindiCausalLMTokenizer"]
 
@@ -42,9 +43,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import (
-        HindiCausalLMModel,
         HindiCausalLMForCausalLM,
-        HindiCausalLMPreTrainedModel,
     )
     # Alias for auto-factory fallback
     HindiCausalLMHeadModel = HindiCausalLMForCausalLM
@@ -57,32 +56,26 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+        pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel,
         )
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMHeadModel,
         )
 
 else:

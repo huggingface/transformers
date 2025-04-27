@@ -1,5 +1,6 @@
 from ...utils import DummyObject
 
+
 class HindiCausalLMPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 

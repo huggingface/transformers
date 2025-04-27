@@ -15,12 +15,10 @@
 
 
 import math
-from typing import List, Optional, Tuple, Union
 
+from ...modeling_utils import PreTrainedModel
 from ...utils import is_torch_available, logging
 from ...utils.import_utils import requires_backends
-from ...modeling_utils import PreTrainedModel
-from ...configuration_utils import PretrainedConfig
 from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
 
@@ -45,10 +43,9 @@ if is_torch_available():
     import torch.utils.checkpoint
     from torch import nn
     from torch.nn import CrossEntropyLoss
-    
+
     from ...activations import ACT2FN
     from ...modeling_outputs import (
-        BaseModelOutput,
         BaseModelOutputWithPastAndCrossAttentions,
         CausalLMOutputWithCrossAttentions,
     )
@@ -56,13 +53,10 @@ if is_torch_available():
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_hindi_causal_lm import HindiCausalLMConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -287,7 +281,7 @@ if is_torch_available():
             norm_class = RMSNorm if getattr(config, "normalization_layer", "layernorm") == "rmsnorm" else nn.LayerNorm
             self.attention_norm = norm_class(config.hidden_size, eps=config.layer_norm_eps)
             self.attention = HindiCausalLMAttention(config)
-            
+
             self.ffn_norm = norm_class(config.hidden_size, eps=config.layer_norm_eps)
             self.intermediate = nn.Linear(config.hidden_size, config.intermediate_size)
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -305,7 +299,7 @@ if is_torch_available():
         ):
             # Pre-norm architecture
             norm_hidden_states = self.attention_norm(hidden_states)
-            
+
             # Self-attention
             attention_outputs = self.attention(
                 norm_hidden_states,
@@ -316,24 +310,24 @@ if is_torch_available():
                 use_cache=use_cache,
             )
             attention_output = attention_outputs[0]
-            
+
             # Residual connection
             hidden_states = hidden_states + attention_output
-            
+
             # Feed-forward network with pre-norm
             ffn_norm_hidden = self.ffn_norm(hidden_states)
-            
+
             # Feed-forward computation
             intermediate_output = self.intermediate(ffn_norm_hidden)
             intermediate_output = self.intermediate_act_fn(intermediate_output)
             ffn_output = self.output(intermediate_output)
             ffn_output = self.dropout(ffn_output)
-            
+
             # Residual connection
             layer_output = hidden_states + ffn_output
-            
+
             outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
-            
+
             return outputs
 
 
@@ -348,7 +342,7 @@ if is_torch_available():
             super().__init__()
             self.config = config
             self.layers = nn.ModuleList([HindiCausalLMLayer(config) for _ in range(config.num_hidden_layers)])
-            
+
             # Use RMSNorm or LayerNorm based on config
             norm_class = RMSNorm if getattr(config, "normalization_layer", "layernorm") == "rmsnorm" else nn.LayerNorm
             self.final_layer_norm = norm_class(config.hidden_size, eps=config.layer_norm_eps)
@@ -366,7 +360,7 @@ if is_torch_available():
         ):
             all_hidden_states = () if output_hidden_states else None
             all_self_attentions = () if output_attentions else None
-            
+
             next_decoder_cache = () if use_cache else None
 
             for i, layer_module in enumerate(self.layers):
@@ -386,10 +380,10 @@ if is_torch_available():
                 )
 
                 hidden_states = layer_outputs[0]
-                
+
                 if use_cache:
                     next_decoder_cache += (layer_outputs[-1],)
-                    
+
                 if output_attentions:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
@@ -401,7 +395,7 @@ if is_torch_available():
 
             if not return_dict:
                 return tuple(v for v in [hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions] if v is not None)
-                
+
             return BaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
                 past_key_values=next_decoder_cache,
@@ -454,20 +448,20 @@ if is_torch_available():
         def __init__(self, config):
             super().__init__(config)
             self.config = config
-            
+
             # Initialize token and position embeddings
             self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-            
+
             # Use position embeddings based on config
             self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
             if self.position_embedding_type == "absolute" or getattr(config, "positional_encoding_type", "absolute") == "learned":
                 self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-                
+
             self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
-            
+
             # Initialize encoder
             self.encoder = HindiCausalLMEncoder(config)
-            
+
             # Initialize weights and apply final processing
             self.post_init()
 
@@ -529,12 +523,12 @@ if is_torch_available():
                 inputs_embeds = self.token_embeddings(input_ids)
 
             # Add position embeddings if using absolute or learned position embeddings
-            if (self.position_embedding_type == "absolute" or 
+            if (self.position_embedding_type == "absolute" or
                 getattr(self.config, "positional_encoding_type", "absolute") == "learned"):
                 if position_ids is None:
                     position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
                     position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
-                
+
                 position_embeds = self.position_embeddings(position_ids)
                 inputs_embeds = inputs_embeds + position_embeds
 
@@ -552,9 +546,9 @@ if is_torch_available():
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            
+
             sequence_output = encoder_outputs[0]
-            
+
             if not return_dict:
                 return (sequence_output,) + encoder_outputs[1:]
 
@@ -575,16 +569,16 @@ if is_torch_available():
         def __init__(self, config):
             super().__init__(config)
             self.config = config
-            
+
             # Initialize the base model
             self.hindi_causal_lm = HindiCausalLMModel(config)
-            
+
             # LM head
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-            
+
             # Initialize weights and apply final processing
             self.post_init()
-            
+
             # Tie weights if configured
             if config.tie_word_embeddings:
                 self.lm_head.weight = self.hindi_causal_lm.token_embeddings.weight
@@ -600,24 +594,24 @@ if is_torch_available():
             inputs = {
                 "input_ids": input_ids,
             }
-            
+
             # Add attention mask if provided
             if "attention_mask" in kwargs:
                 inputs["attention_mask"] = kwargs["attention_mask"]
-                
+
             # Adjust attention mask for past key values
             if past_key_values:
                 inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1)
-                
+
                 # Extend attention mask if present
                 if "attention_mask" in inputs:
                     attention_mask = inputs["attention_mask"]
                     one_hot_positions = torch.ones((attention_mask.shape[0], 1), dtype=attention_mask.dtype, device=attention_mask.device)
                     inputs["attention_mask"] = torch.cat([attention_mask, one_hot_positions], dim=1)
-                
+
                 # Add past key values
                 inputs["past_key_values"] = past_key_values
-            
+
             return inputs
 
         def forward(

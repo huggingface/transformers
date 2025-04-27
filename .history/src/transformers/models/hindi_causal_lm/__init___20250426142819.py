@@ -49,7 +49,6 @@ else:
 # Direct imports for type checking
 if TYPE_CHECKING:
     # Configuration is always available
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
     # SentencePiece tokenizer
     try:
@@ -57,10 +56,10 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         # Import dummy tokenizer if SentencePiece is not available
-        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+        pass
     else:
         # Import actual tokenizer if SentencePiece is available
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     # PyTorch models
     try:
@@ -68,18 +67,10 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         # Import dummy objects if PyTorch is not available
-        from .dummy_pt_objects import (
-            HindiCausalLMForCausalLM,
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
     else:
         # Import actual PyTorch model classes if PyTorch is available
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMForCausalLM,
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-        )
+        pass
 
 # Set up lazy module loading
 else:

@@ -6,7 +6,6 @@
 
 import unittest
 
-import pytest
 from transformers import (
     HindiCausalLMConfig,
     HindiCausalLMForCausalLM,
@@ -16,7 +15,7 @@ from transformers import (
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -156,7 +155,7 @@ class HindiCausalLMModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
-    
+
     def setUp(self):
         self.model_tester = HindiCausalLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=HindiCausalLMConfig, hidden_size=37)
@@ -201,15 +200,15 @@ class HindiCausalLMModelIntegrationTest(unittest.TestCase):
         model.eval()
 
         tokenizer = HindiCausalLMTokenizer.from_pretrained("convaiinnovations/hindi-foundational-model-base")
-        
+
         input_text = "हिंदी भाषा"
         input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
-        
+
         # Test greedy generation
         outputs = model.generate(input_ids, max_length=20)
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertGreater(len(generated_text), len(input_text))
-        
+
         # Test sampling
         outputs = model.generate(input_ids, max_length=20, do_sample=True, top_k=50, top_p=0.95)
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)

@@ -5,6 +5,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_hindi_causal_lm": ["HindiCausalLMConfig"],
 }
@@ -25,8 +26,8 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .dummy_pt_objects import (
-        HindiCausalLMModel,
         HindiCausalLMForCausalLM,
+        HindiCausalLMModel,
         HindiCausalLMPreTrainedModel,
     )
     HindiCausalLMHeadModel = HindiCausalLMForCausalLM
@@ -42,7 +43,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -57,17 +57,16 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
             HindiCausalLMPreTrainedModel,
         )
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
             HindiCausalLMPreTrainedModel,
-            HindiCausalLMHeadModel,
         )
 
 else:

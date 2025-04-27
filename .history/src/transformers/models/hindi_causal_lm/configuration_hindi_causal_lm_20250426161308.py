@@ -96,7 +96,7 @@ class HindiCausalLMConfig(PretrainedConfig):
         self.positional_encoding_type = positional_encoding_type
         self.normalization_layer = normalization_layer
         self.unk_token_id = unk_token_id
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

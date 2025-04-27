@@ -23,9 +23,7 @@ from .auto_factory import (
     _BaseAutoBackboneClass,
     _BaseAutoModelClass,
     _LazyAutoMapping,
-    add_generation_mixin_to_remote_model,
     auto_class_update,
-    get_class_from_dynamic_module,
     register_model_mapping,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
@@ -38,7 +36,7 @@ if TYPE_CHECKING:
     # from ..bart import BartForCausalLM, BartForConditionalGeneration, BartForQuestionAnswering, BartForSequenceClassification, BartModel # noqa: F401
     #...
     # Import necessary classes for HindiCausalLM
-    from ..hindi_causal_lm import ( # noqa: F401
+    from ..hindi_causal_lm import (  # noqa: F401
         HindiCausalLMForCausalLM,
         HindiCausalLMModel,
         HindiCausalLMPreTrainedModel,
@@ -1758,7 +1756,8 @@ def register_model(model_type: str, model_class):
     MODEL_MAPPING.register(model_class.config_class, model_class, exist_ok=True)
 
 # ADD IMPORTS HERE
-from ..hindi_causal_lm import HindiCausalLMModel, HindiCausalLMForCausalLM
+from ..hindi_causal_lm import HindiCausalLMForCausalLM, HindiCausalLMModel
+
 
 # ADD REGISTRATION CALLS HERE
 register_model("hindi_causal_lm", HindiCausalLMModel)

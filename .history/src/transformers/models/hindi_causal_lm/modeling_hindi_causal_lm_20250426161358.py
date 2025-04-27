@@ -120,26 +120,26 @@ class HindiCausalLMSelfAttention(nn.Module):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         assert config.hidden_size % config.num_attention_heads == 0
-        
+
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        
+
         # Query, Key, Value projections
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
-        
+
         # Output projection
         self.output = nn.Linear(self.all_head_size, config.hidden_size)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        
+
         # RoPE
         if config.positional_encoding_type == "rope":
             self.rotary_emb = HindiCausalLMRotaryEmbedding(self.attention_head_size, max_position_embeddings=config.max_position_embeddings)
         else:
             self.rotary_emb = None
-        
+
         self.max_position_embeddings = config.max_position_embeddings
         self.register_buffer(
             "causal_mask",
@@ -148,12 +148,12 @@ class HindiCausalLMSelfAttention(nn.Module):
                 diagonal=1
             )
         )
-        
+
     def transpose_for_scores(self, x):
         new_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_shape)
         return x.permute(0, 2, 1, 3)
-    
+
     def forward(
         self,
         hidden_states,
@@ -164,46 +164,46 @@ class HindiCausalLMSelfAttention(nn.Module):
         use_cache=False,
     ):
         batch_size, seq_length = hidden_states.size()[:2]
-        
+
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        
+
         # Apply rotary embeddings if configured
         if self.rotary_emb is not None:
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_length)
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin, position_ids)
-        
+
         # Compute attention scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         # Apply causal mask - prevents attending to future tokens
         causal_mask = self.causal_mask[:seq_length, :seq_length]
         attention_scores = attention_scores + causal_mask
-        
+
         # Apply attention mask if provided
         if attention_mask is not None:
             # Add the attention mask to the raw attention scores
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = (1.0 - attention_mask) * -10000.0
             attention_scores = attention_scores + attention_mask
-        
+
         # Normalize the attention scores
         attention_probs = F.softmax(attention_scores, dim=-1)
         attention_probs = self.dropout(attention_probs)
-        
+
         # Apply attention to values
         context_layer = torch.matmul(attention_probs, value_layer)
-        
+
         # Reshape back to [batch_size, seq_length, hidden_size]
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_shape)
-        
+
         # Final output projection
         output = self.output(context_layer)
-        
+
         outputs = (output, attention_probs) if output_attentions else (output,)
 
         if use_cache:
@@ -216,7 +216,7 @@ class HindiCausalLMTransformerBlock(nn.Module):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         self.attention = HindiCausalLMSelfAttention(config)
-        
+
         # Use the appropriate normalization layer
         if config.normalization_layer == "rmsnorm":
             self.attention_layernorm = HindiCausalLMRMSNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -224,7 +224,7 @@ class HindiCausalLMTransformerBlock(nn.Module):
         else:
             self.attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.ffn_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        
+
         # Feed-forward network
         self.ffn = nn.Sequential(
             nn.Linear(config.hidden_size, config.intermediate_size),
@@ -232,7 +232,7 @@ class HindiCausalLMTransformerBlock(nn.Module):
             nn.Linear(config.intermediate_size, config.hidden_size),
             nn.Dropout(config.hidden_dropout_prob)
         )
-    
+
     def forward(
         self,
         hidden_states,
@@ -245,7 +245,7 @@ class HindiCausalLMTransformerBlock(nn.Module):
         # Self-attention block with residual connection and layer norm
         residual = hidden_states
         hidden_states = self.attention_layernorm(hidden_states)
-        
+
         # Self-attention
         attn_outputs = self.attention(
             hidden_states,
@@ -256,24 +256,24 @@ class HindiCausalLMTransformerBlock(nn.Module):
             use_cache=use_cache,
         )
         attention_output = attn_outputs[0]
-        
+
         # Add residual connection
         hidden_states = residual + attention_output
-        
+
         # Feed-forward block with residual connection and layer norm
         residual = hidden_states
         hidden_states = self.ffn_layernorm(hidden_states)
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + hidden_states
-        
+
         outputs = (hidden_states,)
-        
+
         if output_attentions:
             outputs += (attn_outputs[1],)
-        
+
         if use_cache:
             outputs += (attn_outputs[-1],)
-        
+
         return outputs
 
 
@@ -287,7 +287,7 @@ class HindiCausalLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
-    
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -368,14 +368,14 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config)
         self.config = config
-        
+
         # Embeddings
         self.token_embeddings = nn.Embedding(
             config.vocab_size,
             config.hidden_size,
             padding_idx=config.pad_token_id
         )
-        
+
         # Use different position embedding based on config
         if config.positional_encoding_type == "learned":
             self.position_embeddings = nn.Embedding(
@@ -383,29 +383,29 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 config.hidden_size
             )
             self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand(1, -1))
-        
+
         self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
-        
+
         # Transformer layers
         self.layers = nn.ModuleList([
             HindiCausalLMTransformerBlock(config) for _ in range(config.num_hidden_layers)
         ])
-        
+
         # Final layer norm
         if config.normalization_layer == "rmsnorm":
             self.final_layer_norm = HindiCausalLMRMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         else:
             self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-    
+
     def get_input_embeddings(self):
         return self.token_embeddings
-    
+
     def set_input_embeddings(self, new_embeddings):
         self.token_embeddings = new_embeddings
-    
+
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # Create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -420,7 +420,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 diagonal=1 + past_key_values_length,
             )[:input_shape[-1], :]
             combined_attention_mask = combined_attention_mask.unsqueeze(0).expand(input_shape[0], -1, -1)
-        
+
         # Apply the user-provided attention mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, seq_len, 1]
@@ -428,9 +428,9 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-        
+
         return combined_attention_mask
-    
+
     @add_start_docstrings_to_model_forward(HINDI_CAUSAL_LM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -451,7 +451,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # Get input shape and device
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -464,10 +464,10 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-        
+
         # Past key values length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        
+
         # Get position IDs
         if position_ids is None:
             if self.config.positional_encoding_type == "learned":
@@ -477,25 +477,25 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                     past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
                 )
                 position_ids = position_ids.unsqueeze(0).expand(input_shape[0], -1)
-        
+
         # Get embeddings
         if inputs_embeds is None:
             inputs_embeds = self.token_embeddings(input_ids)
-        
+
         # Add position embeddings if needed
         if self.config.positional_encoding_type == "learned":
             position_embeds = self.position_embeddings(position_ids)
             hidden_states = inputs_embeds + position_embeds
         else:
             hidden_states = inputs_embeds
-        
+
         # Apply dropout
         hidden_states = self.embedding_dropout(hidden_states)
-        
+
         # Default attention mask (all tokens can be attended to)
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
-        
+
         # Prepare attention mask
         if self.config.positional_encoding_type == "rope":
             # No need to adjust the attention_mask for RoPE
@@ -504,19 +504,19 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             attention_mask = self._prepare_decoder_attention_mask(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
-        
+
         # Init previous hidden states if not empty
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
-        
+
         # Apply transformer layers
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            
+
             past_key_value = past_key_values[idx] if past_key_values is not None else None
-            
+
             layer_outputs = layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -525,26 +525,26 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
-            
+
             hidden_states = layer_outputs[0]
-            
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-            
+
             if output_attentions:
                 all_self_attentions += (layer_outputs[1],)
-        
+
         # Final layer norm
         hidden_states = self.final_layer_norm(hidden_states)
-        
+
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-        
+
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None)
-        
+
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -559,31 +559,31 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
 )
 class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-    
+
     def __init__(self, config):
         super().__init__(config)
         self.model = HindiCausalLMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-        
+
         # Weight tying
         if config.tie_word_embeddings:
             self.lm_head.weight = self.model.token_embeddings.weight
-    
+
     def get_input_embeddings(self):
         return self.model.token_embeddings
-    
+
     def set_input_embeddings(self, value):
         self.model.token_embeddings = value
-    
+
     def get_output_embeddings(self):
         return self.lm_head
-    
+
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-    
+
     @add_start_docstrings_to_model_forward(HINDI_CAUSAL_LM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -606,7 +606,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -618,24 +618,24 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         hidden_states = outputs[0]
         lm_logits = self.lm_head(hidden_states)
-        
+
         loss = None
         if labels is not None:
             # Shift labels to the right
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            
+
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        
+
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        
+
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
@@ -643,7 +643,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -653,15 +653,15 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         **kwargs
     ):
         input_shape = input_ids.shape
-        
+
         # If past_key_values are used, only take the last token
         if past_key_values is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-            
+
             # If attention_mask is provided, keep it consistent with input_ids
             if attention_mask is not None:
                 attention_mask = attention_mask[:, -1].unsqueeze(-1)
-        
+
         # First pass for the first token
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -670,13 +670,13 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 0)
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
-        
+
         # If `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -686,7 +686,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             }
         )
         return model_inputs
-    
+
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()

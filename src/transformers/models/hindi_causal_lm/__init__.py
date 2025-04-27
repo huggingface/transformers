@@ -90,9 +90,9 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
+            HindiCausalLMPreTrainedModel,
         )
     else:
         from .modeling_hindi_causal_lm import (

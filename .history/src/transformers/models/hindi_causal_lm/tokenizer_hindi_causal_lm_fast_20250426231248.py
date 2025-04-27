@@ -15,7 +15,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast

@@ -25,8 +25,6 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ..hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
-from ..hindi_causal_lm.tokenization_hindi_causal_lm import HindiCausalLMTokenizer
 from ...utils import (
     cached_file,
     extract_commit_hash,
@@ -61,7 +59,7 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
-          
+
             (
                 "albert",
                 (

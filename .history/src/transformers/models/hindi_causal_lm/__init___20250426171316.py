@@ -34,7 +34,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import HindiCausalLMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -42,7 +41,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
+        pass
 
     try:
         if not is_torch_available():
@@ -50,11 +49,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
-            HindiCausalLMPreTrainedModel,
-            HindiCausalLMForCausalLM,
-        )
+        pass
 
 else:
     import sys

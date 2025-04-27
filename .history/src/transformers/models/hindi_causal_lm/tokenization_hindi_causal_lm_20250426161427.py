@@ -7,7 +7,7 @@
 """Tokenization classes for HindiCausalLM."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -61,14 +61,14 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
     ):
         self.sp_model = spm.SentencePieceProcessor(**(sp_model_kwargs or {}))
         self.sp_model.Load(vocab_file)
-        
+
         # Store special token IDs
         self.vocab_size = self.sp_model.GetPieceSize()
         self.pad_token_id = 0
         self.bos_token_id = 1
         self.eos_token_id = 2
         self.unk_token_id = 3
-        
+
         super().__init__(
             pad_token=pad_token,
             unk_token=unk_token,

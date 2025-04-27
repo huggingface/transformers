@@ -103,25 +103,25 @@ class HindiCausalLMSelfAttention(nn.Module):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         assert config.hidden_size % config.num_attention_heads == 0
-        
+
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        
+
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
         self.output = nn.Linear(self.all_head_size, config.hidden_size)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        
+
         if config.positional_encoding_type == "rope":
             self.rotary_emb = HindiCausalLMRotaryEmbedding(
-                self.attention_head_size, 
+                self.attention_head_size,
                 max_position_embeddings=config.max_position_embeddings
             )
         else:
             self.rotary_emb = None
-            
+
         self.register_buffer(
             "causal_mask",
             torch.triu(
@@ -134,7 +134,7 @@ class HindiCausalLMSelfAttention(nn.Module):
         new_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_shape)
         return x.permute(0, 2, 1, 3)
-    
+
     def forward(
         self,
         hidden_states,
@@ -145,53 +145,53 @@ class HindiCausalLMSelfAttention(nn.Module):
         use_cache=False,
     ):
         batch_size, seq_length = hidden_states.size()[:2]
-        
+
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        
+
         if self.rotary_emb is not None:
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_length)
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin, position_ids)
-        
+
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         causal_mask = self.causal_mask[:seq_length, :seq_length]
         attention_scores = attention_scores + causal_mask
-        
+
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = (1.0 - attention_mask) * -10000.0
             attention_scores = attention_scores + attention_mask
-        
+
         attention_probs = F.softmax(attention_scores, dim=-1)
         attention_probs = self.dropout(attention_probs)
         context_layer = torch.matmul(attention_probs, value_layer)
-        
+
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_shape)
-        
+
         output = self.output(context_layer)
         outputs = (output, attention_probs) if output_attentions else (output,)
         if use_cache:
             outputs += ((key_layer, value_layer),)
-            
+
         return outputs
 
 class HindiCausalLMTransformerBlock(nn.Module):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__()
         self.attention = HindiCausalLMSelfAttention(config)
-        
+
         if config.normalization_layer == "rmsnorm":
             self.attention_layernorm = HindiCausalLMRMSNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.ffn_layernorm = HindiCausalLMRMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         else:
             self.attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.ffn_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-            
+
         self.ffn = nn.Sequential(
             nn.Linear(config.hidden_size, config.intermediate_size),
             ACT2FN[config.hidden_act],
@@ -210,7 +210,7 @@ class HindiCausalLMTransformerBlock(nn.Module):
     ):
         residual = hidden_states
         hidden_states = self.attention_layernorm(hidden_states)
-        
+
         attn_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -221,18 +221,18 @@ class HindiCausalLMTransformerBlock(nn.Module):
         )
         attention_output = attn_outputs[0]
         hidden_states = residual + attention_output
-        
+
         residual = hidden_states
         hidden_states = self.ffn_layernorm(hidden_states)
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + hidden_states
-        
+
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (attn_outputs[1],)
         if use_cache:
             outputs += (attn_outputs[-1],)
-            
+
         return outputs
 
 class HindiCausalLMPreTrainedModel(PreTrainedModel):
@@ -286,30 +286,30 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config)
         self.config = config
-        
+
         self.token_embeddings = nn.Embedding(
             config.vocab_size,
             config.hidden_size,
             padding_idx=config.pad_token_id
         )
-        
+
         if config.positional_encoding_type == "learned":
             self.position_embeddings = nn.Embedding(
                 config.max_position_embeddings,
                 config.hidden_size
             )
             self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand(1, -1))
-            
+
         self.embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layers = nn.ModuleList([
             HindiCausalLMTransformerBlock(config) for _ in range(config.num_hidden_layers)
         ])
-        
+
         if config.normalization_layer == "rmsnorm":
             self.final_layer_norm = HindiCausalLMRMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         else:
             self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-            
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -341,7 +341,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("Cannot specify both input_ids and inputs_embeds")
-            
+
         if input_ids is not None:
             input_shape = input_ids.size()
             device = input_ids.device
@@ -352,27 +352,27 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             raise ValueError("Need input_ids or inputs_embeds")
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        
+
         if position_ids is None:
             if self.config.positional_encoding_type == "learned":
                 position_ids = self.position_ids[:, past_key_values_length : input_shape[-1] + past_key_values_length]
             else:
                 position_ids = torch.arange(
-                    past_key_values_length, 
-                    input_shape[-1] + past_key_values_length, 
-                    dtype=torch.long, 
+                    past_key_values_length,
+                    input_shape[-1] + past_key_values_length,
+                    dtype=torch.long,
                     device=device
                 ).unsqueeze(0).expand(input_shape[0], -1)
 
         if inputs_embeds is None:
             inputs_embeds = self.token_embeddings(input_ids)
-            
+
         if self.config.positional_encoding_type == "learned":
             position_embeds = self.position_embeddings(position_ids)
             hidden_states = inputs_embeds + position_embeds
         else:
             hidden_states = inputs_embeds
-            
+
         hidden_states = self.embedding_dropout(hidden_states)
         attention_mask = attention_mask if attention_mask is not None else torch.ones(input_shape, device=device)
 
@@ -385,7 +385,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
-            
+
             layer_outputs = layer(
                 hidden_states,
                 attention_mask,
@@ -394,12 +394,12 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 output_attentions,
                 use_cache,
             )
-            
+
             hidden_states = layer_outputs[0]
-            
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-                
+
             if output_attentions:
                 all_self_attentions += (layer_outputs[1],)
 
@@ -415,7 +415,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 all_hidden_states,
                 all_self_attentions
             ] if v is not None)
-            
+
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -527,7 +527,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         model_inputs = {"input_ids": input_ids}
         if inputs_embeds is not None and past_key_values is None:
             model_inputs["inputs_embeds"] = inputs_embeds
-            
+
         model_inputs.update({
             "position_ids": position_ids,
             "past_key_values": past_key_values,

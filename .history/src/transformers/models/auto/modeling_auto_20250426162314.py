@@ -25,11 +25,8 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
-from ..hindi_causal_lm.configuration_hindi_causal_lm import HindiCausalLMConfig
-from ..hindi_causal_lm.modeling_hindi_causal_lm import (
-    HindiCausalLMForCausalLM,
-    HindiCausalLMModel,
-)
+
+
 logger = logging.get_logger(__name__)
 
 MODEL_MAPPING_NAMES = OrderedDict(

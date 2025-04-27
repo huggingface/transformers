@@ -25,10 +25,7 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
-from ..hindi_causal_lm.modeling_hindi_causal_lm import (
-    HindiCausalLM,
-    HindiCausalLMModel,
-)
+
 
 logger = logging.get_logger(__name__)
 
@@ -144,7 +141,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
-        
+
         ("hiera", "HieraModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),

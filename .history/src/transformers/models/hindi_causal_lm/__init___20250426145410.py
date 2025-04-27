@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_sentencepiece_available, # Make sure this utility is imported
+    is_sentencepiece_available,  # Make sure this utility is imported
     is_torch_available,
 )
+
 
 # Define all objects that should be publicly available at the module level
 __all__ = [
@@ -60,8 +61,8 @@ try:
 except OptionalDependencyNotAvailable:
     # If PyTorch is NOT available, import the dummy classes...
     from .dummy_pt_objects import (
-        HindiCausalLMModel,
         HindiCausalLMForCausalLM,
+        HindiCausalLMModel,
         HindiCausalLMPreTrainedModel,
     )
     # ...and EXPLICITLY assign them to the module attribute names.
@@ -99,18 +100,18 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .dummy_pt_objects import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMModel,
             HindiCausalLMPreTrainedModel,
         )
         # Alias for TYPE_CHECKING when torch is missing
         HindiCausalLMHeadModel = HindiCausalLMForCausalLM
     else:
         from .modeling_hindi_causal_lm import (
-            HindiCausalLMModel,
             HindiCausalLMForCausalLM,
+            HindiCausalLMHeadModel,  # Import the real alias
+            HindiCausalLMModel,
             HindiCausalLMPreTrainedModel,
-            HindiCausalLMHeadModel, # Import the real alias
         )
 
 # --- Lazy Module Setup ---

@@ -14,7 +14,7 @@
 """Tokenization classes for Hindi Causal LM."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import is_sentencepiece_available, logging, requires_backends
@@ -35,7 +35,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 if is_sentencepiece_available():
-    import sentencepiece as spm
+    pass
 
 
 class HindiCausalLMTokenizer(PreTrainedTokenizer):
@@ -84,18 +84,18 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         self.do_lower_case = do_lower_case
-        
+
         self.vocab_file = vocab_file
         self.sp_model = None
         if is_sentencepiece_available():
             self.sp_model = self.load_spm(vocab_file)
         else:
             requires_backends(self, ["sentencepiece"])
-            
+
         # SentencePiece token maps
         self.fairseq_tokens_to_ids = {"<s>": 1, "<pad>": 0, "</s>": 2, "<unk>": 3}
         self.fairseq_offset = 0
-        
+
         # Set special tokens and initialize superclass
         super().__init__(
             bos_token=bos_token,
@@ -106,15 +106,15 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             **kwargs,
         )
-        
+
         # Make sure vocab size is set correctly
         if is_sentencepiece_available():
             self.vocab_size = self.sp_model.GetPieceSize() + self.fairseq_offset
-            
+
             # Set up token conversions
             self.tokens_to_ids = self.fairseq_tokens_to_ids.copy()
             self.ids_to_tokens = {v: k for k, v in self.tokens_to_ids.items()}
-            
+
             for i in range(self.sp_model.GetPieceSize()):
                 piece = self.sp_model.IdToPiece(i)
                 if piece not in self.tokens_to_ids:
@@ -205,7 +205,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         """
         if not is_sentencepiece_available():
             requires_backends(self, ["sentencepiece"])
-            
+
         if self.do_lower_case:
             text = text.lower()
         return self.sp_model.EncodeAsPieces(text)
@@ -282,7 +282,7 @@ class HindiCausalLMTokenizer(PreTrainedTokenizer):
         """
         if not is_sentencepiece_available():
             requires_backends(self, ["sentencepiece"])
-            
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
