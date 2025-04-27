@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import github
 import json
-from github import Github
+import os
 import re
 from collections import Counter
 from pathlib import Path
+
+import github
+from github import Github
+
 
 def pattern_to_regex(pattern):
     if pattern.startswith("/"):
