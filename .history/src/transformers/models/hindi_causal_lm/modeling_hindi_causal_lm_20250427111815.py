@@ -80,7 +80,7 @@ if is_torch_available():
     from torch.nn import CrossEntropyLoss
 
     from ...activations import ACT2FN
-    from ...cache_utils import Cache, DynamicCache  # Import Cache utilities
+    from ...cache_utils import Cache, DynamicCache # Import Cache utilities
     from ...generation.configuration_utils import GenerationConfig
     from ...generation.utils import GenerationMixin
     from ...modeling_outputs import (
@@ -88,9 +88,9 @@ if is_torch_available():
         CausalLMOutputWithPast,
     )
     from ...modeling_utils import PreTrainedModel
-    from ...utils import logging  # Already imported, but ensure logger is available
+    from ...utils import logging # Already imported, but ensure logger is available
 
-    logger = logging.get_logger(__name__)  # Re-initialize logger inside the conditional block
+    logger = logging.get_logger(__name__) # Re-initialize logger inside the conditional block
 
     class RMSNorm(nn.Module):
         """
@@ -139,9 +139,9 @@ if is_torch_available():
                 self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
             return (
-                self.cos_cached[:seq_len].to(dtype=x.dtype),
-                self.sin_cached[:seq_len].to(dtype=x.dtype),
-            )
+                 self.cos_cached[:seq_len].to(dtype=x.dtype),
+                 self.sin_cached[:seq_len].to(dtype=x.dtype),
+             )
 
     # Copied from transformers.models.llama.modeling_llama.rotate_half
     def rotate_half(x):
@@ -160,16 +160,18 @@ if is_torch_available():
     class HindiCausalLMAttention(nn.Module):
         """Multi-headed attention with causal mask and RoPE, adapted from LlamaAttention."""
 
-        def __init__(self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None):
+        def __init__(
+            self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None
+        ):
             super().__init__()
             self.config = config
             self.layer_idx = layer_idx
             if layer_idx is None:
-                logger.warning_once(
-                    f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                    "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                    "when creating this class."
-                )
+                 logger.warning_once(
+                     f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
+                     "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                     "when creating this class."
+                 )
 
             self.hidden_size = config.hidden_size
             self.num_heads = config.num_attention_heads
@@ -206,11 +208,11 @@ if is_torch_available():
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,  # Use Cache type hint
+            past_key_value: Optional[Cache] = None, # Use Cache type hint
             output_attentions: bool = False,
             use_cache: bool = False,
             **kwargs,
-        ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:  # Return type hint for Cache
+        ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]: # Return type hint for Cache
             if "padding_mask" in kwargs:
                 warnings.warn(
                     "Passing `padding_mask` is deprecated and will be removed in v4.37. Please pass `attention_mask` instead.`",
@@ -230,12 +232,13 @@ if is_torch_available():
             kv_seq_len = key_states.shape[-2]
             if past_key_value is not None:
                 if self.layer_idx is None:
-                    raise ValueError(
-                        f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                        "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                        "with a layer index."
-                    )
+                     raise ValueError(
+                         f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                         "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                         "with a layer index."
+                     )
                 kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
 
             if self.rotary_emb is not None:
                 cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
@@ -257,9 +260,9 @@ if is_torch_available():
 
             if attention_mask is not None:
                 if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                    )
+                     raise ValueError(
+                         f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                     )
                 attn_weights = attn_weights + attention_mask
 
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -283,6 +286,7 @@ if is_torch_available():
             present_key_value = past_key_value if use_cache else None
 
             return attn_output, attn_weights, present_key_value
+
 
     class HindiCausalLMLayer(nn.Module):
         """Transformer layer, adapted from LlamaDecoderLayer."""
@@ -308,11 +312,12 @@ if is_torch_available():
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,  # Use Cache type hint
+            past_key_value: Optional[Cache] = None, # Use Cache type hint
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
-            **kwargs,
+             **kwargs,
         ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+
             residual = hidden_states
 
             hidden_states = self.input_layernorm(hidden_states)
@@ -329,6 +334,7 @@ if is_torch_available():
             hidden_states = attn_outputs[0]
             attn_weights = attn_outputs[1]
             present_key_value = attn_outputs[2]
+
 
             hidden_states = residual + hidden_states
 
@@ -348,7 +354,7 @@ if is_torch_available():
 
             return outputs
 
-    class HindiCausalLMPreTrainedModel(PreTrainedModel):  # Define base class again for context
+    class HindiCausalLMPreTrainedModel(PreTrainedModel): # Define base class again for context
         config_class = HindiCausalLMConfig
         base_model_prefix = "model"
         supports_gradient_checkpointing = True
@@ -375,8 +381,9 @@ if is_torch_available():
                 module.weight.data.fill_(1.0)
 
         def _set_gradient_checkpointing(self, module, value=False):
-            if isinstance(module, HindiCausalLMModel):
-                module.gradient_checkpointing = value
+             if isinstance(module, HindiCausalLMModel):
+                 module.gradient_checkpointing = value
+
 
     class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         """
@@ -408,12 +415,13 @@ if is_torch_available():
             for layer, heads in heads_to_prune.items():
                 self.layers[layer].self_attn.prune_heads(heads)
 
+
         def forward(
             self,
             input_ids: torch.LongTensor = None,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,  # Updated type hint
+            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None, # Updated type hint
             inputs_embeds: Optional[torch.FloatTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
@@ -428,25 +436,25 @@ if is_torch_available():
             return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
             if (input_ids is None) ^ (inputs_embeds is None):
-                raise ValueError(
-                    "You cannot specify both input_ids and inputs_embeds at the same time, but must specify either one"
-                )
+                 raise ValueError(
+                     "You cannot specify both input_ids and inputs_embeds at the same time, but must specify either one"
+                 )
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
+                 if use_cache:
+                     logger.warning_once(
+                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                     )
+                     use_cache = False
 
             if inputs_embeds is None:
-                inputs_embeds = self.embed_tokens(input_ids)
+                 inputs_embeds = self.embed_tokens(input_ids)
 
             # Llama-like KV cache handling
             use_legacy_cache = False
             if use_cache and not isinstance(past_key_values, Cache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                use_legacy_cache = True
+                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                 use_legacy_cache = True
 
             if attention_mask is not None and self.config._attn_implementation == "flash_attention_2" and use_cache:
                 is_padding_right = attention_mask[:, -1].sum().item() != attention_mask.shape[0]
@@ -463,23 +471,19 @@ if is_torch_available():
             if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             elif self.config._attn_implementation == "sdpa" and not output_attentions:
-                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask,
                     (batch_size, seq_length),
                     inputs_embeds,
-                    past_key_values.get_seq_length()
-                    if past_key_values is not None
-                    else 0,  # Get past length from cache
-                )
+                    past_key_values.get_seq_length() if past_key_values is not None else 0 # Get past length from cache
+                 )
             else:
-                attention_mask = _prepare_4d_causal_attention_mask(
-                    attention_mask,
-                    (batch_size, seq_length),
-                    inputs_embeds,
-                    past_key_values.get_seq_length()
-                    if past_key_values is not None
-                    else 0,  # Get past length from cache
-                )
+                 attention_mask = _prepare_4d_causal_attention_mask(
+                     attention_mask,
+                     (batch_size, seq_length),
+                     inputs_embeds,
+                     past_key_values.get_seq_length() if past_key_values is not None else 0 # Get past length from cache
+                 )
 
             # Position IDs handling
             past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -488,7 +492,8 @@ if is_torch_available():
                 position_ids = torch.arange(
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
-                position_ids = position_ids.unsqueeze(0)  # Shape: [1, seq_len]
+                position_ids = position_ids.unsqueeze(0) # Shape: [1, seq_len]
+
 
             hidden_states = inputs_embeds
 
@@ -507,9 +512,9 @@ if is_torch_available():
                         hidden_states,
                         attention_mask,
                         position_ids,
-                        None,  # past_key_value not passed for GC
+                        None, # past_key_value not passed for GC
                         output_attentions,
-                        False,  # use_cache=False for GC
+                        False, # use_cache=False for GC
                     )
                 else:
                     layer_outputs = decoder_layer(
@@ -525,7 +530,7 @@ if is_torch_available():
 
                 if use_cache:
                     # past_key_values is modified inplace by the Cache object during layer forward
-                    next_decoder_cache = past_key_values  # Cache object is the "next" cache
+                    next_decoder_cache = past_key_values # Cache object is the "next" cache
 
                 if output_attentions:
                     all_self_attns += (layer_outputs[1],)
@@ -539,10 +544,9 @@ if is_torch_available():
             if use_cache:
                 next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
 
+
             if not return_dict:
-                return tuple(
-                    v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None
-                )
+                return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
             return BaseModelOutputWithPast(
                 last_hidden_state=hidden_states,
@@ -553,24 +557,18 @@ if is_torch_available():
 
     # Helper functions for mask preparation (copied from Llama)
     # Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask
-    def _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_4d_causal_attention_mask(
+        attention_mask, input_shape, inputs_embeds, past_key_values_length
+    ):
         bsz, tgt_len = input_shape
         dtype = inputs_embeds.dtype
 
         if attention_mask is not None and attention_mask.dim() == 4:
             expected_shape = (bsz, 1, tgt_len, past_key_values_length + tgt_len)
             if attention_mask.shape != expected_shape:
-                raise ValueError(
-                    f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape}"
-                )
-            if (
-                (attention_mask.dtype != torch.float32)
-                and (attention_mask.dtype != torch.float16)
-                and (attention_mask.dtype != torch.bfloat16)
-            ):
-                raise ValueError(
-                    "4D attention mask must be additive (float type with 0.0 for attended positions and -inf for masked)"
-                )
+                raise ValueError(f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape}")
+            if (attention_mask.dtype != torch.float32) and (attention_mask.dtype != torch.float16) and (attention_mask.dtype != torch.bfloat16):
+                 raise ValueError("4D attention mask must be additive (float type with 0.0 for attended positions and -inf for masked)")
             return attention_mask
 
         mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=inputs_embeds.device)
@@ -579,35 +577,34 @@ if is_torch_available():
         mask = mask.to(dtype)
 
         if past_key_values_length > 0:
-            mask = torch.cat(
-                [torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=inputs_embeds.device), mask], dim=-1
-            )
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=inputs_embeds.device), mask], dim=-1)
 
         expanded_mask = mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
-        if attention_mask is not None:  # 2D padding mask [bsz, src_len]
+        if attention_mask is not None: # 2D padding mask [bsz, src_len]
             padding_mask = attention_mask[:, None, None, :].expand(bsz, 1, tgt_len, past_key_values_length + tgt_len)
             expanded_mask = expanded_mask.masked_fill(padding_mask == 0, torch.finfo(dtype).min)
 
         return expanded_mask
 
+
     # Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_for_sdpa
-    def _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_4d_causal_attention_mask_for_sdpa(
+        attention_mask, input_shape, inputs_embeds, past_key_values_length
+    ):
         bsz, query_pos = input_shape
         kv_pos = past_key_values_length + query_pos
 
         if attention_mask is not None:
             if attention_mask.dim() == 2:
-                attention_mask = attention_mask[:, None, None, :].expand(bsz, 1, query_pos, kv_pos).to(torch.bool)
+                 attention_mask = attention_mask[:, None, None, :].expand(bsz, 1, query_pos, kv_pos).to(torch.bool)
             elif attention_mask.dim() == 4:
-                attention_mask = attention_mask.to(torch.bool)
-                expected_shape = (bsz, 1, query_pos, kv_pos)
-                if attention_mask.shape != expected_shape:
-                    raise ValueError(
-                        f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape} for SDPA"
-                    )
+                 attention_mask = attention_mask.to(torch.bool)
+                 expected_shape = (bsz, 1, query_pos, kv_pos)
+                 if attention_mask.shape != expected_shape:
+                      raise ValueError(f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape} for SDPA")
             else:
-                raise ValueError("Attention mask must be 2D or 4D for SDPA")
+                 raise ValueError("Attention mask must be 2D or 4D for SDPA")
 
             causal_mask = torch.tril(torch.ones((query_pos, kv_pos), dtype=torch.bool, device=inputs_embeds.device))
             causal_mask = causal_mask[None, None, :, :]
@@ -617,6 +614,7 @@ if is_torch_available():
             attention_mask = attention_mask[None, None, :, :].expand(bsz, 1, -1, -1)
 
         return attention_mask
+
 
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
@@ -711,7 +709,7 @@ if is_torch_available():
             if past_key_values is not None:
                 if isinstance(past_key_values, Cache):
                     past_length = past_key_values.get_seq_length()
-                else:  # Legacy cache format
+                else: # Legacy cache format
                     past_length = past_key_values[0][0].shape[2]
                     # max_cache_length = None # Removed F841
 
@@ -719,7 +717,7 @@ if is_torch_available():
                 input_ids_length = input_ids.shape[1]
                 if input_ids_length > past_length:
                     input_ids = input_ids[:, past_length:]
-                else:  # If input is smaller or equal, take the last token
+                else: # If input is smaller or equal, take the last token
                     input_ids = input_ids[:, -1:]
 
             position_ids = kwargs.get("position_ids", None)
@@ -731,10 +729,8 @@ if is_torch_available():
                     position_ids = position_ids[:, past_length:]
 
             elif position_ids is None:
-                position_ids = torch.arange(
-                    past_length, input_ids.shape[1] + past_length, dtype=torch.long, device=input_ids.device
-                )
-                position_ids = position_ids.unsqueeze(0)
+                 position_ids = torch.arange(past_length, input_ids.shape[1] + past_length, dtype=torch.long, device=input_ids.device)
+                 position_ids = position_ids.unsqueeze(0)
 
             # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
             if inputs_embeds is not None and past_key_values is None:
@@ -774,7 +770,7 @@ if is_torch_available():
             input_ids: torch.LongTensor = None,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,  # Keep legacy type hint for compatibility
+            past_key_values: Optional[List[torch.FloatTensor]] = None, # Keep legacy type hint for compatibility
             inputs_embeds: Optional[torch.FloatTensor] = None,
             labels: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
@@ -782,6 +778,7 @@ if is_torch_available():
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
         ) -> Union[Tuple, CausalLMOutputWithPast]:
+
             output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
             output_hidden_states = (
                 output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -827,12 +824,12 @@ if is_torch_available():
         @staticmethod
         def _reorder_cache(past_key_values, beam_idx):
             if isinstance(past_key_values, Cache):
-                return past_key_values.reorder_cache(beam_idx)
+                 return past_key_values.reorder_cache(beam_idx)
             else:
-                reordered_past = ()
-                for layer_past in past_key_values:
-                    reordered_layer_past = tuple(
-                        past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
-                    )
-                    reordered_past += (reordered_layer_past,)
-                return reordered_past
+                 reordered_past = ()
+                 for layer_past in past_key_values:
+                     reordered_layer_past = tuple(
+                         past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
+                     )
+                     reordered_past += (reordered_layer_past,)
+                 return reordered_past
