@@ -106,84 +106,29 @@ def _prepare_4d_causal_attention_mask(
     past_key_values_length: int,
     is_causal: bool = True,
 ):
-    """
-    Create a causal attention mask with proper dimensions.
-    Handles various input mask formats safely.
-    """
     bsz, tgt_len = input_shape
     dtype = inputs_embeds.dtype
-    device = inputs_embeds.device
     src_len = past_key_values_length + tgt_len
 
-    # Always create a base causal mask first
-    mask = torch.full((tgt_len, src_len), torch.finfo(dtype).min, dtype=dtype, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
+    # Create causal attention mask
+    mask = torch.full((tgt_len, src_len), torch.finfo(dtype).min, dtype=dtype, device=inputs_embeds.device)
+    mask_cond = torch.arange(mask.size(-1), device=inputs_embeds.device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0.0)
-
-    # Set past tokens to visible (0.0)
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = 0.0
+    expanded_mask = mask[None, None, :, :].expand(bsz, 1, tgt_len, src_len)
 
-    # Create the correctly dimensioned mask [bsz, 1, tgt_len, src_len]
-    causal_mask = mask[None, None, :, :].expand(bsz, 1, tgt_len, src_len)
-
-    # Apply padding mask if available
+    # Apply padding mask if provided
     if attention_mask is not None:
-        # Handle different attention mask formats
-        if attention_mask.dim() == 2:  # [bsz, seq_len]
-            # Convert to [bsz, 1, 1, seq_len]
-            expanded_attn_mask = attention_mask[:, None, None, :]
-            # Now check if we can broadcast correctly
-            if expanded_attn_mask.shape[-1] == src_len:
-                # Direct broadcasting is possible
-                causal_mask = causal_mask.masked_fill(expanded_attn_mask == 0, torch.finfo(dtype).min)
-            else:
-                # Need a more careful approach to avoid broadcast errors
-                # Create a mask of compatible dimensions
-                compatible_mask = torch.zeros((bsz, 1, tgt_len, src_len), dtype=dtype, device=device)
+        # Handle 2D attention mask [bsz, seq_len]
+        if attention_mask.dim() == 2:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+            attention_mask = attention_mask.expand(bsz, 1, tgt_len, attention_mask.size(-1))
+            expanded_mask = expanded_mask.masked_fill(attention_mask == 0, torch.finfo(dtype).min)
+        else:
+            expanded_mask = attention_mask
 
-                # Fill in the values we have
-                seq_length = min(src_len, expanded_attn_mask.shape[-1])
-                for i in range(bsz):
-                    # Manual per-batch copying to avoid broadcasting issues
-                    for j in range(tgt_len):
-                        for k in range(seq_length):
-                            if expanded_attn_mask[i, 0, 0, k] == 0:
-                                compatible_mask[i, 0, j, k] = torch.finfo(dtype).min
-
-                # Combine with the causal mask
-                causal_mask = causal_mask + compatible_mask
-
-        elif attention_mask.dim() == 4:  # [bsz, 1, query_len, key_len] or similar
-            # Try safe broadcasting if dimensions don't match exactly
-            if attention_mask.shape != (bsz, 1, tgt_len, src_len):
-                # Create a mask of compatible dimensions
-                compatible_mask = torch.zeros((bsz, 1, tgt_len, src_len), dtype=dtype, device=device)
-
-                # Handle various mask shapes safely
-                q_len = min(tgt_len, attention_mask.shape[2])
-                k_len = min(src_len, attention_mask.shape[3])
-
-                # Manual copying to avoid broadcasting errors
-                for i in range(bsz):
-                    for j in range(q_len):
-                        exp_j = j
-                        if attention_mask.shape[2] == 1:  # Special case for singleton dimensions
-                            exp_j = 0
-                        for k in range(k_len):
-                            exp_k = k
-                            if attention_mask.shape[3] == 1:  # Special case for singleton dimensions
-                                exp_k = 0
-                            if attention_mask[i, 0, exp_j, exp_k] == torch.finfo(dtype).min:
-                                compatible_mask[i, 0, j, k] = torch.finfo(dtype).min
-
-                # Combine with the causal mask
-                causal_mask = causal_mask + compatible_mask
-            else:
-                # Direct addition if dimensions match
-                causal_mask = causal_mask + attention_mask
-
-    return causal_mask
+    return expanded_mask
 
 
 class HindiCausalLMAttention(nn.Module):
@@ -258,84 +203,46 @@ class HindiCausalLMAttention(nn.Module):
 
         # Apply attention mask - with more flexible handling
         if attention_mask is not None:
-            # The mask must be broadcast across the batch dimension
-            # For safety, we'll avoid relying on automatic broadcasting
-            # Instead, we'll manually handle the masking
-
-            # The expected mask shape is [bsz, 1, q_len, kv_seq_len]
-            # But we'll handle other shapes as well
-            attn_weights_shape = attn_weights.shape
-
-            # Make sure we don't have dimension mismatches leading to broadcast errors
-            if attention_mask.shape != attn_weights_shape:
-                # Handle different mask shapes
-                try:
-                    # Handle mask with shape [bsz, 1, 1, seq_len]
-                    if attention_mask.shape[2] == 1 and attention_mask.shape[0] == bsz:
-                        # Manually expand along dimension 2 (query length)
-                        # This avoids the broadcast error seen in the tests
-                        expanded_mask = attention_mask.repeat(1, 1, q_len, 1)
-
-                        # Now we need to ensure the last dimension matches
-                        if expanded_mask.shape[3] != attn_weights_shape[3]:
-                            # Pad or truncate the mask in the key length dimension
-                            mask_kv_len = expanded_mask.shape[3]
-                            if mask_kv_len < kv_seq_len:
-                                # Pad with zeros (no mask)
-                                pad_len = kv_seq_len - mask_kv_len
-                                pad = torch.zeros(
-                                    (bsz, 1, q_len, pad_len), device=expanded_mask.device, dtype=expanded_mask.dtype
-                                )
-                                expanded_mask = torch.cat([expanded_mask, pad], dim=3)
-                            else:
-                                # Truncate to match
-                                expanded_mask = expanded_mask[:, :, :, :kv_seq_len]
-
-                        attention_mask = expanded_mask
-                    elif attention_mask.dim() == 4:
-                        # Try other approaches to make the mask compatible
+            # Check the mask shape - we need to be more flexible here
+            # The expected shape is [bsz, 1, q_len, kv_seq_len]
+            if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
+                # Try to adapt the mask
+                if attention_mask.dim() == 4:
+                    # If mask has 4 dimensions with correct batch size
+                    if attention_mask.size(0) == bsz:
+                        # If the first two dimensions match but the last two don't
                         logger.debug(
-                            f"Reshaping attention mask from {attention_mask.shape} to match attn_weights shape {attn_weights_shape}"
+                            f"Reshaping attention mask from {attention_mask.shape} to match expected shape {(bsz, 1, q_len, kv_seq_len)}"
                         )
-                        # Create a new mask with the correct shape
-                        new_mask = torch.zeros(
-                            attn_weights_shape, device=attention_mask.device, dtype=attention_mask.dtype
-                        )
+                        # Try to expand dimensions that are 1 to match expected size
+                        if attention_mask.size(2) == 1 and attention_mask.size(3) == q_len:
+                            # Case: [bsz, 1, 1, q_len] needs to be [bsz, 1, q_len, kv_seq_len]
+                            # This is typically what we see in the error messages
+                            temp_mask = attention_mask.expand(bsz, 1, q_len, q_len)
 
-                        # Carefully copy values to avoid broadcast errors
-                        # For each batch item
-                        for b in range(min(bsz, attention_mask.shape[0])):
-                            # For each attention head (expand if needed)
-                            for h in range(self.num_heads):
-                                h_idx = min(h, attention_mask.shape[1] - 1) if attention_mask.shape[1] > 1 else 0
-                                # For each query position
-                                for q in range(min(q_len, attention_mask.shape[2])):
-                                    q_idx = min(q, attention_mask.shape[2] - 1)
-                                    # For each key position
-                                    for k in range(min(kv_seq_len, attention_mask.shape[3])):
-                                        k_idx = min(k, attention_mask.shape[3] - 1)
-                                        # Copy the mask value
-                                        new_mask[b, h, q, k] = attention_mask[b, h_idx, q_idx, k_idx]
+                            # If we need to extend for past key values (kv_seq_len > q_len)
+                            if kv_seq_len > q_len:
+                                # Create additional mask values for past keys
+                                past_mask = torch.zeros(
+                                    (bsz, 1, q_len, kv_seq_len - q_len), dtype=temp_mask.dtype, device=temp_mask.device
+                                )
+                                temp_mask = torch.cat([past_mask, temp_mask], dim=-1)
 
-                        attention_mask = new_mask
-                except Exception as e:
-                    # If all attempts fail, log a warning but continue
-                    logger.warning(
-                        f"Failed to adapt attention mask shape {attention_mask.shape} to match attn_weights {attn_weights_shape}: {e}"
-                    )
+                            attention_mask = temp_mask
 
-            # Now apply the mask
+            # Apply the mask to attention weights
             attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = self.attention_dropout(attn_weights)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        # Final shape check with better error handling
-        if attn_output.shape[:3] != (bsz, self.num_heads, q_len):
+        # Shape check after matrix multiplication
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+            # Log the issue but try to continue
             logger.warning(
-                f"Attention output shape {attn_output.shape} first dimensions don't match expected {(bsz, self.num_heads, q_len)}. "
-                "This may lead to incorrect results."
+                f"Attention output shape {attn_output.size()} doesn't match expected {(bsz, self.num_heads, q_len, self.head_dim)}. "
+                "This may lead to incorrect results. Check attention mask dimensions."
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -530,8 +437,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
-        # Create causal attention mask - use the updated version that avoids broadcasting errors
-        device = inputs_embeds.device
+        # Create causal attention mask
         _attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
