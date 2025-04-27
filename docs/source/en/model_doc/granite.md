@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 # Granite
 
 [Granite](https://huggingface.co/papers/2408.13359) is a 3B parameter language model trained with the Power scheduler. Discovering a good learning rate for pretraining large language models is difficult because it depends on so many variables (batch size, number of training tokens, etc.) and it is expensive to perform a hyperparameter search. The Power scheduler is based on a power-law relationship between the variables and their transferability to larger models. Combining the Power scheduler with Maximum Update Parameterization (MUP) allows a model to be pretrained with one set of hyperparameters regardless of all the variables.
-Granite model is a series of AI language models built for businesses, not just for general use. It is a super-focused tool for enterprise tasks like summarizing reports, answering questions, or generating code. It is trained on curated datasets (think finance, legal, code, and academic stuff) and filters out junk like duplicates or harmful content with their HAP detector. It comes in different sizes, from super lightweight (sub-billion parameters) up to 34 billion, so you can pick what fits your needs.
+
 
 You can find all the original Granite checkpoints under the [IBM-Granite](https://huggingface.co/ibm-granite) organization.
 
@@ -36,22 +36,20 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
+import torch
+from transformers import pipeline
+
 import torch
 from transformers import pipeline
 
 pipe = pipeline(
-    "text-generation",
-    model="ibm-granite/granite-3.3-8b-instruct",
-    tokenizer=tokenizer,
-    device_map = "auto",
-    torch_dtype = torch.bfloat16,
-
+    task="text-generation",
+    model="ibm-granite/granite-3.3-2b-base",
+    torch_dtype=torch.bfloat16,
+    device=0
 )
-
-prompt = "Explain quantum computing in simple terms:"
-output = pipe(prompt, max_new_tokens=200, do_sample=True, temperature=0.7)
-print(output[0]["generated_text"])
+pipe("Explain quantum computing in simple terms ", max_new_tokens=50)
 ```
 
 </hfoption>
@@ -61,27 +59,24 @@ print(output[0]["generated_text"])
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_path = "ibm/PowerLM-3b"
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-2b-base")
+model = AutoModelForCausalLM.from_pretrained(
+    "ibm-granite/granite-3.3-2b-base",                                          
+    torch_dtype=torch.bfloat16, 
+    device_map="auto",
+    attn_implementation="sdpa"
+)
 
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
-
-# Change input text as desired
-prompt = "Write a code to find the maximum value in a list of numbers."
-
-# tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
-# generate output tokens
-output = model.generate(**input_tokens, max_new_tokens=100)
-# decode output tokens into text
-output = tokenizer.batch_decode(output)
-# loop over the batch to print, in this example, the batch size is 1
-for i in output:
-    print(i)
+inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mishra).
+</hfoption>
+<hfoption id="transformers-cli">
+
+```python
+echo -e "Explain quantum computing simply." | transformers-cli run --task text-generation --model ibm-granite/granite-3.3-8b-instruct --device 0
+```
 </hfoption>
 </hfoptions>
 
@@ -94,24 +89,21 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b-it")
+tokenizer = AutoTokenizer.from_pretrained(""ibm-granite/granite-3.3-2b-base"")
 model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-27b-it",
+    "ibm-granite/granite-3.3-2b-base",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa",
     quantization_config=quantization_config,
 )
 
-input_text = "Explain artificial intelligence to a 10 year old"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-outputs = model.generate(**input_ids, max_new_tokens=32)
-print(tokenizer.decode(outputs[0]))
+input_ids = tokenizer("Explain artificial intelligence to a 10 year old", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 ## Notes
-
-- Granite models support context lengths up to 128K tokens (e.g., in Granite-3.3), thanks to Rotary Position Embeddings     (RoPE). For long-context tasks like document analysis, ensure your input sequences are padded appropriately to avoid      attention issues.
-- Don’t use the torch_dtype parameter in from_pretrained() if you’re using FlashAttention-2, as it only supports fp16 or    bf16. Granite models are optimized for mixed precision, so use Automatic Mixed Precision; set fp16 or bf16 to True if 
-  using Trainer, or use torch.autocast.
   
 ## GraniteConfig
 
