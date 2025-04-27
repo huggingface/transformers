@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...generation.logits_process import LogitsProcessor
 from ...generation.utils import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -75,10 +76,14 @@ class HindiCausalLMRotaryEmbedding(nn.Module):
     def forward(self, x, seq_len=None):
         if seq_len is None:
             seq_len = x.shape[1]
-
-        if seq_len > self.max_seq_len_cached or self.cos_cached.device != x.device or self.cos_cached.dtype != x.dtype:
+            
+        if (
+            seq_len > self.max_seq_len_cached
+            or self.cos_cached.device != x.device
+            or self.cos_cached.dtype != x.dtype
+        ):
             self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
-
+            
         return (
             self.cos_cached[:seq_len],
             self.sin_cached[:seq_len],
@@ -376,13 +381,13 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         # Remove token_type_ids if present
-        if "token_type_ids" in kwargs:
-            kwargs.pop("token_type_ids")
-
+        if 'token_type_ids' in kwargs:
+            kwargs.pop('token_type_ids')
+        
         # Remove cache_position if present
-        if "cache_position" in kwargs:
-            kwargs.pop("cache_position")
-
+        if 'cache_position' in kwargs:
+            kwargs.pop('cache_position')
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -430,19 +435,15 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
+                
             past_key_value = None
             if past_key_values is not None and len(past_key_values) > idx:
                 past_key_value = past_key_values[idx]
 
             if self.gradient_checkpointing and self.training:
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(
-                            *inputs, past_key_value=None, output_attentions=output_attentions, use_cache=False
-                        )
-
+                        return module(*inputs, past_key_value=None, output_attentions=output_attentions, use_cache=False)
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
@@ -463,15 +464,15 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-
+            
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-
+                
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-
+        
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -497,7 +498,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         self.model = HindiCausalLMModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        
         # Make sure these generation-related fields are set
         if not hasattr(self.config, "pad_token_id"):
             self.config.pad_token_id = 0  # Set default value
@@ -505,7 +506,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             self.config.eos_token_id = 2  # Set default value
         if not hasattr(self.config, "bos_token_id"):
             self.config.bos_token_id = 1  # Set default value
-
+            
         # Initialize the weights and apply the final post-init processing
         self.post_init()
 
@@ -526,7 +527,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
             if output_embeddings is not None and input_embeddings is not None:
                 output_embeddings.weight = input_embeddings.weight
-
+            
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -542,11 +543,11 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         # Remove unsupported arguments
-        if "token_type_ids" in kwargs:
-            kwargs.pop("token_type_ids")
-
-        if "cache_position" in kwargs:
-            kwargs.pop("cache_position")
+        if 'token_type_ids' in kwargs:
+            kwargs.pop('token_type_ids')
+        
+        if 'cache_position' in kwargs:
+            kwargs.pop('cache_position')
 
         # Handle default values for optional parameters
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -625,13 +626,13 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
-
+        
         # Include position_ids if provided
         if "position_ids" in kwargs:
             model_inputs["position_ids"] = kwargs["position_ids"]
-
+            
         return model_inputs
-
+        
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -640,17 +641,16 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
             if layer_past is None:
                 reordered_past += (None,)
                 continue
-
+                
             reordered_layer_past = tuple(
-                past_state.index_select(0, beam_idx.to(past_state.device))
-                for past_state in layer_past
-                if past_state is not None
+                past_state.index_select(0, beam_idx.to(past_state.device)) 
+                for past_state in layer_past if past_state is not None
             )
-
+            
             # Check if the tuple has the expected length, if not, pad with None
             if len(reordered_layer_past) != 2:
                 pad_length = 2 - len(reordered_layer_past)
                 reordered_layer_past = reordered_layer_past + (None,) * pad_length
-
+                
             reordered_past += (reordered_layer_past,)
         return reordered_past
