@@ -234,6 +234,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Model"),
         ("qdqbert", "QDQBertModel"),
         ("qwen2", "Qwen2Model"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLModel"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
@@ -327,7 +328,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
-        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration")
     ]
 )
 
