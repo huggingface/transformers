@@ -28,7 +28,7 @@ try:
     from .patch_hindi_model import direct_patch
 
     # Apply the patch immediately
-    direct_patch()
+    patch_hindi_causal_lm()
     print("✅ Applied HindiCausalLM test patches")
 except ImportError:
     print("⚠️ Could not import HindiCausalLM patches. Tests may fail.")
