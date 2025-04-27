@@ -46,10 +46,11 @@ class MagmaProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         self.image_processor = image_processor
         self.tokenizer = tokenizer        
+        self.image_token = "<image>"
 
     def __call__(
         self,
-        texts: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, List[TextInput]],
         images: Union[ImageInput, List[ImageInput]],
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -65,7 +66,7 @@ class MagmaProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            texts (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -110,10 +111,13 @@ class MagmaProcessor(ProcessorMixin):
         else:
             image_inputs = {}
         text_inputs = self.tokenizer(
-            texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
+
+    def apply_chat_template(self, *args, **kwargs):
+        return self.tokenizer.apply_chat_template(*args, **kwargs)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

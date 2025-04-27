@@ -245,8 +245,8 @@ class MagmaImageProcessor(BaseImageProcessor):
             pixel_values = pixel_values.half()
 
         data = {
-            "pixel_values": pixel_values, 
-            "image_sizes": image_sizes,
+            "pixel_values": pixel_values.unsqueeze(0), 
+            "image_sizes": torch.tensor(image_sizes).unsqueeze(0),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 

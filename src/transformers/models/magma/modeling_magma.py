@@ -138,7 +138,7 @@ class MagmaPreTrainedModel(PreTrainedModel):
     config_class = MagmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MagmaVisionAttention"]
+    _no_split_modules = ["MagmaImageTower"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
