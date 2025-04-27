@@ -42,7 +42,7 @@ class HindiCausalLMPreTrainedModel:
     """
 
     config_class = HindiCausalLMConfig
-    base_model_prefix = "model"  # Keep consistent base prefix
+    base_model_prefix = "model" # Keep consistent base prefix
     supports_gradient_checkpointing = True
     _no_split_modules = ["HindiCausalLMLayer"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -55,7 +55,6 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     """
     The Hindi Causal LM base model.
     """
-
     def __init__(self, config=None):
         requires_backends(self, ["torch"])
 
@@ -64,7 +63,6 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     """
     Hindi Causal LM model with a language modeling head.
     """
-
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -87,10 +85,7 @@ if is_torch_available():
         BaseModelOutputWithPast,
         CausalLMOutputWithPast,
     )
-    from ...modeling_utils import (
-        PreTrainedModel,
-        _prepare_4d_causal_attention_mask,
-    )
+    from ...modeling_utils import PreTrainedModel, _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
     from ...utils import logging
 
     logger = logging.get_logger(__name__)
@@ -134,9 +129,9 @@ if is_torch_available():
             if seq_len > self.max_seq_len_cached:
                 self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
             return (
-                self.cos_cached[:seq_len].to(dtype=x.dtype),
-                self.sin_cached[:seq_len].to(dtype=x.dtype),
-            )
+                 self.cos_cached[:seq_len].to(dtype=x.dtype),
+                 self.sin_cached[:seq_len].to(dtype=x.dtype),
+             )
 
     # Copied from transformers.models.llama.modeling_llama.rotate_half
     def rotate_half(x):
@@ -154,15 +149,14 @@ if is_torch_available():
 
     class HindiCausalLMAttention(nn.Module):
         """Multi-headed attention with causal mask and RoPE, adapted from LlamaAttention."""
-
         def __init__(self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None):
             super().__init__()
             self.config = config
             self.layer_idx = layer_idx
             if layer_idx is None:
-                logger.warning_once(
-                    f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended..."
-                )
+                 logger.warning_once(
+                     f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended..."
+                 )
             self.hidden_size = config.hidden_size
             self.num_heads = config.num_attention_heads
             self.head_dim = self.hidden_size // self.num_heads
@@ -209,7 +203,7 @@ if is_torch_available():
             kv_seq_len = key_states.shape[-2]
             if past_key_value is not None:
                 if self.layer_idx is None:
-                    raise ValueError("Layer index needed for cache")
+                     raise ValueError("Layer index needed for cache")
                 kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
             if self.rotary_emb is not None:
@@ -225,15 +219,15 @@ if is_torch_available():
             if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
                 raise ValueError(f"Attention weights shape error {attn_weights.size()} vs expected")
             if attention_mask is not None:
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(f"Attention mask shape error {attention_mask.size()} vs expected")
-                attn_weights = attn_weights + attention_mask
+                 if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                     raise ValueError(f"Attention mask shape error {attention_mask.size()} vs expected")
+                 attn_weights = attn_weights + attention_mask
 
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
             attn_weights = self.attention_dropout(attn_weights)
             attn_output = torch.matmul(attn_weights, value_states)
             if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-                raise ValueError(f"Attention output shape error {attn_output.size()} vs expected")
+                 raise ValueError(f"Attention output shape error {attn_output.size()} vs expected")
 
             attn_output = attn_output.transpose(1, 2).contiguous()
             attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
@@ -268,7 +262,7 @@ if is_torch_available():
             past_key_value: Optional[Cache] = None,
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
-            **kwargs,
+             **kwargs,
         ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -292,9 +286,9 @@ if is_torch_available():
 
             outputs = (hidden_states,)
             if output_attentions:
-                outputs += (attn_weights,)
+                 outputs += (attn_weights,)
             if use_cache:
-                outputs += (present_key_value,)
+                 outputs += (present_key_value,)
             return outputs
 
     class HindiCausalLMPreTrainedModel(PreTrainedModel):
@@ -318,19 +312,19 @@ if is_torch_available():
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
             elif isinstance(module, (nn.LayerNorm, RMSNorm)):
-                if hasattr(module, "bias") and module.bias is not None:
-                    module.bias.data.zero_()
-                module.weight.data.fill_(1.0)
+                 if hasattr(module, 'bias') and module.bias is not None:
+                      module.bias.data.zero_()
+                 module.weight.data.fill_(1.0)
 
         def _set_gradient_checkpointing(self, module, value=False):
-            if isinstance(module, HindiCausalLMModel):
-                module.gradient_checkpointing = value
+             if isinstance(module, HindiCausalLMModel):
+                 module.gradient_checkpointing = value
+
 
     class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         """
         The Hindi Causal LM base model transformer.
         """
-
         def __init__(self, config: HindiCausalLMConfig):
             super().__init__(config)
             self.padding_idx = config.pad_token_id
@@ -344,11 +338,8 @@ if is_torch_available():
             self.gradient_checkpointing = False
             self.post_init()
 
-        def get_input_embeddings(self):
-            return self.embed_tokens
-
-        def set_input_embeddings(self, value):
-            self.embed_tokens = value
+        def get_input_embeddings(self): return self.embed_tokens
+        def set_input_embeddings(self, value): self.embed_tokens = value
 
         def forward(
             self,
@@ -357,12 +348,13 @@ if is_torch_available():
             position_ids: Optional[torch.LongTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
-            token_type_ids: Optional[torch.LongTensor] = None,  # Keep in signature
+            token_type_ids: Optional[torch.LongTensor] = None, # Keep in signature
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
         ) -> Union[Tuple, BaseModelOutputWithPast]:
+
             output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
             output_hidden_states = (
                 output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -375,24 +367,24 @@ if is_torch_available():
 
             # Fixed E701
             if (input_ids is None) == (inputs_embeds is None):
-                raise ValueError("You must specify either input_ids or inputs_embeds")
+                 raise ValueError("You must specify either input_ids or inputs_embeds")
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once("...")
-                    use_cache = False
+                 if use_cache:
+                     logger.warning_once("...")
+                     use_cache = False
 
             past_key_values_length = 0
             if use_cache:
                 if past_key_values is None:
-                    if inputs_embeds is not None:
-                        batch_size, _, hidden_size = inputs_embeds.shape
-                        device, dtype = inputs_embeds.device, inputs_embeds.dtype
-                    else:
-                        batch_size, _ = input_ids.shape
-                        device, dtype = input_ids.device, self.embed_tokens.weight.dtype
-                        hidden_size = self.config.hidden_size
-                    past_key_values = DynamicCache(self.config, batch_size, hidden_size, device=device, dtype=dtype)
+                     if inputs_embeds is not None:
+                         batch_size, _, hidden_size = inputs_embeds.shape
+                         device, dtype = inputs_embeds.device, inputs_embeds.dtype
+                     else:
+                         batch_size, _ = input_ids.shape
+                         device, dtype = input_ids.device, self.embed_tokens.weight.dtype
+                         hidden_size = self.config.hidden_size
+                     past_key_values = DynamicCache(self.config, batch_size, hidden_size, device=device, dtype=dtype)
 
                 use_legacy_cache = not isinstance(past_key_values, Cache)
                 if use_legacy_cache:
@@ -413,21 +405,13 @@ if is_torch_available():
                 )
                 position_ids = position_ids.unsqueeze(0)
 
-            if (
-                attention_mask is not None
-                and attention_mask.dim() == 2
-                and self.config._attn_implementation != "flash_attention_2"
-            ):
-                is_causal = past_key_values_length == 0  # Mask is causal only on first pass when cache is empty
-                attention_mask = _prepare_4d_causal_attention_mask(
-                    attention_mask,
-                    (batch_size, seq_length),
-                    inputs_embeds,
-                    past_key_values_length,
-                    is_causal=is_causal,
-                )
+            if attention_mask is not None and attention_mask.dim() == 2 and self.config._attn_implementation != "flash_attention_2":
+                 is_causal = past_key_values_length == 0 # Mask is causal only on first pass when cache is empty
+                 attention_mask = _prepare_4d_causal_attention_mask(
+                     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, is_causal=is_causal
+                 )
             elif self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             # If attention_mask is None, the attention layer handles causal masking internally for FA/SDPA or via _prepare_4d
 
             hidden_states = inputs_embeds
@@ -444,9 +428,9 @@ if is_torch_available():
                         hidden_states,
                         attention_mask,
                         position_ids,
-                        None,  # past_key_value
+                        None, # past_key_value
                         output_attentions,
-                        False,  # use_cache
+                        False, # use_cache
                     )
                 else:
                     layer_outputs = decoder_layer(
@@ -469,9 +453,7 @@ if is_torch_available():
             next_cache = next_decoder_cache.to_legacy_cache() if use_cache and use_legacy_cache else next_decoder_cache
 
             if not return_dict:
-                return tuple(
-                    v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None
-                )
+                return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
             return BaseModelOutputWithPast(
                 last_hidden_state=hidden_states,
@@ -479,6 +461,7 @@ if is_torch_available():
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
             )
+
 
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
         _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
@@ -491,43 +474,29 @@ if is_torch_available():
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
             self.post_init()
 
-        def get_input_embeddings(self):
-            return self.model.embed_tokens
-
-        def set_input_embeddings(self, value):
-            self.model.embed_tokens = value
-
-        def get_output_embeddings(self):
-            return self.lm_head
-
-        def set_output_embeddings(self, new_embeddings):
-            self.lm_head = new_embeddings
-
-        def tie_weights(self):  # Method remains the same
+        def get_input_embeddings(self): return self.model.embed_tokens
+        def set_input_embeddings(self, value): self.model.embed_tokens = value
+        def get_output_embeddings(self): return self.lm_head
+        def set_output_embeddings(self, new_embeddings): self.lm_head = new_embeddings
+        def tie_weights(self): # Method remains the same
             if self.config.tie_word_embeddings:
                 output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
                 if output_embeddings is not None and input_embeddings is not None:
                     output_embeddings.weight = input_embeddings.weight
             super().tie_weights()
-
-        def _untie_weights(self):  # Method remains the same
+        def _untie_weights(self): # Method remains the same
             if self.config.tie_word_embeddings:
-                output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
-                if output_embeddings is not None and input_embeddings is not None:
-                    if output_embeddings.weight is input_embeddings.weight:
-                        output_embeddings.weight = nn.Parameter(output_embeddings.weight.clone())
-
-        def save_pretrained(self, *args, **kwargs):
-            return super().save_pretrained(*args, **kwargs)  # Inherit method
-
-        def prepare_inputs_for_generation(self, *args, **kwargs):
-            return super().prepare_inputs_for_generation(*args, **kwargs)  # Inherit method
-
+                 output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
+                 if output_embeddings is not None and input_embeddings is not None:
+                     if output_embeddings.weight is input_embeddings.weight:
+                          output_embeddings.weight = nn.Parameter(output_embeddings.weight.clone())
+        def save_pretrained(self, *args, **kwargs): return super().save_pretrained(*args, **kwargs) # Inherit method
+        def prepare_inputs_for_generation(self, *args, **kwargs): return super().prepare_inputs_for_generation(*args, **kwargs) # Inherit method
         def get_generation_config(self):
             if hasattr(self, "generation_config") and self.generation_config is not None:
-                config = self.generation_config
+                 config = self.generation_config
             else:
-                config = GenerationConfig()
+                 config = GenerationConfig()
             config.pad_token_id = self.config.pad_token_id
             config.bos_token_id = self.config.bos_token_id
             config.eos_token_id = self.config.eos_token_id
@@ -542,13 +511,14 @@ if is_torch_available():
             position_ids: Optional[torch.LongTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
-            token_type_ids: Optional[torch.LongTensor] = None,  # Keep in signature
+            token_type_ids: Optional[torch.LongTensor] = None, # Keep in signature
             labels: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
         ) -> Union[Tuple, CausalLMOutputWithPast]:
+
             if token_type_ids is not None:
                 warnings.warn("The `token_type_ids` argument is deprecated and will be ignored for HindiCausalLM.")
 
@@ -598,12 +568,12 @@ if is_torch_available():
         @staticmethod
         def _reorder_cache(past_key_values, beam_idx):
             if isinstance(past_key_values, Cache):
-                return past_key_values.reorder_cache(beam_idx)
+                 return past_key_values.reorder_cache(beam_idx)
             else:
-                reordered_past = ()
-                for layer_past in past_key_values:
-                    reordered_layer_past = tuple(
-                        past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
-                    )
-                    reordered_past += (reordered_layer_past,)
-                return reordered_past
+                 reordered_past = ()
+                 for layer_past in past_key_values:
+                     reordered_layer_past = tuple(
+                         past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
+                     )
+                     reordered_past += (reordered_layer_past,)
+                 return reordered_past
