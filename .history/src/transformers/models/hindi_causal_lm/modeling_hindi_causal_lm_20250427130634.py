@@ -69,6 +69,7 @@ if is_torch_available():
     from torch import nn
     from torch.nn import CrossEntropyLoss
 
+    from ...activations import ACT2FN
     from ...cache_utils import Cache, DynamicCache
     from ...generation.configuration_utils import GenerationConfig
     from ...generation.utils import GenerationMixin
@@ -101,41 +102,34 @@ if is_torch_available():
             self.base = base
             inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
-            self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=torch.get_default_dtype())
+            self._set_cos_sin_cache(
+                seq_len=max_position_embeddings, dtype=torch.get_default_dtype()
+            )
 
         def _set_cos_sin_cache(self, seq_len, dtype):
             self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=torch.int64).type_as(
-                self.inv_freq
-            )
+            t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=torch.int64).type_as(self.inv_freq)
             freqs = torch.outer(t, self.inv_freq)
             emb = torch.cat((freqs, freqs), dim=-1)
             self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
             self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
         def forward(self, x, seq_len=None):
-            if (
-                seq_len > self.max_seq_len_cached
-                or self.cos_cached.device != x.device
-                or self.cos_cached.dtype != x.dtype
-            ):
-                self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+            if seq_len > self.max_seq_len_cached or self.cos_cached.device != x.device or self.cos_cached.dtype != x.dtype:
+                 self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
             return (
-                self.cos_cached[:seq_len],
-                self.sin_cached[:seq_len],
-            )
+                 self.cos_cached[:seq_len],
+                 self.sin_cached[:seq_len],
+             )
 
     def rotate_half(x):
-        # Fixed E702
         x1 = x[..., : x.shape[-1] // 2]
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
     def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-        # Fixed E702
         cos = cos.unsqueeze(unsqueeze_dim)
         sin = sin.unsqueeze(unsqueeze_dim)
-        # Fixed E702 (multiple lines)
         q_embed = (q * cos) + (rotate_half(q) * sin)
         k_embed = (k * cos) + (rotate_half(k) * sin)
         return q_embed, k_embed
@@ -143,11 +137,7 @@ if is_torch_available():
     # ---- ADD MASK HELPERS HERE ----
     # Adapted from transformers.modeling_utils._prepare_4d_causal_attention_mask
     def _prepare_4d_causal_attention_mask(
-        attention_mask: Optional[torch.Tensor],
-        input_shape: Tuple[int, int],
-        inputs_embeds: torch.Tensor,
-        past_key_values_length: int,
-        is_causal: bool = True,
+        attention_mask: Optional[torch.Tensor], input_shape: Tuple[int, int], inputs_embeds: torch.Tensor, past_key_values_length: int, is_causal: bool = True
     ):
         bsz, tgt_len = input_shape
         dtype = inputs_embeds.dtype
@@ -155,20 +145,14 @@ if is_torch_available():
 
         if attention_mask is not None and attention_mask.dim() == 4:
             expected_shape = (bsz, 1, tgt_len, src_len)
-            # Fixed E701
             if attention_mask.shape != expected_shape:
-                raise ValueError(
-                    f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape}"
-                )
-            # Fixed E701
+                 raise ValueError(f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape}")
             if not torch.is_floating_point(attention_mask) and attention_mask.dtype != torch.bool:
-                raise ValueError("4D attention mask must be additive (float type with 0.0/-inf) or boolean")
-            # Fixed E701
+                 raise ValueError("4D attention mask must be additive (float type with 0.0/-inf) or boolean")
             if torch.is_floating_point(attention_mask):
                 attention_mask = attention_mask.to(dtype)
             return attention_mask
 
-        # Fixed E701
         if attention_mask is None and not is_causal:
             return None
 
@@ -182,10 +166,9 @@ if is_torch_available():
         else:
             expanded_mask = torch.zeros((bsz, 1, tgt_len, src_len), dtype=dtype, device=inputs_embeds.device)
 
-        if attention_mask is not None:  # 2D padding mask [bsz, src_len]
-            # Fixed E701
+        if attention_mask is not None:
             if attention_mask.dim() != 2:
-                raise ValueError(f"Attention mask should be 2D but is {attention_mask.dim()}D")
+                 raise ValueError(f"Attention mask should be 2D but is {attention_mask.dim()}D")
             padding_mask = attention_mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len)
             expanded_mask = expanded_mask.masked_fill(padding_mask == 0, torch.finfo(dtype).min)
 
@@ -193,10 +176,7 @@ if is_torch_available():
 
     # Adapted from transformers.modeling_utils._prepare_4d_causal_attention_mask_for_sdpa
     def _prepare_4d_causal_attention_mask_for_sdpa(
-        attention_mask: Optional[torch.Tensor],
-        input_shape: Tuple[int, int],
-        inputs_embeds: torch.Tensor,
-        past_key_values_length: int,
+        attention_mask: Optional[torch.Tensor], input_shape: Tuple[int, int], inputs_embeds: torch.Tensor, past_key_values_length: int
     ):
         bsz, query_pos = input_shape
         kv_pos = past_key_values_length + query_pos
@@ -205,80 +185,69 @@ if is_torch_available():
 
         attn_mask = torch.ones((query_pos, kv_pos), dtype=dtype, device=device)
         if query_pos > 0 and kv_pos > past_key_values_length:
-            attn_mask = torch.tril(attn_mask[:, past_key_values_length:], diagonal=past_key_values_length)
-            if past_key_values_length > 0:
-                attn_mask = torch.cat(
-                    [torch.ones((query_pos, past_key_values_length), dtype=dtype, device=device), attn_mask], dim=1
-                )
+             attn_mask = torch.tril(attn_mask[:, past_key_values_length:], diagonal=past_key_values_length)
+             if past_key_values_length > 0:
+                 attn_mask = torch.cat([torch.ones((query_pos, past_key_values_length), dtype=dtype, device=device), attn_mask], dim=1)
 
         attn_mask = attn_mask[None, None, :, :].expand(bsz, 1, query_pos, kv_pos)
 
         if attention_mask is not None:
             if attention_mask.dim() == 2:
-                attention_mask = attention_mask[:, None, None, :].expand(bsz, 1, query_pos, kv_pos).to(dtype)
+                 attention_mask = attention_mask[:, None, None, :].expand(bsz, 1, query_pos, kv_pos).to(dtype)
             elif attention_mask.dim() == 4:
-                attention_mask = attention_mask.to(dtype)
-                expected_shape = (bsz, 1, query_pos, kv_pos)
-                # Fixed E701
-                if attention_mask.shape != expected_shape:
-                    raise ValueError(
-                        f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape} for SDPA"
-                    )
+                 attention_mask = attention_mask.to(dtype)
+                 expected_shape = (bsz, 1, query_pos, kv_pos)
+                 if attention_mask.shape != expected_shape:
+                     raise ValueError(f"Provided 4D attention mask shape {attention_mask.shape} does not match expected {expected_shape} for SDPA")
             else:
-                raise ValueError("Attention mask must be 2D or 4D for SDPA")
+                 raise ValueError("Attention mask must be 2D or 4D for SDPA")
             attn_mask = attn_mask & attention_mask
 
         return attn_mask
-
     # ---- END MASK HELPERS ----
+
+    class HindiCausalLMMLP(nn.Module):
+        def __init__(self, config):
+            super().__init__()
+            self.config = config
+            self.hidden_size = config.hidden_size
+            self.intermediate_size = config.intermediate_size
+            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+            self.act_fn = ACT2FN[config.hidden_act]
+
+        def forward(self, x):
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            return down_proj
 
     class HindiCausalLMAttention(nn.Module):
         def __init__(self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None):
             super().__init__()
             self.config = config
             self.layer_idx = layer_idx
-            # Fixed E701
             if layer_idx is None:
-                logger.warning_once(f"Instantiating {self.__class__.__name__} without layer_idx is not recommended...")
+                 logger.warning_once(f"Instantiating {self.__class__.__name__} without layer_idx...")
             self.hidden_size = config.hidden_size
             self.num_heads = config.num_attention_heads
             self.head_dim = self.hidden_size // self.num_heads
             self.max_position_embeddings = config.max_position_embeddings
             self.is_causal = True
-
-            # Fixed E701
             if self.head_dim * self.num_heads != self.hidden_size:
-                raise ValueError("hidden_size must be divisible by num_heads")
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-            self.k_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-            self.v_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-            self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+                raise ValueError("...")
+            self.q_proj=nn.Linear(self.hidden_size, self.num_heads*self.head_dim, bias=False)
+            self.k_proj=nn.Linear(self.hidden_size, self.num_heads*self.head_dim, bias=False)
+            self.v_proj=nn.Linear(self.hidden_size, self.num_heads*self.head_dim, bias=False)
+            self.o_proj=nn.Linear(self.num_heads*self.head_dim, self.hidden_size, bias=False)
             self.attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
             self.positional_encoding_type = getattr(config, "positional_encoding_type", "rope")
-            # Fixed E701
             if self.positional_encoding_type == "rope":
-                self.rotary_emb = HindiCausalLMRotaryEmbedding(
-                    self.head_dim, max_position_embeddings=self.max_position_embeddings
-                )
-            # Fixed E701
+                self.rotary_emb = HindiCausalLMRotaryEmbedding(self.head_dim, max_position_embeddings=self.max_position_embeddings)
             else:
                 self.rotary_emb = None
-
         def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
             return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-        def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            **kwargs,
-        ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
-            # Fixed E701
+        def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor]=None, position_ids: Optional[torch.LongTensor]=None, past_key_value: Optional[Cache]=None, output_attentions: bool=False, use_cache: bool=False, **kwargs) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
             if "padding_mask" in kwargs:
                 warnings.warn("...", FutureWarning)
 
@@ -289,9 +258,8 @@ if is_torch_available():
 
             kv_seq_len = key_states.shape[-2]
             if past_key_value is not None:
-                # Fixed E701
                 if self.layer_idx is None:
-                    raise ValueError("Layer index needed for cache")
+                     raise ValueError("...")
                 kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
             if self.rotary_emb is not None:
@@ -300,28 +268,22 @@ if is_torch_available():
                 sin = sin[position_ids]
                 query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-            # Fixed E701
             if past_key_value is not None:
                 key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
 
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-            # Fixed E701
             if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-                raise ValueError(f"Attention weights shape error {attn_weights.size()} vs expected")
+                raise ValueError("...")
             if attention_mask is not None:
-                # Fixed E701
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask shape error {attention_mask.size()} vs expected {(bsz, 1, q_len, kv_seq_len)}"
-                    )
-                attn_weights = attn_weights + attention_mask
+                 if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                      raise ValueError("...")
+                 attn_weights = attn_weights + attention_mask
 
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
             attn_weights = self.attention_dropout(attn_weights)
             attn_output = torch.matmul(attn_weights, value_states)
-            # Fixed E701
             if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-                raise ValueError(f"Attention output shape error {attn_output.size()} vs expected")
+                 raise ValueError("...")
 
             attn_output = attn_output.transpose(1, 2).contiguous()
             attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
@@ -332,35 +294,12 @@ if is_torch_available():
 
             return attn_output, attn_weights_output, present_key_value
 
-    class HindiCausalLMMLP(nn.Module):
-        def __init__(self, config: HindiCausalLMConfig):
-            super().__init__()
-            self.hidden_size = config.hidden_size
-            self.intermediate_size = (
-                config.intermediate_size if hasattr(config, "intermediate_size") else 4 * config.hidden_size
-            )
-
-            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-
-            self.act_fn = nn.SiLU()
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-            gate_output = self.act_fn(self.gate_proj(hidden_states))
-            up_output = self.up_proj(hidden_states)
-            intermediate_output = gate_output * up_output
-            output = self.down_proj(intermediate_output)
-            output = self.dropout(output)
-            return output
-
     class HindiCausalLMLayer(nn.Module):
         def __init__(self, config: HindiCausalLMConfig, layer_idx: int):
             super().__init__()
             self.hidden_size = config.hidden_size
             self.self_attn = HindiCausalLMAttention(config=config, layer_idx=layer_idx)
-            self.mlp = HindiCausalLMMLP(config)
+            self.mlp = HindiCausalLMMLP(config) # Use the defined MLP class
             norm_class = RMSNorm if getattr(config, "normalization_layer", "rmsnorm") == "rmsnorm" else nn.LayerNorm
             self.input_layernorm = norm_class(config.hidden_size, eps=config.layer_norm_eps)
             self.post_attention_layernorm = norm_class(config.hidden_size, eps=config.layer_norm_eps)
@@ -380,16 +319,10 @@ if is_torch_available():
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
             attn_outputs = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
+                hidden_states=hidden_states, attention_mask=attention_mask, position_ids=position_ids,
+                past_key_value=past_key_value, output_attentions=output_attentions, use_cache=use_cache,
             )
-            hidden_states = attn_outputs[0]
-            attn_weights = attn_outputs[1]
-            present_key_value = attn_outputs[2]
+            hidden_states = attn_outputs[0]; attn_weights = attn_outputs[1]; present_key_value = attn_outputs[2]
             hidden_states = residual + hidden_states
 
             residual = hidden_states
@@ -398,12 +331,10 @@ if is_torch_available():
             hidden_states = residual + hidden_states
 
             outputs = (hidden_states,)
-            # Fixed E701
             if output_attentions:
-                outputs += (attn_weights,)
-            # Fixed E701
+                 outputs += (attn_weights,)
             if use_cache:
-                outputs += (present_key_value,)
+                 outputs += (present_key_value,)
             return outputs
 
     class HindiCausalLMPreTrainedModel(PreTrainedModel):
@@ -421,24 +352,20 @@ if is_torch_available():
             std = self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
             if isinstance(module, nn.Linear):
                 module.weight.data.normal_(mean=0.0, std=std)
-                # Fixed E701
                 if module.bias is not None:
                     module.bias.data.zero_()
             elif isinstance(module, nn.Embedding):
                 module.weight.data.normal_(mean=0.0, std=std)
-                # Fixed E701
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
             elif isinstance(module, (nn.LayerNorm, RMSNorm)):
-                # Fixed E701
-                if hasattr(module, "bias") and module.bias is not None:
-                    module.bias.data.zero_()
-                module.weight.data.fill_(1.0)
+                 if hasattr(module, 'bias') and module.bias is not None:
+                      module.bias.data.zero_()
+                 module.weight.data.fill_(1.0)
 
         def _set_gradient_checkpointing(self, module, value=False):
-            # Fixed E701
-            if isinstance(module, HindiCausalLMModel):
-                module.gradient_checkpointing = value
+             if isinstance(module, HindiCausalLMModel):
+                 module.gradient_checkpointing = value
 
     class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         def __init__(self, config: HindiCausalLMConfig):
@@ -454,11 +381,8 @@ if is_torch_available():
             self.gradient_checkpointing = False
             self.post_init()
 
-        def get_input_embeddings(self):
-            return self.embed_tokens
-
-        def set_input_embeddings(self, value):
-            self.embed_tokens = value
+        def get_input_embeddings(self): return self.embed_tokens
+        def set_input_embeddings(self, value): self.embed_tokens = value
 
         def forward(
             self,
@@ -473,35 +397,32 @@ if is_torch_available():
             return_dict: Optional[bool] = None,
             cache_position: Optional[torch.LongTensor] = None,
         ) -> Union[Tuple, BaseModelOutputWithPast]:
+
             output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-            output_hidden_states = (
-                output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-            )
+            output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
             use_cache = use_cache if use_cache is not None else self.config.use_cache
             return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
             if (input_ids is None) == (inputs_embeds is None):
-                raise ValueError("You must specify either input_ids or inputs_embeds")
+                 raise ValueError("You must specify either input_ids or inputs_embeds")
 
-            # Fixed E701 & E702
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once("use_cache=True is incompatible with gradient checkpointing...")
-                    use_cache = False
+                 if use_cache:
+                     logger.warning_once("use_cache=True is incompatible with gradient checkpointing...")
+                     use_cache = False
 
             past_key_values_length = 0
             if use_cache:
                 use_legacy_cache = not isinstance(past_key_values, Cache)
                 if past_key_values is None:
-                    if inputs_embeds is not None:
-                        batch_size, _, hidden_size = inputs_embeds.shape
-                        device, dtype = inputs_embeds.device, inputs_embeds.dtype
-                    else:
-                        batch_size, _ = input_ids.shape
-                        device, dtype = input_ids.device, self.embed_tokens.weight.dtype
-                        hidden_size = self.config.hidden_size
-                    past_key_values = DynamicCache(self.config, batch_size, hidden_size, device=device, dtype=dtype)
-                # Fixed E701
+                     if inputs_embeds is not None:
+                         batch_size, _, hidden_size = inputs_embeds.shape
+                         device, dtype = inputs_embeds.device, inputs_embeds.dtype
+                     else:
+                         batch_size, _ = input_ids.shape
+                         device, dtype = input_ids.device, self.embed_tokens.weight.dtype
+                         hidden_size = self.config.hidden_size
+                     past_key_values = DynamicCache(self.config, batch_size, hidden_size, device=device, dtype=dtype)
                 elif use_legacy_cache:
                     past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_key_values_length = past_key_values.get_seq_length()
@@ -509,47 +430,38 @@ if is_torch_available():
                 past_key_values = None
                 use_legacy_cache = False
 
-            # Fixed E701
             if inputs_embeds is None:
                 inputs_embeds = self.embed_tokens(input_ids)
             batch_size, seq_length = inputs_embeds.shape[:2]
 
             if cache_position is None:
                 if position_ids is None:
-                    device = inputs_embeds.device
-                    position_ids = torch.arange(
-                        past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-                    )
-                    position_ids = position_ids.unsqueeze(0)
+                     device = inputs_embeds.device
+                     position_ids = torch.arange(past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device)
+                     position_ids = position_ids.unsqueeze(0)
                 # else: use provided position_ids
             else:
-                position_ids = cache_position.unsqueeze(0)
+                 position_ids = cache_position.unsqueeze(0)
 
             # Prepare 4D attention mask
+            _attention_mask = None
             if self.config._attn_implementation == "flash_attention_2":
                 _attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             elif attention_mask is not None:
-                is_causal = past_key_values_length == 0
-                is_sdpa = self.config._attn_implementation == "sdpa" and not output_attentions
-                if is_sdpa:
-                    _attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                        attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-                    )
-                else:
-                    _attention_mask = _prepare_4d_causal_attention_mask(
-                        attention_mask,
-                        (batch_size, seq_length),
-                        inputs_embeds,
-                        past_key_values_length,
-                        is_causal=is_causal,
-                    )
-            # If attention_mask is None, and not FA2, create causal mask
+                 is_causal = past_key_values_length == 0
+                 is_sdpa = self.config._attn_implementation == "sdpa" and not output_attentions
+                 if is_sdpa:
+                     _attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                         attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                     )
+                 else:
+                     _attention_mask = _prepare_4d_causal_attention_mask(
+                         attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, is_causal=is_causal
+                     )
             elif seq_length > 1:
-                _attention_mask = _prepare_4d_causal_attention_mask(
-                    None, (batch_size, seq_length), inputs_embeds, past_key_values_length, is_causal=True
-                )
-            else:
-                _attention_mask = None
+                 _attention_mask = _prepare_4d_causal_attention_mask(
+                      None, (batch_size, seq_length), inputs_embeds, past_key_values_length, is_causal=True
+                  )
 
             hidden_states = inputs_embeds
             all_hidden_states = () if output_hidden_states else None
@@ -557,64 +469,37 @@ if is_torch_available():
             next_decoder_cache = None
 
             for decoder_layer in self.layers:
-                # Fixed E701
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
                 if self.gradient_checkpointing and self.training:
-
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
-                            return module(
-                                *inputs,
-                                past_key_value=None,
-                                output_attentions=output_attentions,
-                                use_cache=False,
-                                cache_position=cache_position,
-                            )
-
+                            return module(*inputs, past_key_value=None, output_attentions=output_attentions, use_cache=False, cache_position=cache_position)
                         return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(decoder_layer),
-                        hidden_states,
-                        _attention_mask,
-                        position_ids,
-                        use_reentrant=False,
-                    )
+                    layer_outputs = torch.utils.checkpoint.checkpoint(create_custom_forward(decoder_layer), hidden_states, _attention_mask, position_ids, use_reentrant=False)
                 else:
                     layer_outputs = decoder_layer(
-                        hidden_states,
-                        attention_mask=_attention_mask,
-                        position_ids=position_ids,
-                        past_key_value=past_key_values,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        cache_position=cache_position,
+                        hidden_states, attention_mask=_attention_mask, position_ids=position_ids,
+                        past_key_value=past_key_values, output_attentions=output_attentions, use_cache=use_cache,
+                        cache_position=cache_position
                     )
                 hidden_states = layer_outputs[0]
-                # Fixed E701
                 if use_cache:
                     next_decoder_cache = layer_outputs[-1]
-                # Fixed E701
                 if output_attentions:
                     all_self_attns += (layer_outputs[1],)
 
             hidden_states = self.norm(hidden_states)
-            # Fixed E701
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             next_cache = next_decoder_cache.to_legacy_cache() if use_cache and use_legacy_cache else next_decoder_cache
 
             if not return_dict:
-                return tuple(
-                    v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None
-                )
+                return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
             return BaseModelOutputWithPast(
-                last_hidden_state=hidden_states,
-                past_key_values=next_cache,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attns,
+                last_hidden_state=hidden_states, past_key_values=next_cache,
+                hidden_states=all_hidden_states, attentions=all_self_attns
             )
 
     class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel, GenerationMixin):
@@ -628,52 +513,61 @@ if is_torch_available():
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
             self.post_init()
 
-        def get_input_embeddings(self):
-            return self.model.embed_tokens
-
-        def set_input_embeddings(self, value):
-            self.model.embed_tokens = value
-
-        def get_output_embeddings(self):
-            return self.lm_head
-
-        def set_output_embeddings(self, new_embeddings):
-            self.lm_head = new_embeddings
-
+        def get_input_embeddings(self): return self.model.embed_tokens
+        def set_input_embeddings(self, value): self.model.embed_tokens = value
+        def get_output_embeddings(self): return self.lm_head
+        def set_output_embeddings(self, new_embeddings): self.lm_head = new_embeddings
         def tie_weights(self):
             if self.config.tie_word_embeddings:
                 output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
-                # Fixed E701
                 if output_embeddings is not None and input_embeddings is not None:
                     output_embeddings.weight = input_embeddings.weight
             super().tie_weights()
-
         def _untie_weights(self):
             if self.config.tie_word_embeddings:
-                output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
-                if output_embeddings is not None and input_embeddings is not None:
-                    # Fixed E701
-                    if output_embeddings.weight is input_embeddings.weight:
-                        output_embeddings.weight = nn.Parameter(output_embeddings.weight.clone())
+                 output_embeddings, input_embeddings = self.get_output_embeddings(), self.get_input_embeddings()
+                 if output_embeddings is not None and input_embeddings is not None:
+                     if output_embeddings.weight is input_embeddings.weight:
+                         output_embeddings.weight = nn.Parameter(output_embeddings.weight.clone())
+        def save_pretrained(self, *args, **kwargs): return super().save_pretrained(*args, **kwargs)
+        def prepare_inputs_for_generation(
+            self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        ):
+            past_length = 0
+            if past_key_values is not None:
+                if isinstance(past_key_values, Cache): past_length = past_key_values.get_seq_length()
+                else: past_length = past_key_values[0][0].shape[2]
+                input_ids_length = input_ids.shape[1]
+                if input_ids_length > past_length: input_ids = input_ids[:, past_length:]
+                else: input_ids = input_ids[:, -1:]
 
-        def save_pretrained(self, *args, **kwargs):
-            return super().save_pretrained(*args, **kwargs)
+            position_ids = kwargs.get("position_ids", None)
+            if attention_mask is not None and position_ids is None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                if past_key_values: position_ids = position_ids[:, past_length:]
+            elif cache_position is not None: position_ids = cache_position.unsqueeze(0)
+            elif position_ids is None:
+                 position_ids = torch.arange(past_length, input_ids.shape[1] + past_length, dtype=torch.long, device=input_ids.device)
+                 position_ids = position_ids.unsqueeze(0)
 
-        def prepare_inputs_for_generation(self, *args, **kwargs):
-            return super().prepare_inputs_for_generation(*args, **kwargs)
+            if inputs_embeds is not None and past_key_values is None: model_inputs = {"inputs_embeds": inputs_embeds}
+            else: model_inputs = {"input_ids": input_ids}
 
+            model_inputs.update({
+                "position_ids": position_ids, "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"), "attention_mask": attention_mask,
+                "cache_position": cache_position
+            })
+            return model_inputs
         def get_generation_config(self):
-            # Fixed E701
             if hasattr(self, "generation_config") and self.generation_config is not None:
-                config = self.generation_config
-            # Fixed E701
+                 config = self.generation_config
             else:
-                config = GenerationConfig()
-            # Fixed E702 (multiple lines)
+                 config = GenerationConfig()
             config.pad_token_id = self.config.pad_token_id
             config.bos_token_id = self.config.bos_token_id
             config.eos_token_id = self.config.eos_token_id
-            # Fixed E702
             config.max_length = getattr(self.config, "max_length", 20)
             config.do_sample = getattr(self.config, "do_sample", True)
             return config
@@ -685,34 +579,28 @@ if is_torch_available():
             position_ids: Optional[torch.LongTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
-            token_type_ids: Optional[torch.LongTensor] = None,
             labels: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
+            cache_position: Optional[torch.LongTensor] = None, # Accept cache_position
+            token_type_ids: Optional[torch.LongTensor] = None, # Accept token_type_ids
         ) -> Union[Tuple, CausalLMOutputWithPast]:
+
             if token_type_ids is not None:
                 warnings.warn("The `token_type_ids` argument is deprecated...")
 
             output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-            output_hidden_states = (
-                output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-            )
+            output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
             return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
             outputs = self.model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                inputs_embeds=inputs_embeds,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                cache_position=cache_position,
+                input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids,
+                past_key_values=past_key_values, inputs_embeds=inputs_embeds,
+                use_cache=use_cache, output_attentions=output_attentions, output_hidden_states=output_hidden_states,
+                return_dict=return_dict, cache_position=cache_position,
+                # token_type_ids is NOT passed to self.model
             )
 
             hidden_states = outputs[0]
@@ -732,23 +620,19 @@ if is_torch_available():
                 return (loss,) + output if loss is not None else output
 
             return CausalLMOutputWithPast(
-                loss=loss,
-                logits=logits,
-                past_key_values=outputs.past_key_values,
-                hidden_states=outputs.hidden_states,
-                attentions=outputs.attentions,
+                loss=loss, logits=logits, past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states, attentions=outputs.attentions
             )
 
         @staticmethod
         def _reorder_cache(past_key_values, beam_idx):
-            # Fixed E701
             if isinstance(past_key_values, Cache):
-                return past_key_values.reorder_cache(beam_idx)
-            else:  # Legacy cache format
-                reordered_past = ()
-                for layer_past in past_key_values:
-                    reordered_layer_past = tuple(
-                        past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
-                    )
-                    reordered_past += (reordered_layer_past,)
-                return reordered_past
+                 return past_key_values.reorder_cache(beam_idx)
+            else:
+                 reordered_past = ()
+                 for layer_past in past_key_values:
+                     reordered_layer_past = tuple(
+                         past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past
+                     )
+                     reordered_past += (reordered_layer_past,)
+                 return reordered_past
