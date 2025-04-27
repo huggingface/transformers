@@ -56,7 +56,7 @@ try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    # Add dummy class for SentencePiece tokenizer if not available
+     # Add dummy class for SentencePiece tokenizer if not available
     _import_structure["dummy_tokenizer_objects"] = ["HindiCausalLMTokenizer"]
 else:
     # No change needed in structure if sentencepiece is available
@@ -70,7 +70,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     # No change needed in structure if tokenizers is available
-    pass
+     pass
 
 
 if TYPE_CHECKING:
@@ -102,8 +102,8 @@ if TYPE_CHECKING:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        # Import dummy object if sentencepiece is not available
-        from .dummy_tokenizer_objects import HindiCausalLMTokenizer
+         # Import dummy object if sentencepiece is not available
+         from .dummy_tokenizer_objects import HindiCausalLMTokenizer
     else:
         # Import real tokenizer class if sentencepiece is available
         from .tokenization_hindi_causal_lm import HindiCausalLMTokenizer
@@ -116,7 +116,7 @@ if TYPE_CHECKING:
         # No fast tokenizer class to import if tokenizers lib is missing
         pass
     else:
-        # Import real fast tokenizer class if tokenizers lib is available
+         # Import real fast tokenizer class if tokenizers lib is available
         from .tokenization_hindi_causal_lm_fast import HindiCausalLMTokenizerFast
 
 else:
