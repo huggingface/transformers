@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Hindi Causal Language Model by ConvAI Innovations"""
 
 from typing import TYPE_CHECKING
@@ -24,13 +23,22 @@ from ...utils import (
     is_torch_available,
 )
 
-_import_structure = {
-    "configuration_hindi_causal_lm": [
-        "HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "HindiCausalLMConfig"
-    ],
-}
 
+_import_structure = {
+    "configuration_hindi_causal_lm": ["HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP", "HindiCausalLMConfig"],
+}
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .dummy_pt_objects import *
+else:
+    _import_structure["modeling_hindi_causal_lm"] = [
+        "HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "HindiCausalLMPreTrainedModel",
+        "HindiCausalLMModel",
+        "HindiCausalLMForCausalLM",
+    ]
 # Tokenizer
 try:
     if not is_sentencepiece_available():
@@ -64,10 +72,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hindi_causal_lm import (
-        HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        HindiCausalLMConfig,
-    )
+    from .configuration_hindi_causal_lm import HINDI_CAUSAL_LM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -100,9 +105,5 @@ if TYPE_CHECKING:
 
 else:
     import sys
-    sys.modules[__name__] = _LazyModule(
-        __name__,
-        globals()["__file__"],
-        _import_structure,
-        module_spec=__spec__
-    )
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
