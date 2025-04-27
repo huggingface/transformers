@@ -4108,6 +4108,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     elif device_type == "xpu":
                         torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
                         torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
+                    elif device_type == "hpu":
+                        torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
+                        torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
+
 
                 except Exception as e:
                     raise EnvironmentError(
