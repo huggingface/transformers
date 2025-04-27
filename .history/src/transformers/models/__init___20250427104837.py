@@ -134,7 +134,7 @@ if TYPE_CHECKING:
     from .helium import *
     from .herbert import *
     from .hiera import *
-    from .hindi_causal_lm import *  # Correct alphabetical position
+    from .hindi_causal_lm import * # Correct alphabetical position
     from .hubert import *
     from .ibert import *
     from .idefics import *
