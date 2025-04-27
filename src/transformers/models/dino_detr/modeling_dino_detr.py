@@ -1751,7 +1751,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         decoder_layer,
         num_decoder_layers,
         norm=None,
-        return_intermediate=False,
         d_model=256,
         query_dim=4,
         modulate_hw_attn=False,
@@ -1775,8 +1774,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             self.layers = []
         self.num_decoder_layers = config.num_decoder_layers
         self.norm = norm
-        self.return_intermediate = config.return_intermediate
-        self.query_dim = config.query_dim
         self.num_feature_levels = config.num_feature_levels
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
 
@@ -1977,7 +1974,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         dropout=0.0,
         activation="relu",
         normalize_before=False,
-        return_intermediate_dec=False,
         query_dim=4,
         num_patterns=0,
         modulate_hw_attn=False,
@@ -2008,7 +2004,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         rm_self_attn_layers=None,
         key_aware_type=None,
         # layer share
-        layer_share_type=None,
         # for detach
         rm_detach=None,
         decoder_sa_type="ca",
@@ -2038,16 +2033,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self.num_queries = config.num_queries
         self.random_refpoints_xy = config.random_refpoints_xy
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
-
-        if config.layer_share_type in ["encoder", "both"]:
-            config.enc_layer_share = True
-        else:
-            config.enc_layer_share = False
-        if config.layer_share_type in ["decoder", "both"]:
-            config.dec_layer_share = True
-        else:
-            config.dec_layer_share = False
-
         self.decoder_sa_type = config.decoder_sa_type
 
         # choose encoder layer type
@@ -2533,7 +2518,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         num_classes,
         num_queries,
         aux_loss=False,
-        iter_update=False,
         query_dim=2,
         random_refpoints_xy=False,
         fix_refpoints_hw=-1,
@@ -2620,8 +2604,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         self.aux_loss = config.auxiliary_loss
         self.box_pred_damping = None
-
-        self.iter_update = config.iter_update
 
         # prepare pred layers
         self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
