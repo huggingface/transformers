@@ -385,6 +385,8 @@
         title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
+      - local: model_doc/bitnet
+        title: BitNet
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
