@@ -605,13 +605,13 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
 
 
 class StyleTextToSpeech2GeneratorLayer(nn.Module):
-    def __init__(self, layer_idx, style_size, upsample_rates, resblock_kernel_sizes, upsample_initial_channel, resblock_dilation_sizes, upsample_kernel_sizes, n_fft, reflection_pad=False):
+    def __init__(self, layer_idx, config, reflection_pad=False):
         super().__init__()
         self.layer_idx = layer_idx
 
-        c_cur = upsample_initial_channel // (2 ** (layer_idx + 1))
-        if layer_idx + 1 < len(upsample_rates):
-            noise_conv_stride = math.prod(upsample_rates[layer_idx + 1:])
+        c_cur = config.upsample_initial_channel // (2 ** (layer_idx + 1))
+        if layer_idx + 1 < len(config.upsample_rates):
+            noise_conv_stride = math.prod(config.upsample_rates[layer_idx + 1:])
             noise_conv_padding = (noise_conv_stride + 1) // 2
             noise_conv_kernel_size = noise_conv_stride * 2
             noise_res_kernel_size = 7
@@ -622,15 +622,15 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
             noise_res_kernel_size = 11
 
         self.up = nn.ConvTranspose1d(
-            upsample_initial_channel // (2**layer_idx), 
+            config.upsample_initial_channel // (2**layer_idx), 
             c_cur,
-            upsample_kernel_sizes[layer_idx], 
-            upsample_rates[layer_idx],
-            padding=(upsample_kernel_sizes[layer_idx] - upsample_rates[layer_idx])//2
+            config.upsample_kernel_sizes[layer_idx], 
+            config.upsample_rates[layer_idx],
+            padding=(config.upsample_kernel_sizes[layer_idx] - config.upsample_rates[layer_idx])//2
         )
 
         self.noise_conv = nn.Conv1d(
-            n_fft + 2, 
+            config.gen_istft_n_fft + 2, 
             c_cur, 
             kernel_size=noise_conv_kernel_size, 
             stride=noise_conv_stride, 
@@ -639,7 +639,7 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
 
         self.noise_res = StyleTextToSpeech2AdainResBlock(
             c_cur, 
-            style_size, 
+            config.style_hidden_size, 
             noise_res_kernel_size, 
             (1, 3, 5)
         )
@@ -647,11 +647,11 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
         self.resblocks = nn.ModuleList([
             StyleTextToSpeech2AdainResBlock(
                 c_cur, 
-                style_size, 
+                config.style_hidden_size, 
                 kernel_size, 
                 dilation
             )
-            for kernel_size, dilation in zip(resblock_kernel_sizes, resblock_dilation_sizes)
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
         ])
 
         self.reflection_pad = nn.ReflectionPad1d((1, 0)) if reflection_pad else nn.Identity()
@@ -704,31 +704,20 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
 
 
 class StyleTextToSpeech2Generator(nn.Module):
-    def __init__(
-        self,
-        style_size,
-        resblock_kernel_sizes,
-        upsample_rates,
-        upsample_initial_channel,
-        resblock_dilation_sizes,
-        upsample_kernel_sizes,
-        n_fft,
-        hop_size,
-        sampling_rate
-    ):
+    def __init__(self, config):
         super().__init__()
 
-        self.num_kernels = len(resblock_kernel_sizes)
-        self.num_upsamples = len(upsample_rates)
-        self.n_fft = n_fft
-        self.hop_length = hop_size
-        self.win_length = n_fft
-        self.window = torch.hann_window(n_fft)
-        self.scale_factor = math.prod(upsample_rates) * hop_size
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.n_fft = config.gen_istft_n_fft
+        self.hop_length = config.gen_istft_hop_size
+        self.win_length = config.gen_istft_n_fft
+        self.window = torch.hann_window(config.gen_istft_n_fft)
+        self.scale_factor = math.prod(config.upsample_rates) * config.gen_istft_hop_size
 
         self.f0_upsamp = nn.Upsample(scale_factor=self.scale_factor)
         self.m_source = StyleTextToSpeech2HarmonicNoiseSourceFilter(
-            sampling_rate=sampling_rate,
+            sampling_rate=config.sampling_rate,
             upsample_scale=self.scale_factor,
             harmonic_num=8, 
             voiced_threshold=10
@@ -736,22 +725,16 @@ class StyleTextToSpeech2Generator(nn.Module):
 
         self.layers = nn.ModuleList([
             StyleTextToSpeech2GeneratorLayer(
-                layer_idx, 
-                style_size, 
-                upsample_rates, 
-                resblock_kernel_sizes, 
-                upsample_initial_channel, 
-                resblock_dilation_sizes, 
-                upsample_kernel_sizes, 
-                n_fft, 
-                reflection_pad=True if layer_idx == len(upsample_rates) - 1 else False
+                layer_idx,
+                config,
+                reflection_pad=True if layer_idx == len(config.upsample_rates) - 1 else False
             )
-            for layer_idx in range(len(upsample_rates))
+            for layer_idx in range(len(config.upsample_rates))
         ])    
                 
         self.conv_post = nn.Conv1d(
-            upsample_initial_channel // (2 ** (len(upsample_rates))), 
-            n_fft + 2,
+            config.upsample_initial_channel // (2 ** (len(config.upsample_rates))), 
+            config.gen_istft_n_fft + 2,
             7, 
             padding=3
         )
@@ -895,17 +878,7 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
             StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size, learned_shortcut=True),
             StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 512, config.style_hidden_size, learned_shortcut=True, upsample=True)
         ])
-        self.generator = StyleTextToSpeech2Generator(
-            config.style_hidden_size, 
-            config.resblock_kernel_sizes, 
-            config.upsample_rates, 
-            config.upsample_initial_channel, 
-            config.resblock_dilation_sizes, 
-            config.upsample_kernel_sizes, 
-            config.gen_istft_n_fft, 
-            config.gen_istft_hop_size,
-            config.sampling_rate
-        )
+        self.generator = StyleTextToSpeech2Generator(config)
 
         # apply weight norm
         nn.utils.parametrizations.weight_norm(self.pitch_conv)
