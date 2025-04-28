@@ -101,7 +101,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     We subtract 1 because during the packing process, it's easier to work with values like 0, 1, and 2. To make this possible,
     we add 1 to the original ternary weights (which are typically -1, 0, and 1) when packing them. When unpacking, we reverse
-    this by subtracting 1 to  restore the original ternary values.
+    this by subtracting 1 to restore the original ternary values.
     """
     packed_shape = packed.shape
 
