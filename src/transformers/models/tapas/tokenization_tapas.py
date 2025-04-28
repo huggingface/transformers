@@ -2359,7 +2359,7 @@ _ORDINAL_WORDS = [
     "second",
     "third",
     "fourth",
-    "fith",
+    "fifth",
     "sixth",
     "seventh",
     "eighth",

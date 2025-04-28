@@ -67,7 +67,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    """If tensors not close, or a and b aren't both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:

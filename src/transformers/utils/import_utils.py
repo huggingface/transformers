@@ -1728,14 +1728,14 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 LIBROSA_IMPORT_ERROR = """
-{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+{0} requires the librosa library. But that was not found in your environment. You can install them with pip:
 `pip install librosa`
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
-{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+{0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
 Please note that you may need to restart your runtime after installation.
 """
@@ -1877,7 +1877,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: Optional[Dict[str, object]] = None,
     ):
         super().__init__(name)
 
@@ -2412,7 +2412,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache()
-def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 
