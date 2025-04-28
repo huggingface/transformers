@@ -162,9 +162,9 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
                 if isinstance(condition_node, ast.Call):
                     check_function = getattr(condition_node.func, "id", "")
                     if (
-                        check_function.endswith("available") and
-                        check_function.startswith("is_flash_attn") or
-                        hasattr(transformers.utils.import_utils, check_function)
+                        check_function.endswith("available")
+                        and check_function.startswith("is_flash_attn")
+                        or hasattr(transformers.utils.import_utils, check_function)
                     ):
                         # Don't recurse into "if flash_attn_available()" or any "if library_available" blocks
                         # that appears in `transformers.utils.import_utils` and ignore imports in them
