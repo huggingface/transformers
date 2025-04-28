@@ -1364,7 +1364,7 @@ class UdopStack(UdopPreTrainedModel):
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
-                raise ValueError("You have to intialize the model with valid token embeddings")
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
@@ -1716,9 +1716,9 @@ class UdopModel(UdopPreTrainedModel):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -1892,9 +1892,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -2104,10 +2104,10 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
