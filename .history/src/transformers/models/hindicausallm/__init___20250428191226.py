@@ -1,13 +1,7 @@
 # flake8: noqa
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    _LazyModule,
-    OptionalDependencyNotAvailable,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
+from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_sentencepiece_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
     "configuration_hindicausallm": ["HindiCausalLMConfig", "HINDICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP"],
