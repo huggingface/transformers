@@ -845,6 +845,10 @@ class PretrainedConfig(PushToHubMixin):
 
         self._remove_keys_not_serialized(serializable_config_dict)
 
+        # Key removed only in diff dict
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
+
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
@@ -1005,8 +1009,6 @@ class PretrainedConfig(PushToHubMixin):
         # Do not serialize `base_model_pp_plan` for now
         if "base_model_pp_plan" in d:
             del d["base_model_pp_plan"]
-        if "_name_or_path" in d:
-            del d["_name_or_path"]
         for value in d.values():
             if isinstance(value, dict):
                 self._remove_keys_not_serialized(value)
