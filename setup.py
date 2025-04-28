@@ -149,7 +149,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-rerunfailures",
     "pytest-timeout",
@@ -189,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1",
+    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",

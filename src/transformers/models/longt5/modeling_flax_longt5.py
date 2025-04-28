@@ -145,7 +145,7 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp
 def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
-    This implementation is a simlified version of the original Flaxformr implementation adopted from:
+    This implementation is a simplified version of the original Flaxformr implementation adopted from:
     https://github.com/google/flaxformer/blob/main/flaxformer/architectures/longt5/long_attention.py.
 
     In our scenario, as we use this strategy only for a decoder, orphan tokens, i.e. those tokens which do not make for

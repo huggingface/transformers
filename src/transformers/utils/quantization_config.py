@@ -283,7 +283,7 @@ class HqqConfig(QuantizationConfigMixin):
         nbits (`int`, *optional*, defaults to 4):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, *optional*, defaults to 64):
-            Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
+            Group-size value. Supported values are any value that is divisible by weight.shape[axis]).
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
         axis (`Optional[int]`, *optional*):
@@ -661,7 +661,7 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
             speed up inference but the perplexity may become slightly worse. Also known as act-order.
         sym (`bool`, *optional*, defaults to `True`):
-            Whether to use symetric quantization.
+            Whether to use symmetric quantization.
         true_sequential (`bool`, *optional*, defaults to `True`):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
@@ -1729,7 +1729,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             # Handle AOBaseConfig serialization
             from torchao.core.config import config_to_dict
 
-            # For now we assume there is 1 config per Transfomer, however in the future
+            # For now we assume there is 1 config per Transformer, however in the future
             # We may want to support a config per fqn.
             d["quant_type"] = {"default": config_to_dict(self.quant_type)}
 
