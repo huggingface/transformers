@@ -142,7 +142,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
         return patches
 
     if n_patches_per_batch < 4:
-        # for each batch, atleast 4 small patches are required to
+        # for each batch, at least 4 small patches are required to
         # recreate a large square patch from merging them and later padding is applied
         # 3 x (8x8) patches becomes 1 x ( 8x8 ) patch (extra patch ignored, no padding)
         # 4 x (8x8) patches becomes 1 x (16x16) patch (padding later)

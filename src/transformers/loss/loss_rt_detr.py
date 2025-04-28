@@ -99,7 +99,7 @@ class RTDetrHungarianMatcher(nn.Module):
         target_bbox = torch.cat([v["boxes"] for v in targets])
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
         if self.use_focal_loss:
             out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
             out_prob = out_prob[:, target_ids]

@@ -405,7 +405,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
         """
         super().__init__()
         if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
-            raise ValueError("All costs cant be 0")
+            raise ValueError("All costs can't be 0")
 
         self.num_points = num_points
         self.cost_class = cost_class

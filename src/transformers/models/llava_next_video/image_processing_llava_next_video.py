@@ -60,7 +60,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         image_grid_pinpoints (`List` *optional*, defaults to `[[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]`):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
             based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processinf videos.
+            method. Not used for processing videos.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):

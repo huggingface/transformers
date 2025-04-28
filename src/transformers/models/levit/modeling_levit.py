@@ -246,7 +246,7 @@ class LevitAttentionSubsample(nn.Module):
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
-        # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         self.keys_values = MLPLayerWithBN(input_dim, self.out_dim_keys_values)
         self.queries_subsample = LevitSubsample(stride, resolution_in)
         self.queries = MLPLayerWithBN(input_dim, key_dim * num_attention_heads)
@@ -370,7 +370,7 @@ class LevitStage(nn.Module):
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
-        # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         for _ in range(depths):
             self.layers.append(
                 LevitResidualLayer(
