@@ -351,7 +351,7 @@ class MolmoTextConfig(PretrainedConfig):
         num_hidden_layers=28,
         head_dim=128,
         vocab_size=152192,
-        additional_embedding_size=128,
+        additional_embedding_size=0,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
