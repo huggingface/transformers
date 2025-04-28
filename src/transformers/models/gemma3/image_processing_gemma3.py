@@ -140,7 +140,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     ):
         """
         Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`np.ndarray`):

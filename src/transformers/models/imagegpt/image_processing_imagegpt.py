@@ -66,7 +66,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     Args:
         clusters (`np.ndarray` or `List[List[int]]`, *optional*):
-            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overriden by `clusters`
+            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by

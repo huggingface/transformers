@@ -138,7 +138,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~DetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1278,8 +1278,8 @@ class DetrModel(DetrPreTrainedModel):
         flattened_mask = mask.flatten(1)
 
         # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
+        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
@@ -1603,8 +1603,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
         flattened_mask = mask.flatten(1)
 
         # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
+        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.detr.model.encoder(
                 inputs_embeds=flattened_features,
@@ -1739,7 +1739,7 @@ class DetrMaskHeadSmallConv(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with
+        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with
         # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
         # We expand the projected feature map to match the number of heads.
         x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
