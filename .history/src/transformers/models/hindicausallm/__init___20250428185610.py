@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 # Each key is the filename (without .py) and the value is a list of object names expected in that file.
 _import_structure = {
     "configuration_hindicausallm": ["HindiCausalLMConfig", "HINDICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP"],
-    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"],  # Assuming this exists or will be created
+    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"], # Assuming this exists or will be created
 }
 
 # Step 2: Add conditional imports based on dependencies.
