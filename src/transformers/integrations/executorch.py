@@ -329,7 +329,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         This util function is designed to test exported models by simulating the generation process.
         It processes the input prompt tokens sequentially (no parallel prefill).
         This generate function is not intended to replace the original `generate` method, and the support
-        for leveraging the original `generate` is potentially planed!
+        for leveraging the original `generate` is potentially planned!
 
         Args:
             exported_program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.

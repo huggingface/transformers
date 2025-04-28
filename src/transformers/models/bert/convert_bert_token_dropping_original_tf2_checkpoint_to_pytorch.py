@@ -164,7 +164,7 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
     new_model = BertForMaskedLM.from_pretrained(pytorch_dump_path)
     print(new_model.eval())
 
-    print("Model conversion was done sucessfully!")
+    print("Model conversion was done successfully!")
 
 
 if __name__ == "__main__":

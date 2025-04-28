@@ -1850,7 +1850,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
             # Though that's not through between layers so the layers use as input the output of the previous layer
-            # withtout layer norm
+            # without layer norm
             if output_hidden_states:
                 all_hidden_states += (self.layer_norm(hidden_states),)
 

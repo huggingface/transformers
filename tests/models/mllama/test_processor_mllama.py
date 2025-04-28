@@ -333,7 +333,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=text, images=None, padding=True)
 
     def test_unstructured_kwargs_batched(self):
-        # Overriden because Mllama expects images in nested format. For 2 images it can't infer
+        # Overridden because Mllama expects images in nested format. For 2 images it can't infer
         # the correct nesting, so we better throw an error
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
