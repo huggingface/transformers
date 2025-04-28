@@ -15,7 +15,8 @@
 """PyTorch HindiCausalLM model."""
 
 import math
-from typing import Optional, Tuple, Union
+from functools import partial  # For gradient checkpointing with kwargs
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -33,12 +34,15 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,  # For adding examples
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -122,8 +126,12 @@ class HindiCausalLMAttention(nn.Module):
             )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -154,13 +162,27 @@ class HindiCausalLMAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        # --- RoPE application removed ---
+        # Note: position_ids are no longer used here
+
+        kv_seq_len = key_states.shape[-2]  # Seq length of K before cache update
         if past_key_value is not None:
-            if self.layer_idx is None:  # Ensure layer_idx is available for cache operations
+            if self.layer_idx is None: # Ensure layer_idx is available for cache operations
                 raise ValueError(
                     "The cache structure requires a layer index, but it is not passed to the attention module."
                 )
+            # Dynamic Cache compatibility check
+            if hasattr(past_key_value, "get_usable_length"):
+                 # For dynamic cache, the effective kv sequence length is calculated based on the cache state
+                 # The kv_seq_len variable isn't strictly needed here as the cache handles lengths internally
+                 pass
+            else:
+                # Fallback for tuple KV cache (might be needed for some tests)
+                # kv_seq_len += past_key_value[0].shape[-2] # This logic is flawed for tuple cache
+                pass # Tuple cache handling is less robust, rely on mask shape later
+
             # Update the cache and get the full key/value sequences
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {})
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {}) # Empty cache_kwargs
 
         # GQA: Repeat K/V heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -271,11 +293,11 @@ class HindiCausalLMDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
+        # Self Attention - Removed position_embeddings argument
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,  # Pass position_ids even if unused by attn
+            position_ids=position_ids, # Pass position_ids even if unused by attn
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -334,24 +356,31 @@ class HindiCausalLMPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            # Use truncated normal initialization as in the original notebook
-            torch.nn.init.trunc_normal_(module.weight, mean=0.0, std=std, a=-2 * std, b=2 * std)
+            # Slightly different target mean desired? Convai notebook uses mean=0.0
+            # module.weight.data.normal_(mean=0.0, std=std)
+            # Following common practice: init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+            # Or simply use truncated normal like original example:
+            torch.nn.init.trunc_normal_(module.weight, mean=0.0, std=std, a=-2*std, b=2*std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            torch.nn.init.trunc_normal_(module.weight, mean=0.0, std=std, a=-2 * std, b=2 * std)
+            # module.weight.data.normal_(mean=0.0, std=std)
+            torch.nn.init.trunc_normal_(module.weight, mean=0.0, std=std, a=-2*std, b=2*std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, HindiCausalLMRMSNorm):
             # Initialize RMSNorm weights to 1
             module.weight.data.fill_(1.0)
 
+
     def _setup_cache(self, cache_cls: type, max_batch_size: Optional[int], max_cache_len: Optional[int] = None):
         # Setup cache based on config `cache_implementation`
         if self.config.cache_implementation == "static":
             if max_cache_len is None:
                 max_cache_len = self.config.max_position_embeddings
-            cache = cache_cls(self.config, max_batch_size, max_cache_len, device=self.device, dtype=self.dtype)
+            cache = cache_cls(
+                self.config, max_batch_size, max_cache_len, device=self.device, dtype=self.dtype
+            )
             self.model.past_key_values = cache  # Assign to model attribute
         elif self.config.cache_implementation == "dynamic":
             self.model.past_key_values = cache_cls()  # Dynamic cache takes no args initially
@@ -505,24 +534,19 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         if use_cache:
             cache_cls = StaticCache if self.config.cache_implementation == "static" else DynamicCache
             if past_key_values is None:
-                # Initialize cache if it's None
-                # Determine max_cache_len based on implementation
-                max_cache_len = (
-                    None if self.config.cache_implementation == "dynamic" else self.config.max_position_embeddings
-                )
-                past_key_values = cache_cls(
-                    self.config, batch_size, max_cache_len, device=self.device, dtype=self.dtype
-                )
-                past_key_values_length = 0  # Start at 0 if initializing
+                 max_cache_len = None if self.config.cache_implementation == "dynamic" else self.config.max_position_embeddings
+                 past_key_values = cache_cls(
+                     self.config, batch_size, max_cache_len, device=self.device, dtype=self.dtype
+                 )
+                 past_key_values_length = 0
             else:
-                # Get length if cache is provided
-                past_key_values_length = past_key_values.get_seq_length()
+                 past_key_values_length = past_key_values.get_seq_length()
         elif past_key_values is not None:
-            # Get length even if use_cache=False, needed for mask adjustment
-            if isinstance(past_key_values, Cache):
-                past_key_values_length = past_key_values.get_seq_length()
-            else:  # Fallback for tuple cache
-                past_key_values_length = past_key_values[0][0].shape[2]
+             if isinstance(past_key_values, Cache):
+                 past_key_values_length = past_key_values.get_seq_length()
+             else:
+                  past_key_values_length = past_key_values[0][0].shape[2]
+
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -531,22 +555,13 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         if position_ids is None:
             # Default position_ids behavior if not provided
             position_ids = torch.arange(
-                past_key_values_length,
-                past_key_values_length + seq_length,
-                dtype=torch.long,
-                device=inputs_embeds.device,
+                past_key_values_length, past_key_values_length + seq_length, dtype=torch.long, device=inputs_embeds.device
             )
             position_ids = position_ids.unsqueeze(0)
 
-        # --- Removed RoPE embedding calculation ---
-
         # Attention mask handling
-        attn_implementation = (
-            self.config._attn_implementation
-            if hasattr(self.config, "_attn_implementation") and self.config._attn_implementation is not None
-            else "eager"
-        )
-        is_causal = past_key_values is None or past_key_values_length == 0  # Use past_key_values_length
+        attn_implementation = self.config._attn_implementation if hasattr(self.config, "_attn_implementation") and self.config._attn_implementation is not None else "eager"
+        is_causal = past_key_values is None or past_key_values_length == 0 # More robust check
 
         # Check if SDPA needs 4D mask
         needs_4d_attn_mask = attn_implementation in ["eager", "sdpa"] or output_attentions
@@ -555,38 +570,34 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 attention_mask,
                 (batch_size, seq_length),
                 inputs_embeds,
-                past_key_values_length,  # Pass calculated length
+                past_key_values_length,
                 sliding_window=None,
             )
         # Check if FA2 needs mask modification or can be None
         elif attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:  # Check for padding
-                attention_mask = AttentionMaskConverter._unpad_unattended(
-                    attention_mask, past_key_values_length
-                )  # Pass calculated length
-            elif is_causal:  # No padding and prefill phase
-                attention_mask = None
-            elif attention_mask is not None:
-                pass
+            if attention_mask is not None and 0.0 in attention_mask: # Check for padding
+                attention_mask = AttentionMaskConverter._unpad_unattended(attention_mask, past_key_values_length)
+            elif is_causal: # No padding and prefill phase
+                attention_mask = None # FA2 handles causal mask internally
+            # Else (no padding, generation phase), mask might be needed if batch > 1?
+            # For simplicity/safety, let's assume FA2 handles causal case without mask if no padding.
+            # If batching > 1 in generation requires mask, add logic here.
+            elif attention_mask is not None: # Keep mask if provided (might be for non-causal tests)
+                 pass # Use the provided mask
             else:
-                attention_mask = None
+                 attention_mask = None # Assume causal if no mask provided and not padding
 
         # Else (e.g., custom implementation), fall back to standard 4D mask
-        elif attention_mask is not None:  # If a mask was provided, ensure it's 4D
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,  # Pass calculated length
-            )
+        elif attention_mask is not None: # If a mask was provided, ensure it's 4D
+             attention_mask = _prepare_4d_causal_attention_mask(
+                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+             )
         # Else (no mask provided, not FA2/SDPA/eager), assume standard causal needed
-        elif not needs_4d_attn_mask and attn_implementation != "flash_attention_2":
-            attention_mask = _prepare_4d_causal_attention_mask(
-                None,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,  # Pass calculated length
-            )
+        elif not needs_4d_attn_mask and not attn_implementation == "flash_attention_2":
+              attention_mask = _prepare_4d_causal_attention_mask(
+                 None, (batch_size, seq_length), inputs_embeds, past_key_values_length
+             )
+
 
         hidden_states = inputs_embeds
 
@@ -600,17 +611,18 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
+                # GC needs use_reentrant=False potentially for kwargs
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    past_key_values,  # Pass the full cache object
+                    past_key_values, # Pass the full cache object for context if needed inside GC func
                     output_attentions,
-                    use_cache=False,  # Force False inside GC
+                    use_cache=False, # Force False inside GC
                     cache_position=cache_position,
                 )
-                # Cache state is lost in GC
+                # Cache state is lost in GC, present_key_value will be None
                 present_key_value = None
             else:
                 layer_outputs = decoder_layer(
@@ -623,13 +635,18 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
                     cache_position=cache_position,
                 )
                 # Extract present_key_value if use_cache is True
-                present_key_value = layer_outputs[-1] if use_cache else None
+                if use_cache:
+                     present_key_value = layer_outputs[-1]
+
 
             hidden_states = layer_outputs[0]
 
-            # Update the cache object reference if needed
-            if use_cache and present_key_value is not None:
+            # Update the cache outside the layer call if using GC, but we can't recover state
+            # If not using GC, the Cache object is updated in-place by the layer,
+            # so `next_decoder_cache` reference will point to the updated object.
+            if use_cache and not (self.gradient_checkpointing and self.training):
                 next_decoder_cache = present_key_value
+
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -640,14 +657,11 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        # Assign the final cache state
-        next_cache = next_decoder_cache
-
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(v for v in [hidden_states, next_decoder_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,  # Return the final cache state
+            past_key_values=next_decoder_cache, # Return the final cache state
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
@@ -731,7 +745,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
         भारत एक विशाल देश है जो दुनिया के सबसे बड़े लोकतंत्रों में से एक है।
-        ```"""
+        ```""" # Added Returns example from previous step
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -771,12 +785,8 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
 
         if not return_dict:
             # Don't return cache obj in tuple output if not requested
-            output_items = outputs[1:]  # Get all outputs after last_hidden_state
-            # Explicitly handle case where past_key_values might be None even if use_cache=True (e.g. first step)
-            if use_cache and outputs.past_key_values is None:
-                output_items = (None,) + outputs[2:]  # Insert None for cache
-
-            output = (logits,) + output_items
+            output_without_cache = outputs[1:] if use_cache else outputs[1:]
+            output = (logits,) + output_without_cache
             return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
@@ -796,35 +806,30 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         # Handle past_key_values and cache_position logic
         past_length = 0
         use_static_cache = isinstance(past_key_values, StaticCache)
-        max_cache_length = None  # Initialize
 
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                past_length = (
-                    cache_position[0].item() if cache_position is not None else past_key_values.get_seq_length()
-                )
-                if use_static_cache:
-                    max_cache_length = getattr(past_key_values, "max_cache_length", None)
-            else:  # Tuple cache fallback
+                past_length = cache_position[0].item() if cache_position is not None else past_key_values.get_seq_length() # Use item() for single value tensor
+                max_cache_length = getattr(past_key_values, "max_cache_length", None) # Get max length if static
+            else: # Tuple cache fallback
                 past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
             # Keep only the unprocessed tokens
-            if input_ids.shape[1] > 1:
-                if not use_static_cache:  # Slice only for dynamic cache or prefill
-                    if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                        input_ids = input_ids[:, -1:]
-                    elif past_length < input_ids.shape[1]:
-                        input_ids = input_ids[:, past_length:]
-                    else:  # Should ideally be len 1 if cache is present
-                        input_ids = input_ids[:, -1:]
-                # For static cache, generation input is always length 1
-                elif use_static_cache:
-                    input_ids = input_ids[:, -1:]
+            if input_ids.shape[1] > 1: # Only slice if input_ids is longer than 1 (not in generation phase)
+                 if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                     # This case implies prefill stage with left padding handled
+                     input_ids = input_ids[:, -1:]
+                 elif past_length < input_ids.shape[1]:
+                      input_ids = input_ids[:, past_length:]
+            # If input_ids is already length 1, assume it's the next token
+            # No slicing needed for static cache generation phase as input_ids is already 1
 
         # Determine the new cache position
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
         else:
+            # Increment position for the new token(s)
             cache_position = cache_position[-1:] + 1
 
         position_ids = kwargs.get("position_ids", None)
@@ -833,10 +838,11 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values is not None:
-                if not use_static_cache:  # Slice dynamic position_ids
-                    position_ids = position_ids[:, past_length:]
-                else:  # Use the calculated cache_position for static cache
-                    position_ids = cache_position.unsqueeze(0)
+                 if not use_static_cache: # Slice dynamic position_ids
+                     position_ids = position_ids[:, past_length:]
+                 else: # Use the calculated cache_position for static cache
+                      position_ids = cache_position.unsqueeze(0)
+
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -846,26 +852,18 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
 
         # Update attention mask for static cache if necessary
         if use_static_cache:
-            if max_cache_length is None:  # Try to get from past_key_values again if available
-                max_cache_length = getattr(past_key_values, "max_cache_length", None)
-            if max_cache_length is None:  # Fallback if still None
-                max_cache_length = self.config.max_position_embeddings
-                logger.warning_once(
-                    "StaticCache max_cache_length not found, defaulting to config.max_position_embeddings."
-                )
+             # The attention mask needs to be the full length defined by the cache
+             current_length = cache_position[-1].item() + 1 # New total length after adding token
+             if attention_mask is None: # Create mask if none exists
+                 attention_mask = torch.ones((input_ids.shape[0], max_cache_length), device=input_ids.device, dtype=torch.long)
+             elif attention_mask.shape[1] < max_cache_length:
+                 # Pad the existing mask if it's shorter than the max cache length
+                 delta = max_cache_length - attention_mask.shape[1]
+                 attention_mask = torch.cat([attention_mask.new_zeros((attention_mask.shape[0], delta)), attention_mask], dim=1)
+             # Ensure the current token's position is unmasked (might already be if mask was long enough)
+             if current_length <= max_cache_length:
+                  attention_mask[:, current_length - 1] = 1
 
-            cache_position[-1].item() + 1
-            if attention_mask is None:
-                attention_mask = torch.ones(
-                    (input_ids.shape[0], max_cache_length), device=input_ids.device, dtype=torch.long
-                )
-            elif attention_mask.shape[1] < max_cache_length:
-                # Pad the existing mask
-                delta = max_cache_length - attention_mask.shape[1]
-                attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], delta))], dim=1
-                )  # Pad right with 1s
-            # No need to explicitly set current pos to 1 due to padding with 1s
 
         model_inputs.update(
             {
@@ -881,9 +879,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     @staticmethod
     def _reorder_cache(past_key_values: Cache, beam_idx: torch.LongTensor) -> Cache:
         if past_key_values is None:
-            logger.warning(
-                "You are attempting to reorder past_key_values (`past_key_values`), but `past_key_values` is None. "
-            )
+            logger.warning("You are attempting to reorder past_key_values (`past_key_values`), but `past_key_values` is None. ")
             return None
         return past_key_values.reorder_cache(beam_idx)
 
@@ -908,7 +904,7 @@ class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
         super().__init__(config)
         # Add num_labels to config if not present, needed for classification head
         if not hasattr(config, "num_labels"):
-            config.num_labels = 2  # Default to 2 if not specified
+             config.num_labels = 2 # Default to 2 if not specified
         self.num_labels = config.num_labels
         self.model = HindiCausalLMModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
@@ -946,7 +942,7 @@ class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
 
         Returns:
             Union[Tuple, SequenceClassifierOutputWithPast]
-        """
+        """ # Added Returns placeholder
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Pass cache_position=None as it's not relevant for sequence classification forward pass
@@ -971,16 +967,22 @@ class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None:
+             # For sequence classification, default behavior is to use the last token
+             # if no pad token ID is defined (or if batch size is 1).
             sequence_lengths = -1
             if batch_size != 1:
-                logger.warning_once(
-                    f"{self.__class__.__name__} requires a pad_token_id to be set for batch sizes > 1 for sequence classification. Defaulting to last token."
-                )
+                 logger.warning_once(f"{self.__class__.__name__} requires a pad_token_id to be set for batch sizes > 1 for sequence classification. Defaulting to last token.")
         else:
             if input_ids is not None:
-                non_padding_mask = input_ids.ne(self.config.pad_token_id)
-                sequence_lengths = non_padding_mask.sum(dim=1) - 1
-                sequence_lengths = torch.clamp(sequence_lengths, min=0)
+                # Find the last non-padding token index
+                # (input_ids != pad_token_id) creates a mask of non-padding tokens
+                # .cumsum(dim=1) counts non-padding tokens up to each position
+                # .argmax(dim=1) finds the index of the *last* non-padding token (where cumsum is max)
+                # Clamp ensures we handle sequences of only padding tokens gracefully
+                sequence_lengths = torch.max(
+                    (input_ids != self.config.pad_token_id).int().cumsum(dim=1).argmax(dim=1),
+                    torch.zeros(1, device=input_ids.device, dtype=torch.long),
+                )
             else:
                 sequence_lengths = -1
                 logger.warning_once(
@@ -1016,9 +1018,8 @@ class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
                 loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             # Omit past_key_values from output tuple if not needed for classification
-            # outputs[1] is past_key_values
-            output_items = outputs[2:] if use_cache else outputs[1:]  # Adjust slice based on use_cache
-            output = (pooled_logits,) + output_items
+            # outputs index 1 is past_key_values, so we skip it
+            output = (pooled_logits,) + outputs[1:] # Skip past_key_values in output tuple
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
@@ -1028,7 +1029,6 @@ class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
 # TokenClassification head can also be added if needed, following Llama pattern:
 # class HindiCausalLMForTokenClassification(HindiCausalLMPreTrainedModel): ...
