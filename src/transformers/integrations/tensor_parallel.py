@@ -160,7 +160,7 @@ def distribute_module(
     output_fn=None,
 ) -> nn.Module:
     """
-    Copy pasted from torch's function but we remove the communications (partitionning)
+    Copy pasted from torch's function but we remove the communications (partitioning)
     as well as buffer registering that is similarly not efficient.
     """
     if len(module._forward_pre_hooks) == 0:
@@ -225,7 +225,7 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        # this op cannot be asynch, otherwise it completely breaks the outputs of models
+        # this op cannot be async, otherwise it completely breaks the outputs of models
         torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False)
         return outputs
 

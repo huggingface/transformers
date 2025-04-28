@@ -164,7 +164,7 @@ class UniSpeechConfig(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
         replace_prob (`float`, *optional*, defaults to 0.5):
-            Propability that transformer feature is replaced by quantized feature for pretraining.
+            Probability that transformer feature is replaced by quantized feature for pretraining.
 
     Example:
 

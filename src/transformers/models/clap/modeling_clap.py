@@ -1067,7 +1067,7 @@ CLAP_TEXT_INPUTS_DOCSTRING = r"""
 CLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
@@ -1105,7 +1105,7 @@ CLAP_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

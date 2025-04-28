@@ -72,7 +72,7 @@ class DonutImageProcessor(BaseImageProcessor):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
-            random amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+            random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
@@ -349,7 +349,7 @@ class DonutImageProcessor(BaseImageProcessor):
                 Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-                amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+                amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
                 padded to the largest image size in the batch.
             random_padding (`bool`, *optional*, defaults to `self.random_padding`):
                 Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
