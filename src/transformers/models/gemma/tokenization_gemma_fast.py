@@ -183,7 +183,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
