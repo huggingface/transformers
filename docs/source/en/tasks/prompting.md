@@ -101,7 +101,7 @@ for output in outputs:
 # Date: 09/28/1960
 ```
 
-The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples and it doesn’t work well on complex reasoning tasks.
+The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples, and it may not work well on complex reasoning tasks.
 
 **Structuring Few-Shot Examples for Chat-Trained Models**
 
