@@ -167,7 +167,7 @@ else:
             ("vit_hybrid", ("ViTHybridImageProcessor",)),
             ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vitmatte", ("VitMatteImageProcessor",)),
+            ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
