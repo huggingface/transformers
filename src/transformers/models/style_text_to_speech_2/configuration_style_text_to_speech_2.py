@@ -129,58 +129,45 @@ class StyleTextToSpeech2DecoderConfig(PretrainedConfig):
 
 class StyleTextToSpeech2Config(PretrainedConfig):
     model_type = "style_text_to_speech_2"
+    sub_configs = {"acoustic_text_encoder_config": StyleTextToSpeech2AcousticTextEncoderConfig, "predictor_config": StyleTextToSpeech2PredictorConfig, "decoder_config": StyleTextToSpeech2DecoderConfig}
 
     def __init__(
         self,
+        acoustic_text_encoder_config=None,
+        predictor_config=None,
+        decoder_config=None,
         style_size=256,
-        acoustic_text_encoder_config: Dict=None,
-        predictor_config: Dict=None,
-        decoder_config: Dict=None,
         initializer_range=0.02,
         **kwargs,
     ):
         if acoustic_text_encoder_config is None:
-            acoustic_text_encoder_config = {}
-            logger.info("acoustic_text_encoder_config is None. Initializing the acoustic text encoder with default values.")
+            self.acoustic_text_encoder_config = StyleTextToSpeech2AcousticTextEncoderConfig()
+            logger.info("acoustic_text_encoder_config is None, using default style-text-to-speech-2 acoustic text encoder config")
+        elif isinstance(acoustic_text_encoder_config, dict):
+            self.acoustic_text_encoder_config = StyleTextToSpeech2AcousticTextEncoderConfig(**acoustic_text_encoder_config)
+        elif isinstance(acoustic_text_encoder_config, StyleTextToSpeech2AcousticTextEncoderConfig):
+            self.acoustic_text_encoder_config = acoustic_text_encoder_config
 
         if predictor_config is None:
-            predictor_config = {}
-            logger.info("predictor_config is None. Initializing the predictor with default values.")
+            self.predictor_config = StyleTextToSpeech2PredictorConfig()
+            logger.info("predictor_config is None, using default style-text-to-speech-2 predictor config")
+        elif isinstance(predictor_config, dict):
+            self.predictor_config = StyleTextToSpeech2PredictorConfig(**predictor_config)
+        elif isinstance(predictor_config, StyleTextToSpeech2PredictorConfig):
+            self.predictor_config = predictor_config
 
         if decoder_config is None:
-            decoder_config = {}
-            logger.info("decoder_config is None. Initializing the decoder with default values.")
+            self.decoder_config = StyleTextToSpeech2DecoderConfig()
+            logger.info("decoder_config is None, using default style-text-to-speech-2 decoder config")
+        elif isinstance(decoder_config, dict):
+            self.decoder_config = StyleTextToSpeech2DecoderConfig(**decoder_config)
+        elif isinstance(decoder_config, StyleTextToSpeech2DecoderConfig):
+            self.decoder_config = decoder_config
 
         self.style_size = style_size
-
-        self.acoustic_text_encoder_config = StyleTextToSpeech2AcousticTextEncoderConfig(**acoustic_text_encoder_config)
-        self.predictor_config = StyleTextToSpeech2PredictorConfig(**predictor_config)
-        self.decoder_config = StyleTextToSpeech2DecoderConfig(**decoder_config)
-
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_sub_model_configs(
-        cls,
-        acoustic_text_encoder_config: StyleTextToSpeech2AcousticTextEncoderConfig,
-        predictor_config: StyleTextToSpeech2PredictorConfig,
-        decoder_config: StyleTextToSpeech2DecoderConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`StyleTextToSpeech2Config`] (or a derived class) from StyleTextToSpeech2 sub-models configuration.
-
-        Returns:
-            [`StyleTextToSpeech2Config`]: An instance of a configuration object
-        """
-        return cls(
-            acoustic_text_encoder_config=acoustic_text_encoder_config.to_dict(),
-            predictor_config=predictor_config.to_dict(),
-            decoder_config=decoder_config.to_dict(),
-            **kwargs,
-        )
 
 
 __all__ = [
