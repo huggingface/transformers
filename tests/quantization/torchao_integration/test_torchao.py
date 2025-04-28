@@ -211,8 +211,8 @@ class TorchAoTest(unittest.TestCase):
             mapping_type=mapping_type,
         )
         config = AOPerModuleConfig({"_default": None, "model.embed_tokens": embedding_config})
-        # need set include_embedding to True, and also set modules_to_not_convert to empty list
-        quant_config = TorchAoConfig(quant_type=config, include_embedding=True, modules_to_not_convert=[])
+        # need set `include_embedding` to True
+        quant_config = TorchAoConfig(quant_type=config, include_embedding=True)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device,

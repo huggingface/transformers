@@ -185,6 +185,11 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
+        if self.quantization_config.include_embedding:
+            input_emb = model.get_input_embeddings()
+            input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
+            self.modules_to_not_convert = [x for x in self.modules_to_not_convert if x not in input_emb_names]
+        print(self.modules_to_not_convert)
         return
 
     def check_quantized_param(
@@ -199,6 +204,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
 
         param_device = kwargs.pop("param_device", None)
+        print("modules to not convert:", self.modules_to_not_convert)
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
             return False

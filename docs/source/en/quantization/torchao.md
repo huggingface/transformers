@@ -40,8 +40,7 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - A16W4 Int4 Weight Only Quantization
 - Autoquantization
 
-torchao also supports module level configuration by specifying a dictionary from fully qualified name
-of module and its corresponding quantization config. This allows (1) using different quantization config for different modules (2) skip quantizing certain layers
+torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
 
 
 Check the table below to see if your hardware is compatible.
@@ -276,45 +275,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### Per Module Quantization
-#### 1. Quantizing different layers with different quantization configs
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
-
-model_id = "facebook/opt-125m"
-
-from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
-
-weight_dtype = torch.int8
-granularity = PerAxis(0)
-mapping_type = MappingType.ASYMMETRIC
-embedding_config = IntxWeightOnlyConfig(
-    weight_dtype=weight_dtype,
-    granularity=granularity,
-    mapping_type=mapping_type,
-)
-linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
-quant_config = AOPerModuleConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
-# set `include_embedding` to True in order to include embedding in quantization
-# also need to override modules to not convert in order to quantize embedding
-quantization_config = TorchAoConfig(quant_type=quant_config, modules_to_not_convert = [], include_embedding=True)
-quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
-print("quantized model:", quantized_model)
-# make sure embedding is quantized
-print("embed_tokens weight:", quantized_model.model.decoder.embed_tokens.weight)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-# Manual Testing
-prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
-generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, cache_implementation="static")
-output_text = tokenizer.batch_decode(
-    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)
-print(output_text)
-```
-
-#### 2. Skip quantization for certain layers
+#### 1. Skip quantization for certain layers
 With `AOPerModuleConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
 ```py
 import torch
@@ -337,6 +298,44 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 prompt = "Hey, are you conscious? Can you talk to me?"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128)
+output_text = tokenizer.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
+
+#### 1. Quantizing different layers with different quantization configs
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+model_id = "facebook/opt-125m"
+
+from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
+
+weight_dtype = torch.int8
+granularity = PerAxis(0)
+mapping_type = MappingType.ASYMMETRIC
+embedding_config = IntxWeightOnlyConfig(
+    weight_dtype=weight_dtype,
+    granularity=granularity,
+    mapping_type=mapping_type,
+)
+linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
+quant_config = AOPerModuleConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
+# set `include_embedding` to True in order to include embedding in quantization
+# also need to override modules to not convert in order to quantize embedding
+quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+print("quantized model:", quantized_model)
+# make sure embedding is quantized
+print("embed_tokens weight:", quantized_model.model.decoder.embed_tokens.weight)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# Manual Testing
+prompt = "Hey, are you conscious? Can you talk to me?"
+inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
+generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, cache_implementation="static")
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )
