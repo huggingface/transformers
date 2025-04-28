@@ -142,7 +142,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             speaker id embedding layer.
         num_languages (`int`, *optional*):
             Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
-            languge id embedding layer.
+            language id embedding layer.
         speaker_embed_dim (`int`, *optional*):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):

@@ -1120,7 +1120,7 @@ class VptqLayerConfig(QuantizationConfigMixin):
         group_size (`int`, *optional*, defaults to `-1`): depends on out-features
         indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
         is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
-        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centroid numbers of clusters
         num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
         outlier_size (`int`, *optional*, defaults to `1`): outliers
         vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
