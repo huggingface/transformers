@@ -61,6 +61,7 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepsp
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.ring_attention import ring_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
@@ -5957,6 +5958,7 @@ class AttentionInterface(MutableMapping):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "ring_attention": ring_attention_forward,
     }
 
     def __init__(self):
