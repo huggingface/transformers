@@ -553,8 +553,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(ouptut)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        print(output)
 
         # fmt: off
         EXPECTED_GENERATION = """
@@ -573,7 +573,7 @@ These descriptions provide a detailed overview of the content and atmosphere of 
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(output, EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes

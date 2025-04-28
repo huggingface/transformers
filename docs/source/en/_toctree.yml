@@ -385,6 +385,8 @@
         title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
+      - local: model_doc/bitnet
+        title: BitNet
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
@@ -1015,6 +1017,8 @@
         title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
