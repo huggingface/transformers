@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-import transformers
+from transformers import dynamic_module_utils
 from transformers import (
     AutoTokenizer,
     BertConfig,
@@ -66,7 +66,7 @@ if is_tokenizers_available():
 
 class AutoTokenizerTest(unittest.TestCase):
     def setUp(self):
-        transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+        dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     @slow
     def test_tokenizer_from_pretrained(self):
