@@ -31,6 +31,7 @@ from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -291,6 +292,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -313,6 +315,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -335,6 +338,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -362,6 +366,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -388,6 +393,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -416,7 +422,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch
+    @require_torch_large_accelerator
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
@@ -501,6 +507,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"
