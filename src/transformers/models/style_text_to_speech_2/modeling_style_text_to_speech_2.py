@@ -394,38 +394,32 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
 
         self.dropout = nn.Dropout(dropout_p)
 
-    def _residual(self, hidden_states, style, input_lengths):
-        hidden_states = self.norm1(hidden_states, style, input_lengths)
-        hidden_states = F.leaky_relu(hidden_states, 0.2)
-        hidden_states = self.pool(hidden_states.transpose(1, 2)).transpose(1, 2)
+    def forward(self, hidden_states, style, input_lengths=None):
+        # Residual path
+        residual = self.norm1(hidden_states, style, input_lengths)
+        residual = F.leaky_relu(residual, 0.2)
+        residual = self.pool(residual.transpose(1, 2)).transpose(1, 2)
 
         if self.do_upsample:
             input_lengths = [l * 2 for l in input_lengths] if input_lengths is not None else None
-            hidden_states = _mask_hidden_states(hidden_states, input_lengths)
+            residual = _mask_hidden_states(residual, input_lengths)
             
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.conv1(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = _mask_hidden_states(hidden_states, input_lengths)
+        residual = self.dropout(residual)
+        residual = self.conv1(residual.transpose(1, 2)).transpose(1, 2)
+        residual = _mask_hidden_states(residual, input_lengths)
 
-        hidden_states = self.norm2(hidden_states, style, input_lengths)
-        hidden_states = F.leaky_relu(hidden_states, 0.2)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.conv2(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = _mask_hidden_states(hidden_states, input_lengths)
+        residual = self.norm2(residual, style, input_lengths)
+        residual = F.leaky_relu(residual, 0.2)
+        residual = self.dropout(residual)
+        residual = self.conv2(residual.transpose(1, 2)).transpose(1, 2)
+        residual = _mask_hidden_states(residual, input_lengths)
 
-        return hidden_states
+        # Shortcut path
+        shortcut = self.upsample(hidden_states.transpose(1, 2))
+        shortcut = self.conv1_shortcut(shortcut).transpose(1, 2)
 
-    def _shortcut(self, hidden_states):
-        hidden_states = self.upsample(hidden_states.transpose(1, 2))
-        hidden_states = self.conv1_shortcut(hidden_states).transpose(1, 2)
-
-        return hidden_states
-
-    def forward(self, hidden_states, style, input_lengths=None):
-        hidden_states_residual = self._residual(hidden_states, style, input_lengths)
-        hidden_states_shortcut = self._shortcut(hidden_states)
-        hidden_states = (hidden_states_residual + hidden_states_shortcut) / 2.0**0.5
-        
+        # Combine paths
+        hidden_states = (residual + shortcut) / 2.0**0.5
         return hidden_states
 
 
