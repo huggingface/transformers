@@ -1185,6 +1185,16 @@ class BambaForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = BambaModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.use_z_loss = config.use_z_loss
+
+        # Initialize weights and apply final processing
+        self.post_init()
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
