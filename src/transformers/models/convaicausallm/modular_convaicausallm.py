@@ -60,7 +60,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# NOTE: Removed # Copied from comment for make_causal_mask as it likely doesn't exist standalone in target llama version
 def make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):

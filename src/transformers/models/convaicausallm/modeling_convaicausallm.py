@@ -24,6 +24,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -266,7 +267,6 @@ class ConvaiCausalLMPreTrainedModel(PreTrainedModel):
                 module.weight.data.fill_(1.0)
 
 
-# NOTE: Removed # Copied from comment for make_causal_mask as it likely doesn't exist standalone in target llama version
 def make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
