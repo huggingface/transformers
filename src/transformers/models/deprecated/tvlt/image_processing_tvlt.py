@@ -356,10 +356,10 @@ class TvltImageProcessor(BaseImageProcessor):
 
             - **pixel_mask** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patches).
 
-            - **pixel_values_mixed** -- Pixel values with both postive or negative to be fed to a model, of shape
+            - **pixel_values_mixed** -- Pixel values with both positive or negative to be fed to a model, of shape
               (batch_size, num_channels, height, width).
 
-            - **pixel_mask_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
+            - **pixel_mask_mixed** -- Pixel masks with both positive or negative to be fed to a model, of shape
               (batch_size, num_pixel_patches).
         """
         do_resize = do_resize if do_resize is not None else self.do_resize

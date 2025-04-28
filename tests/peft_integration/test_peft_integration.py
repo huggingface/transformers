@@ -38,7 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import check_torch_load_is_safe, is_torch_available
 
 
 if is_torch_available():
@@ -552,6 +552,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
 
+                check_torch_load_is_safe()
                 dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
@@ -577,6 +578,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                check_torch_load_is_safe()
                 dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # this should always work
@@ -645,6 +647,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                check_torch_load_is_safe()
                 dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # add unexpected key
@@ -672,6 +675,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                check_torch_load_is_safe()
                 dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # remove a key so that we have missing keys
