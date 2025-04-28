@@ -398,9 +398,9 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
         # Residual path
         residual = self.norm1(hidden_states, style, input_lengths)
         residual = F.leaky_relu(residual, 0.2)
-        residual = self.pool(residual.transpose(1, 2)).transpose(1, 2)
 
         if self.do_upsample:
+            residual = self.pool(residual.transpose(1, 2)).transpose(1, 2)
             input_lengths = [l * 2 for l in input_lengths] if input_lengths is not None else None
             residual = _mask_hidden_states(residual, input_lengths)
             
