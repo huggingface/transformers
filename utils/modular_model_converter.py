@@ -1469,7 +1469,8 @@ class ModularFileMapper(ModuleMapper):
                     # If both the old model and new model share the last part of their name, is is detected as a common
                     # suffix, but it should not be the case -> remove it
                     common_model_name_part = common_partial_suffix(cased_default_name, cased_model_name)
-                    cased_model_name = class_name.replace(common_model_name_part, "")
+                    if len(common_model_name_part) > 0:
+                        cased_model_name = class_name.replace(common_model_name_part, "")
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1765,6 +1766,10 @@ if __name__ == "__main__":
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     if args.files_to_parse == ["examples"]:
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    else:
+        for i, model_name in enumerate(args.files_to_parse):
+            if not os.sep in model_name:
+                args.files_to_parse[i] = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
 
     priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
