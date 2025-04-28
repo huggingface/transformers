@@ -287,7 +287,6 @@ def write_model(
     tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
     tokenizer.pad_token = "<|pad|>"
     tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids("<|pad|>")
-    model.config.text_config.pad_token_id = tokenizer.pad_token_id
     tokenizer.save_pretrained(model_path)
     model.config.text_config.pad_token_id = tokenizer.pad_token_id
     model.config.pad_token_id = tokenizer.pad_token_id

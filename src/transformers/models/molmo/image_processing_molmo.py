@@ -204,6 +204,13 @@ class MolmoImageProcessor(BaseImageProcessor):
             "do_split_into_crops",
             "padding_mode",
             "padding_value",
+            "image_padding_mask",
+            "tokens_per_image_width",
+            "overlap_margins", 
+            "device", 
+            "image_patch_size",
+            "tokens_per_image_height",
+            "max_crops",
         ]
 
         # TODO move these to configuration once processing is done.
