@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvaiCausalLM model configuration"""
+"""ConvaiCausalLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -24,6 +24,7 @@ CONVAICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "convaiinnovations/hindi-causal-lm": "https://huggingface.co/convaiinnovations/hindi-causal-lm/resolve/main/config.json",
     # Add other checkpoints here if any
 }
+
 
 class ConvaiCausalLMConfig(PretrainedConfig):
     r"""
@@ -79,6 +80,7 @@ class ConvaiCausalLMConfig(PretrainedConfig):
 
         Example: ... (Add example later)
     """
+
     model_type = "convaicausallm"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -93,13 +95,13 @@ class ConvaiCausalLMConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=512,
         initializer_range=0.02,
-        layer_norm_eps=1e-5, # Changed name from rms_norm_eps
+        layer_norm_eps=1e-5,  # Changed name from rms_norm_eps
         use_cache=True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        attention_dropout=0.0, # Added dropout
+        attention_dropout=0.0,  # Added dropout
         **kwargs,
     ):
         self.vocab_size = vocab_size

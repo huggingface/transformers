@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 # ==== Helper Functions ====
 
 
-# Copied from transformers.models.llama.modeling_llama._repeat_kv
+# Copied from transformers.models.llama.modeling_llama._repeat_kv  <--- CORRECTED COMMENT PATH
 def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -100,7 +100,7 @@ class ConvaiCausalLMAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    # Note: _repeat_kv is now defined outside this class
+    # _repeat_kv method is DEFINED OUTSIDE this class now
 
     def forward(
         self,
@@ -136,7 +136,7 @@ class ConvaiCausalLMAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        # Repeat KVs for GQA - Call the standalone function
+        # Repeat KVs for GQA - Call the standalone helper function
         key_states = _repeat_kv(key_states, self.num_key_value_groups)
         value_states = _repeat_kv(value_states, self.num_key_value_groups)
 
@@ -439,7 +439,21 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
         if past_key_values is not None:
             # Assuming past_key_values is a list/tuple of tuples (k, v)
             # And Cache class is not used (_supports_cache_class = False)
-            past_key_values_length = past_key_values[0][0].shape[2]  # Get length from first layer's key cache
+            # Add safety checks for past_key_values structure
+            if (
+                hasattr(past_key_values, "__len__")
+                and len(past_key_values) > 0
+                and hasattr(past_key_values[0], "__len__")
+                and len(past_key_values[0]) > 0
+            ):
+                try:
+                    past_key_values_length = past_key_values[0][0].shape[2]  # Get length from first layer's key cache
+                except (AttributeError, IndexError):
+                    logger.warning("Could not determine past_key_values length from structure.")
+                    past_key_values_length = 0
+            else:
+                logger.warning("past_key_values structure is unexpected.")
+                past_key_values_length = 0
 
         if position_ids is None:
             position_ids = torch.arange(
@@ -483,6 +497,7 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # inputs are: hidden_states, attention_mask, position_ids
+                        # Pass other arguments explicitly if needed by the layer's forward
                         return module(
                             *inputs,
                             past_key_value=past_key_value,
@@ -524,15 +539,24 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
                 else:
                     # This case might happen if gradient checkpointing is used and not configured
                     # to return the cache state. Log a warning or error if needed.
-                    logger.warning_once(
-                        "KV Cache not found in layer outputs, possibly due to gradient checkpointing configuration."
-                    )
+                    if self.gradient_checkpointing and self.training:
+                        # Expected behavior with gradient checkpointing when use_cache=True was attempted
+                        pass  # Cache is implicitly disabled
+                    else:
+                        logger.warning_once(
+                            "KV Cache not found in layer outputs, possibly due to unexpected layer output format."
+                        )
 
             if output_attentions:
                 # layer_outputs includes attn_weights if output_attentions=True
                 attn_weights_index = 1
                 if len(layer_outputs) > attn_weights_index:
                     all_self_attns += (layer_outputs[attn_weights_index],)
+                else:
+                    if self.gradient_checkpointing and self.training:
+                        pass  # Expected behavior
+                    else:
+                        logger.warning_once("Attention weights not found in layer outputs.")
 
         # Apply final LayerNorm
         hidden_states = self.norm(hidden_states)
@@ -542,6 +566,9 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+        # Ensure next_cache is None if gradient_checkpointing was enabled, as cache is implicitly turned off
+        if self.gradient_checkpointing and self.training:
+            next_cache = None
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
@@ -661,7 +688,11 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
 
         if not return_dict:
             # Ensure past_key_values are handled correctly in non-dict output
-            output = (logits,) + outputs[1:]
+            # Access past_key_values from the BaseModelOutputWithPast object if return_dict=True was used internally
+            past_key_values_out = (
+                outputs.past_key_values if isinstance(outputs, BaseModelOutputWithPast) else outputs[1]
+            )
+            output = (logits,) + (past_key_values_out,) + outputs[2:]  # Assuming outputs[1] was cache
             return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
@@ -690,6 +721,8 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
                         past_length = 0
                 else:
                     logger.warning("past_key_values structure is unexpected.")
+            else:
+                logger.warning("past_key_values structure is unexpected.")
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

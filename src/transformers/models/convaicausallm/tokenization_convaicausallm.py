@@ -98,14 +98,15 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        from_slow=False, # Added for consistency with newer tokenizer patterns
+        from_slow=False,  # Added for consistency with newer tokenizer patterns
         **kwargs,
     ):
         requires_backends(self, "sentencepiece")
         # Import sentencepiece here so it's only required if the tokenizer is actually used
         import sentencepiece as spm
+
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        self.from_slow = from_slow # Track if converting from slow
+        self.from_slow = from_slow  # Track if converting from slow
 
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -120,18 +121,18 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
             logger.info(f"Using pad_token_id {sp_pad_id} from SentencePiece model.")
             effective_pad_token = self.sp_model.IdToPiece(sp_pad_id)
         elif pad_token is None and sp_pad_id == -1:
-             logger.warning(
-                 "The SentencePiece model does not define a pad token, using default `<pad>`. "
-                 "Make sure `<pad>` is ID 0 in your model."
+            logger.warning(
+                "The SentencePiece model does not define a pad token, using default `<pad>`. "
+                "Make sure `<pad>` is ID 0 in your model."
             )
-             effective_pad_token = "<pad>" # Keep default
+            effective_pad_token = "<pad>"  # Keep default
         elif pad_token is not None and self.sp_model.piece_to_id(pad_token) == 0:
-            pass # User provided pad token matches ID 0 assumption, all good
+            pass  # User provided pad token matches ID 0 assumption, all good
         elif pad_token is not None and self.sp_model.piece_to_id(pad_token) != 0:
             logger.warning(
-                 f"You passed pad_token='{pad_token}' but the default uses ID 0. "
-                 "If your model expects pad ID 0, this might lead to unexpected behavior."
-                 f"The ID for '{pad_token}' in the vocab is {self.sp_model.piece_to_id(pad_token)}."
+                f"You passed pad_token='{pad_token}' but the default uses ID 0. "
+                "If your model expects pad ID 0, this might lead to unexpected behavior."
+                f"The ID for '{pad_token}' in the vocab is {self.sp_model.piece_to_id(pad_token)}."
             )
             # Use the user-provided pad_token, but log warning.
 
@@ -139,14 +140,17 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(effective_pad_token, lstrip=False, rstrip=False) if isinstance(effective_pad_token, str) else effective_pad_token
-
+        pad_token = (
+            AddedToken(effective_pad_token, lstrip=False, rstrip=False)
+            if isinstance(effective_pad_token, str)
+            else effective_pad_token
+        )
 
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
-            pad_token=pad_token, # Use the determined pad_token
+            pad_token=pad_token,  # Use the determined pad_token
             sp_model_kwargs=self.sp_model_kwargs,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
@@ -241,7 +245,7 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return () # Return empty tuple on error
+            return ()  # Return empty tuple on error
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
@@ -250,15 +254,15 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
             try:
                 copyfile(self.vocab_file, out_vocab_file)
             except OSError as e:
-                 logger.error(f"Error copying vocabulary file: {e}")
-                 return () # Return empty tuple on error
+                logger.error(f"Error copying vocabulary file: {e}")
+                return ()  # Return empty tuple on error
 
         elif not os.path.isfile(self.vocab_file):
-             logger.warning(
+            logger.warning(
                 f"Can't copy source vocab file '{self.vocab_file}' to '{out_vocab_file}' as it doesn't exist. "
                 "Check the path."
             )
-             return () # Return empty tuple if source doesn't exist
+            return ()  # Return empty tuple if source doesn't exist
 
         return (out_vocab_file,)
 
@@ -270,10 +274,9 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         output = bos_token_id + token_ids_0 + eos_token_id
 
         if token_ids_1 is not None:
-             # Usually BOS is not added between segments for Causal LMs
-             # output = output + bos_token_id + token_ids_1 + eos_token_id
-             output = output + token_ids_1 + eos_token_id
-
+            # Usually BOS is not added between segments for Causal LMs
+            # output = output + bos_token_id + token_ids_1 + eos_token_id
+            output = output + token_ids_1 + eos_token_id
 
         return output
 
