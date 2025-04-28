@@ -13,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-
 # Step 1: Define the expected structure for lazy loading.
 # Each key is the filename (without .py) and the value is a list of object names expected in that file.
 _import_structure = {
@@ -29,12 +28,11 @@ from ...utils import (
     is_torch_available,
 )
 
-
 try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No slow tokenizer if sentencepiece is missing
+    pass # No slow tokenizer if sentencepiece is missing
 else:
     _import_structure["tokenization_hindicausallm"] = ["HindiCausalLMTokenizer"]
 
@@ -42,7 +40,7 @@ try:
     if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No fast tokenizer if tokenizers is missing
+    pass # No fast tokenizer if tokenizers is missing
 else:
     _import_structure["tokenization_hindicausallm_fast"] = ["HindiCausalLMTokenizerFast"]
 
@@ -50,7 +48,7 @@ try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No PyTorch models if torch is missing
+    pass # No PyTorch models if torch is missing
 else:
     _import_structure["modeling_hindicausallm"] = [
         "HindiCausalLMForCausalLM",
@@ -102,11 +100,10 @@ else:
 
     # Standard Hugging Face lazy module setup
     from ...utils import _LazyModule
-
     sys.modules[__name__] = _LazyModule(
         __name__,
         globals()["__file__"],
-        _import_structure,  # Pass the defined structure
+        _import_structure, # Pass the defined structure
         module_spec=__spec__,
-        extra_objects={},  # No extra top-level objects needed here
+        extra_objects={}, # No extra top-level objects needed here
     )
