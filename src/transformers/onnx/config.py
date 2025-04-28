@@ -108,7 +108,9 @@ class OnnxConfig(ABC):
         "speech2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: Optional[List[PatchingSpec]] = None
+    ):
         self._config = config
 
         if task not in self._tasks_to_common_outputs:

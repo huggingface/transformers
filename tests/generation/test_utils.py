@@ -2245,13 +2245,15 @@ class GenerationTesterMixin:
             # BLIP is the only exception with custom generate which call `self.lm.generate()`
             # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
             # compatible with multimodality
+            compile_config = CompileConfig()
+            compile_config._compile_all_devices = True
             if "blip" in model.__class__.__name__.lower():
-                model.language_model.generation_config.compile_config._compile_all_devices = True
+                model.language_model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.language_model.generation_config.cache_implementation = "static"
             else:
                 # force compilation (e.g. fast CI, CPU)
-                model.generation_config.compile_config._compile_all_devices = True
+                model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.generation_config.cache_implementation = "static"
 
@@ -4018,6 +4020,34 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    def test_generate_multi_gpu_causal_mask(self):
+        """
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
+        The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
+        being `None`.
+        """
+        # need to split manually as auto doesn't work well with unbalanced model
+        device_map = {
+            "visual": 0,
+            "model.embed_tokens": 1,
+            "model.layers.0": 1,
+            "model.layers.1": 1,
+            "model.rotary_emb": 1,
+            "model.norm.weight": 1,
+            "lm_head": 1,
+        }
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration", device_map=device_map
+        )
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
+
+        text = ["Hello world", "Today I went to the supermarket to buy"]
+        inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @pytest.mark.generate
+    @require_torch_multi_gpu
     def test_init_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
@@ -4906,6 +4936,37 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+
+    @require_torch_gpu
+    def test_cpu_offload_doesnt_compile(self):
+        """Test that CPU offload doesn't trigger compilation"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        tokenized_inputs = tokenizer(["Hello world"], return_tensors="pt")
+        generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
+
+        # Sanity check: if we don't specify a device map, the model will get compiled
+        model_gpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_gpu.device)
+        _ = model_gpu.generate(input_ids, **generate_kwargs)
+        self.assertTrue(hasattr(model_gpu, "_compiled_call"))
+
+        # If we specify a device map, the model will not be compiled
+        # (as of April 2025, compiling with CPU offload results in a crash)
+        device_map = {
+            "model.embed_tokens": 0,
+            "model.layers.0": 0,
+            "model.layers.1": "cpu",
+            "model.norm": "cpu",
+            "lm_head": 0,
+        }
+        model_cpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map=device_map
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
+        _ = model_cpu.generate(input_ids, **generate_kwargs)
+        self.assertFalse(hasattr(model_cpu, "_compiled_call"))
 
 
 @require_torch

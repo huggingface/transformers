@@ -147,6 +147,7 @@ from .utils import (
     PushInProgress,
     PushToHubMixin,
     can_return_loss,
+    check_torch_load_is_safe,
     find_labels,
     is_accelerate_available,
     is_apex_available,
@@ -198,12 +199,12 @@ if is_datasets_available():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
+    import torch_xla.runtime as xr
     from torch_xla import __version__ as XLA_VERSION
 
     IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
     if IS_XLA_FSDPV2_POST_2_2:
         import torch_xla.distributed.spmd as xs
-        import torch_xla.runtime as xr
 else:
     IS_XLA_FSDPV2_POST_2_2 = False
 
@@ -359,7 +360,7 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supercedes the `tokenizer` argument, which is now deprecated.
+            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -1041,7 +1042,7 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+                    eval_dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal()
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
@@ -2831,6 +2832,7 @@ class Trainer:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not supported."
                         )
+                    check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
@@ -2850,6 +2852,7 @@ class Trainer:
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
                     state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
                 else:
+                    check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2944,6 +2947,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     state_dict["_smp_is_partial"] = False
@@ -2999,6 +3003,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     # If the model is on the GPU, it still works!
@@ -3074,7 +3079,9 @@ class Trainer:
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
-                logs["learning_rate"] = learning_rate
+                logs["learning_rate"] = (
+                    learning_rate.item() if isinstance(learning_rate, torch.Tensor) else learning_rate
+                )
             else:
                 logs["learning_rate"] = self._get_learning_rate()
 
@@ -3120,7 +3127,7 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
+            checkpoint_rng_state = torch.load(rng_file)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -3352,6 +3359,7 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.lr_scheduler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
@@ -3384,6 +3392,7 @@ class Trainer:
             if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_v1_enabled:
+                    check_torch_load_is_safe()
                     optimizer_state = torch.load(
                         os.path.join(
                             checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
@@ -3394,10 +3403,12 @@ class Trainer:
                     # We only need `optimizer` when resuming from checkpoint
                     optimizer_state = optimizer_state["optimizer"]
                 else:
+                    check_torch_load_is_safe()
                     optimizer_state = torch.load(
                         os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu", weights_only=True
                     )
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     lr_scheduler_state = torch.load(
                         os.path.join(checkpoint, SCHEDULER_NAME), map_location="cpu", weights_only=True
                     )
@@ -3441,12 +3452,14 @@ class Trainer:
                             **_get_fsdp_ckpt_kwargs(),
                         )
                     else:
+                        check_torch_load_is_safe()
                         self.optimizer.load_state_dict(
                             torch.load(
                                 os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True
                             )
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.lr_scheduler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
@@ -3484,6 +3497,7 @@ class Trainer:
             # Load in scaler states
             if is_torch_xla_available():
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     scaler_state = torch.load(
                         os.path.join(checkpoint, SCALER_NAME), map_location="cpu", weights_only=True
                     )
@@ -3492,6 +3506,7 @@ class Trainer:
                 self.accelerator.scaler.load_state_dict(scaler_state)
             else:
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.accelerator.scaler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCALER_NAME), weights_only=True)
                     )

@@ -329,13 +329,9 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         pass
 
     @unittest.skip(
-        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+        reason="VLMs doesn't accept inputs embeds and pixel values at the same time. So if the test passed for backbone LM, it passes for VLM also"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(
