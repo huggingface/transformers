@@ -1,6 +1,5 @@
-import argparse
 import re
-
+import argparse
 
 def parse_pytest_output(file_path):
     skipped_tests = {}

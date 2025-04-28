@@ -19,7 +19,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitNetQuantConfig,
+    BitNetConfig,
     OPTForCausalLM,
 )
 from transformers.testing_utils import (
@@ -39,12 +39,12 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class BitNetQuantConfigTest(unittest.TestCase):
+class BitNetConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = BitNetQuantConfig()
+        quantization_config = BitNetConfig()
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
