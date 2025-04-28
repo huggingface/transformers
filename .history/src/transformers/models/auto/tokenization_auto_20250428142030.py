@@ -151,13 +151,7 @@ else:
             ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
-            (
-                "convaicausallm",
-                (
-                    "ConvaiCausalLMTokenizer" if is_sentencepiece_available() else None,
-                    "ConvaiCausalLMTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
+            
             (
                 "cpm",
                 (

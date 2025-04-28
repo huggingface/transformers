@@ -62,7 +62,9 @@ if TYPE_CHECKING:
     from .cohere2 import *
     from .colpali import *
     from .conditional_detr import *
+    # <<< ADD YOUR IMPORT HERE >>>
     from .convaicausallm import *
+    # <<< END ADD >>>
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
