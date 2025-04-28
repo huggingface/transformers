@@ -19,6 +19,7 @@ import gc
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -87,7 +88,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 # Copied from transformers.models.mllama.convert_mllama_weights_to_hf.convert_old_keys_to_new_keys
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
