@@ -1700,7 +1700,9 @@ class TorchAoConfig(QuantizationConfigMixin):
                 and quant_type_kwargs.get("layout", None) is None
             ):
                 if torch.xpu.is_available():
-                    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
+                    if version.parse(importlib.metadata.version("torchao")) >= version.parse(
+                        "0.11.0"
+                    ) and version.parse(importlib.metadata.version("torch")) >= version.parse("2.8.0"):
                         from torchao.dtypes import Int4XPULayout
 
                         quant_type_kwargs["layout"] = Int4XPULayout()
