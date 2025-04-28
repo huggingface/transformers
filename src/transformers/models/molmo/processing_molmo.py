@@ -228,7 +228,7 @@ class MolmoProcessor(ProcessorMixin):
 
         # shift patch mapping after addition of bos token (with left padding)
         # necessary for batched generation
-        leading_pad_mask = ((text_inputs["attention_mask"] == 0).long().cumprod(dim=-1))
+        leading_pad_mask = (text_inputs["attention_mask"] == 0).long().cumprod(dim=-1)
         left_pad = leading_pad_mask.sum(dim=-1)
         total_shift = 1 + left_pad
 
@@ -237,7 +237,6 @@ class MolmoProcessor(ProcessorMixin):
             for mask, shift in zip(image_inputs["image_token_indices"], total_shift):
                 shifted_indices.append(np.where(mask < 0, mask, mask + int(shift)))
             image_inputs["image_token_indices"] = shifted_indices
-
 
         if kwargs.get("device", None) is not None:
             text_inputs = text_inputs.to(device=kwargs.get("device"))
