@@ -1707,7 +1707,9 @@ class TorchAoConfig(QuantizationConfigMixin):
 
                         quant_type_kwargs["layout"] = Int4XPULayout()
                     else:
-                        raise ValueError("TorchAoConfig requires torchao >= 0.11.0 for XPU support. Please upgrade.")
+                        raise ValueError(
+                            "TorchAoConfig requires torchao >= 0.11.0 and torch >= 2.8.0 for XPU support. Please upgrade the version or use run on CPU with the cpu version pytorch."
+                        )
                 else:
                     from torchao.dtypes import Int4CPULayout
 
