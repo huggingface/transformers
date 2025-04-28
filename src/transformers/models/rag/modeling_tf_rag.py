@@ -1186,7 +1186,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 raise ValueError(
                     "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
                     f" num_return_sequences, got {generation_config.num_beams} and"
-                    f" {generation_config.num_return_sequences} (respectivelly)"
+                    f" {generation_config.num_return_sequences} (respectively)"
                 )
 
             def unflatten_beam_dim(tensor):
