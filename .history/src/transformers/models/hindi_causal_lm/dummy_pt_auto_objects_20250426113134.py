@@ -1,1 +1,0 @@
-dummy_pt_auto_objects.py

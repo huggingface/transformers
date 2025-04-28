@@ -1,1 +1,0 @@
-        return model_inputs
