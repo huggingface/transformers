@@ -1768,9 +1768,14 @@ if __name__ == "__main__":
     else:
         for i, model_name in enumerate(args.files_to_parse):
             if os.sep not in model_name:
-                args.files_to_parse[i] = os.path.join(
-                    "src", "transformers", "models", model_name, f"modular_{model_name}.py"
-                )
+                full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+                # If it does not exist, try in the examples section
+                if not os.path.isfile(full_path):
+                    full_path = os.path.join("examples", "modular-transformers", f"modular_{model_name}.py")
+                # We did not find it anywhere
+                if not os.path.isfile(full_path):
+                    raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
+                args.files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
