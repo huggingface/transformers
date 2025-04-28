@@ -250,16 +250,14 @@ else:
             ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-            ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
+             (
+            "hindicausallm",
             (
-                "hindicausallm",
-                (
-                    "HindiCausalLMTokenizer"
-                    if is_sentencepiece_available()
-                    else None,  # Assuming sentencepiece needed for slow
-                    "HindiCausalLMTokenizerFast" if is_tokenizers_available() else None,
-                ),
+                "HindiCausalLMTokenizer" if is_sentencepiece_available() else None, # Assuming sentencepiece needed for slow
+                "HindiCausalLMTokenizerFast" if is_tokenizers_available() else None,
             ),
+        ),
+            ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
