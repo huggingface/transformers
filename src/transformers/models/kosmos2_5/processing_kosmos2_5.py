@@ -72,6 +72,9 @@ class Kosmos2_5Processor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
+        self.image_start_token = tokenizer.boi_token  # "<image>" : fixed token for the start of image
+        self.image_end_token = tokenizer.eoi_token  # "</image>" : fixed token for the end of image
+        self.image_token = tokenizer.image_token  # "<s>" : within a <image> ... </image> pair, these <s> tokens indicate they are positions reserved for an image
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -111,7 +114,7 @@ class Kosmos2_5Processor(ProcessorMixin):
             image_encoding.pop("cols")
             encoding.update(image_encoding)
 
-        prompt = "<s><image>" + "<s>" * num_image_tokens + "</image>"
+        prompt = f"{self.tokenizer.bos_token}{self.image_start_token}{self.image_token * num_image_tokens}{self.image_end_token}"
 
         if text is not None:
             if isinstance(text, str):
