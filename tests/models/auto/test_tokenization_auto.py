@@ -22,7 +22,6 @@ from pathlib import Path
 
 import pytest
 
-from transformers import dynamic_module_utils
 from transformers import (
     AutoTokenizer,
     BertConfig,
@@ -34,6 +33,7 @@ from transformers import (
     PreTrainedTokenizerFast,
     RobertaTokenizer,
     RobertaTokenizerFast,
+    dynamic_module_utils,
     is_tokenizers_available,
 )
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig

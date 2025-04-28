@@ -1967,7 +1967,7 @@ __all__ = [
     "FbgemmFp8Config",
     "HiggsConfig",
     "TorchAoConfig",
-    "BitNetConfig",
+    "BitNetQuantConfig",
     "SpQRConfig",
     "FineGrainedFP8Config",
     "QuarkConfig",

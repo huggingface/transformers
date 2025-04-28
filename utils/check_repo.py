@@ -1199,6 +1199,8 @@ UNDOCUMENTED_OBJECTS = [
     "warning_advice",
     "warning_once",
     "working_or_temp_dir",
+    "VptqLayerConfig",
+    "check_torch_load_is_safe",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

@@ -2811,4 +2811,5 @@ __all__ = [
     "requires",
     "get_available_devices",
     "check_min_version",
+    "check_torch_load_is_safe",
 ]
